@@ -48,9 +48,47 @@ const GameMap = (() => {
     });
   }
 
+  // Deduct maintenance for all player units. Units with unpaid upkeep lose HP.
+  function deductMaintenance(units, resources) {
+    const playerUnits = units.filter(u => u.owner === 'player');
+    const msgs = [];
+
+    playerUnits.forEach(u => {
+      const maint = UNIT_TYPES[u.type].maintenance;
+      let canAfford = true;
+      Object.entries(maint).forEach(([res, cost]) => {
+        if ((resources[res] || 0) < cost) canAfford = false;
+      });
+
+      if (canAfford) {
+        Object.entries(maint).forEach(([res, cost]) => {
+          resources[res] -= cost;
+        });
+      } else {
+        // Unit suffers attrition — loses 10 HP
+        u.hp = Math.max(1, u.hp - 10);
+        msgs.push(`${UNIT_TYPES[u.type].name} is starving! (-10 HP)`);
+      }
+    });
+
+    return msgs;
+  }
+
+  // Calculate total maintenance cost for all player units
+  function getTotalMaintenance(units) {
+    const totals = {};
+    units.filter(u => u.owner === 'player').forEach(u => {
+      const maint = UNIT_TYPES[u.type].maintenance;
+      Object.entries(maint).forEach(([res, cost]) => {
+        totals[res] = (totals[res] || 0) + cost;
+      });
+    });
+    return totals;
+  }
+
   function isWater(c, r) {
     return TERRAIN_MAP[r]?.[c] === 'water';
   }
 
-  return { init, getResource, getZones, collectIncome, isWater };
+  return { init, getResource, getZones, collectIncome, deductMaintenance, getTotalMaintenance, isWater };
 })();
