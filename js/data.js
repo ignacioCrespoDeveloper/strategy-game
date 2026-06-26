@@ -17,12 +17,13 @@ const RESOURCE_DEF = {
   wood: { icon: '🌲', color: '#b87830', label: 'Lumber Camp',    income: 1 },
 };
 
-// Unit types: name, icon, hp, atk, def, moves, sight, cost (resources), abilities[]
+// Unit types: name, icon, hp, atk, def, moves, sight, cost (resources), maintenance (per turn), abilities[]
 const UNIT_TYPES = {
   warrior: {
     name: 'Warrior', icon: '⚔️',
     hp: 100, atk: 40, def: 30, moves: 2, sight: 2,
     cost: { gold: 30, food: 10 },
+    maintenance: { gold: 2, food: 1 },
     abilities: ['Melee', 'Fortify'],
     desc: 'Reliable frontline fighter.',
     trainTime: 1,
@@ -31,6 +32,7 @@ const UNIT_TYPES = {
     name: 'Archer', icon: '🏹',
     hp: 70, atk: 50, def: 15, moves: 2, sight: 3,
     cost: { gold: 40, wood: 10 },
+    maintenance: { gold: 3, food: 1 },
     abilities: ['Ranged', 'High Ground'],
     desc: 'Ranged unit, good sight range.',
     trainTime: 1,
@@ -39,6 +41,7 @@ const UNIT_TYPES = {
     name: 'Scout', icon: '🐎',
     hp: 60, atk: 20, def: 10, moves: 4, sight: 4,
     cost: { gold: 20, food: 20 },
+    maintenance: { gold: 1, food: 2 },
     abilities: ['Fast', 'Recon'],
     desc: 'Fast explorer, low combat power.',
     trainTime: 1,
@@ -47,6 +50,7 @@ const UNIT_TYPES = {
     name: 'Knight', icon: '🛡️',
     hp: 140, atk: 55, def: 60, moves: 3, sight: 2,
     cost: { gold: 80, iron: 30 },
+    maintenance: { gold: 5, iron: 1 },
     abilities: ['Heavy', 'Charge', 'Fortify'],
     desc: 'Heavily armoured elite cavalry.',
     trainTime: 2,
@@ -55,6 +59,7 @@ const UNIT_TYPES = {
     name: 'Catapult', icon: '💥',
     hp: 50, atk: 80, def: 5, moves: 1, sight: 3,
     cost: { gold: 60, wood: 40, iron: 10 },
+    maintenance: { gold: 4, wood: 1 },
     abilities: ['Siege', 'Slow'],
     desc: 'Devastating vs cities and walls.',
     trainTime: 2,

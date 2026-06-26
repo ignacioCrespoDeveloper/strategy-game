@@ -15,17 +15,12 @@ const UI = (() => {
     const cont   = document.getElementById('controlled-resources');
     const resKeys = Object.keys(RESOURCE_DEF);
     const earned  = {};
-
-    // Count what we earn per turn from controlled hexes
-    Object.entries(resources).forEach(([k]) => earned[k] = 0);
     resKeys.forEach(t => earned[t] = 0);
 
     const { player } = zones;
-    // hex resources
     RESOURCE_SPAWNS.forEach(({ c, r, type }) => {
       if (player.has(hexKey(c, r))) earned[type] += RESOURCE_DEF[type].income;
     });
-    // building bonuses
     Cities.getAll().filter(ci => ci.owner === 'player').forEach(ci => {
       const bKeys = Object.keys(BUILDING_TYPES);
       ci.buildings.forEach((lvl, i) => {
@@ -37,14 +32,30 @@ const UI = (() => {
       });
     });
 
-    cont.innerHTML = resKeys.map(t => {
-      const active = earned[t] > 0;
-      return `<div class="res-row ${active ? 'active' : ''}">
-        <span class="icon">${RESOURCE_DEF[t].icon}</span>
-        <span class="label">${RESOURCE_DEF[t].label}</span>
-        <span class="val">${active ? '+' + earned[t] + '/turn' : '—'}</span>
-      </div>`;
-    }).join('');
+    // Maintenance costs
+    const maint = GameMap.getTotalMaintenance(Units.getAll());
+    const net   = {};
+    resKeys.forEach(t => net[t] = earned[t] - (maint[t] || 0));
+
+    const maintStr = Object.entries(maint).filter(([, v]) => v > 0)
+      .map(([k, v]) => `${RESOURCE_DEF[k]?.icon || k}${v}`).join(' ');
+
+    cont.innerHTML = `
+      <div class="section-label">Income per turn</div>
+      ${resKeys.map(t => {
+        const gross = earned[t];
+        const netVal = net[t];
+        const active = gross > 0 || (maint[t] || 0) > 0;
+        const cls = netVal < 0 ? 'deficit' : netVal > 0 ? 'active' : '';
+        return `<div class="res-row ${cls}">
+          <span class="icon">${RESOURCE_DEF[t].icon}</span>
+          <span class="label">${RESOURCE_DEF[t].label}</span>
+          <span class="val">${active ? (netVal >= 0 ? '+' : '') + netVal + '/turn' : '—'}</span>
+        </div>`;
+      }).join('')}
+      ${maintStr ? `<div class="maint-summary">⚔️ Upkeep: ${maintStr}/turn</div>` : ''}
+      <div class="panel-hint" style="margin-top:6px;font-size:10px">Shift+click units to form a group</div>
+    `;
   }
 
   // ── Unit panel ──────────────────────────────
@@ -95,6 +106,16 @@ const UI = (() => {
       </div>
     `;
 
+    // Maintenance line
+    const maint = def.maintenance;
+    const maintStr = Object.entries(maint)
+      .map(([k, v]) => `${RESOURCE_DEF[k]?.icon || k}${v}`).join(' ');
+
+    document.getElementById('unit-stats').innerHTML += `
+      <div class="divider"></div>
+      <div class="maint-row">⚔️ Upkeep: <strong>${maintStr}/turn</strong></div>
+    `;
+
     // Actions (player units only)
     const actEl = document.getElementById('unit-actions');
     if (isPlayer) {
@@ -102,6 +123,7 @@ const UI = (() => {
         ? `<button class="action-btn primary" onclick="Game.beginMove()">Move Unit →</button>`
         : `<button class="action-btn" disabled>No moves remaining</button>`;
       actEl.innerHTML += `<button class="action-btn danger" onclick="Game.disbandUnit()">Disband Unit</button>`;
+      actEl.innerHTML += `<div class="panel-hint" style="margin-top:6px;font-size:10px">Shift+click to add to group</div>`;
     } else {
       actEl.innerHTML = '';
     }
@@ -207,6 +229,58 @@ const UI = (() => {
     UI._onTrain = onTrain;
   }
 
+  // ── Group panel ──────────────────────────────
+  function showGroup(units) {
+    showPanel('panel-group');
+
+    const movable = units.filter(u => u.moves > 0).length;
+    const totalMaint = {};
+    units.forEach(u => {
+      const m = UNIT_TYPES[u.type].maintenance;
+      Object.entries(m).forEach(([k, v]) => totalMaint[k] = (totalMaint[k] || 0) + v);
+    });
+    const maintStr = Object.entries(totalMaint)
+      .map(([k, v]) => `${RESOURCE_DEF[k]?.icon || k}${v}`).join(' ');
+
+    document.getElementById('group-info').innerHTML = `
+      <div class="group-header-row">
+        <span class="group-count">${units.length} unit${units.length !== 1 ? 's' : ''}</span>
+        <span class="group-movable">${movable} can move</span>
+      </div>
+      <div class="group-unit-list">
+        ${units.map(u => {
+          const def = UNIT_TYPES[u.type];
+          const hpPct = Math.round((u.hp / u.maxHp) * 100);
+          const exhausted = u.moves === 0;
+          return `<div class="group-unit-row ${exhausted ? 'exhausted' : ''}">
+            <span class="group-unit-icon">${def.icon}</span>
+            <div class="group-unit-info">
+              <div class="group-unit-name">${def.name}</div>
+              <div class="group-unit-hp-bar">
+                <div class="group-unit-hp-fill" style="width:${hpPct}%;background:${hpPct > 60 ? '#4aaa44' : hpPct > 30 ? '#e09030' : '#d05040'}"></div>
+              </div>
+            </div>
+            <div class="group-unit-moves">
+              ${Array.from({length: u.maxMoves}, (_, i) =>
+                `<div class="gpip ${i < u.moves ? 'on' : ''}"></div>`
+              ).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+      ${maintStr ? `<div class="maint-summary">⚔️ Group upkeep: ${maintStr}/turn</div>` : ''}
+    `;
+
+    document.getElementById('group-actions').innerHTML = `
+      ${movable > 0
+        ? `<button class="action-btn primary" onclick="Game.beginGroupMove()">Move Group →</button>`
+        : `<button class="action-btn" disabled>No moves remaining</button>`}
+      <button class="action-btn" onclick="Game.clearGroup()">Deselect Group</button>
+      <button class="action-btn danger" onclick="Game.disbandGroup()">Disband Group</button>
+      <div class="panel-hint" style="margin-top:6px;font-size:10px">Shift+click units to add/remove</div>
+    `;
+  }
+
   function formatCost(cost) {
     const icons = { gold: '💰', iron: '⚙️', food: '🌾', wood: '🌲' };
     return Object.entries(cost).map(([k, v]) => `${icons[k] || ''}${v}`).join(' ');
@@ -228,5 +302,5 @@ const UI = (() => {
     UI._toastTimer = setTimeout(() => el.classList.remove('show'), duration);
   }
 
-  return { showPanel, showIdle, showUnit, showCity, updateHUD, toast };
+  return { showPanel, showIdle, showUnit, showCity, showGroup, updateHUD, toast };
 })();

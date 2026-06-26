@@ -25,7 +25,7 @@ const Renderer = (() => {
 
   // ── Main draw ──────────────────────────────
   function draw(state) {
-    const { selectedUnit, reachable } = state;
+    const { selectedUnit, selectedGroup, reachable } = state;
     const units  = Units.getAll();
     const cities = Cities.getAll();
     const zones  = GameMap.getZones(units);
@@ -110,13 +110,25 @@ const Renderer = (() => {
     // ── Pass 5: units
     units.forEach(u => {
       const { x, y }  = hexCenter(u.c, u.r, scale);
-      const isSelected = selectedUnit && selectedUnit.id === u.id;
-      const isPlayer   = u.owner === 'player';
-      const def        = UNIT_TYPES[u.type];
-      const col        = isPlayer ? '#4a9eff' : '#ff5050';
-      const exhausted  = u.moves === 0;
+      const isSelected  = selectedUnit && selectedUnit.id === u.id;
+      const isInGroup   = selectedGroup && selectedGroup.includes(u.id);
+      const isPlayer    = u.owner === 'player';
+      const def         = UNIT_TYPES[u.type];
+      const col         = isPlayer ? '#4a9eff' : '#ff5050';
+      const exhausted   = u.moves === 0;
 
-      // Selection pulse ring
+      // Group highlight ring (solid green)
+      if (isInGroup) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, r * 0.58, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(80,220,120,0.85)';
+        ctx.lineWidth   = 2.5 * scale;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Selection pulse ring (dashed white)
       if (isSelected) {
         ctx.save();
         ctx.beginPath();
