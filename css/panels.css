@@ -1,0 +1,332 @@
+/* =============================================
+   HEXFRONT — panels.css
+   Side panel, unit info, city management UI
+============================================= */
+
+/* ── SIDE PANEL ──────────────────────────── */
+#side-panel {
+  width: 280px;
+  min-width: 240px;
+  background: var(--bg2);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ── PANEL SECTIONS ──────────────────────── */
+.panel-section {
+  display: none;
+  flex-direction: column;
+  padding: 14px;
+  gap: 10px;
+  animation: fadeSlide 0.18s ease;
+}
+.panel-section.active { display: flex; }
+
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.panel-header {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* ── RESOURCE SUMMARY (idle) ─────────────── */
+.res-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.res-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.res-row .icon { font-size: 14px; width: 18px; text-align: center; }
+.res-row .label { flex: 1; }
+.res-row .val { font-weight: 600; color: var(--text); }
+.res-row.active .val { color: var(--accent); }
+
+/* ── UNIT PANEL ──────────────────────────── */
+#unit-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.unit-portrait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.unit-icon-big {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--player);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.unit-icon-big.enemy { background: var(--enemy); }
+
+.unit-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+.unit-type {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Stat bars */
+.stat-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.stat-label { width: 68px; color: var(--text-muted); flex-shrink: 0; }
+.stat-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--bg);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.stat-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.stat-val { width: 32px; text-align: right; font-weight: 600; font-size: 12px; }
+
+.bar-hp    { background: #4aaa44; }
+.bar-atk   { background: #e05030; }
+.bar-def   { background: #4a80c0; }
+.bar-moves { background: var(--accent); }
+
+/* Moves pips */
+.moves-pips {
+  display: flex;
+  gap: 4px;
+  padding: 6px 10px;
+  align-items: center;
+}
+.moves-pips .label { font-size: 12px; color: var(--text-muted); margin-right: 4px; }
+.pip {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: background 0.2s;
+}
+.pip.active { background: var(--accent); }
+.pip.used   { background: var(--danger); }
+
+/* Ability tags */
+.ability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 2px;
+}
+.tag {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border2);
+  color: var(--text-muted);
+  background: var(--surface);
+}
+.tag.gold  { color: var(--gold);  border-color: rgba(240,192,64,0.3);  background: rgba(240,192,64,0.07); }
+.tag.blue  { color: var(--player);border-color: rgba(74,158,255,0.3);  background: rgba(74,158,255,0.07); }
+.tag.red   { color: var(--danger); border-color: rgba(208,80,64,0.3);  background: rgba(208,80,64,0.07); }
+
+/* Unit actions */
+#unit-actions { display: flex; flex-direction: column; gap: 6px; }
+
+/* ── CITY PANEL ──────────────────────────── */
+#city-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.city-portrait {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.city-icon-big {
+  font-size: 28px;
+  width: 44px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.city-name  { font-size: 15px; font-weight: 700; color: var(--text); }
+.city-owner { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+
+.city-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.city-stat-row span { font-weight: 600; color: var(--text); }
+
+/* Buildings list */
+.section-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: 2px 0;
+}
+
+.building-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.building-icon { font-size: 16px; width: 20px; text-align: center; }
+.building-info { flex: 1; }
+.building-name { font-size: 13px; font-weight: 600; color: var(--text); }
+.building-desc { font-size: 11px; color: var(--text-muted); }
+.building-level { font-size: 11px; color: var(--accent); font-weight: 700; }
+
+/* Build / recruit buttons */
+.build-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+.build-btn:hover:not(:disabled) {
+  background: var(--surface2);
+  border-color: var(--accent2);
+}
+.build-btn:active:not(:disabled) { transform: scale(0.98); }
+.build-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.build-btn .btn-icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.build-btn .btn-label { flex: 1; font-weight: 600; }
+.build-btn .btn-sub { font-size: 11px; color: var(--text-muted); display: block; margin-top: 1px; }
+.build-btn .btn-cost {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--gold);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.build-btn .btn-cost.unaffordable { color: var(--danger); }
+
+/* Shared action button */
+.action-btn {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border2);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-align: center;
+}
+.action-btn:hover  { background: var(--surface); }
+.action-btn:active { transform: scale(0.98); }
+.action-btn.primary { background: var(--accent2); border-color: var(--accent); color: #fff; }
+.action-btn.primary:hover { background: var(--accent); }
+.action-btn.danger  { border-color: rgba(208,80,64,0.4); color: var(--danger); }
+.action-btn.danger:hover { background: rgba(208,80,64,0.1); }
+
+/* Divider */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 2px 0;
+}
+
+/* ── BUILD QUEUE ─────────────────────────── */
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: rgba(109,171,74,0.08);
+  border: 1px solid rgba(109,171,74,0.25);
+  font-size: 12px;
+}
+.queue-icon { font-size: 14px; }
+.queue-label { flex: 1; color: var(--text); }
+.queue-turns { color: var(--accent); font-weight: 700; }

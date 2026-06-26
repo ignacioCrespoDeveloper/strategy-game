@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Hexfront — Strategy Game</title>
+  <link rel="stylesheet" href="css/main.css" />
+  <link rel="stylesheet" href="css/panels.css" />
+</head>
+<body>
+  <!-- HUD -->
+  <header id="hud">
+    <div id="hud-left">
+      <div class="hud-logo">⚔ HEXFRONT</div>
+      <div class="res-group">
+        <div class="res-pill" title="Gold">💰 <span id="r-gold">0</span></div>
+        <div class="res-pill" title="Iron">⚙️ <span id="r-iron">0</span></div>
+        <div class="res-pill" title="Food">🌾 <span id="r-food">0</span></div>
+        <div class="res-pill" title="Wood">🌲 <span id="r-wood">0</span></div>
+      </div>
+    </div>
+    <div id="hud-right">
+      <div id="turn-display">Turn <span id="turn-num">1</span></div>
+      <button id="end-turn-btn">End Turn ↵</button>
+    </div>
+  </header>
+
+  <!-- Main layout -->
+  <main id="layout">
+    <!-- Map -->
+    <div id="map-wrap">
+      <canvas id="mapCanvas"></canvas>
+    </div>
+
+    <!-- Side panel -->
+    <aside id="side-panel">
+      <!-- Info panel: shown when something is selected -->
+      <div id="panel-idle" class="panel-section active">
+        <div class="panel-header">Awaiting orders</div>
+        <p class="panel-hint">Click a unit to select it, or a city to manage it.</p>
+        <div id="controlled-resources" class="res-summary"></div>
+      </div>
+
+      <!-- Unit panel -->
+      <div id="panel-unit" class="panel-section">
+        <div class="panel-header" id="unit-panel-title">Unit</div>
+        <div id="unit-stats"></div>
+        <div id="unit-actions"></div>
+      </div>
+
+      <!-- City panel -->
+      <div id="panel-city" class="panel-section">
+        <div class="panel-header" id="city-panel-title">City</div>
+        <div id="city-info"></div>
+        <div id="city-build-list"></div>
+      </div>
+    </aside>
+  </main>
+
+  <!-- Toast notification -->
+  <div id="toast"></div>
+
+  <!-- Scripts -->
+  <script src="js/data.js"></script>
+  <script src="js/hex.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/units.js"></script>
+  <script src="js/cities.js"></script>
+  <script src="js/renderer.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/ai.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>

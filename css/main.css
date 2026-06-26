@@ -1,0 +1,164 @@
+/* =============================================
+   HEXFRONT — main.css
+   Base layout, HUD, map canvas, toast
+============================================= */
+
+:root {
+  --bg:         #0f1a10;
+  --bg2:        #162018;
+  --surface:    #1e2e20;
+  --surface2:   #263628;
+  --border:     rgba(255,255,255,0.10);
+  --border2:    rgba(255,255,255,0.18);
+  --text:       #d4dbc8;
+  --text-muted: #7a8f72;
+  --text-dim:   #4a5e44;
+  --accent:     #6dab4a;
+  --accent2:    #4a7a30;
+  --gold:       #f0c040;
+  --iron:       #90a8b8;
+  --food:       #88cc44;
+  --wood:       #b87830;
+  --danger:     #d05040;
+  --warn:       #e09030;
+  --player:     #4a9eff;
+  --enemy:      #ff5050;
+  --font:       'Segoe UI', system-ui, -apple-system, sans-serif;
+  --radius:     8px;
+  --radius-lg:  14px;
+  --hud-h:      52px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 14px;
+  overflow: hidden;
+}
+
+/* ── HUD ─────────────────────────────────── */
+#hud {
+  height: var(--hud-h);
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  gap: 12px;
+  position: relative;
+  z-index: 10;
+}
+
+#hud-left { display: flex; align-items: center; gap: 16px; }
+#hud-right { display: flex; align-items: center; gap: 10px; }
+
+.hud-logo {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.res-group { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.res-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.res-pill span { min-width: 18px; text-align: right; }
+
+#turn-display {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+#end-turn-btn {
+  padding: 6px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent2);
+  background: var(--accent2);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  white-space: nowrap;
+}
+#end-turn-btn:hover  { background: var(--accent); }
+#end-turn-btn:active { transform: scale(0.97); }
+
+/* ── LAYOUT ──────────────────────────────── */
+#layout {
+  display: flex;
+  height: calc(100vh - var(--hud-h));
+  overflow: hidden;
+}
+
+/* ── MAP ─────────────────────────────────── */
+#map-wrap {
+  flex: 1;
+  overflow: auto;
+  background: #0d1a0e;
+  position: relative;
+}
+
+#mapCanvas {
+  display: block;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+
+/* ── TOAST ───────────────────────────────── */
+#toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(60px);
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 8px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  pointer-events: none;
+  transition: transform 0.25s ease, opacity 0.25s ease;
+  opacity: 0;
+  z-index: 100;
+  white-space: nowrap;
+}
+#toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+/* ── RESPONSIVE: narrow screens ──────────── */
+@media (max-width: 640px) {
+  #layout { flex-direction: column; }
+  #side-panel {
+    width: 100% !important;
+    height: 240px;
+    border-top: 1px solid var(--border);
+    border-left: none !important;
+    overflow-y: auto;
+  }
+  .hud-logo { display: none; }
+  .res-pill { padding: 3px 7px; font-size: 12px; }
+}
