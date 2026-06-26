@@ -50,7 +50,7 @@
   --radius-lg: 10px;
   --font:      'Segoe UI', system-ui, -apple-system, sans-serif;
   --hud-h:     48px;
-  --panel-h:   218px;
+  --panel-h:   224px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
