@@ -35,6 +35,10 @@ const AI = (() => {
         );
 
         const result = Units.move(enemy, best.c, best.r);
+        if (result.result === 'moved') {
+          GameMap.processCapture(enemy.c, enemy.r, 'enemy');
+          Cities.captureAt(enemy.c, enemy.r, 'enemy');
+        }
         if (result.result === 'combat' || result.result === 'blocked') break;
         if (enemy.moves <= 0) break;
       }

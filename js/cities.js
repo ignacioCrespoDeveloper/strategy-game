@@ -84,6 +84,17 @@ const Cities = (() => {
     Object.entries(cost).forEach(([k, v]) => { resources[k] = (resources[k] || 0) - v; });
   }
 
+  // Capture a city when a unit walks onto it; returns {name, prev} or null
+  function captureAt(c, r, newOwner) {
+    const city = getAt(c, r);
+    if (!city || city.owner === newOwner) return null;
+    const prev  = city.owner;
+    city.owner  = newOwner;
+    city.hp     = city.maxHp;
+    city.queue  = [];  // cancel enemy training queue on capture
+    return { name: city.name, prev };
+  }
+
   function getBuildingLevel(city, key) {
     const idx = Object.keys(BUILDING_TYPES).indexOf(key);
     return city.buildings[idx];
@@ -92,6 +103,6 @@ const Cities = (() => {
   return {
     init, getAll, getAt,
     buildBuilding, trainUnit,
-    processTurnEnd, getBuildingLevel,
+    processTurnEnd, captureAt, getBuildingLevel,
   };
 })();

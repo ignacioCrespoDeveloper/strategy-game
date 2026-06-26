@@ -30,6 +30,7 @@ const Units = (() => {
 
   function getAll()           { return list; }
   function getAt(c, r)        { return list.find(u => u.c === c && u.r === r) || null; }
+  function getAllAt(c, r)      { return list.filter(u => u.c === c && u.r === r); }
   function byOwner(owner)     { return list.filter(u => u.owner === owner); }
   function remove(id)         { list = list.filter(u => u.id !== id); }
 
@@ -39,23 +40,20 @@ const Units = (() => {
     });
   }
 
-  // Move unit; returns 'moved' | 'combat' | 'blocked'
+  // Move unit; returns 'moved' | 'combat'
   function move(unit, c, r) {
-    const occupant = getAt(c, r);
-    if (occupant) {
-      if (occupant.owner !== unit.owner) {
-        // Simple combat: attacker wins if atk > def's remaining hp/2
-        occupant.hp -= Math.max(1, unit.atk - occupant.def / 2);
-        unit.hp     -= Math.max(1, occupant.atk / 3);
-        if (occupant.hp <= 0) {
-          remove(occupant.id);
-          unit.c = c; unit.r = r;
-        }
-        unit.moves = 0;
-        return { result: 'combat', defeated: occupant.hp <= 0 };
+    const enemy = getAllAt(c, r).find(u => u.owner !== unit.owner);
+    if (enemy) {
+      enemy.hp -= Math.max(1, unit.atk - enemy.def / 2);
+      unit.hp  -= Math.max(1, enemy.atk / 3);
+      if (enemy.hp <= 0) {
+        remove(enemy.id);
+        unit.c = c; unit.r = r;
       }
-      return { result: 'blocked' };
+      unit.moves = 0;
+      return { result: 'combat', defeated: enemy.hp <= 0 };
     }
+    // Empty or friendly — move (stacking allowed)
     unit.c = c;
     unit.r = r;
     unit.moves = Math.max(0, unit.moves - 1);
@@ -75,12 +73,12 @@ const Units = (() => {
     return bfsReach(
       unit.c, unit.r, unit.moves,
       isPassable,
-      (c, r) => { const u = getAt(c, r); return u && u.owner === unit.owner; }
+      () => false  // friendly stacking allowed — no blocking
     );
   }
 
   return {
-    init, spawn, getAll, getAt, byOwner, remove,
+    init, spawn, getAll, getAt, getAllAt, byOwner, remove,
     resetMoves, move, reachableFor,
   };
 })();

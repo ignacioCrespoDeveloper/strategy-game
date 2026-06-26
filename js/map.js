@@ -3,15 +3,27 @@
 // =============================================
 
 const GameMap = (() => {
-  const resourceMap = {};   // hexKey → resource type
+  const resourceMap       = {};   // hexKey → resource type
+  const capturedResources = {};   // hexKey → 'player' | 'enemy' | null
 
   function init() {
     RESOURCE_SPAWNS.forEach(({ c, r, type }) => {
       resourceMap[hexKey(c, r)] = type;
+      capturedResources[hexKey(c, r)] = null;
     });
   }
 
-  function getResource(c, r) { return resourceMap[hexKey(c, r)] || null; }
+  function getResource(c, r)   { return resourceMap[hexKey(c, r)] || null; }
+  function getCapturedBy(c, r) { return capturedResources[hexKey(c, r)] || null; }
+
+  // Capture a resource node; returns {type} if ownership changed, null otherwise
+  function processCapture(c, r, owner) {
+    const k = hexKey(c, r);
+    if (!resourceMap[k]) return null;
+    if (capturedResources[k] === owner) return null;
+    capturedResources[k] = owner;
+    return { type: resourceMap[k] };
+  }
 
   // Control zones: all hexes within 1 step of each owner's units
   function getZones(units) {
@@ -25,13 +37,12 @@ const GameMap = (() => {
     return zones;
   }
 
-  // Collect resources for player based on control zones
+  // Collect resources for player based on captured nodes and city buildings
   function collectIncome(units, cities, resources) {
-    const { player } = getZones(units);
-
-    // Hex resources
-    Object.entries(resourceMap).forEach(([k, type]) => {
-      if (player.has(k)) {
+    // Captured resource nodes
+    Object.entries(capturedResources).forEach(([k, owner]) => {
+      if (owner === 'player') {
+        const type = resourceMap[k];
         resources[type] = (resources[type] || 0) + RESOURCE_DEF[type].income;
       }
     });
@@ -46,6 +57,23 @@ const GameMap = (() => {
         if (key === 'forge')  resources.iron  += lvl;
       });
     });
+  }
+
+  // Heal units within 2 hexes of a friendly city (10 HP/turn)
+  function healUnits(units, cities) {
+    const msgs = [];
+    units.forEach(u => {
+      if (u.hp >= u.maxHp) return;
+      const nearCity = cities.find(ci =>
+        ci.owner === u.owner &&
+        Math.max(Math.abs(ci.c - u.c), Math.abs(ci.r - u.r)) <= 2
+      );
+      if (!nearCity) return;
+      const amount = Math.min(10, u.maxHp - u.hp);
+      u.hp += amount;
+      if (u.owner === 'player') msgs.push(`${UNIT_TYPES[u.type].name} recupera ${amount} HP cerca de ${nearCity.name}`);
+    });
+    return msgs;
   }
 
   // Deduct maintenance for all player units. Units with unpaid upkeep lose HP.
@@ -90,5 +118,5 @@ const GameMap = (() => {
     return TERRAIN_MAP[r]?.[c] === 'water';
   }
 
-  return { init, getResource, getZones, collectIncome, deductMaintenance, getTotalMaintenance, isWater };
+  return { init, getResource, getCapturedBy, processCapture, getZones, collectIncome, healUnits, deductMaintenance, getTotalMaintenance, isWater };
 })();

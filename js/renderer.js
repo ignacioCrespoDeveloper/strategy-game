@@ -14,9 +14,9 @@ const Renderer = (() => {
 
   function resize() {
     const wrap = document.getElementById('map-wrap');
-    const W    = wrap.clientWidth  || 680;
-    const H    = wrap.clientHeight || 480;
-    scale      = Math.min(W / 680, H / 480, 1.4);
+    const W    = wrap.clientWidth  || 800;
+    const H    = wrap.clientHeight || 600;
+    scale      = Math.min(W / 680, H / 480, 2.4);
     canvas.width  = Math.round(680 * scale);
     canvas.height = Math.round(480 * scale);
   }
@@ -64,6 +64,20 @@ const Renderer = (() => {
         if (!res) continue;
         const { x, y } = hexCenter(col, row, scale);
         drawText(RESOURCE_DEF[res].icon, x, y + r * 0.05, r * 0.52, 'center', 'middle', '', 0.85);
+
+        // Ownership flag dot
+        const capturedBy = GameMap.getCapturedBy(col, row);
+        if (capturedBy) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(x + r * 0.38, y - r * 0.28, 4 * scale, 0, Math.PI * 2);
+          ctx.fillStyle = capturedBy === 'player' ? '#4a9eff' : '#ff5050';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+          ctx.lineWidth = 1 * scale;
+          ctx.stroke();
+          ctx.restore();
+        }
       }
     }
 
@@ -107,15 +121,23 @@ const Renderer = (() => {
       ctx.restore();
     });
 
-    // ── Pass 5: units
+    // ── Pass 5: units (grouped per hex to support stacking)
+    const hexGroups = new Map();
     units.forEach(u => {
+      const k = hexKey(u.c, u.r);
+      if (!hexGroups.has(k)) hexGroups.set(k, []);
+      hexGroups.get(k).push(u);
+    });
+
+    hexGroups.forEach(stack => {
+      const u          = stack[0];
       const { x, y }  = hexCenter(u.c, u.r, scale);
-      const isSelected  = selectedUnit && selectedUnit.id === u.id;
-      const isInGroup   = selectedGroup && selectedGroup.includes(u.id);
-      const isPlayer    = u.owner === 'player';
-      const def         = UNIT_TYPES[u.type];
-      const col         = isPlayer ? '#4a9eff' : '#ff5050';
-      const exhausted   = u.moves === 0;
+      const isSelected = selectedUnit && stack.some(su => su.id === selectedUnit.id);
+      const isInGroup  = selectedGroup && stack.some(su => selectedGroup.includes(su.id));
+      const isPlayer   = u.owner === 'player';
+      const def        = UNIT_TYPES[u.type];
+      const col        = isPlayer ? '#4a9eff' : '#ff5050';
+      const exhausted  = stack.every(su => su.moves === 0);
 
       // Group highlight ring (solid green)
       if (isInGroup) {
@@ -177,6 +199,25 @@ const Renderer = (() => {
         ctx.arc(px, y + r * 0.6, 2.5 * scale, 0, Math.PI * 2);
         ctx.fillStyle = i < u.moves ? col : 'rgba(100,100,100,0.5)';
         ctx.fill();
+      }
+
+      // Stack count badge (top-right of unit circle)
+      if (stack.length > 1) {
+        const bx = x + r * 0.28, by = y - r * 0.28;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(bx, by, r * 0.22, 0, Math.PI * 2);
+        ctx.fillStyle = col;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+        ctx.lineWidth = 1 * scale;
+        ctx.stroke();
+        ctx.font = `bold ${Math.round(r * 0.24)}px sans-serif`;
+        ctx.fillStyle = '#fff';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(stack.length, bx, by);
+        ctx.restore();
       }
     });
   }

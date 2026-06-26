@@ -25,44 +25,40 @@
     </div>
   </header>
 
-  <!-- Main layout -->
+  <!-- Map: full screen below HUD -->
   <main id="layout">
-    <!-- Map -->
     <div id="map-wrap">
       <canvas id="mapCanvas"></canvas>
     </div>
+  </main>
 
-    <!-- Side panel -->
-    <aside id="side-panel">
-      <!-- Info panel: shown when something is selected -->
-      <div id="panel-idle" class="panel-section active">
-        <div class="panel-header">Awaiting orders</div>
-        <p class="panel-hint">Click a unit to select it, or a city to manage it.</p>
-        <div id="controlled-resources" class="res-summary"></div>
-      </div>
+  <!-- Bottom info panel — hidden when idle, slides up on selection -->
+  <div id="bottom-panel">
+    <div class="bp-frame">
+      <button class="bp-close" onclick="Game.deselect()">✕</button>
 
       <!-- Unit panel -->
       <div id="panel-unit" class="panel-section">
-        <div class="panel-header" id="unit-panel-title">Unit</div>
-        <div id="unit-stats"></div>
-        <div id="unit-actions"></div>
+        <div class="bp-col bp-portrait" id="bp-unit-portrait"></div>
+        <div class="bp-col bp-main"     id="bp-unit-stats"></div>
+        <div class="bp-col bp-actions"  id="bp-unit-actions"></div>
       </div>
 
       <!-- City panel -->
       <div id="panel-city" class="panel-section">
-        <div class="panel-header" id="city-panel-title">City</div>
-        <div id="city-info"></div>
-        <div id="city-build-list"></div>
+        <div class="bp-col bp-portrait" id="bp-city-portrait"></div>
+        <div class="bp-col bp-main"     id="bp-city-main"></div>
+        <div class="bp-col bp-actions"  id="bp-city-actions"></div>
       </div>
 
-      <!-- Group panel -->
+      <!-- Army panel -->
       <div id="panel-group" class="panel-section">
-        <div class="panel-header">Group Selected</div>
-        <div id="group-info"></div>
-        <div id="group-actions"></div>
+        <div class="bp-col bp-portrait" id="bp-army-portrait"></div>
+        <div class="bp-col bp-main"     id="bp-army-main"></div>
+        <div class="bp-col bp-actions"  id="bp-army-actions"></div>
       </div>
-    </aside>
-  </main>
+    </div>
+  </div>
 
   <!-- Toast notification -->
   <div id="toast"></div>

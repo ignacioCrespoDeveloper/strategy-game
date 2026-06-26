@@ -1,33 +1,56 @@
 /* =============================================
    HEXFRONT — main.css
-   Base layout, HUD, map canvas, toast
+   Total War: Rome II campaign aesthetic
 ============================================= */
 
 :root {
-  --bg:         #0f1a10;
-  --bg2:        #162018;
-  --surface:    #1e2e20;
-  --surface2:   #263628;
-  --border:     rgba(255,255,255,0.10);
-  --border2:    rgba(255,255,255,0.18);
-  --text:       #d4dbc8;
-  --text-muted: #7a8f72;
-  --text-dim:   #4a5e44;
-  --accent:       #6dab4a;
-  --accent2:      #4a7a30;
+  /* Dark imperial palette */
+  --bg:         #07060400;
+  --bg:         #080604;
+  --bg2:        #0e0b06;
+  --surface:    #161009;
+  --surface2:   #1e160c;
+  --surface3:   #261e10;
+
+  /* Gold / bronze accents */
+  --gold:        #c8a030;
+  --gold-bright: #e8c050;
+  --gold-mid:    #8a6c20;
+  --gold-dim:    #4a3a10;
+
+  /* Parchment text */
+  --text:       #d4c89a;
+  --text-muted: #8a7856;
+  --text-dim:   #4a3e28;
+
+  /* Unit / faction colours */
+  --player:       #4a9eff;
+  --enemy:        #ff5050;
+  --accent:       #c8a030;
+  --accent2:      #6a5018;
   --accent-green: #50dc78;
-  --gold:       #f0c040;
-  --iron:       #90a8b8;
-  --food:       #88cc44;
-  --wood:       #b87830;
-  --danger:     #d05040;
-  --warn:       #e09030;
-  --player:     #4a9eff;
-  --enemy:      #ff5050;
-  --font:       'Segoe UI', system-ui, -apple-system, sans-serif;
-  --radius:     8px;
-  --radius-lg:  14px;
-  --hud-h:      52px;
+
+  /* Status */
+  --danger:  #d05040;
+  --warn:    #e09030;
+
+  /* Resource colours */
+  --gold-res: #f0c040;
+  --iron:     #90a8b8;
+  --food:     #88cc44;
+  --wood:     #b87830;
+
+  /* Borders */
+  --border:  rgba(200,160,48,0.18);
+  --border2: rgba(200,160,48,0.40);
+  --border3: rgba(200,160,48,0.72);
+
+  /* Misc */
+  --radius:    5px;
+  --radius-lg: 10px;
+  --font:      'Segoe UI', system-ui, -apple-system, sans-serif;
+  --hud-h:     48px;
+  --panel-h:   218px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -44,122 +67,135 @@ html, body {
 /* ── HUD ─────────────────────────────────── */
 #hud {
   height: var(--hud-h);
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #181108 0%, #0c0904 100%);
+  border-bottom: 1px solid var(--border2);
+  box-shadow: 0 2px 16px rgba(0,0,0,0.9), inset 0 -1px 0 rgba(200,160,48,0.08);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 18px;
   gap: 12px;
   position: relative;
-  z-index: 10;
+  z-index: 20;
 }
 
-#hud-left { display: flex; align-items: center; gap: 16px; }
+#hud-left  { display: flex; align-items: center; gap: 16px; }
 #hud-right { display: flex; align-items: center; gap: 10px; }
 
 .hud-logo {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  color: var(--accent);
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  text-shadow: 0 0 14px rgba(200,160,48,0.55);
   white-space: nowrap;
 }
 
-.res-group { display: flex; gap: 6px; flex-wrap: wrap; }
+.res-group { display: flex; gap: 5px; }
 
 .res-pill {
   display: flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 10px;
-  border-radius: 20px;
+  padding: 3px 11px;
+  border-radius: 3px;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: rgba(255,255,255,0.025);
   font-size: 13px;
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
+  transition: border-color 0.15s;
 }
-
-.res-pill span { min-width: 18px; text-align: right; }
+.res-pill:hover { border-color: var(--border2); }
+.res-pill span  { min-width: 20px; text-align: right; }
 
 #turn-display {
-  font-size: 13px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
   color: var(--text-muted);
   white-space: nowrap;
 }
 
 #end-turn-btn {
-  padding: 6px 16px;
-  border-radius: var(--radius);
-  border: 1px solid var(--accent2);
-  background: var(--accent2);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
+  padding: 6px 18px;
+  border-radius: 3px;
+  border: 1px solid var(--gold-mid);
+  background: linear-gradient(180deg, #2c2008 0%, #181206 100%);
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
   white-space: nowrap;
 }
-#end-turn-btn:hover  { background: var(--accent); }
+#end-turn-btn:hover {
+  background: linear-gradient(180deg, #3e2e0c 0%, #241a08 100%);
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(200,160,48,0.28);
+}
 #end-turn-btn:active { transform: scale(0.97); }
 
 /* ── LAYOUT ──────────────────────────────── */
 #layout {
-  display: flex;
+  width: 100%;
   height: calc(100vh - var(--hud-h));
+  position: relative;
   overflow: hidden;
 }
 
 /* ── MAP ─────────────────────────────────── */
 #map-wrap {
-  flex: 1;
-  overflow: auto;
-  background: #0d1a0e;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #040302;
   position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Subtle vignette on map edges */
+#map-wrap::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.5) 100%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 #mapCanvas {
   display: block;
   cursor: pointer;
   image-rendering: pixelated;
+  position: relative;
+  z-index: 0;
 }
 
 /* ── TOAST ───────────────────────────────── */
 #toast {
   position: fixed;
-  bottom: 20px;
+  top: calc(var(--hud-h) + 10px);
   left: 50%;
-  transform: translateX(-50%) translateY(60px);
-  background: var(--surface2);
+  transform: translateX(-50%) translateY(-70px);
+  background: rgba(12,9,5,0.96);
   border: 1px solid var(--border2);
   color: var(--text);
-  padding: 8px 20px;
-  border-radius: 20px;
+  padding: 7px 20px;
+  border-radius: 3px;
   font-size: 13px;
   font-weight: 500;
   pointer-events: none;
-  transition: transform 0.25s ease, opacity 0.25s ease;
+  transition: transform 0.22s ease, opacity 0.22s ease;
   opacity: 0;
-  z-index: 100;
+  z-index: 200;
   white-space: nowrap;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.7);
 }
 #toast.show {
   transform: translateX(-50%) translateY(0);
   opacity: 1;
-}
-
-/* ── RESPONSIVE: narrow screens ──────────── */
-@media (max-width: 640px) {
-  #layout { flex-direction: column; }
-  #side-panel {
-    width: 100% !important;
-    height: 240px;
-    border-top: 1px solid var(--border);
-    border-left: none !important;
-    overflow-y: auto;
-  }
-  .hud-logo { display: none; }
-  .res-pill { padding: 3px 7px; font-size: 12px; }
 }
