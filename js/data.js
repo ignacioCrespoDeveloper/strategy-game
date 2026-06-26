@@ -112,46 +112,63 @@ const BARRACKS_UNLOCK = {
   3: ['warrior', 'scout', 'archer', 'knight', 'catapult'],
 };
 
-// Terrain map: 8 rows × 11 cols
+// Compact terrain map builder
+const _T = s => s.split(' ').map(c => ({ p:'plains', f:'forest', m:'mountain', w:'water', d:'desert' }[c]));
+
+// Terrain map: 18 rows × 24 cols — continent surrounded by ocean
 const TERRAIN_MAP = [
-  ['plains','plains','forest','forest','mountain','mountain','plains','plains','water','water','plains'],
-  ['plains','forest','forest','plains','mountain','plains','plains','water','water','plains','plains'],
-  ['plains','plains','plains','plains','plains','plains','plains','plains','plains','plains','mountain'],
-  ['plains','desert','desert','plains','plains','forest','forest','plains','plains','mountain','mountain'],
-  ['plains','desert','plains','plains','forest','forest','plains','plains','water','water','plains'],
-  ['plains','plains','plains','plains','plains','plains','plains','plains','water','plains','plains'],
-  ['mountain','mountain','plains','plains','plains','desert','desert','plains','plains','plains','plains'],
-  ['mountain','plains','plains','plains','plains','desert','plains','plains','plains','plains','plains'],
+  _T('w w w w w w w w w w w w w w w w w w w w w w w w'), // 0
+  _T('w w w w w p p p p p p p p w w w w w w w w w w w'), // 1
+  _T('w w w w p p f f p p p p p p p w w w w w w w w w'), // 2
+  _T('w w w p p f f f p m m p p p p p p w w w w w w w'), // 3
+  _T('w w p p f f p p p m m m p p p p p p w w w w w w'), // 4
+  _T('w w p p p p p p p p m p p p p f f p p p w w w w'), // 5
+  _T('w p p p p p p d d p p p p p f f f p p p p w w w'), // 6
+  _T('w p p p d d d d p p p p p f f p p p p p p p w w'), // 7
+  _T('w w p p d d p p p p p p p p p p p p p p m p w w'), // 8
+  _T('w w p p p p p p p p p p p p p p p m m p p p w w'), // 9
+  _T('w w w p p p p p p p p p p p p p m m p p p p w w'), // 10
+  _T('w w w p p p p p p p p f f p p p m p p p p w w w'), // 11
+  _T('w w w w p p p p p p f f f p p p p p p p w w w w'), // 12
+  _T('w w w w p p p p p f f p p p p p p p w w w w w w'), // 13
+  _T('w w w w w p p p p p p p p p p p w w w w w w w w'), // 14
+  _T('w w w w w w p p p p p p p w w w w w w w w w w w'), // 15
+  _T('w w w w w w w p p p p w w w w w w w w w w w w w'), // 16
+  _T('w w w w w w w w w w w w w w w w w w w w w w w w'), // 17
 ];
 
 const RESOURCE_SPAWNS = [
-  { c:2, r:1, type:'wood'  },
-  { c:3, r:0, type:'wood'  },
-  { c:1, r:3, type:'gold'  },
-  { c:4, r:4, type:'food'  },
-  { c:5, r:5, type:'food'  },
-  { c:6, r:2, type:'iron'  },
-  { c:7, r:1, type:'iron'  },
-  { c:9, r:3, type:'gold'  },
-  { c:8, r:6, type:'wood'  },
-  { c:1, r:6, type:'food'  },
-  { c:5, r:2, type:'gold'  },
-  { c:3, r:5, type:'iron'  },
+  { c:6,  r:3,  type:'wood' },   // NW forest
+  { c:13, r:7,  type:'wood' },   // center forest
+  { c:15, r:6,  type:'wood' },   // NE forest
+  { c:10, r:13, type:'wood' },   // south forest
+  { c:4,  r:5,  type:'gold' },   // NW plains
+  { c:12, r:10, type:'gold' },   // center plains
+  { c:8,  r:12, type:'gold' },   // south plains
+  { c:17, r:5,  type:'gold' },   // NE plains
+  { c:8,  r:5,  type:'food' },   // center-left
+  { c:13, r:8,  type:'food' },   // center
+  { c:5,  r:13, type:'food' },   // south
+  { c:10, r:9,  type:'food' },   // center
+  { c:9,  r:4,  type:'iron' },   // NW mountains
+  { c:10, r:5,  type:'iron' },   // mountain pass
+  { c:17, r:9,  type:'iron' },   // E mountains
+  { c:20, r:8,  type:'iron' },   // far-east mountains
 ];
 
 const CITY_SPAWNS = [
-  { c:5, r:3, name:'Ironhold',   owner:'neutral' },
-  { c:1, r:1, name:'Dawnfort',   owner:'player'  },
-  { c:9, r:6, name:'Ashrock',    owner:'enemy'   },
-  { c:8, r:2, name:'Silvergate', owner:'neutral' },
+  { c:5,  r:2,  name:'Dawnfort',   owner:'player'  },
+  { c:19, r:9,  name:'Ashrock',    owner:'enemy'   },
+  { c:11, r:7,  name:'Ironhold',   owner:'neutral' },
+  { c:15, r:4,  name:'Silvergate', owner:'neutral' },
 ];
 
 const INITIAL_UNITS = [
-  { type:'warrior', c:1, r:1, owner:'player' },
-  { type:'scout',   c:2, r:2, owner:'player' },
-  { type:'warrior', c:9, r:5, owner:'enemy'  },
-  { type:'warrior', c:8, r:7, owner:'enemy'  },
+  { type:'warrior', c:5,  r:2,  owner:'player' },
+  { type:'scout',   c:6,  r:4,  owner:'player' },
+  { type:'warrior', c:19, r:9,  owner:'enemy'  },
+  { type:'warrior', c:18, r:8,  owner:'enemy'  },
 ];
 
-const COLS = 11;
-const ROWS = 8;
+const COLS = 24;
+const ROWS = 18;

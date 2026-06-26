@@ -77,13 +77,15 @@ function bfsReach(startC, startR, maxMoves, isPassable, isBlocked) {
   return reach;
 }
 
-// Nearest hex from pixel coordinates
-function pixelToHex(px, py, scale) {
+// Nearest hex from pixel coordinates (screen-space px,py + camera offset)
+function pixelToHex(px, py, scale, camX = 0, camY = 0) {
+  const wx = px + camX;
+  const wy = py + camY;
   let best = null, bestDist = Infinity;
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const { x, y } = hexCenter(col, row, scale);
-      const d = Math.hypot(px - x, py - y);
+      const d = Math.hypot(wx - x, wy - y);
       if (d < bestDist) { bestDist = d; best = { c: col, r: row }; }
     }
   }

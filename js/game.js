@@ -23,6 +23,17 @@ const Game = (() => {
     document.getElementById('mapCanvas').addEventListener('click', onMapClick);
     document.getElementById('end-turn-btn').addEventListener('click', endTurn);
 
+    // Arrow-key camera pan (smooth via rAF inside Renderer)
+    const PAN_DIRS = { ArrowLeft:'left', ArrowRight:'right', ArrowUp:'up', ArrowDown:'down' };
+    document.addEventListener('keydown', e => {
+      const dir = PAN_DIRS[e.key];
+      if (dir) { e.preventDefault(); Renderer.setPanFlag(dir, true); }
+    });
+    document.addEventListener('keyup', e => {
+      const dir = PAN_DIRS[e.key];
+      if (dir) Renderer.setPanFlag(dir, false);
+    });
+
     UI.updateHUD(state.resources, state.turn);
     UI.showIdle();
     render();
@@ -31,7 +42,8 @@ const Game = (() => {
   // ── Click handler ───────────────────────────
   function onMapClick(e) {
     const rect = e.target.getBoundingClientRect();
-    const hex  = pixelToHex(e.clientX - rect.left, e.clientY - rect.top, Renderer.getScale());
+    const cam  = Renderer.getCamera();
+    const hex  = pixelToHex(e.clientX - rect.left, e.clientY - rect.top, Renderer.getScale(), cam.x, cam.y);
     if (!hex) return;
 
     const unit = Units.getAt(hex.c, hex.r);
