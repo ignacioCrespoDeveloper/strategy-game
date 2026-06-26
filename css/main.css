@@ -110,6 +110,18 @@ html, body {
 .res-pill:hover { border-color: var(--border2); }
 .res-pill span  { min-width: 20px; text-align: right; }
 
+/* Per-turn net income badge inside HUD pill */
+.res-net {
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 0;
+  margin-left: 1px;
+  transition: color 0.2s;
+}
+.res-net.pos  { color: #50dc78; }
+.res-net.neg  { color: #d05040; }
+.res-net.zero { display: none; }
+
 #turn-display {
   font-size: 12px;
   letter-spacing: 0.06em;

@@ -13,10 +13,10 @@
     <div id="hud-left">
       <div class="hud-logo">⚔ HEXFRONT</div>
       <div class="res-group">
-        <div class="res-pill" title="Gold">💰 <span id="r-gold">0</span></div>
-        <div class="res-pill" title="Iron">⚙️ <span id="r-iron">0</span></div>
-        <div class="res-pill" title="Food">🌾 <span id="r-food">0</span></div>
-        <div class="res-pill" title="Wood">🌲 <span id="r-wood">0</span></div>
+        <div class="res-pill" title="Gold">💰 <span id="r-gold">0</span><span class="res-net" id="rn-gold"></span></div>
+        <div class="res-pill" title="Iron">⚙️ <span id="r-iron">0</span><span class="res-net" id="rn-iron"></span></div>
+        <div class="res-pill" title="Food">🌾 <span id="r-food">0</span><span class="res-net" id="rn-food"></span></div>
+        <div class="res-pill" title="Wood">🌲 <span id="r-wood">0</span><span class="res-net" id="rn-wood"></span></div>
       </div>
     </div>
     <div id="hud-right">
@@ -56,6 +56,9 @@
 
   <!-- Toast notification -->
   <div id="toast"></div>
+
+  <!-- Unit tooltip (fixed, shown on hover over unit cards) -->
+  <div id="tw-tooltip"></div>
 
   <!-- Scripts -->
   <script src="js/data.js"></script>

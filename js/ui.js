@@ -4,6 +4,7 @@
 
 const UI = (() => {
 
+  // ── Panel visibility ─────────────────────────
   function showPanel(id) {
     document.querySelectorAll('.panel-section').forEach(el => el.classList.remove('active'));
     const bp = document.getElementById('bottom-panel');
@@ -17,17 +18,14 @@ const UI = (() => {
 
   function showIdle() { showPanel('panel-idle'); }
 
-  // ── Enemy unit panel ────────────────────────
+  // ── Enemy/allied unit panel ──────────────────
   function showUnit(unit) {
     const def      = UNIT_TYPES[unit.type];
     const isPlayer = unit.owner === 'player';
-    const hpPct    = Math.round((unit.hp / unit.maxHp) * 100);
-    const hpColor  = hpPct > 60 ? '#4aaa44' : hpPct > 30 ? '#e09030' : '#d05040';
     const maintStr = _maintStr(def.maintenance);
 
     document.getElementById('bp-unit-content').innerHTML = `
       <div class="tw-panel">
-        <!-- Portrait -->
         <div class="tw-portrait">
           <div class="tw-port-label">${isPlayer ? 'Aliado' : 'Enemigo'}</div>
           <div class="tw-port-frame">${def.icon}</div>
@@ -37,8 +35,6 @@ const UI = (() => {
             ${maintStr ? `<div class="tw-port-sub" style="margin-top:4px;color:var(--warn)">⚔ ${maintStr}/t</div>` : ''}
           </div>
         </div>
-
-        <!-- Stats -->
         <div class="tw-body">
           <div class="tw-header">
             <span class="tw-title">${def.name}</span>
@@ -46,12 +42,12 @@ const UI = (() => {
           </div>
           <div class="tw-stats-block">
             ${_bar('HP',      unit.hp,       unit.maxHp, 'tw-bar-hp')}
-            ${_bar('Attack',  unit.atk,      100,        'tw-bar-atk')}
-            ${_bar('Defense', unit.def,      100,        'tw-bar-def')}
-            ${_bar('Speed',   unit.maxMoves, 5,          'tw-bar-spd')}
+            ${_bar('Ataque',  unit.atk,      100,        'tw-bar-atk')}
+            ${_bar('Defensa', unit.def,      100,        'tw-bar-def')}
+            ${_bar('Velocidad', unit.maxMoves, 5,        'tw-bar-spd')}
           </div>
           <div class="tw-pips">
-            <span class="tw-pips-label">Moves</span>
+            <span class="tw-pips-label">Movimientos</span>
             ${Array.from({length: unit.maxMoves}, (_, i) =>
               `<div class="tw-pip ${i < unit.moves ? 'on' : ''}"></div>`
             ).join('')}
@@ -67,14 +63,14 @@ const UI = (() => {
     showPanel('panel-unit');
   }
 
-  // ── Army panel ──────────────────────────────
+  // ── Army panel ───────────────────────────────
   function showArmy(units) {
     const movable      = units.filter(u => u.moves > 0);
-    const minMoves     = movable.length > 0 ? Math.min(...movable.map(u => u.moves)) : 0;
     const anyExhausted = units.some(u => u.moves === 0);
     const anyMovable   = movable.length > 0;
     const isLocked     = anyExhausted && anyMovable;
     const canSplit     = units.length > 1;
+    const minMoves     = anyMovable ? Math.min(...movable.map(u => u.moves)) : 0;
 
     const totalMaint = {};
     units.forEach(u => {
@@ -82,19 +78,17 @@ const UI = (() => {
         totalMaint[k] = (totalMaint[k] || 0) + v;
       });
     });
-    const maintStr = _maintStr(totalMaint);
-
+    const maintStr    = _maintStr(totalMaint);
     const statusText  = !anyMovable ? 'Agotado' : isLocked ? 'Bloqueado' : `Vel. ${minMoves}`;
     const statusColor = !anyMovable ? 'var(--text-dim)' : isLocked ? 'var(--warn)' : 'var(--accent-green)';
 
     let hintText = '', hintActive = false;
-    if (!anyMovable)    { hintText = 'Sin movimientos. Termina el turno.'; }
-    else if (isLocked)  { hintText = 'Unidades mixtas — usa → en una tropa individual.'; }
-    else                { hintText = 'Click en hex iluminado para mover.'; hintActive = true; }
+    if (!anyMovable)   { hintText = 'Sin movimientos. Termina el turno.'; }
+    else if (isLocked) { hintText = 'Unidades mixtas — usa → en una tropa individual.'; }
+    else               { hintText = 'Click en hex iluminado para mover.'; hintActive = true; }
 
     document.getElementById('bp-army-content').innerHTML = `
       <div class="tw-panel">
-        <!-- Portrait: general / army -->
         <div class="tw-portrait">
           <div class="tw-port-label">Ejército</div>
           <div class="tw-port-frame">⚔</div>
@@ -105,19 +99,14 @@ const UI = (() => {
           </div>
         </div>
 
-        <!-- Body: unit cards + action bar -->
         <div class="tw-body">
           <div class="tw-header">
             <span class="tw-title">Selección</span>
             <span class="tw-subtitle">${movable.length}/${units.length} con movimiento</span>
           </div>
-
-          <!-- Horizontal unit cards -->
           <div class="tw-cards-row">
             ${units.map(u => _unitCard(u, canSplit)).join('')}
           </div>
-
-          <!-- Action bar -->
           <div class="tw-action-bar">
             <div class="tw-action-hint ${hintActive ? 'active' : ''}">${hintText}</div>
             <div class="tw-btn-wrap">
@@ -133,7 +122,7 @@ const UI = (() => {
 
   function showGroup(units) { showArmy(units); }
 
-  // ── City panel ──────────────────────────────
+  // ── City panel ───────────────────────────────
   function showCity(city, resources, onBuild, onTrain) {
     UI._onBuild = onBuild;
     UI._onTrain = onTrain;
@@ -143,59 +132,55 @@ const UI = (() => {
 
     document.getElementById('bp-city-content').innerHTML = `
       <div class="tw-panel">
-        <!-- Portrait -->
         <div class="tw-portrait">
           <div class="tw-port-label">Ciudad</div>
           <div class="tw-port-frame">🏰</div>
           <div class="tw-port-nameplate">
             <div class="tw-port-title">${city.name}</div>
             <div class="tw-port-sub">${ownerLabel}</div>
-            ${city.queue.length ? `<div style="width:100%;margin-top:5px">
-              ${city.queue.map(q => `
-                <div class="queue-row">
-                  <span class="queue-icon">${UNIT_TYPES[q.key]?.icon || '🔨'}</span>
-                  <span class="queue-label">${UNIT_TYPES[q.key]?.name || q.key}</span>
-                  <span class="queue-turns">${q.turnsLeft}t</span>
-                </div>`).join('')}
-            </div>` : '<div class="tw-hint" style="margin-top:5px">Cola vacía</div>'}
+            ${city.queue.length
+              ? `<div style="width:100%;margin-top:5px">
+                  ${city.queue.map(q => `
+                    <div class="queue-row">
+                      <span class="queue-icon">${UNIT_TYPES[q.key]?.icon || '🔨'}</span>
+                      <span class="queue-label">${UNIT_TYPES[q.key]?.name || q.key}</span>
+                      <span class="queue-turns">${q.turnsLeft}t</span>
+                    </div>`).join('')}
+                </div>`
+              : '<div class="tw-hint" style="margin-top:5px">Cola vacía</div>'}
           </div>
         </div>
 
-        <!-- Body: buildings -->
         <div class="tw-body">
           <div class="tw-header">
             <span class="tw-title">${city.name}</span>
             <span class="tw-subtitle">Edificios</span>
           </div>
-
           <div class="tw-cards-row">
             ${city.owner !== 'player'
               ? `<p class="tw-hint" style="align-self:center;padding:8px">Conquista esta ciudad para gestionarla.</p>`
               : _buildingCards(city, resources)}
           </div>
-
           ${city.owner === 'player' ? `
-          <div class="tw-action-bar">
-            <div class="tw-action-hint">Mejora edificios ↑</div>
-          </div>` : ''}
+            <div class="tw-action-bar">
+              <div class="tw-action-hint">Mejora edificios ↑</div>
+            </div>` : ''}
         </div>
 
-        <!-- Recruit column -->
         ${city.owner === 'player' ? _recruitCol(city, resources) : ''}
       </div>
     `;
     showPanel('panel-city');
   }
 
-  // ── Helpers ─────────────────────────────────
-
+  // ── Helpers: unit card with data-uid for tooltip ─
   function _unitCard(u, canSplit) {
     const def    = UNIT_TYPES[u.type];
     const hpPct  = Math.round((u.hp / u.maxHp) * 100);
     const hpCol  = hpPct > 60 ? '#4aaa44' : hpPct > 30 ? '#e09030' : '#d05040';
     const exh    = u.moves === 0;
     const showSp = canSplit && u.moves > 0;
-    return `<div class="tw-unit-card ${exh ? 'exhausted' : ''}" title="${def.name} · ${u.hp}/${u.maxHp} HP">
+    return `<div class="tw-unit-card ${exh ? 'exhausted' : ''}" data-uid="${u.id}">
       <div class="tw-card-port">
         ${exh ? '<div class="tw-card-badge">Agot.</div>' : ''}
         ${def.icon}
@@ -245,28 +230,26 @@ const UI = (() => {
   function _recruitCol(city, resources) {
     const bKeys   = Object.keys(BUILDING_TYPES);
     const barrLvl = city.buildings[bKeys.indexOf('barracks')];
-    const hasArmy = Game.armyNearCity(city);
-    const noArmies = Units.byOwner('player').length === 0;
-    const canRec  = hasArmy || noArmies;
 
     let inner = '';
     if (barrLvl === 0) {
       inner = `<p class="tw-hint">Construye Barracas para reclutar.</p>`;
-    } else if (!canRec) {
-      inner = `<p class="tw-hint" style="color:var(--warn)">Acerca un ejército a la ciudad.</p>`;
     } else {
-      if (noArmies) inner += `<p class="tw-hint" style="color:var(--accent-green);margin-bottom:3px">Crea tu primer ejército</p>`;
       const unlocked = BARRACKS_UNLOCK[barrLvl] || [];
-      inner += unlocked.map(uType => {
-        const uDef = UNIT_TYPES[uType];
-        const cost = uDef.cost;
-        const canA = Object.entries(cost).every(([k, v]) => (resources[k] || 0) >= v);
-        return `<button class="tw-recruit-btn" onclick="UI._onTrain('${uType}')" ${!canA ? 'disabled' : ''}>
-          <span class="tw-rbt-icon">${uDef.icon}</span>
-          <span class="tw-rbt-name">${uDef.name}</span>
-          <span class="tw-rbt-cost ${canA ? '' : 'unaffordable'}">${_formatCost(cost)}</span>
-        </button>`;
-      }).join('');
+      if (!unlocked.length) {
+        inner = `<p class="tw-hint">Sin unidades disponibles.</p>`;
+      } else {
+        inner = unlocked.map(uType => {
+          const uDef = UNIT_TYPES[uType];
+          const cost = uDef.cost;
+          const canA = Object.entries(cost).every(([k, v]) => (resources[k] || 0) >= v);
+          return `<button class="tw-recruit-btn" onclick="UI._onTrain('${uType}')" ${!canA ? 'disabled' : ''}>
+            <span class="tw-rbt-icon">${uDef.icon}</span>
+            <span class="tw-rbt-name">${uDef.name}</span>
+            <span class="tw-rbt-cost ${canA ? '' : 'unaffordable'}">${_formatCost(cost)}</span>
+          </button>`;
+        }).join('');
+      }
     }
 
     return `<div class="tw-recruit-col">
@@ -302,14 +285,31 @@ const UI = (() => {
       .join(' ');
   }
 
+  // ── HUD ──────────────────────────────────────
   function updateHUD(resources, turn) {
-    document.getElementById('r-gold').textContent = resources.gold || 0;
-    document.getElementById('r-iron').textContent = resources.iron || 0;
-    document.getElementById('r-food').textContent = resources.food || 0;
-    document.getElementById('r-wood').textContent = resources.wood || 0;
+    const income = GameMap.calcIncome(Cities.getAll());
+    const maint  = GameMap.getTotalMaintenance(Units.getAll());
+    const RES    = ['gold', 'iron', 'food', 'wood'];
+
+    RES.forEach(r => {
+      document.getElementById(`r-${r}`).textContent = resources[r] || 0;
+      const net   = (income[r] || 0) - (maint[r] || 0);
+      const netEl = document.getElementById(`rn-${r}`);
+      if (netEl) {
+        if (net === 0) {
+          netEl.textContent = '';
+          netEl.className   = 'res-net zero';
+        } else {
+          netEl.textContent = (net > 0 ? '+' : '') + net;
+          netEl.className   = 'res-net ' + (net > 0 ? 'pos' : 'neg');
+        }
+      }
+    });
+
     document.getElementById('turn-num').textContent = turn;
   }
 
+  // ── Toast ─────────────────────────────────────
   function toast(msg, duration = 2200) {
     const el = document.getElementById('toast');
     el.textContent = msg;
@@ -318,5 +318,88 @@ const UI = (() => {
     UI._toastTimer = setTimeout(() => el.classList.remove('show'), duration);
   }
 
-  return { showPanel, showIdle, showUnit, showCity, showArmy, showGroup, updateHUD, toast };
+  // ── Unit card tooltip (fixed-position, event delegation) ──
+  let _ttTimer = null;
+
+  function _initTooltip() {
+    const tt = document.getElementById('tw-tooltip');
+
+    document.body.addEventListener('mouseover', e => {
+      const card = e.target.closest('[data-uid]');
+      if (!card) return;
+      clearTimeout(_ttTimer);
+      _ttTimer = setTimeout(() => _showTooltip(card, tt), 180);
+    });
+
+    document.body.addEventListener('mouseout', e => {
+      const card = e.target.closest('[data-uid]');
+      if (!card) return;
+      clearTimeout(_ttTimer);
+      tt.style.display = 'none';
+    });
+  }
+
+  function _showTooltip(card, tt) {
+    const uid  = parseInt(card.dataset.uid, 10);
+    const unit = Units.getAll().find(u => u.id === uid);
+    if (!unit) return;
+
+    const def    = UNIT_TYPES[unit.type];
+    const hpPct  = Math.round((unit.hp / unit.maxHp) * 100);
+    const hpCol  = hpPct > 60 ? '#4aaa44' : hpPct > 30 ? '#e09030' : '#d05040';
+    const maint  = _maintStr(def.maintenance);
+
+    tt.innerHTML = `
+      <div class="tt-name"><span class="tt-icon">${def.icon}</span>${def.name}</div>
+      <div class="tt-stat-row">
+        <span class="tt-stat-label">Vida</span>
+        <div class="tt-stat-bar-wrap"><div class="tt-stat-bar" style="width:${hpPct}%;background:${hpCol}"></div></div>
+        <span class="tt-stat-val">${unit.hp}/${unit.maxHp}</span>
+      </div>
+      <div class="tt-stat-row">
+        <span class="tt-stat-label">Ataque</span>
+        <div class="tt-stat-bar-wrap"><div class="tt-stat-bar" style="width:${Math.min(100,unit.atk)}%;background:#e05030"></div></div>
+        <span class="tt-stat-val">${unit.atk}</span>
+      </div>
+      <div class="tt-stat-row">
+        <span class="tt-stat-label">Defensa</span>
+        <div class="tt-stat-bar-wrap"><div class="tt-stat-bar" style="width:${Math.min(100,unit.def)}%;background:#4a80c0"></div></div>
+        <span class="tt-stat-val">${unit.def}</span>
+      </div>
+      <div class="tt-stat-row">
+        <span class="tt-stat-label">Velocidad</span>
+        <div class="tt-stat-bar-wrap"><div class="tt-stat-bar" style="width:${unit.maxMoves / 5 * 100}%;background:var(--gold)"></div></div>
+        <span class="tt-stat-val">${unit.maxMoves}</span>
+      </div>
+      ${def.abilities.length ? `
+        <div class="tt-divider"></div>
+        <div class="tt-tags">${def.abilities.map(a => `<span class="tt-tag">${a}</span>`).join('')}</div>` : ''}
+      ${maint ? `<div class="tt-maint">Upkeep: ${maint}/t</div>` : ''}
+    `;
+
+    // Position: show invisible first to measure, then place above card
+    tt.style.visibility = 'hidden';
+    tt.style.display    = 'block';
+
+    const cardRect = card.getBoundingClientRect();
+    const ttW      = tt.offsetWidth;
+    const ttH      = tt.offsetHeight;
+    let left = cardRect.left + cardRect.width / 2 - ttW / 2;
+    let top  = cardRect.top - ttH - 8;
+
+    left = Math.max(8, Math.min(left, window.innerWidth  - ttW - 8));
+    top  = Math.max(8, Math.min(top,  window.innerHeight - ttH - 8));
+
+    tt.style.left       = left + 'px';
+    tt.style.top        = top  + 'px';
+    tt.style.visibility = 'visible';
+  }
+
+  // ── Init ─────────────────────────────────────
+  // Called once from game.js after DOM ready
+  function init() {
+    _initTooltip();
+  }
+
+  return { init, showPanel, showIdle, showUnit, showCity, showArmy, showGroup, updateHUD, toast };
 })();

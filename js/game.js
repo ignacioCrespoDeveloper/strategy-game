@@ -19,6 +19,7 @@ const Game = (() => {
     Units.init();
 
     Renderer.init(document.getElementById('mapCanvas'));
+    UI.init();
 
     document.getElementById('mapCanvas').addEventListener('click', onMapClick);
     document.getElementById('end-turn-btn').addEventListener('click', endTurn);
@@ -268,12 +269,8 @@ const Game = (() => {
   // ── Train unit ──────────────────────────────
   function onTrain(type) {
     if (!state.selectedCity) return;
-    const city     = state.selectedCity;
-    const noArmies = Units.byOwner('player').length === 0;
-    if (!armyNearCity(city) && !noArmies) {
-      UI.toast('Necesitas un ejército cerca de la ciudad para reclutar.');
-      return;
-    }
+    const city = state.selectedCity;
+    // No army-near restriction: units spawn at the city hex when no army is nearby
     const result = Cities.trainUnit(city, type, state.resources);
     UI.toast(result.msg);
     UI.updateHUD(state.resources, state.turn);

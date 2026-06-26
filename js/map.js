@@ -114,9 +114,34 @@ const GameMap = (() => {
     return totals;
   }
 
+  // Preview income for next turn (does not modify resources)
+  function calcIncome(cities) {
+    const totals = {};
+    Object.keys(RESOURCE_DEF).forEach(t => totals[t] = 0);
+
+    Object.entries(capturedResources).forEach(([k, owner]) => {
+      if (owner === 'player') {
+        const type = resourceMap[k];
+        totals[type] = (totals[type] || 0) + RESOURCE_DEF[type].income;
+      }
+    });
+
+    cities.filter(ci => ci.owner === 'player').forEach(ci => {
+      ci.buildings.forEach((lvl, bIdx) => {
+        if (lvl === 0) return;
+        const key = Object.keys(BUILDING_TYPES)[bIdx];
+        if (key === 'market') totals.gold += lvl * 2;
+        if (key === 'farm')   totals.food += lvl * 2;
+        if (key === 'forge')  totals.iron += lvl;
+      });
+    });
+
+    return totals;
+  }
+
   function isWater(c, r) {
     return TERRAIN_MAP[r]?.[c] === 'water';
   }
 
-  return { init, getResource, getCapturedBy, processCapture, getZones, collectIncome, healUnits, deductMaintenance, getTotalMaintenance, isWater };
+  return { init, getResource, getCapturedBy, processCapture, getZones, collectIncome, healUnits, deductMaintenance, getTotalMaintenance, calcIncome, isWater };
 })();

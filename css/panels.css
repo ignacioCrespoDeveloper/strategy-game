@@ -648,3 +648,94 @@
   color: var(--text-dim);
   line-height: 1.4;
 }
+
+/* ── UNIT CARD TOOLTIP ────────────────────── */
+#tw-tooltip {
+  position: fixed;
+  display: none;
+  z-index: 500;
+  min-width: 158px;
+  max-width: 200px;
+  padding: 10px 12px;
+  background: linear-gradient(170deg, #1e1608 0%, #0e0b04 100%);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  box-shadow: 0 -4px 24px rgba(0,0,0,0.85), inset 0 1px 0 rgba(200,160,48,0.07);
+  pointer-events: none;
+}
+
+@keyframes ttFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+#tw-tooltip[style*="visible"] { animation: ttFadeIn 0.12s ease; }
+
+.tt-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+.tt-icon { font-size: 15px; }
+
+.tt-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+.tt-stat-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  width: 52px;
+  flex-shrink: 0;
+}
+.tt-stat-bar-wrap {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.tt-stat-bar {
+  height: 100%;
+  border-radius: 2px;
+}
+.tt-stat-val {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text);
+  min-width: 32px;
+  text-align: right;
+}
+
+.tt-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 0 5px;
+}
+.tt-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.tt-tag {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.tt-maint {
+  font-size: 9px;
+  color: var(--warn);
+  margin-top: 6px;
+}
