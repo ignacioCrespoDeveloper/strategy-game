@@ -1,5 +1,8 @@
 // =============================================
-//  renderer.js — canvas draw calls
+//  renderer.js  —  Total War campaign-map style
+//  Two layers:
+//    1. _worldCanvas (static): ocean + terrain fills + diagonal hatching
+//    2. draw() (per-frame):    hex overlay (zones/reach) + cities + units
 // =============================================
 
 const Renderer = (() => {
@@ -9,6 +12,18 @@ const Renderer = (() => {
   let panRafId      = null;
   let lastDrawState = null;
   const PAN_SPEED   = 10;
+
+  let _worldCanvas  = null;
+  let _worldDirty   = true;
+
+  // ── Terrain palette (TW campaign map colours) ──
+  const TPAL = {
+    water:    { base: '#0a2030' },
+    plains:   { base: '#6b7840', mid: '#7e8f4a', lite: '#96aa55', stripe: 'rgba(180,200,100,0.13)' },
+    forest:   { base: '#253b1a', mid: '#2e4e20', lite: '#3a6328', stripe: 'rgba(80,140,50,0.16)'   },
+    mountain: { base: '#4a3e2e', mid: '#5a4c38', lite: '#7a6650', stripe: 'rgba(180,155,110,0.14)' },
+    desert:   { base: '#6e5822', mid: '#8a7030', lite: '#aa9040', stripe: 'rgba(220,185,70,0.16)'  },
+  };
 
   function init(c) {
     canvas = c;
@@ -21,13 +36,15 @@ const Renderer = (() => {
     const wrap = document.getElementById('map-wrap');
     canvas.width  = wrap.clientWidth  || 900;
     canvas.height = wrap.clientHeight || 620;
-    scale = 1.0;
-    _worldDirty = true;
+    scale         = 1.0;
+    _worldDirty   = true;
+    _patternCache = {};
     clampCamera();
   }
 
   function getScale()  { return scale; }
   function getCamera() { return { x: camera.x, y: camera.y }; }
+  function markTerrainDirty() { _worldDirty = true; _patternCache = {}; }
 
   function clampCamera() {
     const worldW = (42 + (COLS - 1) * HEX_R * 1.74 + HEX_R * 3) * scale;
@@ -40,7 +57,6 @@ const Renderer = (() => {
     panFlags[dir] = active;
     if (active && !panRafId) _startPanRaf();
   }
-
   function _startPanRaf() {
     function loop() {
       let moved = false;
@@ -55,299 +71,51 @@ const Renderer = (() => {
     panRafId = requestAnimationFrame(loop);
   }
 
-  // ── Terrain world cache ──────────────────────
-  // Terrain is static — render all hexes once to an offscreen canvas.
-  let _worldCanvas = null;
-  let _worldDirty  = true;
+  // ── Hex path helper ─────────────────────────
+  function _hexPath(c2d, x, y, r) {
+    c2d.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a  = (Math.PI / 3) * i - Math.PI / 6;
+      const px = x + r * Math.cos(a);
+      const py = y + r * Math.sin(a);
+      i === 0 ? c2d.moveTo(px, py) : c2d.lineTo(px, py);
+    }
+    c2d.closePath();
+  }
 
-  function markTerrainDirty() { _worldDirty = true; }
+  // ── Diagonal stripe pattern (TW campaign style) ─
+  let _patternCache = {};
 
-  // ── Procedural texture helpers ───────────────
+  function _stripePattern(ctx2, key, lineColor, spacing, lineW) {
+    if (_patternCache[key]) return _patternCache[key];
+    const sp = spacing || 7;
+    const lw = lineW   || 1.4;
+    const c  = document.createElement('canvas');
+    c.width  = sp * 2;
+    c.height = sp * 2;
+    const cx = c.getContext('2d');
+    cx.clearRect(0, 0, sp * 2, sp * 2);
+    cx.strokeStyle = lineColor;
+    cx.lineWidth   = lw;
+    cx.lineCap     = 'square';
+    // 45° lines tiling seamlessly in a 2s×2s tile
+    for (let i = -sp * 2; i < sp * 4; i += sp) {
+      cx.beginPath();
+      cx.moveTo(i,        0);
+      cx.lineTo(i + sp * 2, sp * 2);
+      cx.stroke();
+    }
+    _patternCache[key] = ctx2.createPattern(c, 'repeat');
+    return _patternCache[key];
+  }
 
-  // Deterministic pseudo-random per hex (consistent across frames)
+  // ── Seeded pseudo-random ─────────────────────
   function _sr(c, r, s) {
     const v = Math.sin(c * 374761 + r * 1234567 + (s || 0) * 999983) * 43758.5453;
     return v - Math.floor(v);
   }
 
-  // Build hex clip path (same orientation as hex.js drawHex)
-  function _hexPath(wCtx, x, y, r) {
-    wCtx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const a  = (Math.PI / 3) * i - Math.PI / 6;
-      const px = x + r * Math.cos(a);
-      const py = y + r * Math.sin(a);
-      i === 0 ? wCtx.moveTo(px, py) : wCtx.lineTo(px, py);
-    }
-    wCtx.closePath();
-  }
-
-  // ── Per-terrain texture painters ────────────
-  // Each receives the world-canvas 2d context and world coords.
-  const _terrain = {
-
-    water(wc, x, y, r, c, row, skipBase) {
-      if (!skipBase) {
-        const g = wc.createRadialGradient(x, y - r*0.2, r*0.05, x, y + r*0.3, r*1.1);
-        g.addColorStop(0, '#1e3f6a');
-        g.addColorStop(1, '#091828');
-        wc.fillStyle = g;
-        wc.fill();
-      }
-
-      // Sine-wave ripples
-      const wCount = 3 + Math.floor(_sr(c, row, 0) * 3);
-      for (let i = 0; i < wCount; i++) {
-        const wy    = y - r * 0.5 + (i / (wCount - 1)) * r * 1.0;
-        const amp   = r * (0.035 + _sr(c, row, i + 5)  * 0.04);
-        const freq  = 2   + _sr(c, row, i + 10) * 2.5;
-        const phase = _sr(c, row, i + 20) * Math.PI * 2;
-        wc.beginPath();
-        const steps = 16;
-        for (let j = 0; j <= steps; j++) {
-          const t  = j / steps;
-          const wx = x - r * 0.82 + t * r * 1.64;
-          const ry = wy + Math.sin(t * Math.PI * freq + phase) * amp;
-          j === 0 ? wc.moveTo(wx, ry) : wc.lineTo(wx, ry);
-        }
-        wc.strokeStyle = `rgba(90,175,255,${0.10 + _sr(c, row, i + 30) * 0.10})`;
-        wc.lineWidth   = 0.9;
-        wc.stroke();
-      }
-
-      // Subtle shimmer dots
-      const dots = 4 + Math.floor(_sr(c, row, 50) * 4);
-      for (let i = 0; i < dots; i++) {
-        const dx = x + (_sr(c, row, i * 3 + 60) - 0.5) * r * 1.3;
-        const dy = y + (_sr(c, row, i * 3 + 61) - 0.5) * r * 0.9;
-        const dr = r * (0.02 + _sr(c, row, i * 3 + 62) * 0.03);
-        wc.beginPath();
-        wc.arc(dx, dy, dr, 0, Math.PI * 2);
-        wc.fillStyle = `rgba(150,210,255,${0.15 + _sr(c, row, i + 70) * 0.10})`;
-        wc.fill();
-      }
-    },
-
-    plains(wc, x, y, r, c, row, skipBase) {
-      const hue  = 100 + Math.floor(_sr(c, row, 0) * 20);
-      const lite = 18  + Math.floor(_sr(c, row, 1) * 6);
-      if (!skipBase) {
-        const g = wc.createRadialGradient(x, y - r * 0.25, r * 0.05, x, y + r * 0.15, r * 1.1);
-        g.addColorStop(0, `hsl(${hue},48%,${lite + 8}%)`);
-        g.addColorStop(1, `hsl(${hue},42%,${lite}%)`);
-        wc.fillStyle = g;
-        wc.fill();
-      }
-
-      // Grass tufts
-      const count = 10 + Math.floor(_sr(c, row, 2) * 9);
-      for (let i = 0; i < count; i++) {
-        const gx  = x + (_sr(c, row, i * 5)     - 0.5) * r * 1.5;
-        const gy  = y + (_sr(c, row, i * 5 + 1) - 0.5) * r * 1.15;
-        const gh  = r * (0.07 + _sr(c, row, i * 5 + 2) * 0.10);
-        const gt  = (_sr(c, row, i * 5 + 3) - 0.5) * 0.55;
-        const gv  = 75 + Math.floor(_sr(c, row, i * 5 + 4) * 40);
-        wc.beginPath();
-        wc.moveTo(gx, gy);
-        wc.lineTo(gx + gt * gh, gy - gh);
-        wc.strokeStyle = `rgba(30,${gv},15,0.65)`;
-        wc.lineWidth   = 0.85;
-        wc.stroke();
-        // second blade slightly offset
-        wc.beginPath();
-        wc.moveTo(gx + 1.5, gy);
-        wc.lineTo(gx + 1.5 - gt * gh * 0.7, gy - gh * 0.8);
-        wc.strokeStyle = `rgba(35,${gv - 10},18,0.45)`;
-        wc.stroke();
-      }
-
-      // Occasional small pebble/flower
-      const spotCount = 2 + Math.floor(_sr(c, row, 80) * 3);
-      for (let i = 0; i < spotCount; i++) {
-        const sx = x + (_sr(c, row, i * 3 + 90) - 0.5) * r * 1.2;
-        const sy = y + (_sr(c, row, i * 3 + 91) - 0.5) * r;
-        wc.beginPath();
-        wc.arc(sx, sy, r * 0.025, 0, Math.PI * 2);
-        wc.fillStyle = `rgba(180,160,60,0.3)`;
-        wc.fill();
-      }
-    },
-
-    forest(wc, x, y, r, c, row, skipBase) {
-      if (!skipBase) {
-        const g = wc.createRadialGradient(x, y, r * 0.1, x, y + r * 0.2, r * 1.1);
-        g.addColorStop(0, '#162414');
-        g.addColorStop(1, '#070e06');
-        wc.fillStyle = g;
-        wc.fill();
-      }
-
-      // Ground texture
-      const gnd = 3 + Math.floor(_sr(c, row, 100) * 4);
-      for (let i = 0; i < gnd; i++) {
-        const lx = x + (_sr(c, row, i * 4 + 100) - 0.5) * r * 1.4;
-        const ly = y + (_sr(c, row, i * 4 + 101) - 0.5) * r * 1.1;
-        wc.beginPath();
-        wc.arc(lx, ly, r * (0.04 + _sr(c, row, i + 105) * 0.04), 0, Math.PI * 2);
-        wc.fillStyle = 'rgba(8,22,6,0.5)';
-        wc.fill();
-      }
-
-      // Tree crowns — sorted back to front
-      const count = 5 + Math.floor(_sr(c, row, 0) * 4);
-      const trees = [];
-      for (let i = 0; i < count; i++) {
-        trees.push({
-          tx: x + (_sr(c, row, i * 6)     - 0.5) * r * 1.15,
-          ty: y + (_sr(c, row, i * 6 + 1) - 0.5) * r * 0.85,
-          tr: r * (0.17 + _sr(c, row, i * 6 + 2) * 0.15),
-          gv: 32 + Math.floor(_sr(c, row, i * 6 + 3) * 48),
-          lf: _sr(c, row, i * 6 + 4),
-        });
-      }
-      trees.sort((a, b) => a.ty - b.ty);
-      trees.forEach(({ tx, ty, tr, gv, lf }) => {
-        // Drop shadow
-        wc.beginPath();
-        wc.arc(tx + tr * 0.18, ty + tr * 0.22, tr * 0.9, 0, Math.PI * 2);
-        wc.fillStyle = 'rgba(0,0,0,0.22)';
-        wc.fill();
-        // Crown body
-        wc.beginPath();
-        wc.arc(tx, ty, tr, 0, Math.PI * 2);
-        wc.fillStyle = `rgba(8,${gv},6,0.85)`;
-        wc.fill();
-        // Subtle highlight
-        wc.beginPath();
-        wc.arc(tx - tr * 0.22, ty - tr * 0.25, tr * 0.45, 0, Math.PI * 2);
-        wc.fillStyle = `rgba(30,${Math.min(gv + 35, 120)},18,0.20)`;
-        wc.fill();
-        // Tiny secondary crown
-        if (lf > 0.5) {
-          wc.beginPath();
-          wc.arc(tx + tr * 0.55, ty - tr * 0.4, tr * 0.45, 0, Math.PI * 2);
-          wc.fillStyle = `rgba(10,${gv - 5},8,0.7)`;
-          wc.fill();
-        }
-      });
-    },
-
-    mountain(wc, x, y, r, c, row, skipBase) {
-      if (!skipBase) {
-        const g = wc.createRadialGradient(x, y - r * 0.1, r * 0.05, x, y + r * 0.4, r * 1.15);
-        g.addColorStop(0, '#4e4030');
-        g.addColorStop(1, '#241e18');
-        wc.fillStyle = g;
-        wc.fill();
-      }
-
-      // Pebble scatter on base
-      const pebbles = 6 + Math.floor(_sr(c, row, 200) * 6);
-      for (let i = 0; i < pebbles; i++) {
-        const px = x + (_sr(c, row, i * 4 + 200) - 0.5) * r * 1.4;
-        const py = y + (_sr(c, row, i * 4 + 201) - 0.5) * r * 1.1;
-        const pr = r * (0.022 + _sr(c, row, i * 4 + 202) * 0.025);
-        const sh = 50 + Math.floor(_sr(c, row, i * 4 + 203) * 30);
-        wc.beginPath();
-        wc.arc(px, py, pr, 0, Math.PI * 2);
-        wc.fillStyle = `rgba(${sh},${sh - 5},${sh - 10},0.5)`;
-        wc.fill();
-      }
-
-      // Mountain peaks (back to front)
-      const peakCount = 2 + Math.floor(_sr(c, row, 0) * 2);
-      const peaks = [];
-      for (let i = 0; i < peakCount; i++) {
-        peaks.push({
-          px: x + (_sr(c, row, i * 7)     - 0.5) * r * 0.75,
-          py: y + _sr(c, row, i * 7 + 1)  * r * 0.5,
-          h:  r * (0.50 + _sr(c, row, i * 7 + 2) * 0.42),
-          w:  r * (0.30 + _sr(c, row, i * 7 + 3) * 0.22),
-          sh: 55 + Math.floor(_sr(c, row, i * 7 + 4) * 38),
-        });
-      }
-      peaks.sort((a, b) => a.py - b.py);
-      peaks.forEach(({ px, py, h, w, sh }) => {
-        // Shadow face (right)
-        wc.beginPath();
-        wc.moveTo(px - w, py);
-        wc.lineTo(px + w * 0.08, py - h);
-        wc.lineTo(px + w, py);
-        wc.closePath();
-        wc.fillStyle = `rgba(${sh - 18},${sh - 22},${sh - 22},0.72)`;
-        wc.fill();
-        // Lit face (left)
-        wc.beginPath();
-        wc.moveTo(px - w, py);
-        wc.lineTo(px + w * 0.08, py - h);
-        wc.lineTo(px - w * 0.08, py);
-        wc.closePath();
-        wc.fillStyle = `rgba(${sh + 22},${sh + 16},${sh + 10},0.38)`;
-        wc.fill();
-        // Snow cap
-        if (h > r * 0.52) {
-          const sf = h * 0.28;
-          wc.beginPath();
-          wc.moveTo(px - w * 0.25, py - h + sf);
-          wc.lineTo(px + w * 0.08, py - h);
-          wc.lineTo(px + w * 0.22, py - h + sf);
-          wc.closePath();
-          wc.fillStyle = 'rgba(228,235,250,0.60)';
-          wc.fill();
-          // Snow shadow line
-          wc.beginPath();
-          wc.moveTo(px - w * 0.25, py - h + sf);
-          wc.lineTo(px + w * 0.08, py - h + sf * 0.1);
-          wc.strokeStyle = 'rgba(150,165,185,0.22)';
-          wc.lineWidth   = 0.7;
-          wc.stroke();
-        }
-      });
-    },
-
-    desert(wc, x, y, r, c, row, skipBase) {
-      if (!skipBase) {
-        const g = wc.createRadialGradient(x, y - r * 0.1, r * 0.08, x, y + r * 0.3, r * 1.1);
-        g.addColorStop(0, '#9a7c38');
-        g.addColorStop(1, '#4e3a18');
-        wc.fillStyle = g;
-        wc.fill();
-      }
-
-      // Dune ripples
-      const lineCount = 4 + Math.floor(_sr(c, row, 0) * 4);
-      for (let i = 0; i < lineCount; i++) {
-        const wy    = y - r * 0.55 + (i / (lineCount - 1)) * r * 1.1;
-        const off   = (_sr(c, row, i + 8)  - 0.5) * r * 0.18;
-        const bulge = r * (0.045 + _sr(c, row, i + 15) * 0.05);
-        const cx2   = x + (_sr(c, row, i + 20) - 0.5) * r * 0.35;
-        wc.beginPath();
-        wc.moveTo(x - r * 0.78, wy + off);
-        wc.quadraticCurveTo(cx2, wy + off - bulge, x + r * 0.78, wy + off);
-        wc.strokeStyle = `rgba(210,170,65,${0.14 + _sr(c, row, i + 25) * 0.10})`;
-        wc.lineWidth   = 0.85 + _sr(c, row, i + 30) * 0.55;
-        wc.stroke();
-      }
-
-      // Wind erosion marks (diagonal scratches)
-      const scratches = 3 + Math.floor(_sr(c, row, 60) * 3);
-      for (let i = 0; i < scratches; i++) {
-        const sx  = x + (_sr(c, row, i * 4 + 60) - 0.5) * r * 1.2;
-        const sy  = y + (_sr(c, row, i * 4 + 61) - 0.5) * r * 0.9;
-        const sl  = r * (0.08 + _sr(c, row, i * 4 + 62) * 0.10);
-        wc.beginPath();
-        wc.moveTo(sx, sy);
-        wc.lineTo(sx + sl, sy + sl * 0.3);
-        wc.strokeStyle = `rgba(240,195,80,${0.10 + _sr(c, row, i * 4 + 63) * 0.08})`;
-        wc.lineWidth   = 0.6;
-        wc.stroke();
-      }
-    },
-  };
-
-  // ── Bake all terrain hexes to a single offscreen canvas ─
-  // No hex borders on the terrain layer — the grid appears only as
-  // a gameplay overlay (zones, reachable, selection) in draw().
+  // ── WORLD CANVAS BUILD ───────────────────────
   function _buildWorldCanvas() {
     const worldW = Math.ceil((42 + (COLS - 1) * HEX_R * 1.74 + HEX_R * 4) * scale);
     const worldH = Math.ceil((44 + (ROWS - 0.5) * HEX_H + HEX_H * 2) * scale);
@@ -361,119 +129,283 @@ const Renderer = (() => {
 
     const r = HEX_R * scale;
 
-    // Pass A: base terrain fills — slightly LARGER than hex so adjacent tiles
-    // share edges without gaps (seamless terrain regions).
+    // ── Ocean background ───────────────────────
+    // Deep teal fill + subtle horizontal wave lines (TW ocean feel)
+    const oceanGrad = wc.createLinearGradient(0, 0, 0, worldH);
+    oceanGrad.addColorStop(0,   '#0f2840');
+    oceanGrad.addColorStop(0.5, '#0a2035');
+    oceanGrad.addColorStop(1,   '#07182a');
+    wc.fillStyle = oceanGrad;
+    wc.fillRect(0, 0, worldW, worldH);
+
+    // Wave lines over the ocean
+    wc.save();
+    for (let wy = 18; wy < worldH; wy += 28) {
+      wc.beginPath();
+      for (let wx = 0; wx <= worldW; wx += 6) {
+        const y = wy + Math.sin(wx * 0.04) * 3;
+        wx === 0 ? wc.moveTo(wx, y) : wc.lineTo(wx, y);
+      }
+      wc.strokeStyle = 'rgba(255,255,255,0.025)';
+      wc.lineWidth   = 1;
+      wc.stroke();
+    }
+    wc.restore();
+
+    // ── Land hexes ─────────────────────────────
+    // Pass 1: solid base fill (slightly larger than hex = no gaps)
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
-        const t        = TERRAIN_MAP[row][col];
+        const t = TERRAIN_MAP[row][col];
+        if (t === 'water') continue;
+        const p        = TPAL[t];
         const { x, y } = hexCenter(col, row, scale);
-        const fn       = _terrain[t];
-        if (!fn) continue;
 
         wc.save();
-        _hexPath(wc, x, y, r + 0.8);   // slight overdraw, no gap between tiles
+        _hexPath(wc, x, y, r + 0.8);
         wc.clip();
-        fn(wc, x, y, r, col, row);
+
+        // Subtle micro-variation in shade per hex
+        const v   = _sr(col, row, 0);
+        const lit = Math.floor(v * 12 - 6);
+        const g   = wc.createRadialGradient(
+          x - r * 0.2, y - r * 0.25, r * 0.05,
+          x + r * 0.15, y + r * 0.25, r * 1.1
+        );
+        g.addColorStop(0, _shiftL(p.lite, lit));
+        g.addColorStop(0.55, _shiftL(p.mid, lit));
+        g.addColorStop(1,    _shiftL(p.base, lit - 4));
+        wc.fillStyle = g;
+        wc.fill();
+
         wc.restore();
       }
     }
 
-    // Pass B: redraw ONLY the texture detail elements (not the base gradient)
-    // with a wider clip so trees, grass, peaks bleed into neighbours.
+    // Pass 2: diagonal stripe overlay (the TW "map texture" look)
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
-        const t        = TERRAIN_MAP[row][col];
+        const t = TERRAIN_MAP[row][col];
         if (t === 'water') continue;
+        const p        = TPAL[t];
         const { x, y } = hexCenter(col, row, scale);
 
         wc.save();
-        _hexPath(wc, x, y, r + 4.5);
+        _hexPath(wc, x, y, r + 0.8);
         wc.clip();
-        _terrain[t]?.(wc, x, y, r, col, row, true); // true = skip base fill
+
+        const pat = _stripePattern(wc, `stripe_${t}`, p.stripe, 7, 1.3);
+        if (pat) { wc.fillStyle = pat; wc.fill(); }
+
         wc.restore();
+      }
+    }
+
+    // Pass 3: terrain detail elements (contained to each hex)
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const t = TERRAIN_MAP[row][col];
+        if (t === 'water') continue;
+        const { x, y } = hexCenter(col, row, scale);
+        wc.save();
+        _hexPath(wc, x, y, r - 1);
+        wc.clip();
+        _drawDetail(wc, t, x, y, r, col, row);
+        wc.restore();
+      }
+    }
+
+    // Pass 4: coastline — thin bright border ONLY where land meets water
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const t = TERRAIN_MAP[row][col];
+        if (t === 'water') continue;
+        const { x, y } = hexCenter(col, row, scale);
+        const isCoast   = neighbors(col, row).some(n => TERRAIN_MAP[n.r]?.[n.c] === 'water');
+        if (!isCoast) continue;
+
+        _hexPath(wc, x, y, r - 0.5);
+        wc.strokeStyle = 'rgba(200,185,130,0.30)';
+        wc.lineWidth   = 1.5;
+        wc.stroke();
+      }
+    }
+
+    // Pass 5: interior land-to-land terrain borders (subtle)
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const t = TERRAIN_MAP[row][col];
+        if (t === 'water') continue;
+        const { x, y } = hexCenter(col, row, scale);
+        const hasDiff   = neighbors(col, row).some(n => {
+          const nt = TERRAIN_MAP[n.r]?.[n.c];
+          return nt && nt !== 'water' && nt !== t;
+        });
+        if (!hasDiff) continue;
+
+        _hexPath(wc, x, y, r - 0.5);
+        wc.strokeStyle = 'rgba(0,0,0,0.18)';
+        wc.lineWidth   = 0.8;
+        wc.stroke();
       }
     }
 
     _worldDirty = false;
   }
 
-  // ── Main draw ──────────────────────────────
+  // ── Terrain detail elements ──────────────────
+  function _drawDetail(wc, terrain, x, y, r, col, row) {
+    if (terrain === 'forest') {
+      // A few simple tree crowns
+      const n = 4 + Math.floor(_sr(col, row, 0) * 3);
+      for (let i = 0; i < n; i++) {
+        const tx = x + (_sr(col, row, i * 4 + 1) - 0.5) * r * 1.1;
+        const ty = y + (_sr(col, row, i * 4 + 2) - 0.5) * r * 0.8;
+        const tr = r * (0.13 + _sr(col, row, i * 4 + 3) * 0.10);
+        const gv = 28 + Math.floor(_sr(col, row, i * 4 + 4) * 36);
+        wc.beginPath();
+        wc.arc(tx, ty + tr * 0.12, tr, 0, Math.PI * 2);
+        wc.fillStyle = `rgba(10,${gv},6,0.60)`;
+        wc.fill();
+      }
+    } else if (terrain === 'mountain') {
+      // Simple peak silhouettes
+      const n = 2 + Math.floor(_sr(col, row, 0) * 2);
+      for (let i = 0; i < n; i++) {
+        const mx = x + (_sr(col, row, i * 5 + 1) - 0.5) * r * 0.7;
+        const my = y + _sr(col, row, i * 5 + 2)          * r * 0.4;
+        const mh = r * (0.40 + _sr(col, row, i * 5 + 3) * 0.35);
+        const mw = r * (0.28 + _sr(col, row, i * 5 + 4) * 0.18);
+        const sh = 60 + Math.floor(_sr(col, row, i * 5 + 5) * 30);
+        wc.beginPath();
+        wc.moveTo(mx - mw, my); wc.lineTo(mx, my - mh); wc.lineTo(mx + mw, my);
+        wc.closePath();
+        wc.fillStyle = `rgba(${sh},${sh - 6},${sh - 12},0.55)`;
+        wc.fill();
+        if (mh > r * 0.45) {
+          const sf = mh * 0.28;
+          wc.beginPath();
+          wc.moveTo(mx - mw * 0.22, my - mh + sf);
+          wc.lineTo(mx, my - mh);
+          wc.lineTo(mx + mw * 0.22, my - mh + sf);
+          wc.closePath();
+          wc.fillStyle = 'rgba(230,235,250,0.50)';
+          wc.fill();
+        }
+      }
+    } else if (terrain === 'desert') {
+      // Light dune ripple lines
+      const n = 3 + Math.floor(_sr(col, row, 0) * 3);
+      for (let i = 0; i < n; i++) {
+        const dy = y - r * 0.45 + (i / (n - 1)) * r * 0.9;
+        wc.beginPath();
+        wc.moveTo(x - r * 0.70, dy);
+        wc.quadraticCurveTo(x, dy - r * 0.05, x + r * 0.70, dy);
+        wc.strokeStyle = `rgba(220,185,60,0.14)`;
+        wc.lineWidth   = 0.9;
+        wc.stroke();
+      }
+    }
+    // plains: no extra detail (stripes + gradient are enough)
+  }
+
+  // ── Colour helpers ───────────────────────────
+  function _shiftL(hex, amt) {
+    // Very naive lightness shift on hex colour
+    let r = parseInt(hex.slice(1, 3), 16);
+    let g = parseInt(hex.slice(3, 5), 16);
+    let b = parseInt(hex.slice(5, 7), 16);
+    r = Math.min(255, Math.max(0, r + amt));
+    g = Math.min(255, Math.max(0, g + amt));
+    b = Math.min(255, Math.max(0, b + amt));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  // ── MAIN DRAW (per frame) ────────────────────
   function draw(state) {
     lastDrawState = state;
     const { selectedUnit, selectedGroup, reachable } = state;
-    const units   = Units.getAll();
-    const cities  = Cities.getAll();
-    const zones   = GameMap.getZones(units);
-    const r       = HEX_R * scale;
-
+    const units    = Units.getAll();
+    const cities   = Cities.getAll();
+    const zones    = GameMap.getZones(units);
+    const r        = HEX_R * scale;
     const reachSet = new Set(reachable.map(h => hexKey(h.c, h.r)));
 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Viewport culling bounds (world coords)
+    // Viewport culling bounds
     const vx0 = camera.x - r * 2, vx1 = camera.x + canvas.width  + r * 2;
     const vy0 = camera.y - r * 2, vy1 = camera.y + canvas.height + r * 2;
 
-    // ── Pass 1: Terrain (from pre-baked cache) ──
+    // ── 1. Terrain world (baked) ───────────────
     if (_worldDirty) _buildWorldCanvas();
     if (_worldCanvas) ctx.drawImage(_worldCanvas, 0, 0);
 
-    // ── Pass 2: Hex gameplay overlay ─────────────────────────────────────
-    // The hex grid is INVISIBLE on the base map. It only appears here
-    // to convey gameplay information: control zones and movement range.
+    // ── 2. Faction territory stripes ──────────
+    // Player and enemy-controlled hexes get a coloured diagonal stripe overlay,
+    // exactly like TW campaign map province colours.
+    const playerStripe = _stripePattern(ctx, 'ov_player', 'rgba(74,158,255,0.28)', 9, 1.8);
+    const enemyStripe  = _stripePattern(ctx, 'ov_enemy',  'rgba(220,60,60,0.28)',  9, 1.8);
+    const contestStripe= _stripePattern(ctx, 'ov_contest','rgba(220,195,0,0.22)',  9, 1.8);
+
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         const { x, y } = hexCenter(col, row, scale);
         if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
-        const k      = hexKey(col, row);
-        const inP    = zones.player.has(k);
-        const inE    = zones.enemy.has(k);
-        const reach  = reachSet.has(k);
 
-        if (!inP && !inE && !reach) continue;   // skip — nothing to show
+        const t = TERRAIN_MAP[row][col];
+        if (t === 'water') continue;
+
+        const k   = hexKey(col, row);
+        const inP = zones.player.has(k);
+        const inE = zones.enemy.has(k);
+        if (!inP && !inE) continue;
+
+        let pat = null, borderCol = null;
+        if      (inP && !inE) { pat = playerStripe; borderCol = 'rgba(74,158,255,0.45)';  }
+        else if (inE && !inP) { pat = enemyStripe;  borderCol = 'rgba(220,60,60,0.42)';   }
+        else                  { pat = contestStripe; borderCol = 'rgba(220,195,0,0.40)';  }
 
         ctx.save();
         _hexPath(ctx, x, y, r - 0.5);
+        ctx.clip();
+        if (pat) { ctx.fillStyle = pat; ctx.fill(); }
+        ctx.restore();
 
-        if (reach) {
-          // Reachable: solid tinted fill + bright border
-          ctx.fillStyle   = 'rgba(74,158,255,0.18)';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(140,205,255,0.90)';
-          ctx.lineWidth   = 1.6 * scale;
-          ctx.stroke();
-          // Inner highlight ring
-          _hexPath(ctx, x, y, r - 3.5);
-          ctx.strokeStyle = 'rgba(200,235,255,0.28)';
-          ctx.lineWidth   = 1 * scale;
-          ctx.stroke();
-        } else if (inP && !inE) {
-          ctx.fillStyle   = 'rgba(74,158,255,0.11)';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(74,158,255,0.38)';
-          ctx.lineWidth   = 1.2 * scale;
-          ctx.stroke();
-        } else if (inE && !inP) {
-          ctx.fillStyle   = 'rgba(255,80,80,0.11)';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(255,80,80,0.35)';
-          ctx.lineWidth   = 1.2 * scale;
-          ctx.stroke();
-        } else {
-          // Contested
-          ctx.fillStyle   = 'rgba(220,200,0,0.09)';
-          ctx.fill();
-          ctx.strokeStyle = 'rgba(220,200,0,0.32)';
-          ctx.lineWidth   = 1.2 * scale;
-          ctx.stroke();
-        }
+        // Border line for the territory
+        _hexPath(ctx, x, y, r - 0.5);
+        ctx.strokeStyle = borderCol;
+        ctx.lineWidth   = 1.5 * scale;
+        ctx.stroke();
+      }
+    }
+
+    // ── 3. Reachable hex overlay ───────────────
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (!reachSet.has(hexKey(col, row))) continue;
+        const { x, y } = hexCenter(col, row, scale);
+        if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
+
+        ctx.save();
+        _hexPath(ctx, x, y, r - 0.5);
+        ctx.fillStyle = 'rgba(74,158,255,0.20)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(160,215,255,0.92)';
+        ctx.lineWidth   = 1.8 * scale;
+        ctx.stroke();
+        // Inner glow ring
+        _hexPath(ctx, x, y, r - 4);
+        ctx.strokeStyle = 'rgba(200,235,255,0.30)';
+        ctx.lineWidth   = 1.2 * scale;
+        ctx.stroke();
         ctx.restore();
       }
     }
 
-    // ── Pass 3: Resources ──
+    // ── 4. Resources ──────────────────────────
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         const res = GameMap.getResource(col, row);
@@ -482,39 +414,30 @@ const Renderer = (() => {
         if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
 
         const rdef = RESOURCE_DEF[res];
-
-        // Background token
         ctx.save();
+        // Token circle
         ctx.beginPath();
-        ctx.arc(x, y + r * 0.05, r * 0.30, 0, Math.PI * 2);
-        const bg = ctx.createRadialGradient(x, y - r * 0.08, r * 0.04, x, y + r * 0.10, r * 0.32);
-        bg.addColorStop(0, 'rgba(30,22,8,0.82)');
-        bg.addColorStop(1, 'rgba(10,8,2,0.88)');
-        ctx.fillStyle = bg;
+        ctx.arc(x, y + r * 0.04, r * 0.27, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(15,10,4,0.78)';
         ctx.fill();
-        ctx.strokeStyle = rdef.color + '88';
-        ctx.lineWidth   = 1 * scale;
+        ctx.strokeStyle = rdef.color + '99';
+        ctx.lineWidth   = 1.2 * scale;
         ctx.stroke();
-        ctx.restore();
-
-        // Resource emoji
-        ctx.save();
-        ctx.font         = `${Math.round(r * 0.38)}px serif`;
+        // Icon
+        ctx.font         = `${Math.round(r * 0.34)}px serif`;
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
-        ctx.globalAlpha  = 0.92;
-        ctx.fillText(rdef.icon, x, y + r * 0.05);
+        ctx.globalAlpha  = 0.90;
+        ctx.fillText(rdef.icon, x, y + r * 0.04);
         ctx.restore();
 
         // Capture dot
-        const capturedBy = GameMap.getCapturedBy(col, row);
-        if (capturedBy) {
-          const dotX = x + r * 0.24;
-          const dotY = y - r * 0.22;
+        const cap = GameMap.getCapturedBy(col, row);
+        if (cap) {
           ctx.save();
           ctx.beginPath();
-          ctx.arc(dotX, dotY, 4.5 * scale, 0, Math.PI * 2);
-          ctx.fillStyle   = capturedBy === 'player' ? '#4a9eff' : '#ff5050';
+          ctx.arc(x + r * 0.22, y - r * 0.20, 4.5 * scale, 0, Math.PI * 2);
+          ctx.fillStyle   = cap === 'player' ? '#4a9eff' : '#ff5050';
           ctx.fill();
           ctx.strokeStyle = 'rgba(0,0,0,0.8)';
           ctx.lineWidth   = 1.2 * scale;
@@ -524,70 +447,70 @@ const Renderer = (() => {
       }
     }
 
-    // ── Pass 4: Cities ──
+    // ── 5. Cities ─────────────────────────────
     cities.forEach(ci => {
       const { x, y } = hexCenter(ci.c, ci.r, scale);
       if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
 
-      const ownerColor = ci.owner === 'player' ? '#4a9eff'
-                       : ci.owner === 'enemy'  ? '#ff5050' : '#ffe066';
+      const ownerCol = ci.owner === 'player' ? '#4a9eff'
+                     : ci.owner === 'enemy'  ? '#e04040' : '#ddb030';
 
-      // Outer glow ring
+      // Outer glow
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y, r * 0.60, 0, Math.PI * 2);
-      ctx.fillStyle   = `${ownerColor}18`;
+      ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
+      ctx.fillStyle = ownerCol + '20';
       ctx.fill();
-      ctx.strokeStyle = `${ownerColor}55`;
-      ctx.lineWidth   = 2.5 * scale;
+      ctx.strokeStyle = ownerCol + '55';
+      ctx.lineWidth   = 2.2 * scale;
       ctx.stroke();
       ctx.restore();
 
-      // Inner shadow disk
+      // Drop shadow
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y + 2 * scale, r * 0.46, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.arc(x + 2 * scale, y + 3 * scale, r * 0.42, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(0,0,0,0.40)';
       ctx.fill();
       ctx.restore();
 
-      // City disk
+      // City disc
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y, r * 0.46, 0, Math.PI * 2);
-      const cg = ctx.createRadialGradient(x - r*0.1, y - r*0.1, r*0.02, x, y, r*0.48);
-      cg.addColorStop(0, '#2a2016');
+      ctx.arc(x, y, r * 0.42, 0, Math.PI * 2);
+      const cg = ctx.createRadialGradient(x - r * 0.12, y - r * 0.12, r * 0.02, x, y, r * 0.44);
+      cg.addColorStop(0, '#2e2518');
       cg.addColorStop(1, '#0e0c08');
-      ctx.fillStyle = cg;
+      ctx.fillStyle   = cg;
       ctx.fill();
-      ctx.strokeStyle = ownerColor;
+      ctx.strokeStyle = ownerCol;
       ctx.lineWidth   = 1.8 * scale;
       ctx.stroke();
       ctx.restore();
 
-      // Castle emoji
+      // Castle icon
       ctx.save();
-      ctx.font         = `${Math.round(r * 0.46)}px serif`;
+      ctx.font         = `${Math.round(r * 0.40)}px serif`;
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
       ctx.shadowColor  = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur   = 4 * scale;
-      ctx.fillText('🏰', x, y - r * 0.04);
+      ctx.fillText('🏰', x, y - r * 0.02);
       ctx.restore();
 
-      // City name label
+      // City name
       ctx.save();
       ctx.font         = `bold ${Math.round(8.5 * scale)}px var(--font, sans-serif)`;
-      ctx.fillStyle    = ownerColor;
+      ctx.fillStyle    = ownerCol;
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'top';
       ctx.shadowColor  = 'rgba(0,0,0,0.95)';
       ctx.shadowBlur   = 5 * scale;
-      ctx.fillText(ci.name, x, y + r * 0.52);
+      ctx.fillText(ci.name, x, y + r * 0.48);
       ctx.restore();
     });
 
-    // ── Pass 5: Units ──
+    // ── 6. Units ──────────────────────────────
     const hexGroups = new Map();
     units.forEach(u => {
       const k = hexKey(u.c, u.r);
@@ -600,14 +523,13 @@ const Renderer = (() => {
       const { x, y } = hexCenter(u.c, u.r, scale);
       if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
 
-      const isSelected = selectedUnit && stack.some(su => su.id === selectedUnit.id);
+      const isSelected = selectedUnit  && stack.some(su => su.id === selectedUnit.id);
       const isInGroup  = selectedGroup && stack.some(su => selectedGroup.includes(su.id));
       const isPlayer   = u.owner === 'player';
       const def        = UNIT_TYPES[u.type];
-      const col        = isPlayer ? '#4a9eff' : '#ff5050';
+      const teamCol    = isPlayer ? '#4a9eff' : '#ff5050';
       const exhausted  = stack.every(su => su.moves === 0);
 
-      // Group ring
       if (isInGroup) {
         ctx.save();
         ctx.beginPath();
@@ -617,13 +539,11 @@ const Renderer = (() => {
         ctx.stroke();
         ctx.restore();
       }
-
-      // Selection ring (dashed)
       if (isSelected) {
         ctx.save();
         ctx.beginPath();
         ctx.arc(x, y, r * 0.54, 0, Math.PI * 2);
-        ctx.strokeStyle = 'rgba(255,255,255,0.75)';
+        ctx.strokeStyle = 'rgba(255,255,255,0.80)';
         ctx.lineWidth   = 2 * scale;
         ctx.setLineDash([4 * scale, 3 * scale]);
         ctx.stroke();
@@ -631,32 +551,31 @@ const Renderer = (() => {
         ctx.restore();
       }
 
-      // Drop shadow
+      // Shadow
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x + 1.5 * scale, y + 2.5 * scale, r * 0.36, 0, Math.PI * 2);
+      ctx.arc(x + 1.5 * scale, y + 2.5 * scale, r * 0.34, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(0,0,0,0.45)';
       ctx.fill();
       ctx.restore();
 
-      // Unit disk with gradient
+      // Disc
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y, r * 0.36, 0, Math.PI * 2);
-      const ug = ctx.createRadialGradient(x - r*0.1, y - r*0.1, r*0.02, x, y, r*0.38);
-      const baseCol = exhausted ? '#3a3a3a' : col;
+      ctx.arc(x, y, r * 0.34, 0, Math.PI * 2);
+      const ug = ctx.createRadialGradient(x - r * 0.08, y - r * 0.10, r * 0.02, x, y, r * 0.36);
       ug.addColorStop(0, exhausted ? '#555' : isPlayer ? '#6ab4ff' : '#ff8080');
-      ug.addColorStop(1, baseCol);
+      ug.addColorStop(1, exhausted ? '#3a3a3a' : teamCol);
       ctx.fillStyle   = ug;
       ctx.fill();
-      ctx.strokeStyle = isSelected ? '#fff' : 'rgba(0,0,0,0.7)';
+      ctx.strokeStyle = isSelected ? '#fff' : 'rgba(0,0,0,0.70)';
       ctx.lineWidth   = (isSelected ? 2 : 1.5) * scale;
       ctx.stroke();
       ctx.restore();
 
-      // Unit emoji
+      // Icon
       ctx.save();
-      ctx.font         = `${Math.round(r * 0.34)}px serif`;
+      ctx.font         = `${Math.round(r * 0.30)}px serif`;
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
       ctx.shadowColor  = 'rgba(0,0,0,0.7)';
@@ -665,45 +584,43 @@ const Renderer = (() => {
       ctx.restore();
 
       // HP bar
-      const barW = r * 0.68, barH = 3.5 * scale;
-      const barX = x - barW / 2, barY = y + r * 0.44;
+      const bw = r * 0.64, bh = 3 * scale, bx = x - bw / 2, by = y + r * 0.42;
       ctx.fillStyle = 'rgba(0,0,0,0.55)';
-      ctx.fillRect(barX, barY, barW, barH);
-      const hpRatio = u.hp / u.maxHp;
-      ctx.fillStyle = hpRatio > 0.6 ? '#4aaa44' : hpRatio > 0.3 ? '#e09030' : '#d05040';
-      ctx.fillRect(barX, barY, barW * hpRatio, barH);
+      ctx.fillRect(bx, by, bw, bh);
+      const hp = u.hp / u.maxHp;
+      ctx.fillStyle = hp > 0.6 ? '#4aaa44' : hp > 0.3 ? '#e09030' : '#d05040';
+      ctx.fillRect(bx, by, bw * hp, bh);
 
       // Move pips
       for (let i = 0; i < u.maxMoves; i++) {
         const px = x - ((u.maxMoves - 1) * 5 * scale) / 2 + i * 5 * scale;
         ctx.beginPath();
-        ctx.arc(px, y + r * 0.60, 2.5 * scale, 0, Math.PI * 2);
-        ctx.fillStyle = i < u.moves ? col : 'rgba(100,100,100,0.45)';
+        ctx.arc(px, y + r * 0.58, 2.5 * scale, 0, Math.PI * 2);
+        ctx.fillStyle = i < u.moves ? teamCol : 'rgba(100,100,100,0.40)';
         ctx.fill();
       }
 
       // Stack count badge
       if (stack.length > 1) {
-        const bx = x + r * 0.26, by = y - r * 0.26;
+        const bx2 = x + r * 0.24, by2 = y - r * 0.24;
         ctx.save();
         ctx.beginPath();
-        ctx.arc(bx, by, r * 0.20, 0, Math.PI * 2);
-        ctx.fillStyle   = col;
+        ctx.arc(bx2, by2, r * 0.19, 0, Math.PI * 2);
+        ctx.fillStyle   = teamCol;
         ctx.fill();
         ctx.strokeStyle = 'rgba(0,0,0,0.8)';
         ctx.lineWidth   = 1 * scale;
         ctx.stroke();
-        ctx.font         = `bold ${Math.round(r * 0.22)}px sans-serif`;
+        ctx.font         = `bold ${Math.round(r * 0.20)}px sans-serif`;
         ctx.fillStyle    = '#fff';
         ctx.textAlign    = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(stack.length, bx, by);
+        ctx.fillText(stack.length, bx2, by2);
         ctx.restore();
       }
     });
 
-    ctx.restore(); // end camera transform
-
+    ctx.restore();
     _drawPanHint();
   }
 
@@ -713,7 +630,7 @@ const Renderer = (() => {
     if (!(worldW > canvas.width || worldH > canvas.height)) return;
     ctx.save();
     ctx.font         = `${Math.round(11 * scale)}px monospace`;
-    ctx.fillStyle    = 'rgba(255,255,255,0.28)';
+    ctx.fillStyle    = 'rgba(255,255,255,0.22)';
     ctx.textAlign    = 'right';
     ctx.textBaseline = 'bottom';
     ctx.fillText('↑↓←→ para navegar', canvas.width - 8, canvas.height - 6);
