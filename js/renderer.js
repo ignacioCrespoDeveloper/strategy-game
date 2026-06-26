@@ -86,12 +86,14 @@ const Renderer = (() => {
   // Each receives the world-canvas 2d context and world coords.
   const _terrain = {
 
-    water(wc, x, y, r, c, row) {
-      const g = wc.createRadialGradient(x, y - r*0.2, r*0.05, x, y + r*0.3, r*1.1);
-      g.addColorStop(0, '#1e3f6a');
-      g.addColorStop(1, '#091828');
-      wc.fillStyle = g;
-      wc.fill();
+    water(wc, x, y, r, c, row, skipBase) {
+      if (!skipBase) {
+        const g = wc.createRadialGradient(x, y - r*0.2, r*0.05, x, y + r*0.3, r*1.1);
+        g.addColorStop(0, '#1e3f6a');
+        g.addColorStop(1, '#091828');
+        wc.fillStyle = g;
+        wc.fill();
+      }
 
       // Sine-wave ripples
       const wCount = 3 + Math.floor(_sr(c, row, 0) * 3);
@@ -126,14 +128,16 @@ const Renderer = (() => {
       }
     },
 
-    plains(wc, x, y, r, c, row) {
+    plains(wc, x, y, r, c, row, skipBase) {
       const hue  = 100 + Math.floor(_sr(c, row, 0) * 20);
       const lite = 18  + Math.floor(_sr(c, row, 1) * 6);
-      const g = wc.createRadialGradient(x, y - r * 0.25, r * 0.05, x, y + r * 0.15, r * 1.1);
-      g.addColorStop(0, `hsl(${hue},48%,${lite + 8}%)`);
-      g.addColorStop(1, `hsl(${hue},42%,${lite}%)`);
-      wc.fillStyle = g;
-      wc.fill();
+      if (!skipBase) {
+        const g = wc.createRadialGradient(x, y - r * 0.25, r * 0.05, x, y + r * 0.15, r * 1.1);
+        g.addColorStop(0, `hsl(${hue},48%,${lite + 8}%)`);
+        g.addColorStop(1, `hsl(${hue},42%,${lite}%)`);
+        wc.fillStyle = g;
+        wc.fill();
+      }
 
       // Grass tufts
       const count = 10 + Math.floor(_sr(c, row, 2) * 9);
@@ -169,12 +173,14 @@ const Renderer = (() => {
       }
     },
 
-    forest(wc, x, y, r, c, row) {
-      const g = wc.createRadialGradient(x, y, r * 0.1, x, y + r * 0.2, r * 1.1);
-      g.addColorStop(0, '#162414');
-      g.addColorStop(1, '#070e06');
-      wc.fillStyle = g;
-      wc.fill();
+    forest(wc, x, y, r, c, row, skipBase) {
+      if (!skipBase) {
+        const g = wc.createRadialGradient(x, y, r * 0.1, x, y + r * 0.2, r * 1.1);
+        g.addColorStop(0, '#162414');
+        g.addColorStop(1, '#070e06');
+        wc.fillStyle = g;
+        wc.fill();
+      }
 
       // Ground texture
       const gnd = 3 + Math.floor(_sr(c, row, 100) * 4);
@@ -226,12 +232,14 @@ const Renderer = (() => {
       });
     },
 
-    mountain(wc, x, y, r, c, row) {
-      const g = wc.createRadialGradient(x, y - r * 0.1, r * 0.05, x, y + r * 0.4, r * 1.15);
-      g.addColorStop(0, '#4e4030');
-      g.addColorStop(1, '#241e18');
-      wc.fillStyle = g;
-      wc.fill();
+    mountain(wc, x, y, r, c, row, skipBase) {
+      if (!skipBase) {
+        const g = wc.createRadialGradient(x, y - r * 0.1, r * 0.05, x, y + r * 0.4, r * 1.15);
+        g.addColorStop(0, '#4e4030');
+        g.addColorStop(1, '#241e18');
+        wc.fillStyle = g;
+        wc.fill();
+      }
 
       // Pebble scatter on base
       const pebbles = 6 + Math.floor(_sr(c, row, 200) * 6);
@@ -297,12 +305,14 @@ const Renderer = (() => {
       });
     },
 
-    desert(wc, x, y, r, c, row) {
-      const g = wc.createRadialGradient(x, y - r * 0.1, r * 0.08, x, y + r * 0.3, r * 1.1);
-      g.addColorStop(0, '#9a7c38');
-      g.addColorStop(1, '#4e3a18');
-      wc.fillStyle = g;
-      wc.fill();
+    desert(wc, x, y, r, c, row, skipBase) {
+      if (!skipBase) {
+        const g = wc.createRadialGradient(x, y - r * 0.1, r * 0.08, x, y + r * 0.3, r * 1.1);
+        g.addColorStop(0, '#9a7c38');
+        g.addColorStop(1, '#4e3a18');
+        wc.fillStyle = g;
+        wc.fill();
+      }
 
       // Dune ripples
       const lineCount = 4 + Math.floor(_sr(c, row, 0) * 4);
@@ -336,6 +346,8 @@ const Renderer = (() => {
   };
 
   // ── Bake all terrain hexes to a single offscreen canvas ─
+  // No hex borders on the terrain layer — the grid appears only as
+  // a gameplay overlay (zones, reachable, selection) in draw().
   function _buildWorldCanvas() {
     const worldW = Math.ceil((42 + (COLS - 1) * HEX_R * 1.74 + HEX_R * 4) * scale);
     const worldH = Math.ceil((44 + (ROWS - 0.5) * HEX_H + HEX_H * 2) * scale);
@@ -349,6 +361,8 @@ const Renderer = (() => {
 
     const r = HEX_R * scale;
 
+    // Pass A: base terrain fills — slightly LARGER than hex so adjacent tiles
+    // share edges without gaps (seamless terrain regions).
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         const t        = TERRAIN_MAP[row][col];
@@ -356,37 +370,27 @@ const Renderer = (() => {
         const fn       = _terrain[t];
         if (!fn) continue;
 
-        // 1. Clip to hex interior and paint texture
         wc.save();
-        _hexPath(wc, x, y, r - 1);
+        _hexPath(wc, x, y, r + 0.8);   // slight overdraw, no gap between tiles
         wc.clip();
         fn(wc, x, y, r, col, row);
-
-        // 2. Depth vignette inside clip
-        _hexPath(wc, x, y, r - 1);
-        const vig = wc.createRadialGradient(x, y - r * 0.1, r * 0.18, x, y + r * 0.22, r * 1.05);
-        vig.addColorStop(0,    'rgba(0,0,0,0)');
-        vig.addColorStop(0.60, 'rgba(0,0,0,0)');
-        vig.addColorStop(1,    'rgba(0,0,0,0.42)');
-        wc.fillStyle = vig;
-        wc.fill();
         wc.restore();
+      }
+    }
 
-        // 3. Hex border (outside clip)
-        _hexPath(wc, x, y, r - 0.5);
-        wc.strokeStyle = t === 'water'
-          ? 'rgba(15,40,80,0.75)'
-          : 'rgba(0,0,0,0.48)';
-        wc.lineWidth = 1;
-        wc.stroke();
+    // Pass B: redraw ONLY the texture detail elements (not the base gradient)
+    // with a wider clip so trees, grass, peaks bleed into neighbours.
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const t        = TERRAIN_MAP[row][col];
+        if (t === 'water') continue;
+        const { x, y } = hexCenter(col, row, scale);
 
-        // 4. Thin inner highlight (top-left edge feel)
-        _hexPath(wc, x, y, r - 1.5);
-        wc.strokeStyle = t === 'water'
-          ? 'rgba(60,120,200,0.12)'
-          : 'rgba(255,255,255,0.06)';
-        wc.lineWidth = 0.75;
-        wc.stroke();
+        wc.save();
+        _hexPath(wc, x, y, r + 4.5);
+        wc.clip();
+        _terrain[t]?.(wc, x, y, r, col, row, true); // true = skip base fill
+        wc.restore();
       }
     }
 
@@ -416,29 +420,56 @@ const Renderer = (() => {
     if (_worldDirty) _buildWorldCanvas();
     if (_worldCanvas) ctx.drawImage(_worldCanvas, 0, 0);
 
-    // ── Pass 2: Zone overlays + reachable highlight ──
+    // ── Pass 2: Hex gameplay overlay ─────────────────────────────────────
+    // The hex grid is INVISIBLE on the base map. It only appears here
+    // to convey gameplay information: control zones and movement range.
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         const { x, y } = hexCenter(col, row, scale);
         if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
-        const k   = hexKey(col, row);
-        const inP = zones.player.has(k);
-        const inE = zones.enemy.has(k);
+        const k      = hexKey(col, row);
+        const inP    = zones.player.has(k);
+        const inE    = zones.enemy.has(k);
+        const reach  = reachSet.has(k);
 
-        if (inP && !inE) drawHex(ctx, x, y, r - 1, 'rgba(74,158,255,0.13)', 'rgba(74,158,255,0.42)', 1.1 * scale);
-        else if (inE && !inP) drawHex(ctx, x, y, r - 1, 'rgba(255,80,80,0.13)', 'rgba(255,80,80,0.38)', 1.1 * scale);
-        else if (inP && inE)  drawHex(ctx, x, y, r - 1, 'rgba(220,200,0,0.10)', 'rgba(220,200,0,0.35)', 1.1 * scale);
+        if (!inP && !inE && !reach) continue;   // skip — nothing to show
 
-        if (reachSet.has(k)) {
-          drawHex(ctx, x, y, r - 1, 'rgba(74,158,255,0.22)', 'rgba(140,200,255,0.88)', 1.5 * scale);
-          // Pulsing inner glow
-          ctx.save();
-          _hexPath(ctx, x, y, r - 3);
-          ctx.strokeStyle = 'rgba(180,220,255,0.3)';
-          ctx.lineWidth   = 2 * scale;
+        ctx.save();
+        _hexPath(ctx, x, y, r - 0.5);
+
+        if (reach) {
+          // Reachable: solid tinted fill + bright border
+          ctx.fillStyle   = 'rgba(74,158,255,0.18)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(140,205,255,0.90)';
+          ctx.lineWidth   = 1.6 * scale;
           ctx.stroke();
-          ctx.restore();
+          // Inner highlight ring
+          _hexPath(ctx, x, y, r - 3.5);
+          ctx.strokeStyle = 'rgba(200,235,255,0.28)';
+          ctx.lineWidth   = 1 * scale;
+          ctx.stroke();
+        } else if (inP && !inE) {
+          ctx.fillStyle   = 'rgba(74,158,255,0.11)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(74,158,255,0.38)';
+          ctx.lineWidth   = 1.2 * scale;
+          ctx.stroke();
+        } else if (inE && !inP) {
+          ctx.fillStyle   = 'rgba(255,80,80,0.11)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(255,80,80,0.35)';
+          ctx.lineWidth   = 1.2 * scale;
+          ctx.stroke();
+        } else {
+          // Contested
+          ctx.fillStyle   = 'rgba(220,200,0,0.09)';
+          ctx.fill();
+          ctx.strokeStyle = 'rgba(220,200,0,0.32)';
+          ctx.lineWidth   = 1.2 * scale;
+          ctx.stroke();
         }
+        ctx.restore();
       }
     }
 
