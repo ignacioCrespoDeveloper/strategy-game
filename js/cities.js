@@ -23,19 +23,27 @@ const Cities = (() => {
 
   // Attempt to construct/upgrade a building
   function buildBuilding(city, buildingKey, resources) {
-    const bIdx = Object.keys(BUILDING_TYPES).indexOf(buildingKey);
-    const def  = BUILDING_TYPES[buildingKey];
+    const bKeys      = Object.keys(BUILDING_TYPES);
+    const bIdx       = bKeys.indexOf(buildingKey);
+    const def        = BUILDING_TYPES[buildingKey];
     const currentLvl = city.buildings[bIdx];
 
     if (currentLvl >= def.maxLevel) return { ok: false, msg: 'Already at max level.' };
 
+    // Check prerequisites
+    if (def.requires) {
+      for (const [reqKey, reqLvl] of Object.entries(def.requires)) {
+        const reqIdx = bKeys.indexOf(reqKey);
+        if (city.buildings[reqIdx] < reqLvl) {
+          return { ok: false, msg: `Requires ${BUILDING_TYPES[reqKey].name} Lv${reqLvl}.` };
+        }
+      }
+    }
+
     const cost = def.cost[currentLvl];
     if (!canAfford(cost, resources)) return { ok: false, msg: 'Not enough resources.' };
 
-    // Deduct cost
     deduct(cost, resources);
-
-    // Add to build queue (instant for now, could add turns)
     city.buildings[bIdx] = currentLvl + 1;
     return { ok: true, msg: `${def.name} upgraded to level ${city.buildings[bIdx]}!` };
   }

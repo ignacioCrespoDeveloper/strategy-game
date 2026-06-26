@@ -52,9 +52,12 @@ const GameMap = (() => {
       ci.buildings.forEach((lvl, bIdx) => {
         if (lvl === 0) return;
         const key = Object.keys(BUILDING_TYPES)[bIdx];
-        if (key === 'market') resources.gold  += lvl * 2;
-        if (key === 'farm')   resources.food  += lvl * 2;
-        if (key === 'forge')  resources.iron  += lvl;
+        if (key === 'market')  resources.gold += lvl * 2;
+        if (key === 'farm')    resources.food += lvl * 2;
+        if (key === 'forge')   resources.iron += lvl;
+        if (key === 'port')    resources.gold += lvl === 1 ? 5 : 10;
+        if (key === 'granary') resources.food += lvl === 1 ? 3 : 5;
+        if (key === 'temple') { resources.gold += lvl; resources.food += lvl; }
       });
     });
   }
@@ -130,9 +133,12 @@ const GameMap = (() => {
       ci.buildings.forEach((lvl, bIdx) => {
         if (lvl === 0) return;
         const key = Object.keys(BUILDING_TYPES)[bIdx];
-        if (key === 'market') totals.gold += lvl * 2;
-        if (key === 'farm')   totals.food += lvl * 2;
-        if (key === 'forge')  totals.iron += lvl;
+        if (key === 'market')  totals.gold += lvl * 2;
+        if (key === 'farm')    totals.food += lvl * 2;
+        if (key === 'forge')   totals.iron += lvl;
+        if (key === 'port')    totals.gold += lvl === 1 ? 5 : 10;
+        if (key === 'granary') totals.food += lvl === 1 ? 3 : 5;
+        if (key === 'temple') { totals.gold += lvl; totals.food += lvl; }
       });
     });
 

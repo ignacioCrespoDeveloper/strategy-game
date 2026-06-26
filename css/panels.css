@@ -499,80 +499,154 @@
 
 /* ── BUILDING CARDS (city) ───────────────── */
 .tw-build-card {
-  width: 82px;
+  width: 78px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(180deg, #1a1409 0%, #100d06 100%);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(200,160,48,0.10);
   border-radius: 3px;
   overflow: hidden;
-  transition: border-color 0.14s;
+  cursor: default;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  background: #0c0a06;
+  position: relative;
 }
-.tw-build-card.built  { border-color: rgba(200,160,48,0.25); }
-.tw-build-card.maxed  { border-color: rgba(200,160,48,0.45); }
+.tw-build-card:hover {
+  border-color: rgba(200,160,48,0.45);
+  box-shadow: 0 0 10px rgba(200,160,48,0.12);
+}
+.tw-build-card.built { border-color: rgba(200,160,48,0.28); }
+.tw-build-card.maxed { border-color: rgba(200,160,48,0.55); box-shadow: 0 0 6px rgba(200,160,48,0.2); }
+.tw-build-card.locked { opacity: 0.55; }
 
+/* ── Icon area with category tint ───────── */
 .tw-build-icon-area {
-  height: 46px;
+  height: 54px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 22px;
-  background: linear-gradient(160deg, #161008 0%, #0c0904 100%);
-  border-bottom: 1px solid var(--border);
   position: relative;
-}
-.tw-build-lvl-badge {
-  position: absolute;
-  top: 3px; right: 4px;
-  font-size: 8px;
-  font-weight: 700;
-  color: var(--gold);
-  background: rgba(0,0,0,0.7);
-  padding: 1px 4px;
-  border-radius: 2px;
+  border-bottom: 1px solid rgba(0,0,0,0.6);
+  /* default — overridden per category */
+  background: linear-gradient(160deg, #1a130a 0%, #0c0904 100%);
 }
 
-.tw-build-info {
-  padding: 4px 5px 3px;
-  flex: 1;
+/* Category background tints */
+.tw-build-card.cat-military .tw-build-icon-area {
+  background: linear-gradient(160deg, #3a0c0c 0%, #1a0606 100%);
+}
+.tw-build-card.cat-economy .tw-build-icon-area {
+  background: linear-gradient(160deg, #3a2a00 0%, #1a1200 100%);
+}
+.tw-build-card.cat-food .tw-build-icon-area {
+  background: linear-gradient(160deg, #0e3010 0%, #081808 100%);
+}
+.tw-build-card.cat-industry .tw-build-icon-area {
+  background: linear-gradient(160deg, #18202e 0%, #0c1018 100%);
+}
+.tw-build-card.cat-culture .tw-build-icon-area {
+  background: linear-gradient(160deg, #280e3a 0%, #14061e 100%);
+}
+
+/* Vignette overlay over icon area */
+.tw-build-icon-area::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%);
+  pointer-events: none;
+}
+
+/* Category stripe — 2px top accent */
+.tw-build-card.cat-military::before { content:''; display:block; height:2px; background:#8b1a1a; }
+.tw-build-card.cat-economy::before  { content:''; display:block; height:2px; background:#8b6a00; }
+.tw-build-card.cat-food::before     { content:''; display:block; height:2px; background:#2a6a1a; }
+.tw-build-card.cat-industry::before { content:''; display:block; height:2px; background:#2a3a50; }
+.tw-build-card.cat-culture::before  { content:''; display:block; height:2px; background:#5a1a7a; }
+
+.tw-build-icon-glyph {
+  font-size: 26px;
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.8));
+}
+
+/* Level badge — Roman numeral style */
+.tw-build-lvl-badge {
+  position: absolute;
+  top: 4px; right: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: Georgia, serif;
+  color: var(--gold);
+  background: rgba(0,0,0,0.75);
+  border: 1px solid rgba(200,160,48,0.4);
+  padding: 1px 4px;
+  border-radius: 2px;
+  z-index: 2;
+  line-height: 1.2;
+}
+
+/* Lock overlay */
+.tw-build-lock-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  background: rgba(0,0,0,0.45);
+  z-index: 3;
+}
+
+/* ── Footer text ─────────────────────────── */
+.tw-build-footer {
+  padding: 4px 5px 0;
   display: flex;
   flex-direction: column;
   gap: 1px;
+  flex: 1;
 }
 .tw-build-name {
   font-size: 8.5px;
   font-weight: 700;
   color: var(--text);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tw-build-effect {
+.tw-build-effect-line {
   font-size: 8px;
   color: var(--text-muted);
   line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+.tw-req-hint { color: #e09030; font-size: 8px; }
 
+/* ── Upgrade button ─────────────────────── */
 .tw-build-upgrade-btn {
   width: 100%;
-  padding: 4px 5px;
+  margin-top: 3px;
+  padding: 3px 4px;
   border: none;
-  border-top: 1px solid var(--border);
-  background: rgba(200,160,48,0.07);
+  border-top: 1px solid rgba(200,160,48,0.12);
+  background: rgba(200,160,48,0.06);
   color: var(--gold);
   font-size: 8px;
   font-weight: 700;
   cursor: pointer;
   transition: background 0.14s;
   text-align: center;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   flex-shrink: 0;
 }
-.tw-build-upgrade-btn:hover:not(:disabled) { background: rgba(200,160,48,0.16); }
+.tw-build-upgrade-btn:hover:not(:disabled) { background: rgba(200,160,48,0.18); }
 .tw-build-upgrade-btn:disabled { opacity: 0.22; cursor: not-allowed; color: var(--text-dim); }
+.tw-build-upgrade-btn.maxed { color: var(--accent-green); opacity: 0.7; }
 .tw-build-cost { font-weight: 400; color: var(--gold-mid); margin-left: 2px; }
 
 /* ── RECRUIT COLUMN (city) ───────────────── */
@@ -738,4 +812,61 @@
   font-size: 9px;
   color: var(--warn);
   margin-top: 6px;
+}
+
+/* Building tooltip extras */
+.tt-lv-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: Georgia, serif;
+  color: var(--gold);
+  border: 1px solid rgba(200,160,48,0.4);
+  background: rgba(0,0,0,0.5);
+  padding: 0px 4px;
+  border-radius: 2px;
+  margin-left: 5px;
+  vertical-align: middle;
+}
+.tt-cat {
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  margin-top: 1px;
+}
+.tt-desc {
+  font-size: 9px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin-top: 4px;
+}
+.tt-section-label {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+.tt-effect {
+  font-size: 9.5px;
+  color: var(--text);
+  line-height: 1.4;
+}
+.tt-effect.active { color: var(--accent-green); }
+.tt-cost-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.tt-cost-label { font-size: 8px; color: var(--text-muted); }
+.tt-cost { font-size: 9px; font-weight: 700; }
+.tt-cost.can-afford   { color: var(--accent-green); }
+.tt-cost.cant-afford  { color: var(--danger); }
+.tt-req {
+  font-size: 9px;
+  color: #e09030;
+  margin-top: 5px;
 }

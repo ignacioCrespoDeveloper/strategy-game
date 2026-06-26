@@ -4,6 +4,10 @@
 
 const UI = (() => {
 
+  // ── Shared state for tooltip access ─────────
+  let _currentCity      = null;
+  let _currentResources = null;
+
   // ── Panel visibility ─────────────────────────
   function showPanel(id) {
     document.querySelectorAll('.panel-section').forEach(el => el.classList.remove('active'));
@@ -41,10 +45,10 @@ const UI = (() => {
             <span class="tw-subtitle">${isPlayer ? 'Unidad aliada' : 'Unidad enemiga'}</span>
           </div>
           <div class="tw-stats-block">
-            ${_bar('HP',      unit.hp,       unit.maxHp, 'tw-bar-hp')}
-            ${_bar('Ataque',  unit.atk,      100,        'tw-bar-atk')}
-            ${_bar('Defensa', unit.def,      100,        'tw-bar-def')}
-            ${_bar('Velocidad', unit.maxMoves, 5,        'tw-bar-spd')}
+            ${_bar('HP',       unit.hp,       unit.maxHp, 'tw-bar-hp')}
+            ${_bar('Ataque',   unit.atk,      100,        'tw-bar-atk')}
+            ${_bar('Defensa',  unit.def,      100,        'tw-bar-def')}
+            ${_bar('Velocidad',unit.maxMoves, 5,          'tw-bar-spd')}
           </div>
           <div class="tw-pips">
             <span class="tw-pips-label">Movimientos</span>
@@ -98,7 +102,6 @@ const UI = (() => {
             ${maintStr ? `<div class="tw-port-sub" style="margin-top:5px;color:var(--warn)">⚔ ${maintStr}/t</div>` : ''}
           </div>
         </div>
-
         <div class="tw-body">
           <div class="tw-header">
             <span class="tw-title">Selección</span>
@@ -124,6 +127,8 @@ const UI = (() => {
 
   // ── City panel ───────────────────────────────
   function showCity(city, resources, onBuild, onTrain) {
+    _currentCity      = city;
+    _currentResources = resources;
     UI._onBuild = onBuild;
     UI._onTrain = onTrain;
 
@@ -154,17 +159,13 @@ const UI = (() => {
         <div class="tw-body">
           <div class="tw-header">
             <span class="tw-title">${city.name}</span>
-            <span class="tw-subtitle">Edificios</span>
+            <span class="tw-subtitle">Edificios · <span style="color:var(--text-muted);font-size:9px">Hover para info</span></span>
           </div>
           <div class="tw-cards-row">
             ${city.owner !== 'player'
               ? `<p class="tw-hint" style="align-self:center;padding:8px">Conquista esta ciudad para gestionarla.</p>`
               : _buildingCards(city, resources)}
           </div>
-          ${city.owner === 'player' ? `
-            <div class="tw-action-bar">
-              <div class="tw-action-hint">Mejora edificios ↑</div>
-            </div>` : ''}
         </div>
 
         ${city.owner === 'player' ? _recruitCol(city, resources) : ''}
@@ -173,7 +174,98 @@ const UI = (() => {
     showPanel('panel-city');
   }
 
-  // ── Helpers: unit card with data-uid for tooltip ─
+  // ── Building cards ───────────────────────────
+  function _buildingCards(city, resources) {
+    const bKeys = Object.keys(BUILDING_TYPES);
+    return bKeys.map((key, i) => {
+      const def    = BUILDING_TYPES[key];
+      const lvl    = city.buildings[i];
+      const atMax  = lvl >= def.maxLevel;
+      const next   = atMax ? null : def.cost[lvl];
+      const canAf  = next ? Object.entries(next).every(([k, v]) => (resources[k] || 0) >= v) : false;
+
+      // Requirement check
+      let isLocked = false, lockReason = '';
+      if (def.requires) {
+        for (const [reqKey, reqLvl] of Object.entries(def.requires)) {
+          const reqIdx = bKeys.indexOf(reqKey);
+          if (city.buildings[reqIdx] < reqLvl) {
+            isLocked   = true;
+            lockReason = `${BUILDING_TYPES[reqKey].name} Lv${reqLvl}`;
+          }
+        }
+      }
+
+      const classes = [
+        'tw-build-card',
+        `cat-${def.category}`,
+        lvl > 0  ? 'built'  : '',
+        atMax    ? 'maxed'  : '',
+        isLocked ? 'locked' : '',
+      ].filter(Boolean).join(' ');
+
+      const lvlRoman = ['', 'I', 'II', 'III', 'IV', 'V'][lvl] || lvl;
+
+      let btnHtml = '';
+      if (!isLocked) {
+        if (atMax) {
+          btnHtml = `<button class="tw-build-upgrade-btn maxed" disabled>Máx. ✓</button>`;
+        } else {
+          btnHtml = `<button class="tw-build-upgrade-btn" onclick="UI._onBuild('${key}')" ${!canAf ? 'disabled' : ''}>
+            ${lvl === 0 ? '➕ Construir' : '⬆ Mejorar'}
+          </button>`;
+        }
+      }
+
+      return `<div class="${classes}" data-bkey="${key}">
+        <div class="tw-build-icon-area">
+          <span class="tw-build-icon-glyph">${def.icon}</span>
+          ${lvl > 0 ? `<div class="tw-build-lvl-badge">${lvlRoman}</div>` : ''}
+          ${isLocked ? `<div class="tw-build-lock-overlay">🔒</div>` : ''}
+        </div>
+        <div class="tw-build-footer">
+          <div class="tw-build-name">${def.name}</div>
+          <div class="tw-build-effect-line">
+            ${isLocked
+              ? `<span class="tw-req-hint">Req: ${lockReason}</span>`
+              : lvl > 0
+                ? def.effect[lvl - 1]
+                : '<span style="color:var(--text-dim)">Sin construir</span>'}
+          </div>
+          ${btnHtml}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  // ── Recruit column ───────────────────────────
+  function _recruitCol(city, resources) {
+    const bKeys   = Object.keys(BUILDING_TYPES);
+    const barrLvl = city.buildings[bKeys.indexOf('barracks')];
+
+    let inner = '';
+    if (barrLvl === 0) {
+      inner = `<p class="tw-hint">Construye Barracas para reclutar.</p>`;
+    } else {
+      const unlocked = BARRACKS_UNLOCK[barrLvl] || [];
+      inner = unlocked.map(uType => {
+        const uDef = UNIT_TYPES[uType];
+        const canA = Object.entries(uDef.cost).every(([k, v]) => (resources[k] || 0) >= v);
+        return `<button class="tw-recruit-btn" onclick="UI._onTrain('${uType}')" ${!canA ? 'disabled' : ''}>
+          <span class="tw-rbt-icon">${uDef.icon}</span>
+          <span class="tw-rbt-name">${uDef.name}</span>
+          <span class="tw-rbt-cost ${canA ? '' : 'unaffordable'}">${_formatCost(uDef.cost)}</span>
+        </button>`;
+      }).join('');
+    }
+
+    return `<div class="tw-recruit-col">
+      <div class="tw-section-label">Reclutar</div>
+      ${inner}
+    </div>`;
+  }
+
+  // ── Unit card (army panel) ────────────────────
   function _unitCard(u, canSplit) {
     const def    = UNIT_TYPES[u.type];
     const hpPct  = Math.round((u.hp / u.maxHp) * 100);
@@ -200,64 +292,7 @@ const UI = (() => {
     </div>`;
   }
 
-  function _buildingCards(city, resources) {
-    return Object.keys(BUILDING_TYPES).map((key, i) => {
-      const def   = BUILDING_TYPES[key];
-      const lvl   = city.buildings[i];
-      const atMax = lvl >= def.maxLevel;
-      const next  = atMax ? null : def.cost[lvl];
-      const canAf = next ? Object.entries(next).every(([k, v]) => (resources[k] || 0) >= v) : false;
-
-      return `<div class="tw-build-card ${lvl > 0 ? 'built' : ''} ${atMax ? 'maxed' : ''}">
-        <div class="tw-build-icon-area">
-          ${def.icon}
-          ${lvl > 0 ? `<div class="tw-build-lvl-badge">Lv${lvl}</div>` : ''}
-        </div>
-        <div class="tw-build-info">
-          <div class="tw-build-name">${def.name}</div>
-          <div class="tw-build-effect">${lvl > 0 ? def.effect[lvl - 1] : def.desc}</div>
-        </div>
-        ${atMax
-          ? `<button class="tw-build-upgrade-btn" disabled>Máx.</button>`
-          : `<button class="tw-build-upgrade-btn" onclick="UI._onBuild('${key}')" ${!canAf ? 'disabled' : ''}>
-              ${lvl === 0 ? '➕ Construir' : '⬆ Mejorar'}
-              <span class="tw-build-cost">${_formatCost(next)}</span>
-            </button>`}
-      </div>`;
-    }).join('');
-  }
-
-  function _recruitCol(city, resources) {
-    const bKeys   = Object.keys(BUILDING_TYPES);
-    const barrLvl = city.buildings[bKeys.indexOf('barracks')];
-
-    let inner = '';
-    if (barrLvl === 0) {
-      inner = `<p class="tw-hint">Construye Barracas para reclutar.</p>`;
-    } else {
-      const unlocked = BARRACKS_UNLOCK[barrLvl] || [];
-      if (!unlocked.length) {
-        inner = `<p class="tw-hint">Sin unidades disponibles.</p>`;
-      } else {
-        inner = unlocked.map(uType => {
-          const uDef = UNIT_TYPES[uType];
-          const cost = uDef.cost;
-          const canA = Object.entries(cost).every(([k, v]) => (resources[k] || 0) >= v);
-          return `<button class="tw-recruit-btn" onclick="UI._onTrain('${uType}')" ${!canA ? 'disabled' : ''}>
-            <span class="tw-rbt-icon">${uDef.icon}</span>
-            <span class="tw-rbt-name">${uDef.name}</span>
-            <span class="tw-rbt-cost ${canA ? '' : 'unaffordable'}">${_formatCost(cost)}</span>
-          </button>`;
-        }).join('');
-      }
-    }
-
-    return `<div class="tw-recruit-col">
-      <div class="tw-section-label">Reclutar</div>
-      ${inner}
-    </div>`;
-  }
-
+  // ── Shared helpers ───────────────────────────
   function _bar(label, val, max, cls) {
     const pct = Math.min(100, Math.round((val / max) * 100));
     return `<div class="tw-stat-row">
@@ -318,36 +353,51 @@ const UI = (() => {
     UI._toastTimer = setTimeout(() => el.classList.remove('show'), duration);
   }
 
-  // ── Unit card tooltip (fixed-position, event delegation) ──
+  // ── Tooltip system ────────────────────────────
   let _ttTimer = null;
 
   function _initTooltip() {
     const tt = document.getElementById('tw-tooltip');
 
     document.body.addEventListener('mouseover', e => {
-      const card = e.target.closest('[data-uid]');
-      if (!card) return;
+      const unitCard = e.target.closest('[data-uid]');
+      const bldCard  = e.target.closest('[data-bkey]');
+      if (!unitCard && !bldCard) return;
       clearTimeout(_ttTimer);
-      _ttTimer = setTimeout(() => _showTooltip(card, tt), 180);
+      if (unitCard) _ttTimer = setTimeout(() => _showUnitTooltip(unitCard, tt),     180);
+      if (bldCard)  _ttTimer = setTimeout(() => _showBuildingTooltip(bldCard, tt), 180);
     });
 
     document.body.addEventListener('mouseout', e => {
-      const card = e.target.closest('[data-uid]');
-      if (!card) return;
+      if (!e.target.closest('[data-uid]') && !e.target.closest('[data-bkey]')) return;
       clearTimeout(_ttTimer);
       tt.style.display = 'none';
     });
   }
 
-  function _showTooltip(card, tt) {
+  function _positionTooltip(tt, triggerRect) {
+    tt.style.visibility = 'hidden';
+    tt.style.display    = 'block';
+    const ttW = tt.offsetWidth, ttH = tt.offsetHeight;
+    let left = triggerRect.left + triggerRect.width / 2 - ttW / 2;
+    let top  = triggerRect.top - ttH - 8;
+    left = Math.max(8, Math.min(left, window.innerWidth  - ttW - 8));
+    top  = Math.max(8, Math.min(top,  window.innerHeight - ttH - 8));
+    tt.style.left       = left + 'px';
+    tt.style.top        = top  + 'px';
+    tt.style.visibility = 'visible';
+  }
+
+  // Unit card tooltip
+  function _showUnitTooltip(card, tt) {
     const uid  = parseInt(card.dataset.uid, 10);
     const unit = Units.getAll().find(u => u.id === uid);
     if (!unit) return;
 
-    const def    = UNIT_TYPES[unit.type];
-    const hpPct  = Math.round((unit.hp / unit.maxHp) * 100);
-    const hpCol  = hpPct > 60 ? '#4aaa44' : hpPct > 30 ? '#e09030' : '#d05040';
-    const maint  = _maintStr(def.maintenance);
+    const def   = UNIT_TYPES[unit.type];
+    const hpPct = Math.round((unit.hp / unit.maxHp) * 100);
+    const hpCol = hpPct > 60 ? '#4aaa44' : hpPct > 30 ? '#e09030' : '#d05040';
+    const maint = _maintStr(def.maintenance);
 
     tt.innerHTML = `
       <div class="tt-name"><span class="tt-icon">${def.icon}</span>${def.name}</div>
@@ -376,27 +426,85 @@ const UI = (() => {
         <div class="tt-tags">${def.abilities.map(a => `<span class="tt-tag">${a}</span>`).join('')}</div>` : ''}
       ${maint ? `<div class="tt-maint">Upkeep: ${maint}/t</div>` : ''}
     `;
+    _positionTooltip(tt, card.getBoundingClientRect());
+  }
 
-    // Position: show invisible first to measure, then place above card
-    tt.style.visibility = 'hidden';
-    tt.style.display    = 'block';
+  // Building card tooltip
+  const CAT_COLORS = {
+    military: '#7a1414',
+    economy:  '#7a5800',
+    food:     '#1e5a14',
+    industry: '#2c3548',
+    culture:  '#461459',
+  };
+  const CAT_LABELS = {
+    military: 'Militar',
+    economy:  'Economía',
+    food:     'Alimentos',
+    industry: 'Industria',
+    culture:  'Cultura',
+  };
 
-    const cardRect = card.getBoundingClientRect();
-    const ttW      = tt.offsetWidth;
-    const ttH      = tt.offsetHeight;
-    let left = cardRect.left + cardRect.width / 2 - ttW / 2;
-    let top  = cardRect.top - ttH - 8;
+  function _showBuildingTooltip(card, tt) {
+    const bkey = card.dataset.bkey;
+    const def  = BUILDING_TYPES[bkey];
+    if (!def) return;
 
-    left = Math.max(8, Math.min(left, window.innerWidth  - ttW - 8));
-    top  = Math.max(8, Math.min(top,  window.innerHeight - ttH - 8));
+    const city   = _currentCity;
+    const res    = _currentResources;
+    const bKeys  = Object.keys(BUILDING_TYPES);
+    const lvl    = city ? city.buildings[bKeys.indexOf(bkey)] : 0;
+    const atMax  = lvl >= def.maxLevel;
+    const next   = !atMax ? def.cost[lvl] : null;
+    const canAf  = next ? Object.entries(next).every(([k, v]) => (res?.[k] || 0) >= v) : false;
 
-    tt.style.left       = left + 'px';
-    tt.style.top        = top  + 'px';
-    tt.style.visibility = 'visible';
+    // Prerequisite check
+    let reqText = '';
+    if (def.requires && city) {
+      for (const [reqKey, reqLvl] of Object.entries(def.requires)) {
+        const reqIdx  = bKeys.indexOf(reqKey);
+        const cityLvl = city.buildings[reqIdx];
+        if (cityLvl < reqLvl) reqText = `Requiere: ${BUILDING_TYPES[reqKey].name} Lv${reqLvl}`;
+      }
+    }
+
+    const catColor = CAT_COLORS[def.category] || '#1a1200';
+    const catLabel = CAT_LABELS[def.category] || def.category;
+    const lvlRoman = ['', 'I', 'II', 'III', 'IV', 'V'][lvl] || String(lvl);
+
+    tt.innerHTML = `
+      <div class="tt-name" style="border-bottom-color:${catColor}40">
+        <span class="tt-icon">${def.icon}</span>
+        <div>
+          ${def.name}
+          ${lvl > 0 ? `<span class="tt-lv-badge">Lv ${lvlRoman}</span>` : ''}
+          <div class="tt-cat" style="color:${catColor};filter:brightness(1.6)">${catLabel}</div>
+        </div>
+      </div>
+      <div class="tt-desc">${def.desc}</div>
+      ${lvl > 0 ? `
+        <div class="tt-divider"></div>
+        <div class="tt-section-label">Activo</div>
+        <div class="tt-effect active">${def.effect[lvl - 1]}</div>
+      ` : ''}
+      ${!atMax && next ? `
+        <div class="tt-divider"></div>
+        <div class="tt-section-label">${lvl === 0 ? 'Construir' : `Mejorar → Lv ${lvlRoman === '' ? 'I' : (['I','II','III','IV','V'][lvl] || lvl + 1)}`}</div>
+        <div class="tt-effect">${def.effect[lvl]}</div>
+        <div class="tt-cost-row">
+          <span class="tt-cost-label">Costo</span>
+          <span class="tt-cost ${canAf ? 'can-afford' : 'cant-afford'}">${_formatCost(next)}</span>
+        </div>
+      ` : atMax ? `
+        <div class="tt-divider"></div>
+        <div class="tt-effect" style="color:var(--gold)">✓ Nivel máximo</div>
+      ` : ''}
+      ${reqText ? `<div class="tt-req">🔒 ${reqText}</div>` : ''}
+    `;
+    _positionTooltip(tt, card.getBoundingClientRect());
   }
 
   // ── Init ─────────────────────────────────────
-  // Called once from game.js after DOM ready
   function init() {
     _initTooltip();
   }

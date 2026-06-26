@@ -66,46 +66,80 @@ const UNIT_TYPES = {
   },
 };
 
-// Building types: name, icon, desc, cost, effect, maxLevel
+// Building types: name, icon, category, desc, cost[], effect[], maxLevel
+// requires: { buildingKey: minLevel } — must be met before constructing
 const BUILDING_TYPES = {
+
+  // ── MILITARY ────────────────────────────────
   barracks: {
-    name: 'Barracks', icon: '🏛️',
-    desc: 'Train military units.',
-    cost: [{ gold: 50, wood: 20 }, { gold: 100, iron: 30 }, { gold: 200, iron: 60 }],
-    effect: ['Unlocks Warrior, Scout', 'Unlocks Archer', 'Unlocks Knight, Catapult'],
-    maxLevel: 3,
-  },
-  market: {
-    name: 'Market', icon: '🏪',
-    desc: 'Increases gold income per turn.',
-    cost: [{ gold: 40, wood: 10 }, { gold: 90, gold2: 0 }, { gold: 180 }],
-    effect: ['+2 Gold/turn', '+4 Gold/turn', '+6 Gold/turn'],
-    maxLevel: 3,
-  },
-  farm: {
-    name: 'Farm', icon: '🌱',
-    desc: 'Increases food production.',
-    cost: [{ gold: 30, wood: 20 }, { gold: 70, food: 10 }, { gold: 140, food: 20 }],
-    effect: ['+2 Food/turn', '+4 Food/turn', '+6 Food/turn'],
-    maxLevel: 3,
-  },
-  forge: {
-    name: 'Forge', icon: '🔨',
-    desc: 'Produces iron, improves unit stats.',
-    cost: [{ gold: 60, iron: 20 }, { gold: 130, iron: 40 }, { gold: 260, iron: 80 }],
-    effect: ['+1 Iron/turn, units +5 atk', '+2 Iron/turn, units +10 atk', '+3 Iron/turn, units +15 atk'],
+    name: 'Barracks', icon: '🏛️', category: 'military',
+    desc: 'Recruits and trains military units for your armies.',
+    cost:   [{ gold:50,  wood:20 }, { gold:120, iron:20 }, { gold:250, iron:50 }],
+    effect: ['Trains Warriors & Scouts', 'Trains Archers', 'Trains Knights & Catapults'],
     maxLevel: 3,
   },
   walls: {
-    name: 'Walls', icon: '🧱',
-    desc: 'Fortifies city, slows enemy capture.',
-    cost: [{ gold: 80, stone: 0, iron: 20 }, { gold: 160, iron: 40 }, { gold: 300, iron: 80 }],
-    effect: ['+20 City HP', '+40 City HP', '+60 City HP'],
+    name: 'Walls', icon: '🧱', category: 'military',
+    desc: 'Stone ramparts that slow enemy units and protect the city.',
+    cost:   [{ gold:80,  iron:20 }, { gold:180, iron:50  }, { gold:350, iron:100 }],
+    effect: ['+20 City HP', '+50 City HP, enemy -1 Speed', '+100 City HP, siege penalty'],
+    maxLevel: 3,
+  },
+
+  // ── ECONOMY ─────────────────────────────────
+  market: {
+    name: 'Market', icon: '🏪', category: 'economy',
+    desc: 'Generates gold through commerce and taxation.',
+    cost:   [{ gold:40,  wood:15 }, { gold:100           }, { gold:220           }],
+    effect: ['+2 💰/turn', '+4 💰/turn', '+6 💰/turn'],
+    maxLevel: 3,
+  },
+  port: {
+    name: 'Port', icon: '⚓', category: 'economy',
+    desc: 'Coastal trade route that greatly multiplies gold income.',
+    requires: { market: 1 },
+    cost:   [{ gold:150, wood:50 }, { gold:300, wood:100 }],
+    effect: ['+5 💰/turn', '+10 💰/turn'],
+    maxLevel: 2,
+  },
+
+  // ── FOOD ────────────────────────────────────
+  farm: {
+    name: 'Farm', icon: '🌱', category: 'food',
+    desc: 'Cultivates fertile land for a steady food supply.',
+    cost:   [{ gold:30,  wood:20 }, { gold:70,  food:10  }, { gold:140, food:20  }],
+    effect: ['+2 🌾/turn', '+4 🌾/turn', '+6 🌾/turn'],
+    maxLevel: 3,
+  },
+  granary: {
+    name: 'Granary', icon: '🌾', category: 'food',
+    desc: 'Stores surplus grain and feeds larger standing armies.',
+    requires: { farm: 2 },
+    cost:   [{ gold:90,  food:30 }, { gold:200, food:60  }],
+    effect: ['+3 🌾/turn', '+5 🌾/turn'],
+    maxLevel: 2,
+  },
+
+  // ── INDUSTRY ────────────────────────────────
+  forge: {
+    name: 'Forge', icon: '🔨', category: 'industry',
+    desc: 'Smelts iron for weapons and armour, boosting combat power.',
+    cost:   [{ gold:60,  iron:20 }, { gold:140, iron:40  }, { gold:280, iron:80  }],
+    effect: ['+1 ⚙️/turn, units +5 ATK', '+2 ⚙️/turn, units +10 ATK', '+3 ⚙️/turn, units +15 ATK'],
+    maxLevel: 3,
+  },
+
+  // ── CULTURE ─────────────────────────────────
+  temple: {
+    name: 'Temple', icon: '⛩️', category: 'culture',
+    desc: 'Divine favour brings prosperity and strengthens your soldiers.',
+    cost:   [{ gold:70,  wood:30 }, { gold:160, iron:20  }, { gold:320, iron:50  }],
+    effect: ['+1 💰/t, +1 🌾/t', '+2 💰/t, +2 🌾/t, units +5 DEF', '+3 💰/t, +3 🌾/t, units +10 DEF'],
     maxLevel: 3,
   },
 };
 
-// Which buildings unlock which units
+// Which barracks level unlocks which units
 const BARRACKS_UNLOCK = {
   1: ['warrior', 'scout'],
   2: ['warrior', 'scout', 'archer'],
