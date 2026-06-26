@@ -197,7 +197,7 @@ html, body {
 #mapCanvas {
   display: block;
   cursor: pointer;
-  image-rendering: pixelated;
+  image-rendering: auto;
   position: relative;
   z-index: 0;
 }
