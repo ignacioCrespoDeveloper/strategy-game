@@ -327,7 +327,6 @@ const Renderer = (() => {
     const { selectedUnit, selectedGroup, reachable } = state;
     const units    = Units.getAll();
     const cities   = Cities.getAll();
-    const zones    = GameMap.getZones(units);
     const r        = HEX_R * scale;
     const reachSet = new Set(reachable.map(h => hexKey(h.c, h.r)));
 
@@ -343,46 +342,7 @@ const Renderer = (() => {
     if (_worldDirty) _buildWorldCanvas();
     if (_worldCanvas) ctx.drawImage(_worldCanvas, 0, 0);
 
-    // ── 2. Faction territory stripes ──────────
-    // Player and enemy-controlled hexes get a coloured diagonal stripe overlay,
-    // exactly like TW campaign map province colours.
-    const playerStripe = _stripePattern(ctx, 'ov_player', 'rgba(74,158,255,0.28)', 9, 1.8);
-    const enemyStripe  = _stripePattern(ctx, 'ov_enemy',  'rgba(220,60,60,0.28)',  9, 1.8);
-    const contestStripe= _stripePattern(ctx, 'ov_contest','rgba(220,195,0,0.22)',  9, 1.8);
-
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const { x, y } = hexCenter(col, row, scale);
-        if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
-
-        const t = TERRAIN_MAP[row][col];
-        if (t === 'water') continue;
-
-        const k   = hexKey(col, row);
-        const inP = zones.player.has(k);
-        const inE = zones.enemy.has(k);
-        if (!inP && !inE) continue;
-
-        let pat = null, borderCol = null;
-        if      (inP && !inE) { pat = playerStripe; borderCol = 'rgba(74,158,255,0.45)';  }
-        else if (inE && !inP) { pat = enemyStripe;  borderCol = 'rgba(220,60,60,0.42)';   }
-        else                  { pat = contestStripe; borderCol = 'rgba(220,195,0,0.40)';  }
-
-        ctx.save();
-        _hexPath(ctx, x, y, r - 0.5);
-        ctx.clip();
-        if (pat) { ctx.fillStyle = pat; ctx.fill(); }
-        ctx.restore();
-
-        // Border line for the territory
-        _hexPath(ctx, x, y, r - 0.5);
-        ctx.strokeStyle = borderCol;
-        ctx.lineWidth   = 1.5 * scale;
-        ctx.stroke();
-      }
-    }
-
-    // ── 3. Reachable hex overlay ───────────────
+    // ── 2. Reachable hex overlay ───────────────
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         if (!reachSet.has(hexKey(col, row))) continue;

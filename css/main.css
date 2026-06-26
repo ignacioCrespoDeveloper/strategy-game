@@ -49,8 +49,21 @@
   --radius:    5px;
   --radius-lg: 10px;
   --font:      'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-head: 'Cinzel', 'Palatino Linotype', Georgia, serif;
+  --font-body: 'Crimson Text', Georgia, serif;
   --hud-h:     48px;
   --panel-h:   224px;
+
+  /* Parchment palette — panels */
+  --parch:      #e4d09c;
+  --parch2:     #d4bc80;
+  --parch3:     #c4a860;
+  --parch-dark: #1e1408;
+  --ink:        #1a0e04;
+  --ink-mid:    #6a4820;
+  --ink-light:  #9a7848;
+  --sepia-brd:  rgba(140,100,40,0.38);
+  --sepia-brd2: rgba(140,100,40,0.60);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -83,6 +96,7 @@ html, body {
 #hud-right { display: flex; align-items: center; gap: 10px; }
 
 .hud-logo {
+  font-family: var(--font-head);
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -123,6 +137,7 @@ html, body {
 .res-net.zero { display: none; }
 
 #turn-display {
+  font-family: var(--font-head);
   font-size: 12px;
   letter-spacing: 0.06em;
   color: var(--text-muted);
