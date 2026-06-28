@@ -1,10 +1,10 @@
 // =============================================
-//  map.js — map state: resources, zones
+//  map.js — map state: resources, zones, income
 // =============================================
 
 const GameMap = (() => {
-  const resourceMap       = {};   // hexKey → resource type
-  const capturedResources = {};   // hexKey → 'player' | 'enemy' | null
+  const resourceMap       = {};
+  const capturedResources = {};
 
   function init() {
     RESOURCE_SPAWNS.forEach(({ c, r, type }) => {
@@ -16,7 +16,6 @@ const GameMap = (() => {
   function getResource(c, r)   { return resourceMap[hexKey(c, r)] || null; }
   function getCapturedBy(c, r) { return capturedResources[hexKey(c, r)] || null; }
 
-  // Capture a resource node; returns {type} if ownership changed, null otherwise
   function processCapture(c, r, owner) {
     const k = hexKey(c, r);
     if (!resourceMap[k]) return null;
@@ -25,19 +24,58 @@ const GameMap = (() => {
     return { type: resourceMap[k] };
   }
 
-  // Control zones: all hexes within 1 step of each owner's units
-  function getZones(units) {
+  // Control zones: hexes within 1 step of each owner's units + city influence radius
+  function getZones(units, cities) {
     const zones = { player: new Set(), enemy: new Set() };
+
     units.forEach(u => {
       const side = zones[u.owner];
       if (!side) return;
       side.add(hexKey(u.c, u.r));
       neighbors(u.c, u.r).forEach(n => side.add(hexKey(n.c, n.r)));
     });
+
+    if (cities) {
+      cities.forEach(ci => {
+        const side = zones[ci.owner];
+        if (!side) return;
+        const typeData  = CITY_TYPES[ci.type || 'aldea'];
+        const range     = typeData.influence;
+        const visited   = new Set();
+        const queue     = [{ c: ci.c, r: ci.r, dist: 0 }];
+        visited.add(hexKey(ci.c, ci.r));
+        while (queue.length) {
+          const { c, r, dist } = queue.shift();
+          side.add(hexKey(c, r));
+          if (dist < range) {
+            neighbors(c, r).forEach(n => {
+              const k = hexKey(n.c, n.r);
+              if (!visited.has(k)) { visited.add(k); queue.push({ c: n.c, r: n.r, dist: dist + 1 }); }
+            });
+          }
+        }
+      });
+    }
+
     return zones;
   }
 
-  // Collect resources for player based on captured nodes and city buildings
+  // Sum all resource/gold bonuses from a city's buildings
+  function _buildingBonuses(city) {
+    const b = { gold: 0, iron: 0, food: 0, wood: 0 };
+    Object.entries(city.buildings).forEach(([key, lvl]) => {
+      if (!lvl || lvl <= 0) return;
+      const def    = BUILDING_TYPES[key];
+      const bonus  = def?.bonus?.[lvl - 1];
+      if (!bonus) return;
+      if (bonus.gold) b.gold += bonus.gold;
+      if (bonus.iron) b.iron += bonus.iron;
+      if (bonus.food) b.food += bonus.food;
+      if (bonus.wood) b.wood += bonus.wood;
+    });
+    return b;
+  }
+
   function collectIncome(units, cities, resources) {
     // Captured resource nodes
     Object.entries(capturedResources).forEach(([k, owner]) => {
@@ -47,22 +85,21 @@ const GameMap = (() => {
       }
     });
 
-    // City building bonuses
+    // Player city income
     cities.filter(ci => ci.owner === 'player').forEach(ci => {
-      ci.buildings.forEach((lvl, bIdx) => {
-        if (lvl === 0) return;
-        const key = Object.keys(BUILDING_TYPES)[bIdx];
-        if (key === 'market')  resources.gold += lvl * 2;
-        if (key === 'farm')    resources.food += lvl * 2;
-        if (key === 'forge')   resources.iron += lvl;
-        if (key === 'port')    resources.gold += lvl === 1 ? 5 : 10;
-        if (key === 'granary') resources.food += lvl === 1 ? 3 : 5;
-        if (key === 'temple') { resources.gold += lvl; resources.food += lvl; }
+      const typeData = CITY_TYPES[ci.type || 'aldea'];
+      Object.entries(typeData.income).forEach(([res, amt]) => {
+        resources[res] = (resources[res] || 0) + amt;
       });
+      const b = _buildingBonuses(ci);
+      resources.gold = (resources.gold || 0) + b.gold;
+      resources.iron = (resources.iron || 0) + b.iron;
+      resources.food = (resources.food || 0) + b.food;
+      resources.wood = (resources.wood || 0) + b.wood;
     });
   }
 
-  // Heal units within 2 hexes of a friendly city (10 HP/turn)
+  // Heal units within 2 hexes of a friendly city
   function healUnits(units, cities) {
     const msgs = [];
     units.forEach(u => {
@@ -79,45 +116,33 @@ const GameMap = (() => {
     return msgs;
   }
 
-  // Deduct maintenance for all player units. Units with unpaid upkeep lose HP.
   function deductMaintenance(units, resources) {
-    const playerUnits = units.filter(u => u.owner === 'player');
     const msgs = [];
-
-    playerUnits.forEach(u => {
+    units.filter(u => u.owner === 'player').forEach(u => {
       const maint = UNIT_TYPES[u.type].maintenance;
-      let canAfford = true;
-      Object.entries(maint).forEach(([res, cost]) => {
-        if ((resources[res] || 0) < cost) canAfford = false;
-      });
-
-      if (canAfford) {
-        Object.entries(maint).forEach(([res, cost]) => {
-          resources[res] -= cost;
-        });
+      let ok = true;
+      Object.entries(maint).forEach(([res, cost]) => { if ((resources[res] || 0) < cost) ok = false; });
+      if (ok) {
+        Object.entries(maint).forEach(([res, cost]) => { resources[res] -= cost; });
       } else {
-        // Unit suffers attrition — loses 10 HP
         u.hp = Math.max(1, u.hp - 10);
-        msgs.push(`${UNIT_TYPES[u.type].name} is starving! (-10 HP)`);
+        msgs.push(`${UNIT_TYPES[u.type].name} está hambrienta! (-10 HP)`);
       }
     });
-
     return msgs;
   }
 
-  // Calculate total maintenance cost for all player units
   function getTotalMaintenance(units) {
     const totals = {};
     units.filter(u => u.owner === 'player').forEach(u => {
-      const maint = UNIT_TYPES[u.type].maintenance;
-      Object.entries(maint).forEach(([res, cost]) => {
+      Object.entries(UNIT_TYPES[u.type].maintenance).forEach(([res, cost]) => {
         totals[res] = (totals[res] || 0) + cost;
       });
     });
     return totals;
   }
 
-  // Preview income for next turn (does not modify resources)
+  // Preview income for HUD without modifying resources
   function calcIncome(cities) {
     const totals = {};
     Object.keys(RESOURCE_DEF).forEach(t => totals[t] = 0);
@@ -130,16 +155,15 @@ const GameMap = (() => {
     });
 
     cities.filter(ci => ci.owner === 'player').forEach(ci => {
-      ci.buildings.forEach((lvl, bIdx) => {
-        if (lvl === 0) return;
-        const key = Object.keys(BUILDING_TYPES)[bIdx];
-        if (key === 'market')  totals.gold += lvl * 2;
-        if (key === 'farm')    totals.food += lvl * 2;
-        if (key === 'forge')   totals.iron += lvl;
-        if (key === 'port')    totals.gold += lvl === 1 ? 5 : 10;
-        if (key === 'granary') totals.food += lvl === 1 ? 3 : 5;
-        if (key === 'temple') { totals.gold += lvl; totals.food += lvl; }
+      const typeData = CITY_TYPES[ci.type || 'aldea'];
+      Object.entries(typeData.income).forEach(([res, amt]) => {
+        totals[res] = (totals[res] || 0) + amt;
       });
+      const b = _buildingBonuses(ci);
+      totals.gold += b.gold;
+      totals.iron += b.iron;
+      totals.food += b.food;
+      totals.wood += b.wood;
     });
 
     return totals;
@@ -149,5 +173,28 @@ const GameMap = (() => {
     return TERRAIN_MAP[r]?.[c] === 'water';
   }
 
-  return { init, getResource, getCapturedBy, processCapture, getZones, collectIncome, healUnits, deductMaintenance, getTotalMaintenance, calcIncome, isWater };
+  function getCityIncome(city) {
+    const typeData = CITY_TYPES[city.type || 'aldea'];
+    const inc = Object.assign({}, typeData.income);
+    const b   = _buildingBonuses(city);
+    Object.entries(b).forEach(([k, v]) => { if (v) inc[k] = (inc[k] || 0) + v; });
+    return inc;
+  }
+
+  function getPlayerNodes() {
+    const nodes = [];
+    Object.entries(capturedResources).forEach(([k, owner]) => {
+      if (owner === 'player') {
+        const type = resourceMap[k];
+        nodes.push({ type, income: RESOURCE_DEF[type].income, icon: RESOURCE_DEF[type].icon });
+      }
+    });
+    return nodes;
+  }
+
+  return {
+    init, getResource, getCapturedBy, processCapture,
+    getZones, collectIncome, healUnits, deductMaintenance,
+    getTotalMaintenance, calcIncome, isWater, getCityIncome, getPlayerNodes,
+  };
 })();

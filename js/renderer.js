@@ -18,6 +18,9 @@ const Renderer = (() => {
   let _worldCanvas = null;
   let _worldDirty  = true;
 
+  // Unit portrait images (loaded asynchronously; drawn in token if available)
+  const _unitImgs = {};
+
   // Terrain colour palette — muted organic campaign-map tones
   const TPAL = {
     water:    { mid: '#0a2030' },
@@ -36,6 +39,17 @@ const Renderer = (() => {
     ctx    = c.getContext('2d');
     resize();
     window.addEventListener('resize', () => { resize(); if (lastDrawState) draw(lastDrawState); });
+    _preloadUnitImgs();
+  }
+
+  function _preloadUnitImgs() {
+    Object.entries(UNIT_TYPES).forEach(([type, def]) => {
+      if (!def.img) return;
+      const img = new Image();
+      img.onload = () => { if (lastDrawState) draw(lastDrawState); };
+      img.src    = `assets/units/${def.img}.png`;
+      _unitImgs[type] = img;
+    });
   }
 
   function resize() {
@@ -402,11 +416,61 @@ const Renderer = (() => {
       }
     }
 
+    // ── 4a. City influence — per-hex tint + soft glow ────────────────
+    cities.forEach(ci => {
+      const typeData = CITY_TYPES[ci.type || 'aldea'];
+      const rgb = ci.owner === 'player' ? '74,158,255'
+                : ci.owner === 'enemy'  ? '220,60,60' : '200,160,40';
+
+      // BFS: collect all hexes within influence radius
+      const visited = new Set();
+      const queue   = [{ c: ci.c, r: ci.r, dist: 0 }];
+      visited.add(hexKey(ci.c, ci.r));
+      while (queue.length) {
+        const { c: hc, r: hr, dist } = queue.shift();
+        if (dist > 0) {  // skip the city hex itself
+          const { x: hx, y: hy } = hexCenter(hc, hr, scale);
+          ctx.save();
+          _hexPath(ctx, hx, hy, r * 0.94);
+          ctx.fillStyle = `rgba(${rgb},${dist === 1 ? 0.18 : 0.10})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(${rgb},${dist === 1 ? 0.30 : 0.14})`;
+          ctx.lineWidth   = 0.8;
+          ctx.stroke();
+          ctx.restore();
+        }
+        if (dist < typeData.influence) {
+          neighbors(hc, hr).forEach(n => {
+            const k = hexKey(n.c, n.r);
+            if (!visited.has(k) && !GameMap.isWater(n.c, n.r)) {
+              visited.add(k);
+              queue.push({ c: n.c, r: n.r, dist: dist + 1 });
+            }
+          });
+        }
+      }
+
+      // Soft radial glow on top
+      const { x, y } = hexCenter(ci.c, ci.r, scale);
+      const influenceR = typeData.influence * r * 2.0;
+      ctx.save();
+      const grad = ctx.createRadialGradient(x, y, r * 0.5, x, y, influenceR);
+      grad.addColorStop(0,   `rgba(${rgb},0.12)`);
+      grad.addColorStop(0.55,`rgba(${rgb},0.03)`);
+      grad.addColorStop(1,   `rgba(${rgb},0.00)`);
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.arc(x, y, influenceR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
     // ── 4. Cities ─────────────────────────────
     cities.forEach(ci => {
       const { x, y } = hexCenter(ci.c, ci.r, scale);
       if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
 
+      const typeData = CITY_TYPES[ci.type || 'aldea'];
       const ownerCol = ci.owner === 'player' ? '#4a9eff'
                      : ci.owner === 'enemy'  ? '#e04040' : '#ddb030';
 
@@ -450,7 +514,7 @@ const Renderer = (() => {
       ctx.textBaseline = 'middle';
       ctx.shadowColor  = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur   = 4;
-      ctx.fillText('🏰', x, y - r * 0.02);
+      ctx.fillText(typeData.icon, x, y - r * 0.02);
       ctx.restore();
 
       // City name label
@@ -462,6 +526,17 @@ const Renderer = (() => {
       ctx.shadowColor  = 'rgba(0,0,0,0.95)';
       ctx.shadowBlur   = 5;
       ctx.fillText(ci.name, x, y + r * 0.48);
+      ctx.restore();
+
+      // City tier label
+      ctx.save();
+      ctx.font         = `${Math.round(7)}px sans-serif`;
+      ctx.fillStyle    = ownerCol + 'bb';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'top';
+      ctx.shadowColor  = 'rgba(0,0,0,0.90)';
+      ctx.shadowBlur   = 4;
+      ctx.fillText(typeData.name.toUpperCase(), x, y + r * 0.48 + 11);
       ctx.restore();
     });
 
@@ -528,14 +603,26 @@ const Renderer = (() => {
       ctx.stroke();
       ctx.restore();
 
-      // Icon
+      // Portrait image or emoji fallback inside token
       ctx.save();
-      ctx.font         = `${Math.round(r * 0.30)}px serif`;
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor  = 'rgba(0,0,0,0.7)';
-      ctx.shadowBlur   = 2;
-      ctx.fillText(def.icon, x, y + 1);
+      const uImg = _unitImgs[u.type];
+      if (uImg && uImg.complete && uImg.naturalWidth > 0) {
+        const ir = r * 0.31;
+        ctx.beginPath();
+        ctx.arc(x, y, ir, 0, Math.PI * 2);
+        ctx.clip();
+        // Draw top portion of the portrait (head/torso)
+        const iw = uImg.naturalWidth, ih = uImg.naturalHeight;
+        const drawH = Math.min(ih, iw * 1.2);
+        ctx.drawImage(uImg, 0, 0, iw, drawH, x - ir, y - ir, ir * 2, ir * 2);
+      } else {
+        ctx.font         = `${Math.round(r * 0.30)}px serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor  = 'rgba(0,0,0,0.7)';
+        ctx.shadowBlur   = 2;
+        ctx.fillText(def.icon, x, y + 1);
+      }
       ctx.restore();
 
       // HP bar

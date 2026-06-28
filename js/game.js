@@ -9,7 +9,7 @@ const Game = (() => {
     selectedGroup: [],     // IDs of units in the selected army
     reachable:     [],
     phase:         'idle', // 'idle' | 'army-moving'
-    resources:     { gold: 50, iron: 10, food: 20, wood: 10 },
+    resources:     { gold: 5000, iron: 5000, food: 5000, wood: 5000 },
     turn:          1,
   };
 
@@ -36,6 +36,7 @@ const Game = (() => {
     });
 
     UI.updateHUD(state.resources, state.turn);
+    UI.updateEmpirePanel(Cities.getAll(), GameMap.getPlayerNodes());
     UI.showIdle();
     render();
   }
@@ -105,12 +106,58 @@ const Game = (() => {
 
   // Select all units at (c,r) as one army and immediately enter move mode
   function selectArmy(c, r) {
-    const allHere = Units.getAllAt(c, r);
+    const allHere = Units.getAllAt(c, r).filter(u => u.owner === 'player');
     state.selectedGroup = allHere.map(u => u.id);
     state.selectedUnit  = null;
     state.selectedCity  = null;
-    UI.showArmy(allHere);
+    const cityHere = Cities.getAt(c, r);
+    UI.showArmy(allHere, state.resources, cityHere, onRecruit);
     beginArmyMove();
+  }
+
+  const ARMY_MAX = 10;
+
+  // ── Recruit unit into army ──
+  function onRecruit(type) {
+    const army = getArmyUnits();
+    if (!army.length) return;
+    const { c, r } = army[0];
+    const def = UNIT_TYPES[type];
+    if (!def) return;
+
+    if (Units.getAllAt(c, r).filter(u => u.owner === 'player').length >= ARMY_MAX) {
+      UI.toast(`Máximo ${ARMY_MAX} unidades por ejército.`); return;
+    }
+
+    const cost = def.cost || {};
+    const canAf = Object.entries(cost).every(([k, v]) => (state.resources[k] || 0) >= v);
+    if (!canAf) { UI.toast('Recursos insuficientes.'); return; }
+
+    Object.entries(cost).forEach(([k, v]) => { state.resources[k] -= v; });
+
+    const trainTime = def.trainTime || 0;
+    if (trainTime > 0) {
+      // Requires a player city at this hex to train
+      const cityHere = Cities.getAt(c, r);
+      if (!cityHere || cityHere.owner !== 'player') {
+        Object.entries(cost).forEach(([k, v]) => { state.resources[k] += v; });
+        UI.toast('Las unidades entrenadas requieren estar en una ciudad.');
+        return;
+      }
+      cityHere.queue.push({ type: 'unit', key: type, turnsLeft: trainTime });
+      UI.updateHUD(state.resources, state.turn);
+      UI.toast(`${def.name} en entrenamiento — ${trainTime} turno${trainTime > 1 ? 's' : ''}.`);
+      UI.showArmy(getArmyUnits(), state.resources, cityHere, onRecruit);
+      render();
+      return;
+    }
+
+    Units.spawn(type, c, r, 'player');
+    state.selectedGroup = Units.getAllAt(c, r).filter(u => u.owner === 'player').map(u => u.id);
+    UI.updateHUD(state.resources, state.turn);
+    UI.toast(`${def.name} reclutado.`);
+    UI.showArmy(getArmyUnits(), state.resources, Cities.getAt(c, r), onRecruit);
+    render();
   }
 
   // ── Capture city/resource when unit lands ──
@@ -137,19 +184,17 @@ const Game = (() => {
     const anyExhausted = allUnits.some(u => u.moves === 0);
 
     if (!anyMovable) {
-      // Whole army exhausted
       state.phase = 'idle';
       state.reachable = [];
-      UI.showArmy(allUnits);
+      _refreshArmyPanel(allUnits);
       render();
       return;
     }
 
     if (anyExhausted) {
-      // Mixed — some units exhausted; army locked. Player must split a unit manually.
       state.phase = 'idle';
       state.reachable = [];
-      UI.showArmy(allUnits);
+      _refreshArmyPanel(allUnits);
       render();
       return;
     }
@@ -167,6 +212,13 @@ const Game = (() => {
     render();
   }
 
+  // Refresh army panel with current context
+  function _refreshArmyPanel(units) {
+    const u = units[0];
+    const city = u ? Cities.getAt(u.c, u.r) : null;
+    UI.showArmy(units, state.resources, city, onRecruit);
+  }
+
   // ── Extract single unit to move alone ───────
   function splitUnit(unitId) {
     const unit = Units.getAll().find(u => u.id === unitId);
@@ -174,7 +226,7 @@ const Game = (() => {
     state.selectedGroup = [unitId];
     state.selectedUnit  = null;
     state.selectedCity  = null;
-    UI.showArmy([unit]);
+    _refreshArmyPanel([unit]);
     beginArmyMove();
   }
 
@@ -195,6 +247,12 @@ const Game = (() => {
 
     const next = path[1];
     let anyMoved = false;
+
+    const alreadyThere = Units.getAllAt(next.c, next.r).filter(u => u.owner === 'player').length;
+    if (alreadyThere > 0 && alreadyThere + movable.length > ARMY_MAX) {
+      UI.toast(`Fusión bloqueada — superaría el máximo de ${ARMY_MAX} unidades.`);
+      return;
+    }
 
     movable.forEach(u => {
       const result = Units.move(u, next.c, next.r);
@@ -222,7 +280,7 @@ const Game = (() => {
     } else {
       state.phase     = 'idle';
       state.reachable = [];
-      UI.showArmy(army);
+      _refreshArmyPanel(army);
     }
   }
 
@@ -234,6 +292,39 @@ const Game = (() => {
     state.phase    = 'idle';
     state.reachable = [];
     UI.showIdle();
+    render();
+  }
+
+  // ── Raise new army from city ────────────────
+  function raiseArmy(type) {
+    const city = state.selectedCity;
+    if (!city) return;
+    const def  = UNIT_TYPES[type];
+    if (!def)  return;
+
+    const cost = def.cost || {};
+    if (!Object.entries(cost).every(([k, v]) => (state.resources[k] || 0) >= v)) {
+      UI.toast('Recursos insuficientes.'); return;
+    }
+
+    Object.entries(cost).forEach(([k, v]) => { state.resources[k] -= v; });
+    UI._closeRaiseArmyModal();
+
+    const trainTime = def.trainTime || 0;
+    if (trainTime > 0) {
+      city.queue.push({ type: 'unit', key: type, turnsLeft: trainTime });
+      UI.updateHUD(state.resources, state.turn);
+      UI.toast(`${def.name} en entrenamiento — ${trainTime} turno${trainTime > 1 ? 's' : ''}.`);
+      UI.showCity(city, state.resources, onBuild, onTrain);
+      render();
+      return;
+    }
+
+    Units.spawn(type, city.c, city.r, 'player');
+    UI.updateHUD(state.resources, state.turn);
+    UI.toast(`Ejército levantado — ${def.name}`);
+    state.selectedCity = null;
+    selectArmy(city.c, city.r);
     render();
   }
 
@@ -261,7 +352,9 @@ const Game = (() => {
     if (!state.selectedCity) return;
     const result = Cities.buildBuilding(state.selectedCity, key, state.resources);
     UI.toast(result.msg);
+    if (result.ok) Renderer.markTerrainDirty();
     UI.updateHUD(state.resources, state.turn);
+    UI.updateEmpirePanel(Cities.getAll(), GameMap.getPlayerNodes());
     UI.showCity(state.selectedCity, state.resources, onBuild, onTrain);
     render();
   }
@@ -270,7 +363,6 @@ const Game = (() => {
   function onTrain(type) {
     if (!state.selectedCity) return;
     const city = state.selectedCity;
-    // No army-near restriction: units spawn at the city hex when no army is nearby
     const result = Cities.trainUnit(city, type, state.resources);
     UI.toast(result.msg);
     UI.updateHUD(state.resources, state.turn);
@@ -283,6 +375,12 @@ const Game = (() => {
     Units.resetMoves('player');
     GameMap.collectIncome(Units.getAll(), Cities.getAll(), state.resources);
     const maintMsgs = GameMap.deductMaintenance(Units.getAll(), state.resources);
+    // Building upkeep
+    Cities.getAll().filter(c => c.owner === 'player').forEach(city => {
+      Object.entries(Cities.getTotalBuildingMaintenance(city)).forEach(([k, v]) => {
+        state.resources[k] = Math.max(0, (state.resources[k] || 0) - v);
+      });
+    });
     const healMsgs  = GameMap.healUnits(Units.getAll(), Cities.getAll());
 
     // Spawn trained units
@@ -302,8 +400,9 @@ const Game = (() => {
     state.selectedGroup = state.selectedGroup.filter(id => Units.getAll().some(u => u.id === id));
 
     UI.updateHUD(state.resources, state.turn);
+    UI.updateEmpirePanel(Cities.getAll(), GameMap.getPlayerNodes());
     if (state.selectedGroup.length > 0) {
-      UI.showArmy(getArmyUnits());
+      _refreshArmyPanel(getArmyUnits());
     } else {
       UI.showIdle();
     }
@@ -366,7 +465,7 @@ const Game = (() => {
     });
   }
 
-  return { init, disbandGroup, armyNearCity, deselect, splitUnit };
+  return { init, disbandGroup, armyNearCity, deselect, splitUnit, raiseArmy };
 })();
 
 // Boot
