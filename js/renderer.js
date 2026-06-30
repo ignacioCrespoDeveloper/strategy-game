@@ -64,7 +64,7 @@ const Renderer = (() => {
     canvas.style.width  = _logW + 'px';
     canvas.style.height = _logH + 'px';
 
-    scale         = 1.0;
+    scale         = Math.min(1.0, (_logW * 2) / ((COLS - 1) * HEX_R * 1.74));
     _worldDirty   = true;
     _patternCache = {};
     clampCamera();
@@ -81,8 +81,28 @@ const Renderer = (() => {
     camera.y = Math.max(0, Math.min(camera.y, Math.max(0, worldH - _logH)));
   }
 
-  function _worldLogW() { return Math.ceil(42 + (COLS - 1) * HEX_R * 1.74 + HEX_R * 4); }
-  function _worldLogH() { return Math.ceil(44 + (ROWS - 0.5) * HEX_H + HEX_H * 2);      }
+  function _worldLogW() { return Math.ceil((42 + (COLS - 1) * HEX_R * 1.74 + HEX_R * 4) * scale); }
+  function _worldLogH() { return Math.ceil((44 + (ROWS - 0.5) * HEX_H + HEX_H * 2) * scale);      }
+
+  function centerOn(col, row) {
+    const { x, y } = hexCenter(col, row, scale);
+    camera.x = x - _logW / 2;
+    camera.y = y - _logH / 2;
+    clampCamera();
+  }
+
+  function zoomAt(px, py, delta) {
+    const prev   = scale;
+    scale        = Math.max(0.25, Math.min(2.0, scale * (delta > 0 ? 0.85 : 1.18)));
+    if (scale === prev) return;
+    // Zoom toward mouse position: shift camera so (px,py) stays fixed
+    camera.x = (camera.x + px) * (scale / prev) - px;
+    camera.y = (camera.y + py) * (scale / prev) - py;
+    _worldDirty   = true;
+    _patternCache = {};
+    clampCamera();
+    if (lastDrawState) draw(lastDrawState);
+  }
 
   // ── Pan ─────────────────────────────────────
   function setPanFlag(dir, active) {
@@ -328,10 +348,220 @@ const Renderer = (() => {
     }
   }
 
+  // ── City 2D renderer ─────────────────────────
+  function _seededRng(seed) {
+    let s = (seed ^ 0xdeadbeef) >>> 0;
+    return () => { s ^= s << 13; s ^= s >> 17; s ^= s << 5; s = s >>> 0; return s / 0xffffffff; };
+  }
+
+  function _roundRect(ctx, x, y, w, h, rad) {
+    ctx.beginPath();
+    ctx.moveTo(x + rad, y);
+    ctx.lineTo(x + w - rad, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+    ctx.lineTo(x + w, y + h - rad);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+    ctx.lineTo(x + rad, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+    ctx.lineTo(x, y + rad);
+    ctx.quadraticCurveTo(x, y, x + rad, y);
+    ctx.closePath();
+  }
+
+  function _drawCity2D(ctx, city, cx, cy, hexR) {
+    const tier = CITY_TYPES[city.type || 'aldea']?.tier ?? 0;
+    let ownerCol;
+    if (city.owner === 'player') {
+      ownerCol = (typeof Game !== 'undefined') ? Game.getPlayerColor() : '#4a9eff';
+    } else if (city.factionId && typeof FACTIONS !== 'undefined') {
+      const f = FACTIONS.find(f => f.id === city.factionId);
+      ownerCol = f ? f.color : (city.owner === 'enemy' ? '#e04040' : '#c8a030');
+    } else {
+      ownerCol = city.owner === 'enemy' ? '#e04040' : '#c8a030';
+    }
+
+    const TIER = [
+      { r: 0.45, blds: 12,  sides: 8,  streets: 3 },  // aldea
+      { r: 0.80, blds: 26,  sides: 10, streets: 4 },  // pueblo
+      { r: 1.30, blds: 60,  sides: 10, streets: 5 },  // ciudad
+      { r: 1.90, blds: 110, sides: 12, streets: 6 },  // gran_ciudad
+    ];
+    const cfg   = TIER[Math.min(tier, 3)];
+    const cityR = hexR * cfg.r;
+    const rng   = _seededRng((city.c * 7919 + city.r * 1013) | 0);
+
+    const wallPoly = (rad, offset = 0) =>
+      Array.from({length: cfg.sides}, (_, i) => {
+        const a = (i / cfg.sides) * Math.PI * 2 + offset - Math.PI / 2;
+        return { x: cx + Math.cos(a) * rad, y: cy + Math.sin(a) * rad };
+      });
+
+    const tracePoly = (pts) => {
+      ctx.beginPath();
+      pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+      ctx.closePath();
+    };
+
+    const outer = wallPoly(cityR);
+    const inner = wallPoly(cityR * 0.86);
+
+    // Shadow
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = hexR * 0.35;
+    ctx.shadowOffsetX = 2; ctx.shadowOffsetY = 3;
+    tracePoly(outer); ctx.fillStyle = '#00000000'; ctx.fill();
+    ctx.restore();
+
+    // Ground inside walls
+    tracePoly(outer);
+    const grd = ctx.createRadialGradient(cx, cy - cityR * 0.15, 0, cx, cy, cityR);
+    grd.addColorStop(0,   '#d8c88a');
+    grd.addColorStop(0.6, '#cbbf7a');
+    grd.addColorStop(1,   '#b8ac68');
+    ctx.fillStyle = grd;
+    ctx.fill();
+
+    // Streets — radial spokes from center to gates
+    ctx.save();
+    const streetW = Math.max(0.6, hexR * 0.044);
+    ctx.lineWidth   = streetW;
+    ctx.strokeStyle = '#a89054';
+    for (let g = 0; g < cfg.streets; g++) {
+      const a = (g / cfg.streets) * Math.PI * 2 - Math.PI / 2;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * cityR * 0.92, cy + Math.sin(a) * cityR * 0.92);
+      ctx.stroke();
+    }
+    // Ring road near walls
+    ctx.lineWidth   = streetW * 0.7;
+    ctx.strokeStyle = '#9e8850';
+    ctx.beginPath();
+    ctx.arc(cx, cy, cityR * 0.76, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    // Buildings — seeded, top-down rooftop rectangles
+    const ROOF = ['#b85c2a','#c46830','#a85028','#cc7035','#b06030','#c07840','#9a4820'];
+    for (let b = 0; b < cfg.blds; b++) {
+      const ang  = rng() * Math.PI * 2;
+      const dist = Math.sqrt(rng()) * cityR * 0.78;
+      const bx   = cx + Math.cos(ang) * dist;
+      const by   = cy + Math.sin(ang) * dist;
+      if ((bx - cx) ** 2 + (by - cy) ** 2 > (cityR * 0.80) ** 2) continue;
+
+      // Skip if close to a street spoke
+      let onStreet = false;
+      for (let g = 0; g < cfg.streets; g++) {
+        const sa = (g / cfg.streets) * Math.PI * 2 - Math.PI / 2;
+        const da = Math.abs(Math.atan2(by - cy, bx - cx) - sa);
+        const normDa = Math.min(da, Math.PI * 2 - da);
+        if (normDa < 0.18 && dist > hexR * 0.08) { onStreet = true; break; }
+      }
+      if (onStreet) continue;
+
+      const bw  = cityR * (0.022 + rng() * 0.055);
+      const bh  = cityR * (0.016 + rng() * 0.038);
+      const rot = rng() * Math.PI;
+
+      ctx.save();
+      ctx.translate(bx, by); ctx.rotate(rot);
+      ctx.fillStyle   = ROOF[Math.floor(rng() * ROOF.length)];
+      ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+      ctx.strokeStyle = 'rgba(50,20,5,0.50)';
+      ctx.lineWidth   = 0.35;
+      ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+      ctx.restore();
+    }
+
+    // Central plaza & cathedral/forum
+    ctx.save();
+    ctx.fillStyle   = '#d8ca80';
+    ctx.strokeStyle = 'rgba(90,60,20,0.4)';
+    ctx.lineWidth   = 0.5;
+    ctx.beginPath(); ctx.arc(cx, cy, cityR * 0.06, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    const cbW = cityR * (0.06 + tier * 0.008);
+    const cbH = cityR * (0.09 + tier * 0.008);
+    ctx.fillStyle   = '#e8d060';
+    ctx.strokeStyle = 'rgba(70,45,10,0.7)'; ctx.lineWidth = 0.6;
+    ctx.fillRect(cx - cbW / 2, cy - cbH * 0.6 - cityR * 0.06, cbW, cbH);
+    ctx.strokeRect(cx - cbW / 2, cy - cbH * 0.6 - cityR * 0.06, cbW, cbH);
+    ctx.restore();
+
+    // Outer wall
+    tracePoly(outer);
+    ctx.lineWidth   = Math.max(1.4, cityR * 0.055);
+    ctx.strokeStyle = '#8a7858';
+    ctx.stroke();
+
+    // Inner wall edge (stone thickness detail)
+    tracePoly(inner);
+    ctx.lineWidth   = Math.max(0.5, cityR * 0.018);
+    ctx.strokeStyle = 'rgba(70,55,30,0.35)';
+    ctx.stroke();
+
+    // Towers at wall vertices
+    const twR = Math.max(2, cityR * 0.062);
+    outer.forEach(p => {
+      ctx.save();
+      ctx.beginPath(); ctx.arc(p.x, p.y, twR, 0, Math.PI * 2);
+      ctx.fillStyle   = '#c8b068'; ctx.fill();
+      ctx.strokeStyle = '#5a4a28'; ctx.lineWidth = Math.max(0.5, cityR * 0.018); ctx.stroke();
+      ctx.restore();
+    });
+
+    // Ownership tint on wall outline
+    tracePoly(outer);
+    ctx.lineWidth   = Math.max(0.8, hexR * 0.03);
+    ctx.strokeStyle = ownerCol + 'cc';
+    ctx.stroke();
+
+    // Name badge: black rounded pill + owner dot + white text
+    const fs = Math.round(Math.max(9, Math.min(15, hexR * 0.32)));
+    ctx.save();
+    ctx.font = `bold ${fs}px sans-serif`;
+    const textW  = ctx.measureText(city.name).width;
+    const dotR   = fs * 0.44;
+    const padX   = 7;
+    const padY   = 4;
+    const gapTxt = 5;
+    const badgeW = padX + dotR * 2 + gapTxt + textW + padX;
+    const badgeH = fs + padY * 2;
+    const bx     = cx - badgeW / 2;
+    const by     = cy + cityR + 6;
+    const brad   = badgeH / 2;
+
+    // Black pill background
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    _roundRect(ctx, bx, by, badgeW, badgeH, brad);
+    ctx.fill();
+
+    // Thin border matching owner color
+    ctx.strokeStyle = ownerCol + '99';
+    ctx.lineWidth   = 1;
+    _roundRect(ctx, bx, by, badgeW, badgeH, brad);
+    ctx.stroke();
+
+    // Owner color dot
+    ctx.beginPath();
+    ctx.arc(bx + padX + dotR, by + badgeH / 2, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = ownerCol;
+    ctx.fill();
+
+    // City name text
+    ctx.fillStyle    = '#ffffff';
+    ctx.textAlign    = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor  = 'rgba(0,0,0,0.6)';
+    ctx.shadowBlur   = 2;
+    ctx.fillText(city.name, bx + padX + dotR * 2 + gapTxt, by + badgeH / 2);
+    ctx.restore();
+  }
+
   // ── MAIN DRAW (per frame) ────────────────────
   function draw(state) {
     lastDrawState = state;
-    const { selectedUnit, selectedGroup, reachable } = state;
+    const { selectedUnit, selectedGroup, reachable, phase, leaderHex, visibleHexes, exploredHexes } = state;
     const units    = Units.getAll();
     const cities   = Cities.getAll();
     const r        = HEX_R * scale;
@@ -381,6 +611,8 @@ const Renderer = (() => {
       for (let col = 0; col < COLS; col++) {
         const res = GameMap.getResource(col, row);
         if (!res) continue;
+        const rk = hexKey(col, row);
+        if (exploredHexes && !exploredHexes.has(rk) && !(visibleHexes && visibleHexes.has(rk))) continue;
         const { x, y } = hexCenter(col, row, scale);
         if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
 
@@ -418,6 +650,8 @@ const Renderer = (() => {
 
     // ── 4a. City influence — per-hex tint + soft glow ────────────────
     cities.forEach(ci => {
+      // Only draw influence for player cities and currently visible non-player cities
+      if (ci.owner !== 'player' && visibleHexes && !visibleHexes.has(hexKey(ci.c, ci.r))) return;
       const typeData = CITY_TYPES[ci.type || 'aldea'];
       const rgb = ci.owner === 'player' ? '74,158,255'
                 : ci.owner === 'enemy'  ? '220,60,60' : '200,160,40';
@@ -467,78 +701,35 @@ const Renderer = (() => {
 
     // ── 4. Cities ─────────────────────────────
     cities.forEach(ci => {
+      const ck = hexKey(ci.c, ci.r);
+      // Skip completely unexplored cities (player doesn't know they exist)
+      if (exploredHexes && !exploredHexes.has(ck) && !(visibleHexes && visibleHexes.has(ck))) return;
       const { x, y } = hexCenter(ci.c, ci.r, scale);
-      if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
-
-      const typeData = CITY_TYPES[ci.type || 'aldea'];
-      const ownerCol = ci.owner === 'player' ? '#4a9eff'
-                     : ci.owner === 'enemy'  ? '#e04040' : '#ddb030';
-
-      // Outer glow ring
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.62, 0, Math.PI * 2);
-      ctx.fillStyle   = ownerCol + '1e';
-      ctx.fill();
-      ctx.strokeStyle = ownerCol + '55';
-      ctx.lineWidth   = 2.2;
-      ctx.stroke();
-      ctx.restore();
-
-      // Drop shadow
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(x + 2, y + 3, r * 0.42, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.40)';
-      ctx.fill();
-      ctx.restore();
-
-      // City disc
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.42, 0, Math.PI * 2);
-      const cg = ctx.createRadialGradient(x - r * 0.12, y - r * 0.12, r * 0.02, x, y, r * 0.44);
-      cg.addColorStop(0, '#2e2518');
-      cg.addColorStop(1, '#0e0c08');
-      ctx.fillStyle   = cg;
-      ctx.fill();
-      ctx.strokeStyle = ownerCol;
-      ctx.lineWidth   = 1.8;
-      ctx.stroke();
-      ctx.restore();
-
-      // Icon
-      ctx.save();
-      ctx.font         = `${Math.round(r * 0.40)}px serif`;
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor  = 'rgba(0,0,0,0.9)';
-      ctx.shadowBlur   = 4;
-      ctx.fillText(typeData.icon, x, y - r * 0.02);
-      ctx.restore();
-
-      // City name label
-      ctx.save();
-      ctx.font         = `bold ${Math.round(8.5)}px sans-serif`;
-      ctx.fillStyle    = ownerCol;
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'top';
-      ctx.shadowColor  = 'rgba(0,0,0,0.95)';
-      ctx.shadowBlur   = 5;
-      ctx.fillText(ci.name, x, y + r * 0.48);
-      ctx.restore();
-
-      // City tier label
-      ctx.save();
-      ctx.font         = `${Math.round(7)}px sans-serif`;
-      ctx.fillStyle    = ownerCol + 'bb';
-      ctx.textAlign    = 'center';
-      ctx.textBaseline = 'top';
-      ctx.shadowColor  = 'rgba(0,0,0,0.90)';
-      ctx.shadowBlur   = 4;
-      ctx.fillText(typeData.name.toUpperCase(), x, y + r * 0.48 + 11);
-      ctx.restore();
+      if (x < vx0 - r * 1.5 || x > vx1 + r * 1.5 || y < vy0 - r * 1.5 || y > vy1 + r * 1.5) return;
+      _drawCity2D(ctx, ci, x, y, r);
     });
+
+    // ── 4b. City-select pulse rings ────────────
+    if (phase === 'city-select') {
+      const t = Date.now() / 700;
+      const pulse = 0.55 + Math.sin(t) * 0.25; // 0.30 … 0.80
+      cities.forEach(ci => {
+        const { x, y } = hexCenter(ci.c, ci.r, scale);
+        if (x < vx0 - r * 2 || x > vx1 + r * 2 || y < vy0 - r * 2 || y > vy1 + r * 2) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, r * 0.74, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(200,160,30,${pulse.toFixed(2)})`;
+        ctx.lineWidth = 3.5;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(x, y, r * 0.82, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(200,160,30,${(pulse * 0.35).toFixed(2)})`;
+        ctx.lineWidth = 7;
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
 
     // ── 5. Units ──────────────────────────────
     const hexGroups = new Map();
@@ -549,15 +740,18 @@ const Renderer = (() => {
     });
 
     hexGroups.forEach(stack => {
-      const u         = stack[0];
+      const u = stack[0];
+      // Non-player units are hidden in non-visible hexes (fog of war)
+      if (u.owner !== 'player' && visibleHexes && !visibleHexes.has(hexKey(u.c, u.r))) return;
       const { x, y } = hexCenter(u.c, u.r, scale);
       if (x < vx0 || x > vx1 || y < vy0 || y > vy1) return;
 
-      const isSelected = selectedUnit  && stack.some(su => su.id === selectedUnit.id);
-      const isInGroup  = selectedGroup && stack.some(su => selectedGroup.includes(su.id));
-      const isPlayer   = u.owner === 'player';
-      const def        = UNIT_TYPES[u.type];
-      const teamCol    = isPlayer ? '#4a9eff' : '#ff5050';
+      const isSelected    = selectedUnit  && stack.some(su => su.id === selectedUnit.id);
+      const isInGroup     = selectedGroup && stack.some(su => selectedGroup.includes(su.id));
+      const isPlayer      = u.owner === 'player';
+      const isLeaderStack = stack.some(su => su.isLeader);
+      const def           = UNIT_TYPES[u.type];
+      const teamCol       = isPlayer ? Game.getPlayerColor() : '#ff5050';
       const exhausted  = stack.every(su => su.moves === 0);
 
       if (isInGroup) {
@@ -578,6 +772,17 @@ const Renderer = (() => {
         ctx.setLineDash([4, 3]);
         ctx.stroke();
         ctx.setLineDash([]);
+        ctx.restore();
+      }
+
+      // Gold ring for leader unit
+      if (isLeaderStack && isPlayer) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(x, y, r * 0.46, 0, Math.PI * 2);
+        ctx.strokeStyle = '#e8c050';
+        ctx.lineWidth   = 3;
+        ctx.stroke();
         ctx.restore();
       }
 
@@ -633,12 +838,24 @@ const Renderer = (() => {
       ctx.fillStyle = hp > 0.6 ? '#4aaa44' : hp > 0.3 ? '#e09030' : '#d05040';
       ctx.fillRect(bx, by, bw * hp, bh);
 
-      // Move pips
-      for (let i = 0; i < u.maxMoves; i++) {
-        const px = x - ((u.maxMoves - 1) * 5) / 2 + i * 5;
+      // Move pips — 1 pip = 2 moves (halved to match UI)
+      const totalPips = Math.ceil(u.maxMoves / 2);
+      const fullPips  = Math.floor(u.moves / 2);
+      const hasHalf   = u.moves % 2 === 1;
+      const pipSpacing = 5.5;
+      const pipStartX  = x - ((totalPips - 1) * pipSpacing) / 2;
+      for (let i = 0; i < totalPips; i++) {
+        const px = pipStartX + i * pipSpacing;
+        const py = y + r * 0.58;
         ctx.beginPath();
-        ctx.arc(px, y + r * 0.58, 2.5, 0, Math.PI * 2);
-        ctx.fillStyle = i < u.moves ? teamCol : 'rgba(100,100,100,0.40)';
+        ctx.arc(px, py, 2.5, 0, Math.PI * 2);
+        if (i < fullPips) {
+          ctx.fillStyle = teamCol;
+        } else if (i === fullPips && hasHalf) {
+          ctx.fillStyle = isPlayer ? 'rgba(74,158,255,0.50)' : 'rgba(255,80,80,0.50)';
+        } else {
+          ctx.fillStyle = 'rgba(100,100,100,0.40)';
+        }
         ctx.fill();
       }
 
@@ -660,6 +877,18 @@ const Renderer = (() => {
         ctx.fillText(stack.length, bx2, by2);
         ctx.restore();
       }
+
+      // Leader crown — shown when leader is commanding this army
+      if (isPlayer && leaderHex && leaderHex.c === u.c && leaderHex.r === u.r) {
+        ctx.save();
+        ctx.font         = `${Math.round(r * 0.28)}px serif`;
+        ctx.textAlign    = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+        ctx.shadowBlur   = 4;
+        ctx.fillText('👑', x - r * 0.30, y - r * 0.46);
+        ctx.restore();
+      }
     });
 
     ctx.restore();
@@ -679,5 +908,5 @@ const Renderer = (() => {
     ctx.restore();
   }
 
-  return { init, draw, resize, getScale, getCamera, setPanFlag, markTerrainDirty };
+  return { init, draw, resize, getScale, getCamera, setPanFlag, markTerrainDirty, zoomAt, centerOn };
 })();

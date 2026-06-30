@@ -11,8 +11,11 @@
   <link rel="stylesheet" href="css/panels.css" />
 </head>
 <body>
-  <!-- HUD -->
-  <header id="hud">
+  <!-- Pre-game faction/leader selection screen -->
+  <div id="pre-game-screen" style="display:none"></div>
+
+  <!-- HUD (hidden until game starts) -->
+  <header id="hud" style="display:none">
     <div id="hud-left">
       <div class="hud-logo">⚔ HEXFRONT</div>
       <div class="res-group">
@@ -28,8 +31,8 @@
     </div>
   </header>
 
-  <!-- Map: full screen below HUD -->
-  <main id="layout">
+  <!-- Map: full screen below HUD (hidden until game starts) -->
+  <main id="layout" style="display:none">
     <div id="map-wrap">
       <canvas id="mapCanvas"></canvas>
     </div>
@@ -57,8 +60,26 @@
     </div>
   </div>
 
+  <!-- Leader panel tab (visible when panel is collapsed) -->
+  <div id="leader-tab" style="display:none" onclick="UI.toggleLeaderPanel()" title="Abrir panel de líder"></div>
+
+  <!-- Leader panel (top-left, always visible after game starts) -->
+  <div id="leader-panel" style="display:none"></div>
+
   <!-- Empire sidebar (top-right, cities + resource nodes) -->
   <div id="empire-panel"></div>
+
+  <!-- Battle log (below empire panel) -->
+  <div id="battle-log-panel"></div>
+
+  <!-- City selection phase banner -->
+  <div id="city-select-banner" style="display:none">
+    <span class="csb-icon">🏛</span>
+    <div class="csb-text">
+      <span class="csb-title">Selecciona tu Capital</span>
+      <span class="csb-hint">Haz clic en cualquier ciudad del mapa para establecer tu punto de inicio</span>
+    </div>
+  </div>
 
   <!-- Toast notification -->
   <div id="toast"></div>
@@ -70,11 +91,13 @@
   <script src="js/data.js"></script>
   <script src="js/hex.js"></script>
   <script src="js/map.js"></script>
+  <script src="js/combat.js"></script>
   <script src="js/units.js"></script>
   <script src="js/cities.js"></script>
   <script src="js/renderer.js"></script>
   <script src="js/ui.js"></script>
   <script src="js/ai.js"></script>
+  <script src="js/pregame.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>

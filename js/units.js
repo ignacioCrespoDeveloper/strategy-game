@@ -13,19 +13,61 @@ const Units = (() => {
 
   function spawn(type, c, r, owner) {
     const def = UNIT_TYPES[type];
-    list.push({
-      id:      nextId++,
+    const u = {
+      id:       nextId++,
       type,
       owner,
       c, r,
-      hp:      def.hp,
-      maxHp:   def.hp,
-      atk:     def.atk,
-      def:     def.def,
-      moves:   def.moves,
-      maxMoves:def.moves,
-      sight:   def.sight,
-    });
+      hp:       def.hp,
+      maxHp:    def.hp,
+      atk:      def.atk,
+      def:      def.def,
+      arm:      def.arm || 0,
+      moves:    def.moves,
+      maxMoves: def.moves,
+      sight:    def.sight,
+      xp:       0,
+      level:    1,
+      isLeader: false,
+    };
+    list.push(u);
+    return u;
+  }
+
+  function getLeaderUnit() {
+    return list.find(u => u.isLeader && u.owner === 'player') || null;
+  }
+
+  function awardXP(unitId, amount) {
+    const unit = list.find(u => u.id === unitId);
+    if (!unit) return false;
+    unit.xp = (unit.xp || 0) + amount;
+    return _checkLevelUp(unit);
+  }
+
+  function _checkLevelUp(unit) {
+    const thresholds = UNIT_XP_THRESHOLDS; // [100, 300, 600]
+    const maxLevel = thresholds.length + 1; // 4
+    let leveled = false;
+    while ((unit.level || 1) < maxLevel) {
+      if (unit.xp >= thresholds[(unit.level || 1) - 1]) {
+        unit.level = (unit.level || 1) + 1;
+        _applyLevelStats(unit);
+        leveled = true;
+      } else break;
+    }
+    return leveled;
+  }
+
+  function _applyLevelStats(unit) {
+    const base = UNIT_TYPES[unit.type];
+    const b = UNIT_LEVEL_BONUSES[(unit.level || 1) - 1] || UNIT_LEVEL_BONUSES[0];
+    const hpRatio = unit.maxHp > 0 ? unit.hp / unit.maxHp : 1;
+    unit.maxHp = Math.round(base.hp * b.maxHp);
+    unit.hp    = Math.min(unit.maxHp, Math.max(1, Math.round(unit.maxHp * hpRatio)));
+    unit.atk   = Math.round(base.atk * b.atk);
+    unit.def   = Math.round(base.def * b.def);
+    unit.arm   = Math.round((base.arm || 0) * b.arm);
   }
 
   function getAll()           { return list; }
@@ -40,20 +82,8 @@ const Units = (() => {
     });
   }
 
-  // Move unit; returns 'moved' | 'combat'
+  // Move unit to (c, r) — combat is handled at army level in game.js
   function move(unit, c, r) {
-    const enemy = getAllAt(c, r).find(u => u.owner !== unit.owner);
-    if (enemy) {
-      enemy.hp -= Math.max(1, unit.atk - enemy.def / 2);
-      unit.hp  -= Math.max(1, enemy.atk / 3);
-      if (enemy.hp <= 0) {
-        remove(enemy.id);
-        unit.c = c; unit.r = r;
-      }
-      unit.moves = 0;
-      return { result: 'combat', defeated: enemy.hp <= 0 };
-    }
-    // Empty or friendly — move (stacking allowed)
     unit.c = c;
     unit.r = r;
     unit.moves = Math.max(0, unit.moves - 1);
@@ -79,6 +109,6 @@ const Units = (() => {
 
   return {
     init, spawn, getAll, getAt, getAllAt, byOwner, remove,
-    resetMoves, move, reachableFor,
+    resetMoves, move, reachableFor, awardXP, getLeaderUnit,
   };
 })();

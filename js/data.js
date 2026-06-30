@@ -4,10 +4,10 @@
 
 const TERRAIN_DEF = {
   plains:   { color: '#2e4a22', border: '#3a6028', label: 'Plains',   move: 1 },
-  forest:   { color: '#183018', border: '#20401e', label: 'Forest',   move: 2 },
-  mountain: { color: '#4a3e2e', border: '#665540', label: 'Mountain', move: 3 },
+  forest:   { color: '#183018', border: '#20401e', label: 'Forest',   move: 1 },
+  mountain: { color: '#4a3e2e', border: '#665540', label: 'Mountain', move: 1 },
   water:    { color: '#0e2840', border: '#1a3a58', label: 'Water',    move: 99 },
-  desert:   { color: '#5a4a20', border: '#7a6428', label: 'Desert',   move: 2 },
+  desert:   { color: '#5a4a20', border: '#7a6428', label: 'Desert',   move: 1 },
 };
 
 const RESOURCE_DEF = {
@@ -61,11 +61,14 @@ const POP_LEVELS = [
 ];
 
 // Unit types
+// Stats: atk=melee attack, def=melee defence, arm=missile armour, ap=armour pierce,
+//        rng=range (0=melee), role=class, bonusVs={role:mult}, charge=cav charge bonus
 const UNIT_TYPES = {
   // ── Reclutable en cualquier lugar ─────────────────────
   militia: {
-    name: 'Milicia', icon: '🪓', img: null,
-    hp: 50, atk: 20, def: 15, moves: 2, sight: 2,
+    name: 'Milicia', icon: '🪓', img: 'milicia',
+    hp: 80, atk: 28, def: 12, arm: 5, ap: 0, rng: 0, moves: 4, sight: 2,
+    role: 'infantry',
     cost: { gold: 15 },
     maintenance: { gold: 1 },
     abilities: ['Melee', 'Levy'],
@@ -73,10 +76,22 @@ const UNIT_TYPES = {
     trainTime: 0, mercenary: false,
   },
 
-  // ── Mercenarios (fuera/dentro de ciudad) ──────────────
+  // ── General (líder como unidad) ──────────────────────
+  commander: {
+    name: 'General', icon: '👑', img: null,
+    hp: 120, atk: 40, def: 28, arm: 15, ap: 8, rng: 0, moves: 6, sight: 4,
+    role: 'infantry',
+    cost: {}, maintenance: {},
+    abilities: ['Liderazgo', 'Inspira'],
+    desc: 'Tu líder en persona. Inspira a las tropas cercanas y fortalece las ciudades bajo su mando.',
+    trainTime: 0, mercenary: false,
+  },
+
+  // ── Mercenarios ───────────────────────────────────────
   merc_inf: {
-    name: 'Mercenario Inf.', icon: '🗡️', img: null,
-    hp: 85, atk: 38, def: 28, moves: 2, sight: 2,
+    name: 'Mercenario Inf.', icon: '🗡️', img: 'merc_inf',
+    hp: 85, atk: 38, def: 28, arm: 15, ap: 0, rng: 0, moves: 4, sight: 2,
+    role: 'infantry',
     cost: { gold: 70 },
     maintenance: { gold: 4 },
     abilities: ['Melee', 'Mercenario'],
@@ -84,20 +99,22 @@ const UNIT_TYPES = {
     trainTime: 0, mercenary: true,
   },
   merc_arch: {
-    name: 'Mercenario Arq.', icon: '🏹', img: null,
-    hp: 60, atk: 45, def: 12, moves: 2, sight: 3,
+    name: 'Mercenario Arq.', icon: '🏹', img: 'merc_arch',
+    hp: 65, atk: 38, def: 10, arm: 8, ap: 0, rng: 3, moves: 4, sight: 3,
+    role: 'ranged', firesFirst: true,
     cost: { gold: 80 },
     maintenance: { gold: 5 },
-    abilities: ['Ranged', 'Mercenario'],
+    abilities: ['Ranged', 'Fires First', 'Mercenario'],
     desc: 'Arqueros mercenarios. Buenos sin necesidad de cuarteles.',
     trainTime: 0, mercenary: true,
   },
   merc_cav: {
-    name: 'Mercenario Cab.', icon: '🐎', img: null,
-    hp: 65, atk: 30, def: 18, moves: 4, sight: 4,
+    name: 'Mercenario Cab.', icon: '🐎', img: 'merc_cav',
+    hp: 70, atk: 45, def: 18, arm: 10, ap: 0, rng: 0, moves: 8, sight: 4,
+    role: 'cavalry', charge: 0.30,
     cost: { gold: 100 },
     maintenance: { gold: 6 },
-    abilities: ['Fast', 'Mercenario'],
+    abilities: ['Fast', 'Charge +30%', 'Mercenario'],
     desc: 'Caballería ligera de alquiler. Veloz y siempre disponible.',
     trainTime: 0, mercenary: true,
   },
@@ -105,7 +122,8 @@ const UNIT_TYPES = {
   // ── Unidades entrenables en ciudad ────────────────────
   warrior: {
     name: 'Infantería', icon: '⚔️', img: 'infanteria',
-    hp: 100, atk: 40, def: 30, moves: 2, sight: 2,
+    hp: 110, atk: 50, def: 30, arm: 20, ap: 0, rng: 0, moves: 4, sight: 2,
+    role: 'infantry',
     cost: { gold: 30, food: 10 },
     maintenance: { gold: 2, food: 1 },
     abilities: ['Melee', 'Fortify'],
@@ -113,54 +131,240 @@ const UNIT_TYPES = {
     trainTime: 1,
   },
   archer: {
-    name: 'Hondero', icon: '🏹', img: 'honderos',
-    hp: 70, atk: 50, def: 15, moves: 2, sight: 3,
-    cost: { gold: 40, wood: 10 },
-    maintenance: { gold: 3, food: 1 },
-    abilities: ['Ranged', 'High Ground'],
-    desc: 'Hostigador a distancia con buen campo de visión.',
+    name: 'Hondero', icon: '🏹', img: 'hondero',
+    hp: 65, atk: 30, def: 8, arm: 5, ap: 0, rng: 2, moves: 6, sight: 3,
+    role: 'ranged', firesFirst: true,
+    cost: { gold: 30, wood: 10 },
+    maintenance: { gold: 2, food: 1 },
+    abilities: ['Ranged', 'Fires First'],
+    desc: 'Hostigador con honda. Rápido, barato, dispara primero.',
     trainTime: 1,
   },
+  archer_bow: {
+    name: 'Arquero', icon: '🏹', img: 'arquero',
+    hp: 75, atk: 38, def: 12, arm: 10, ap: 0, rng: 3, moves: 4, sight: 3,
+    role: 'ranged', firesFirst: true,
+    cost: { gold: 50, wood: 15 },
+    maintenance: { gold: 3, food: 1 },
+    abilities: ['Ranged', 'Fires First', 'Long Range'],
+    desc: 'Arquero de largo alcance. 2 rondas de fuego antes del cuerpo a cuerpo.',
+    trainTime: 1,
+  },
+  crossbow: {
+    name: 'Ballestero', icon: '🎯', img: 'ballestero',
+    hp: 85, atk: 55, def: 18, arm: 14, ap: 40, rng: 2, moves: 4, sight: 2,
+    role: 'ranged', firesFirst: true,
+    cost: { gold: 70, iron: 20, wood: 10 },
+    maintenance: { gold: 4, iron: 1 },
+    abilities: ['Ranged', 'Fires First', 'Armor Pierce'],
+    desc: 'Penetra armaduras (AP 40). Contra-élite. Destruye piqueros.',
+    trainTime: 2,
+  },
   scout: {
-    name: 'Caballería', icon: '🐎', img: 'caballeria',
-    hp: 60, atk: 20, def: 10, moves: 4, sight: 4,
-    cost: { gold: 20, food: 20 },
-    maintenance: { gold: 1, food: 2 },
-    abilities: ['Fast', 'Recon'],
-    desc: 'Explorador veloz. Bajo poder de combate.',
+    name: 'Cab. Ligera', icon: '🐎', img: 'cab_ligera',
+    hp: 95, atk: 68, def: 22, arm: 14, ap: 0, rng: 0, moves: 8, sight: 4,
+    role: 'cavalry', charge: 0.40,
+    bonusVs: { pikemen: 0.35 },
+    cost: { gold: 40, food: 20 },
+    maintenance: { gold: 2, food: 2 },
+    abilities: ['Fast', 'Charge +40%', 'Recon'],
+    desc: 'Caballería ágil. Aplasta arqueros (×2.2). Débil vs piqueros (×0.35).',
     trainTime: 1,
   },
   knight: {
-    name: 'Caballero', icon: '🛡️', img: 'caballeria',
-    hp: 140, atk: 55, def: 60, moves: 3, sight: 2,
+    name: 'Cab. Pesada', icon: '🛡️', img: 'cab_pesada',
+    hp: 140, atk: 88, def: 42, arm: 20, ap: 10, rng: 0, moves: 8, sight: 2,
+    role: 'cavalry', charge: 0.65,
+    bonusVs: { pikemen: 0.25 },
     cost: { gold: 80, iron: 30 },
     maintenance: { gold: 5, iron: 1 },
-    abilities: ['Heavy', 'Charge', 'Fortify'],
-    desc: 'Caballería pesada de élite. Carga devastadora.',
+    abilities: ['Heavy', 'Charge +65%', 'Fortify'],
+    desc: 'Caballería de élite. Carga brutal. Vulnerable a piqueros (×0.25) y ballesteros.',
     trainTime: 2,
   },
   catapult: {
-    name: 'Catapulta', icon: '💥', img: null,
-    hp: 50, atk: 80, def: 5, moves: 1, sight: 3,
+    name: 'Catapulta', icon: '💥', img: 'catapulta',
+    hp: 50, atk: 80, def: 5, arm: 0, ap: 100, rng: 4, moves: 2, sight: 3,
+    role: 'siege',
     cost: { gold: 60, wood: 40, iron: 10 },
     maintenance: { gold: 4, wood: 1 },
-    abilities: ['Siege', 'Slow'],
-    desc: 'Devastadora contra ciudades y muros.',
+    abilities: ['Siege', 'Slow', 'AP 100'],
+    desc: 'Devastadora contra ciudades y muros. Ignora toda armadura. Frágil en campo.',
     trainTime: 2,
   },
   spearman: {
-    name: 'Piquero', icon: '🗡️', img: 'piqueros',
-    hp: 90, atk: 35, def: 50, moves: 2, sight: 2,
+    name: 'Piquero', icon: '🗡️', img: 'piquero',
+    hp: 120, atk: 45, def: 35, arm: 18, ap: 0, rng: 0, moves: 4, sight: 2,
+    role: 'pikemen',
+    bonusVs: { cavalry: 2.2 },
     cost: { gold: 35, iron: 10 },
     maintenance: { gold: 2, food: 1 },
     abilities: ['Pica', 'Anti-Caballería'],
-    desc: 'Especialista defensivo. Muy efectivo contra caballería.',
+    desc: 'Formación de picas. Destroza caballería (×2.2). Vulnerable a arqueros.',
     trainTime: 1,
   },
 };
 
 // Unit types always available for recruitment regardless of city buildings
 const ALWAYS_RECRUITABLE = ['militia', 'merc_inf', 'merc_arch', 'merc_cav'];
+
+// ── Unit leveling ───────────────────────────────────────────────────
+// XP thresholds to reach each level (0-indexed: [0]=lvl2, [1]=lvl3, [2]=lvl4)
+const UNIT_XP_THRESHOLDS = [100, 300, 600];
+
+// Stat multipliers applied to UNIT_TYPES base values at each level (1-indexed)
+const UNIT_LEVEL_BONUSES = [
+  { atk:1.00, def:1.00, arm:1.00, maxHp:1.00 }, // Level 1
+  { atk:1.12, def:1.10, arm:1.08, maxHp:1.15 }, // Level 2: +12% atk, +10% def, +15% HP
+  { atk:1.25, def:1.22, arm:1.18, maxHp:1.30 }, // Level 3
+  { atk:1.40, def:1.35, arm:1.30, maxHp:1.50 }, // Level 4
+];
+
+// ── Rasgos de líder ─────────────────────────────────────────────────
+const TRAITS = {
+  estratega: { name: 'Estratega', icon: '🎯', desc: '+25% XP ganada en combate.',            effect: { combatXpMult: 1.25 } },
+  guerrero:  { name: 'Guerrero',  icon: '⚔',  desc: '+20% ATK al comandar un ejército.',      effect: { commanderAtkBonus: 0.20 } },
+  mercader:  { name: 'Mercader',  icon: '💰', desc: '+3 oro/turno por ciudad propia.',        effect: { goldPerCity: 3 } },
+  piadoso:   { name: 'Piadoso',   icon: '✝',  desc: '+5 crecimiento de población/turno.',    effect: { popGrowthBonus: 5 } },
+  cruel:     { name: 'Cruel',     icon: '💀', desc: '+30 XP extra por cada unidad enemiga eliminada.', effect: { killXpBonus: 30 } },
+};
+
+// ── Facciones ───────────────────────────────────────────────────────
+const FACTIONS = [
+  {
+    id: 'norte',
+    name: 'Imperio del Norte',
+    symbol: '❄',
+    color: '#4a9eff',
+    desc: 'Forjado en el hielo y la guerra. El Imperio domina el norte con una disciplina de hierro y siglos de conquista.',
+    leaders: [
+      { id: 'magnus',  name: 'Magnus el Invicto', title: 'Gran General',   traits: ['estratega', 'guerrero'], desc: 'Nunca ha perdido una batalla campal. Su sola presencia inspira pavor en el enemigo.' },
+      { id: 'valdris', name: 'Sera Valdris',       title: 'Almirante',      traits: ['estratega', 'cruel'],    desc: 'Mente táctica sin igual. Especialista en maniobras de flanqueo y engaño.' },
+      { id: 'vorne',   name: 'Darius Vorne',       title: 'Comandante',     traits: ['guerrero', 'piadoso'],   desc: 'Implacable y frío como el invierno. Sus enemigos huyen antes de verle llegar.' },
+    ],
+  },
+  {
+    id: 'sur',
+    name: 'República del Sur',
+    symbol: '🌅',
+    color: '#e06030',
+    desc: 'Una república de mercaderes y soldados. El oro compra ejércitos; los ideales los mantienen unidos en batalla.',
+    leaders: [
+      { id: 'elara',   name: 'Elara Voss',    title: 'Cónsul',          traits: ['mercader', 'piadoso'],   desc: 'Diplomática antes que guerrera. Gana alianzas donde otros sólo ganan batallas.' },
+      { id: 'brennos', name: 'Marcus Brennos', title: 'Tribuno Militar', traits: ['guerrero', 'estratega'], desc: 'Héroe del pueblo. Sus soldados le siguen hasta la muerte con júbilo.' },
+      { id: 'calenta', name: 'Iva Calenta',    title: 'Pretora',         traits: ['mercader', 'cruel'],     desc: 'Jurista y estratega. Convierte las leyes de la guerra en ventajas propias.' },
+    ],
+  },
+  {
+    id: 'este',
+    name: 'Confederación del Este',
+    symbol: '🌲',
+    color: '#40b864',
+    desc: 'Una alianza de clanes y tribus libres. Feroces, impredecibles y leales sólo a quienes demuestran ser dignos.',
+    leaders: [
+      { id: 'zorel',   name: 'Zorel Khanessa', title: 'Gran Khanessa',          traits: ['estratega', 'mercader'], desc: 'Une a los clanes con voluntad de acero. Su voz es ley en las estepas del este.' },
+      { id: 'torund',  name: 'Torund el Gris',  title: 'Jarl',                   traits: ['guerrero', 'piadoso'],   desc: 'Anciano pero implacable. Combatió en cuarenta guerras y sigue de pie.' },
+      { id: 'ashford', name: 'Mira Ashford',    title: 'Capitana de Vanguardia', traits: ['cruel', 'estratega'],    desc: 'Joven, rápida y brillante. La mejor estratega táctica que el este ha dado.' },
+    ],
+  },
+  {
+    id: 'oeste',
+    name: 'Sultanato del Oeste',
+    symbol: '☀',
+    color: '#d4a020',
+    desc: 'Un sultanato próspero y milenario. Sus ejércitos son legión, su riqueza inagotable y su orgullo, inquebrantable.',
+    leaders: [
+      { id: 'rashid',  name: 'Amir Al-Rashid', title: 'Sultán',                traits: ['mercader', 'piadoso'],   desc: 'Gobernante absoluto y visionario. Lo que ordena se ejecuta sin demora ni cuestionamiento.' },
+      { id: 'selim',   name: 'Selim Dara',      title: 'Gran Visir',            traits: ['mercader', 'estratega'], desc: 'Maestro de la intriga y la estrategia a largo plazo. Nunca actúa sin plan.' },
+      { id: 'bashir',  name: 'Bashir Navarro',  title: 'Capitán de la Guardia', traits: ['guerrero', 'cruel'],     desc: 'Leal hasta la muerte y el mejor espadachín del sultanato. Protege lo que ama.' },
+    ],
+  },
+];
+
+// ── Eventos aleatorios ───────────────────────────────────────────────
+const EVENTS = [
+  {
+    id: 'plaga',
+    icon: '☠',
+    title: 'La Plaga Llega',
+    desc: 'Una enfermedad se extiende por tus ciudades. El pueblo clama por ayuda.',
+    choices: [
+      { text: 'Gastar 50 oro en medicamentos',     effect: { gold: -50 },     result: 'La plaga fue contenida. El pueblo te lo agradece.' },
+      { text: 'Ignorarla — que los fuertes sobrevivan', effect: { popLoss: 50 }, result: 'La plaga cobra muchas vidas. La población decrece.' },
+    ],
+  },
+  {
+    id: 'mercader_visitante',
+    icon: '💰',
+    title: 'Mercader Extranjero',
+    desc: 'Un rico mercader llega a tus ciudades con una propuesta irresistible.',
+    choices: [
+      { text: 'Comprar sus mercancías (−30💰, +60🌲)', effect: { gold: -30, wood: 60 }, result: 'Excelente trato. Tus almacenes se llenan de madera.' },
+      { text: 'Cobrar impuesto de tránsito (+25💰)',   effect: { gold: 25 },           result: 'El mercader parte con cara larga, tú con más oro.' },
+      { text: 'Dejarlo pasar sin más',                 effect: {},                     result: 'El mercader sigue su camino sin incidentes.' },
+    ],
+  },
+  {
+    id: 'desercion',
+    icon: '🏃',
+    title: 'Deserción en las Filas',
+    desc: 'Las largas marchas han quebrado el espíritu de algunos soldados.',
+    choices: [
+      { text: 'Pagar primas de fidelidad (−40💰)',        effect: { gold: -40 },       result: 'El oro habló. Los soldados permanecen en sus puestos.' },
+      { text: 'Ejecutar a los desertores como ejemplo',   effect: { unitHpLoss: 15 },  result: 'Lección de hierro. La moral cae, pero la disciplina se mantiene.' },
+    ],
+  },
+  {
+    id: 'cosecha_abundante',
+    icon: '🌾',
+    title: 'Cosecha Abundante',
+    desc: 'Este año las lluvias han sido generosas. Tus campos producen más que nunca.',
+    choices: [
+      { text: 'Almacenar el excedente (+50🌾)',   effect: { food: 50 },  result: 'Tus graneros rebosan. El invierno no te preocupa.' },
+      { text: 'Vender el excedente (+35💰)',       effect: { gold: 35 }, result: 'Oro fácil. Los mercados agradecen la oferta.' },
+    ],
+  },
+  {
+    id: 'espias_descubiertos',
+    icon: '👁',
+    title: 'Espías Descubiertos',
+    desc: 'Tu guardia ha capturado espías enemigos infiltrados en la capital.',
+    choices: [
+      { text: 'Interrogarlos y ejecutarlos (+20💰)', effect: { gold: 20 }, result: 'Información valiosa extraída. El enemigo pierde sus ojos.' },
+      { text: 'Ofrecerles trabajo para ti',          effect: {},           result: 'Los espías cambian de bando. Información a cambio de vida.' },
+    ],
+  },
+  {
+    id: 'veta_mineral',
+    icon: '⛏',
+    title: 'Veta de Mineral Descubierta',
+    desc: 'Tus exploradores encontraron una rica veta de hierro en las montañas cercanas.',
+    choices: [
+      { text: 'Excavar de inmediato (−30🌲, +50⚙️)', effect: { wood: -30, iron: 50 }, result: '¡Mineral extraído! El hierro fluye a tus forjas.' },
+      { text: 'Registrar para después',               effect: {},                     result: 'La veta queda marcada. La aprovecharás más adelante.' },
+    ],
+  },
+  {
+    id: 'festival',
+    icon: '🎉',
+    title: 'Festival de la Victoria',
+    desc: 'El pueblo propone celebrar los recientes éxitos con un gran festival.',
+    choices: [
+      { text: 'Organizar el festival (−35💰, +30 pop)', effect: { gold: -35, popGrowth: 30 }, result: '¡El pueblo celebra! La moral sube y la población crece.' },
+      { text: 'Cancelarlo — hay trabajo que hacer',     effect: {},                            result: 'Tus ciudadanos murmuran, pero obedecen.' },
+    ],
+  },
+  {
+    id: 'bandidos',
+    icon: '⚔',
+    title: 'Bandidos en los Caminos',
+    desc: 'Una banda de salteadores interrumpe el comercio entre tus ciudades.',
+    choices: [
+      { text: 'Enviar tropas a cazarlos (−25💰)',  effect: { gold: -25 }, result: 'Los bandidos fueron dispersados. El comercio se restablece.' },
+      { text: 'Ignorarlos — no son prioridad',     effect: { gold: -15 }, result: 'Los bandidos siguen operando y cobran su peaje de facto.' },
+    ],
+  },
+];
 
 // ── Building tree ───────────────────────────────────────────────────
 // Each building has:
@@ -270,8 +474,8 @@ const BUILDING_TYPES = {
     buildTime: 2,
     maintenance: { food: 1, wood: 1 },
     bonus: [{}, {}],
-    trains: { 1: ['archer'], 2: ['archer'] },
-    effect: ['Entrena Honderos', '+Rango armas distancia'],
+    trains: { 1: ['archer', 'archer_bow'], 2: ['archer', 'archer_bow', 'crossbow'] },
+    effect: ['Entrena Honderos y Arqueros', '+Ballesteros (Lv 2)'],
     desc: 'Especializada en unidades a distancia.',
   },
   barracks_cav: {
@@ -316,8 +520,8 @@ const BUILDING_TYPES = {
     buildTime: 3,
     maintenance: { iron: 1 },
     bonus: [{}],
-    trains: { 1: ['archer', 'catapult'] },
-    effect: ['Defiende ciudad automáticamente. Entrena Catapultas'],
+    trains: { 1: ['archer', 'archer_bow', 'crossbow', 'catapult'] },
+    effect: ['Defiende ciudad automáticamente. Todas las unidades distancia + Catapultas'],
     desc: 'Torre de guardia y defensa a distancia.',
   },
   royal_stable: {
@@ -542,72 +746,137 @@ const BUILDING_TYPES = {
   },
 };
 
-// Compact terrain map builder
-const _T = s => s.split(' ').map(c => ({ p:'plains', f:'forest', m:'mountain', w:'water', d:'desert' }[c]));
+// Europe terrain map — 72 cols × 46 rows
+// col 0 = ~10°W, col 71 = ~61°E | row 0 = ~71°N, row 45 = ~26°N
+const TERRAIN_MAP = (() => {
+  const C = 72, R = 46;
+  const m = Array.from({length: R}, () => Array(C).fill('water'));
+  const f = (r0, r1, c0, c1, t) => {
+    for (let r = r0; r <= Math.min(r1, R-1); r++)
+      for (let c = c0; c <= Math.min(c1, C-1); c++)
+        m[r][c] = t;
+  };
 
-// Terrain map: 18 rows × 24 cols — continent surrounded by ocean
-const TERRAIN_MAP = [
-  _T('w w w w w w w w w w w w w w w w w w w w w w w w'), // 0
-  _T('w w w w w p p p p p p p p w w w w w w w w w w w'), // 1
-  _T('w w w w p p f f p p p p p p p w w w w w w w w w'), // 2
-  _T('w w w p p f f f p m m p p p p p p w w w w w w w'), // 3
-  _T('w w p p f f p p p m m m p p p p p p w w w w w w'), // 4
-  _T('w w p p p p p p p p m p p p p f f p p p w w w w'), // 5
-  _T('w p p p p p p d d p p p p p f f f p p p p w w w'), // 6
-  _T('w p p p d d d d p p p p p f f p p p p p p p w w'), // 7
-  _T('w w p p d d p p p p p p p p p p p p p p m p w w'), // 8
-  _T('w w p p p p p p p p p p p p p p p m m p p p w w'), // 9
-  _T('w w w p p p p p p p p p p p p p m m p p p p w w'), // 10
-  _T('w w w p p p p p p p p f f p p p m p p p p w w w'), // 11
-  _T('w w w w p p p p p p f f f p p p p p p p w w w w'), // 12
-  _T('w w w w p p p p p f f p p p p p p p w w w w w w'), // 13
-  _T('w w w w w p p p p p p p p p p p w w w w w w w w'), // 14
-  _T('w w w w w w p p p p p p p w w w w w w w w w w w'), // 15
-  _T('w w w w w w w p p p p w w w w w w w w w w w w w'), // 16
-  _T('w w w w w w w w w w w w w w w w w w w w w w w w'), // 17
-];
+  // ── 1. LAND BASE ──────────────────────────────
+  f(0,  14, 22, 35, 'plains');  // Scandinavia
+  f(0,  13, 36, 48, 'plains');  // Finland
+  f(0,  25, 49, 71, 'plains');  // Russia / East
+  f(13, 20, 4,  14, 'plains');  // British Isles
+  f(17, 27, 7,  20, 'plains');  // France
+  f(22, 33, 4,  20, 'plains');  // Iberian Peninsula
+  f(14, 22, 19, 36, 'plains');  // Germany + Poland
+  f(14, 23, 37, 52, 'plains');  // Ukraine + Belarus
+  f(20, 34, 21, 29, 'plains');  // Italy
+  f(21, 33, 29, 41, 'plains');  // Balkans + Greece
+  f(20, 28, 40, 58, 'plains');  // Anatolia / Turkey
+  f(18, 23, 53, 64, 'plains');  // Caucasus region
+  f(27, 35, 48, 57, 'plains');  // Levant
+  f(34, 45, 4,  59, 'desert');  // North Africa / Sahara
+
+  // ── 2. SEAS & WATER ───────────────────────────
+  f(0,  45, 0,  3,  'water');   // Atlantic margin
+  f(4,  12, 32, 37, 'water');   // Gulf of Bothnia
+  f(12, 17, 23, 39, 'water');   // Baltic Sea
+  f(12, 18, 11, 22, 'water');   // North Sea
+  f(18, 21, 7,  10, 'water');   // English Channel
+  f(23, 26, 4,  8,  'water');   // Bay of Biscay
+  f(25, 33, 19, 22, 'water');   // Tyrrhenian Sea
+  f(22, 30, 27, 31, 'water');   // Adriatic Sea
+  f(29, 35, 27, 33, 'water');   // Ionian Sea
+  f(28, 35, 37, 43, 'water');   // Aegean Sea
+  f(30, 38, 7,  19, 'water');   // Western Mediterranean
+  f(28, 38, 43, 57, 'water');   // Eastern Mediterranean
+  f(26, 30, 39, 53, 'water');   // Black Sea
+  f(14, 27, 60, 65, 'water');   // Caspian Sea
+
+  // ── 3. MOUNTAIN RANGES ────────────────────────
+  f(0,  14, 22, 26, 'mountain'); // Norwegian spine
+  f(13, 16, 7,  10, 'mountain'); // Scottish Highlands
+  f(22, 24, 10, 15, 'mountain'); // Pyrenees
+  f(23, 26, 14, 17, 'mountain'); // Massif Central
+  f(21, 25, 19, 28, 'mountain'); // Alps
+  f(22, 32, 23, 27, 'mountain'); // Apennines
+  f(20, 24, 33, 40, 'mountain'); // Carpathians
+  f(23, 30, 29, 34, 'mountain'); // Dinaric Alps
+  f(29, 33, 34, 38, 'mountain'); // Rhodopes / Balkans
+  f(19, 24, 41, 54, 'mountain'); // Pontic mountains (N.Turkey)
+  f(25, 28, 44, 52, 'mountain'); // Taurus mountains
+  f(18, 22, 53, 64, 'mountain'); // Caucasus
+  f(34, 37, 8,  16, 'mountain'); // Atlas mountains
+
+  // ── 4. FORESTS ────────────────────────────────
+  f(0,  14, 27, 35, 'forest');  // Scandinavian forests (E of mountains)
+  f(0,  13, 36, 48, 'forest');  // Finnish boreal
+  f(13, 19, 37, 49, 'forest');  // Baltic states / Belarus
+  f(17, 21, 22, 31, 'forest');  // Central European forest belt
+  f(14, 19, 4,  7,  'forest');  // Ireland
+  f(16, 20, 10, 13, 'forest');  // English / Welsh woodland
+  f(19, 22, 8,  12, 'forest');  // Brittany / Normandy
+  f(21, 23, 19, 23, 'forest');  // Black Forest
+  f(23, 27, 30, 33, 'forest');  // Balkan forests
+  f(22, 26, 44, 50, 'forest');  // Anatolian interior
+
+  // ── 5. ISLANDS & PENINSULA RE-ASSERTS ─────────
+  f(26, 33, 22, 28, 'plains');  // Italian peninsula
+  f(22, 32, 23, 27, 'mountain');// Apennines re-assert
+  f(31, 35, 22, 26, 'plains');  // Southern Italy + Sicily
+  f(27, 31, 19, 21, 'plains');  // Sardinia
+  f(25, 28, 20, 22, 'plains');  // Corsica
+  f(30, 34, 33, 36, 'plains');  // Greek peninsula
+  f(30, 33, 34, 36, 'mountain');// Greek mountains
+  f(22, 24, 43, 46, 'plains');  // Crimea
+  f(14, 17, 22, 25, 'plains');  // Denmark
+  f(15, 17, 26, 29, 'plains');  // Skåne (southern Sweden)
+  f(35, 36, 33, 38, 'plains');  // Crete
+  f(28, 29, 47, 49, 'plains');  // Cyprus
+  f(28, 33, 5,  19, 'plains');  // Southern Iberia re-assert
+  f(28, 30, 38, 40, 'plains');  // Istanbul / Bosphorus
+  f(33, 37, 19, 22, 'desert');  // Tunisia re-assert
+
+  return m;
+})();
 
 const RESOURCE_SPAWNS = [
-  { c:6,  r:3,  type:'wood' },
-  { c:13, r:7,  type:'wood' },
-  { c:15, r:6,  type:'wood' },
-  { c:10, r:13, type:'wood' },
-  { c:4,  r:5,  type:'gold' },
-  { c:12, r:10, type:'gold' },
-  { c:8,  r:12, type:'gold' },
-  { c:17, r:5,  type:'gold' },
-  { c:8,  r:5,  type:'food' },
-  { c:13, r:8,  type:'food' },
-  { c:5,  r:13, type:'food' },
-  { c:10, r:9,  type:'food' },
-  { c:9,  r:4,  type:'iron' },
-  { c:10, r:5,  type:'iron' },
-  { c:17, r:9,  type:'iron' },
-  { c:20, r:8,  type:'iron' },
+  // Wood — forests of Scandinavia, Central Europe, Baltic
+  { c:30, r:8,  type:'wood' },
+  { c:40, r:8,  type:'wood' },
+  { c:25, r:18, type:'wood' },
+  { c:43, r:16, type:'wood' },
+  { c:7,  r:16, type:'wood' },
+  // Gold — river valleys and trade routes
+  { c:13, r:25, type:'gold' },
+  { c:35, r:18, type:'gold' },
+  { c:45, r:20, type:'gold' },
+  { c:22, r:27, type:'gold' },
+  { c:8,  r:30, type:'gold' },
+  // Food — fertile plains
+  { c:22, r:26, type:'food' },
+  { c:10, r:17, type:'food' },
+  { c:9,  r:28, type:'food' },
+  { c:41, r:19, type:'food' },
+  { c:18, r:25, type:'food' },
+  { c:33, r:19, type:'food' },
+  // Iron — mountain deposits
+  { c:25, r:23, type:'iron' },
+  { c:34, r:21, type:'iron' },
+  { c:20, r:18, type:'iron' },
+  { c:9,  r:16, type:'iron' },
+  { c:24, r:5,  type:'iron' },
 ];
 
 const CITY_SPAWNS = [
-  { c:5,  r:2,  name:'Dawnfort',   owner:'player'  },
-  { c:19, r:9,  name:'Ashrock',    owner:'enemy'   },
-  { c:11, r:7,  name:'Ironhold',   owner:'neutral' },
-  { c:15, r:4,  name:'Silvergate', owner:'neutral' },
+  { c:22, r:29, name:'Roma',        owner:'neutral' },
+  { c:11, r:19, name:'Londinium',   owner:'neutral' },
+  { c:13, r:22, name:'Lutetia',     owner:'neutral' },
+  { c:29, r:23, name:'Vindobona',   owner:'neutral' },
+  { c:7,  r:32, name:'Hispalis',    owner:'neutral' },
+  { c:41, r:21, name:'Borysthenes', owner:'neutral' },
+  { c:35, r:32, name:'Athenae',     owner:'neutral' },
+  { c:39, r:29, name:'Byzantium',   owner:'neutral' },
+  { c:20, r:35, name:'Carthago',    owner:'neutral' },
 ];
 
-const INITIAL_UNITS = [
-  // Player army — all start grouped at Dawnfort (c:5, r:2)
-  { type:'warrior',  c:5, r:2, owner:'player' },
-  { type:'warrior',  c:5, r:2, owner:'player' },
-  { type:'warrior',  c:5, r:2, owner:'player' },
-  { type:'archer',   c:5, r:2, owner:'player' },
-  { type:'archer',   c:5, r:2, owner:'player' },
-  { type:'spearman', c:5, r:2, owner:'player' },
-  { type:'spearman', c:5, r:2, owner:'player' },
-  { type:'scout',    c:5, r:2, owner:'player' },
-  { type:'scout',    c:5, r:2, owner:'player' },
-  // Enemy army — grouped
-  { type:'warrior',  c:19, r:9, owner:'enemy' },
-  { type:'warrior',  c:19, r:9, owner:'enemy' },
-];
+const INITIAL_UNITS = [];
 
-const COLS = 24;
-const ROWS = 18;
+const COLS = 72;
+const ROWS = 46;

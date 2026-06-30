@@ -13,6 +13,7 @@ const Cities = (() => {
       r:         s.r,
       name:      s.name,
       owner:     s.owner,
+      factionId: null,
       type:      'aldea',
       pop:       50,
       hp:        100,
@@ -24,6 +25,16 @@ const Cities = (() => {
 
   function getAll()    { return list; }
   function getAt(c, r) { return list.find(ci => ci.c === c && ci.r === r) || null; }
+
+  function setOwner(c, r, owner) {
+    const city = getAt(c, r);
+    if (city) city.owner = owner;
+  }
+
+  function setFaction(c, r, factionId) {
+    const city = getAt(c, r);
+    if (city) city.factionId = factionId;
+  }
 
   // Returns a Set of terrain types (including 'coast') within city's influence radius
   function getTerrainInRadius(city) {
@@ -265,6 +276,23 @@ const Cities = (() => {
 
   function getBuildingLevel(city, key) { return city.buildings[key] || 0; }
 
+  function getGarrisonTypes(city) {
+    const tier = CITY_TYPES[city.type || 'aldea']?.tier ?? 0;
+    const bases = [
+      ['militia', 'militia'],
+      ['militia', 'militia', 'militia'],
+      ['militia', 'militia', 'warrior'],
+      ['warrior', 'warrior', 'militia', 'militia'],
+    ];
+    const types = [...(bases[Math.min(tier, 3)] || bases[0])];
+    if ((city.buildings.barracks || 0) >= 1) {
+      const idx = types.indexOf('militia');
+      if (idx >= 0) types[idx] = 'warrior';
+    }
+    if ((city.buildings.archery_range || 0) >= 1) types.push('archer');
+    return types;
+  }
+
   function getTotalBuildingMaintenance(city) {
     const total = {};
     Object.entries(city.buildings).forEach(([key, lvl]) => {
@@ -288,10 +316,10 @@ const Cities = (() => {
   }
 
   return {
-    init, getAll, getAt,
+    init, getAll, getAt, setOwner, setFaction,
     buildBuilding, trainUnit,
     processTurnEnd, captureAt, getBuildingLevel,
-    getTrainableUnits, getTerrainInRadius,
+    getTrainableUnits, getTerrainInRadius, getGarrisonTypes,
     getCityFoodBalance, getCityFoodProduction, getCityFoodConsumption, getCityPopGrowth,
     recalcMaxHp, getTotalBuildingMaintenance, getTotalBuildingMaintenanceForCities,
   };

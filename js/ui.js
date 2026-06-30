@@ -18,20 +18,26 @@ const UI = (() => {
       _cityPanelActive = false;
       const hp = document.getElementById('info-hover-panel');
       if (hp) hp.style.display = 'none';
+      _closeRecruitModal();
+      _closeRaiseArmyModal();
     } else {
       if (id === 'panel-city') {
         bp.classList.add('city-mode');
         bp.classList.remove('army-mode');
+        _closeRecruitModal();
       } else if (id === 'panel-group') {
         bp.classList.add('army-mode');
         bp.classList.remove('city-mode');
         _cityPanelActive = false;
         const hp = document.getElementById('info-hover-panel');
         if (hp) hp.style.display = 'none';
+        _closeRaiseArmyModal();
       } else {
         bp.classList.remove('city-mode');
         bp.classList.remove('army-mode');
         _cityPanelActive = false;
+        _closeRecruitModal();
+        _closeRaiseArmyModal();
       }
       document.getElementById(id).classList.add('active');
       bp.classList.add('visible');
@@ -45,6 +51,10 @@ const UI = (() => {
     const def      = UNIT_TYPES[unit.type];
     const isPlayer = unit.owner === 'player';
     const maintStr = _maintStr(def.maintenance);
+    const ROLE_LABEL = { infantry:'Infantería', pikemen:'Piqueros', ranged:'Distancia', cavalry:'Caballería', siege:'Asedio' };
+    const roleLabel  = ROLE_LABEL[def.role] || '';
+    const hpPct      = Math.round((unit.hp / unit.maxHp) * 100);
+    const hpCol      = hpPct > 60 ? '#2a8030' : hpPct > 30 ? '#b07020' : '#9a2010';
 
     document.getElementById('bp-unit-content').innerHTML = `
       <div class="tw-panel">
@@ -53,32 +63,32 @@ const UI = (() => {
           <div class="tw-port-frame">${_unitImgHtml(unit.type, def.icon, 'port')}</div>
           <div class="tw-port-nameplate">
             <div class="tw-port-title">${def.name}</div>
+            ${roleLabel ? `<div class="tw-port-sub" style="font-style:normal;font-size:8px;letter-spacing:0.1em;text-transform:uppercase;color:var(--ink-light)">${roleLabel}</div>` : ''}
             <div class="tw-port-sub">${unit.hp}/${unit.maxHp} HP</div>
-            ${maintStr ? `<div class="tw-port-sub" style="margin-top:4px;color:var(--warn)">⚔ ${maintStr}/t</div>` : ''}
+            <div class="tw-port-sub" style="color:#f0d060;font-weight:700">★ Nivel ${unit.level||1}</div>
+            ${maintStr ? `<div class="tw-port-sub" style="color:var(--warn)">⚔ ${maintStr}/t</div>` : ''}
           </div>
         </div>
-        <div class="tw-body">
+        <div class="tw-body tw-body-unit">
           <div class="tw-header">
             <span class="tw-title">${def.name}</span>
             <span class="tw-subtitle">${isPlayer ? 'Unidad aliada' : 'Unidad enemiga'}</span>
           </div>
-          <div class="tw-stats-block">
-            ${_bar('HP',       unit.hp,       unit.maxHp, 'tw-bar-hp')}
-            ${_bar('Ataque',   unit.atk,      100,        'tw-bar-atk')}
-            ${_bar('Defensa',  unit.def,      100,        'tw-bar-def')}
-            ${_bar('Velocidad',unit.maxMoves, 5,          'tw-bar-spd')}
+          <div class="tw-stats-bars">
+            ${_statRow('⚔', 'ATK', unit.atk,       130, '#a82818')}
+            ${_statRow('🛡', 'DEF', unit.def,        80, '#1848a0')}
+            ${_statRow('🔰', 'ARM', unit.arm||0,     50, '#4828a0')}
+            ${(def.ap||0) > 0 ? _statRow('⛏', 'AP',  def.ap,      100, '#8a3810') : ''}
+            ${_statRow('❤', 'HP',  unit.hp, unit.maxHp, hpCol)}
+            ${(def.rng||0) > 0 ? _statRow('🏹', 'RNG', def.rng, 5, '#186840') : ''}
           </div>
+          ${_xpBar(unit)}
+          ${_specialEffects(def)}
           <div class="tw-pips">
             <span class="tw-pips-label">Movimientos</span>
-            ${Array.from({length: unit.maxMoves}, (_, i) =>
-              `<div class="tw-pip ${i < unit.moves ? 'on' : ''}"></div>`
-            ).join('')}
+            ${_renderPips(unit.moves, unit.maxMoves, 'tw-pip')}
+            ${unit.moves === 0 ? '<span class="tw-pips-label" style="color:#9a2010;margin-left:4px">Agotado</span>' : ''}
           </div>
-          <div class="tw-tags">
-            ${def.abilities.map(a => `<span class="tw-tag">${a}</span>`).join('')}
-            ${unit.moves === 0 ? '<span class="tw-tag red">Agotado</span>' : ''}
-          </div>
-          <div class="tw-desc">${def.desc} · Vista: ${def.sight} hex</div>
         </div>
       </div>
     `;
@@ -95,11 +105,12 @@ const UI = (() => {
     if (onRecruit)  _onRecruit = onRecruit;
     _disbandConfirming = false;
 
+    const isEnemy      = units.length > 0 && units[0].owner !== 'player';
     const movable      = units.filter(u => u.moves > 0);
     const anyExhausted = units.some(u => u.moves === 0);
     const anyMovable   = movable.length > 0;
     const isLocked     = anyExhausted && anyMovable;
-    const canSplit     = units.length > 1;
+    const canSplit     = !isEnemy && units.length > 1;
     const minMoves     = anyMovable ? Math.min(...movable.map(u => u.moves)) : 0;
 
     const totalMaint = {};
@@ -109,27 +120,42 @@ const UI = (() => {
       });
     });
     const maintStr    = _maintStr(totalMaint);
-    const statusText  = !anyMovable ? 'Agotado' : isLocked ? 'Bloqueado' : `Vel. ${minMoves}`;
+    const statusText  = !anyMovable ? 'Agotado' : isLocked ? 'Bloqueado' : `Vel. ${Math.ceil(minMoves / 2)}`;
     const statusColor = !anyMovable ? 'var(--text-dim)' : isLocked ? 'var(--warn)' : 'var(--accent-green)';
 
     let hintText = '', hintActive = false;
-    if (!anyMovable)   { hintText = 'Sin movimientos. Termina el turno.'; }
-    else if (isLocked) { hintText = 'Unidades mixtas — usa → en una tropa individual.'; }
-    else               { hintText = 'Click en hex iluminado para mover.'; hintActive = true; }
+    if (isEnemy) {
+      hintText = `Ejército enemigo — ${units.length} unidad${units.length !== 1 ? 'es' : ''}. Acércate para combatir.`;
+    } else if (!anyMovable) {
+      hintText = 'Sin movimientos. Termina el turno.';
+    } else if (isLocked) {
+      hintText = 'Unidades mixtas — usa → en una tropa individual.';
+    } else {
+      hintText = 'Click en hex iluminado para mover.'; hintActive = true;
+    }
+
+    const isLeaderHere = !isEnemy && (typeof Game !== 'undefined') && Game.isLeaderWithArmy ? Game.isLeaderWithArmy() : false;
+    const leaderBadge  = (!isEnemy && isLeaderHere)
+      ? `<div class="tw-leader-badge">👑 Líder presente</div>` : '';
+
+    const portraitInner = isEnemy
+      ? `<div style="font-family:var(--font-head);font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:#9a2010;text-align:center;padding:16px 8px">⚔ Enemigo</div>`
+      : `<div class="tw-port-actions">
+          <div class="tw-btn-wrap">
+            <button class="tw-round-btn recruit" onclick="UI._openRecruitModal()" title="Reclutar unidades">+</button>
+            <span class="tw-btn-label">Reclutar</span>
+          </div>
+          <div class="tw-btn-wrap" id="disband-wrap">
+            <button class="tw-round-btn disband" id="disband-btn" onclick="UI._onDisbandClick()" title="Disolver ejército">✕</button>
+            <span class="tw-btn-label" id="disband-label">Disolver</span>
+          </div>
+        </div>
+        ${leaderBadge}`;
 
     document.getElementById('bp-army-content').innerHTML = `
       <div class="tw-panel">
         <div class="tw-portrait" style="justify-content:center">
-          <div class="tw-port-actions">
-            <div class="tw-btn-wrap">
-              <button class="tw-round-btn recruit" onclick="UI._openRecruitModal()" title="Reclutar unidades">+</button>
-              <span class="tw-btn-label">Reclutar</span>
-            </div>
-            <div class="tw-btn-wrap" id="disband-wrap">
-              <button class="tw-round-btn disband" id="disband-btn" onclick="UI._onDisbandClick()" title="Disolver ejército">✕</button>
-              <span class="tw-btn-label" id="disband-label">Disolver</span>
-            </div>
-          </div>
+          ${portraitInner}
         </div>
         <div class="tw-body">
           <div class="tw-cards-row">
@@ -505,6 +531,27 @@ const UI = (() => {
     if (income.food) incParts.push(`🌾+${income.food}`);
     if (income.wood) incParts.push(`🌲+${income.wood}`);
 
+    // Faction owner info
+    let factionHtml = '';
+    if (city.factionId && typeof FACTIONS !== 'undefined') {
+      const f = FACTIONS.find(f => f.id === city.factionId);
+      if (f) {
+        const relations = (typeof Game !== 'undefined' && Game.getRelations) ? Game.getRelations() : {};
+        const rel = relations[f.id];
+        const relIcon = !rel ? '' : rel === 'war' ? '🔴' : rel === 'allied' ? '💙' : '🟡';
+        const isPlayer = city.owner === 'player';
+        const isNeutralFaction = city.owner === 'faction';
+        const treatarBtn = (isNeutralFaction || (city.owner === 'enemy')) && rel
+          ? `<button class="city-faction-btn" onclick="Game.openDiplomacy()">⚜ Diplomacia</button>` : '';
+        factionHtml = `<div class="city-faction-row" style="color:${f.color}">
+          <span>${f.symbol}</span>
+          <span>${isPlayer ? 'Tu facción' : f.name}</span>
+          ${relIcon ? `<span class="city-rel-badge">${relIcon}</span>` : ''}
+          ${treatarBtn}
+        </div>`;
+      }
+    }
+
     const el = _getHoverPanel();
     el.innerHTML = `
       <div class="ihp-img-area" style="background:rgba(40,20,0,0.20);align-items:center;justify-content:center;display:flex">
@@ -515,6 +562,7 @@ const UI = (() => {
           <span class="ihp-name">${city.name}</span>
           <span class="ihp-cat-badge" style="background:${tierColor}22;border-color:${tierColor}66;color:${tierColor}">${typeData.name}</span>
         </div>
+        ${factionHtml}
         <div class="ihp-effect">❤ ${city.hp}/${city.maxHp} &nbsp;|&nbsp; 👥 ${city.pop}</div>
         ${incParts.length ? `<div class="ihp-bonus">${incParts.join('  ')}</div>` : ''}
       </div>`;
@@ -579,6 +627,22 @@ const UI = (() => {
     el.style.display = 'flex';
   }
 
+  function _unitHoverBody(def, hp, maxHp) {
+    const hpVal  = hp !== undefined ? hp : def.hp;
+    const hpMax  = maxHp !== undefined ? maxHp : def.hp;
+    const hpCol  = (hpVal / hpMax) > 0.6 ? '#2a8030' : (hpVal / hpMax) > 0.3 ? '#b07020' : '#9a2010';
+    return `
+      <div class="tw-stats-bars ihp-bars">
+        ${_statRow('⚔', 'ATK', def.atk,    130, '#a82818')}
+        ${_statRow('🛡', 'DEF', def.def,     80, '#1848a0')}
+        ${_statRow('🔰', 'ARM', def.arm||0,  50, '#4828a0')}
+        ${(def.ap||0) > 0 ? _statRow('⛏', 'AP', def.ap, 100, '#8a3810') : ''}
+        ${_statRow('❤', 'HP', hpVal, hpMax, hpCol)}
+        ${(def.rng||0) > 0 ? _statRow('🏹', 'RNG', def.rng, 5, '#186840') : ''}
+      </div>
+      ${_specialEffects(def)}`;
+  }
+
   function _showUnitTypeHover(type) {
     const def = UNIT_TYPES[type];
     if (!def) return;
@@ -593,10 +657,7 @@ const UI = (() => {
       <div class="ihp-img-area ihp-unit-area">${imgHtml}</div>
       <div class="ihp-body">
         <div class="ihp-name-row"><span class="ihp-name">${def.name}</span></div>
-        <div class="ihp-unit-stats">
-          <span>⚔ ${def.atk}</span><span>🛡 ${def.def}</span>
-          <span>❤ ${def.maxHp ?? '—'}</span><span>👟 ${def.moves}</span>
-        </div>
+        ${_unitHoverBody(def)}
         ${def.desc ? `<div class="ihp-desc">${def.desc}</div>` : ''}
         ${costStr  ? `<div class="ihp-cost-row"><span class="ihp-cost-lbl">Costo</span><span class="ihp-cost-val">${costStr}</span></div>` : ''}
         ${maintStr ? `<div class="ihp-cost-row"><span class="ihp-cost-lbl">Mant.</span><span class="ihp-cost-val">${maintStr}/t</span></div>` : ''}
@@ -608,7 +669,7 @@ const UI = (() => {
     const def = UNIT_TYPES[type];
     if (!def) return;
     const maintStr = _maintStr(def.maintenance);
-    const imgHtml = def.img
+    const imgHtml  = def.img
       ? `<img src="assets/units/${def.img}.png" class="ihp-unit-img" onerror="this.style.display='none'">`
       : `<span class="ihp-icon-fb">${def.icon}</span>`;
 
@@ -617,10 +678,7 @@ const UI = (() => {
       <div class="ihp-img-area ihp-unit-area">${imgHtml}</div>
       <div class="ihp-body">
         <div class="ihp-name-row"><span class="ihp-name">${def.name}</span></div>
-        <div class="ihp-unit-stats">
-          <span>⚔ ${def.atk}</span><span>🛡 ${def.def}</span>
-          <span>❤ ${hp}/${maxHp}</span><span>👟 ${def.moves}</span>
-        </div>
+        ${_unitHoverBody(def, hp, maxHp)}
         ${def.desc ? `<div class="ihp-desc">${def.desc}</div>` : ''}
         ${maintStr ? `<div class="ihp-cost-row"><span class="ihp-cost-lbl">Mant.</span><span class="ihp-cost-val">${maintStr}/t</span></div>` : ''}
       </div>`;
@@ -1036,6 +1094,7 @@ const UI = (() => {
       <div class="tw-card-port">
         ${_unitImgHtml(u.type, def.icon, 'card')}
         ${showSp ? `<button class="tw-card-split" onclick="Game.splitUnit(${u.id})" title="Mover solo">→</button>` : ''}
+        <span class="tw-card-level">L${u.level||1}</span>
       </div>
       <div class="tw-card-hp">
         <div class="tw-card-hp-fill" style="width:${hpPct}%;background:${hpCol}"></div>
@@ -1043,12 +1102,35 @@ const UI = (() => {
       <div class="tw-card-footer">
         <div class="tw-card-name">${def.name}</div>
         <div class="tw-card-pips">
-          ${Array.from({length: u.maxMoves}, (_, i) =>
-            `<div class="tw-cpip ${i < u.moves ? 'on' : ''}"></div>`
-          ).join('')}
+          ${_renderPips(u.moves, u.maxMoves, 'tw-cpip')}
         </div>
       </div>
     </div>`;
+  }
+
+  function _xpBar(unit) {
+    const level = unit.level || 1;
+    const xp    = unit.xp || 0;
+    const thr   = UNIT_XP_THRESHOLDS; // [100, 300, 600]
+    const nextXP = thr[level - 1] || null;
+    const prevXP = level > 1 ? (thr[level - 2] || 0) : 0;
+    const pct    = nextXP ? Math.round(((xp - prevXP) / (nextXP - prevXP)) * 100) : 100;
+    const label  = nextXP ? `Nivel ${level} — ${xp}/${nextXP} XP` : `Nivel ${level} MAX`;
+    return `<div class="tw-xp-row">
+      <span class="tw-xp-label">${label}</span>
+      <div class="tw-xp-bar-wrap"><div class="tw-xp-bar" style="width:${pct}%"></div></div>
+    </div>`;
+  }
+
+  // Each pip represents 2 moves; half-pip = 1 remaining move
+  function _renderPips(moves, maxMoves, cls) {
+    const total    = Math.ceil(maxMoves / 2);
+    const fullOn   = Math.floor(moves / 2);
+    const hasHalf  = moves % 2 === 1;
+    return Array.from({length: total}, (_, i) => {
+      const pipCls = i < fullOn ? 'on' : (i === fullOn && hasHalf ? 'half' : '');
+      return `<div class="${cls} ${pipCls}"></div>`;
+    }).join('');
   }
 
   // ── Unit portrait helper ──────────────────────
@@ -1075,6 +1157,65 @@ const UI = (() => {
       </div>
       <span class="tw-stat-val">${val}</span>
     </div>`;
+  }
+
+  function _statRow(icon, label, val, max, color) {
+    const pct = Math.min(100, Math.max(3, Math.round((val / max) * 100)));
+    return `<div class="tw-srow">
+      <span class="tw-srow-icon">${icon}</span>
+      <span class="tw-srow-lbl">${label}</span>
+      <div class="tw-srow-bar-wrap">
+        <div class="tw-srow-bar" style="width:${pct}%;background:${color}"></div>
+      </div>
+      <span class="tw-srow-val">${val}</span>
+    </div>`;
+  }
+
+  function _specialEffects(def) {
+    const ROLE_NAMES = { cavalry:'Caballería', infantry:'Infantería', pikemen:'Piqueros', ranged:'Distancia', siege:'Asedio' };
+    const fx = [];
+    if (def.firesFirst) {
+      fx.push({ icon:'🏹', name:'Dispara Primero', desc:'Ataca antes del combate cuerpo a cuerpo. Sin represalia en la fase de distancia.' });
+    }
+    if (def.charge) {
+      fx.push({ icon:'⚡', name:`Carga +${Math.round(def.charge * 100)}%`, desc:`Bonus de daño en la embestida inicial. Máximo impacto en el primer contacto.` });
+    }
+    if (def.bonusVs) {
+      Object.entries(def.bonusVs).forEach(([role, mult]) => {
+        const rn = ROLE_NAMES[role] || role;
+        if (mult >= 1.5) {
+          fx.push({ icon:'💪', name:`×${mult} vs ${rn}`, desc:`Ventaja táctica dominante frente a ${rn.toLowerCase()}. Formación especializada.` });
+        } else {
+          fx.push({ icon:'⚠', name:`×${mult} vs ${rn}`, desc:`Muy vulnerable frente a ${rn.toLowerCase()}. Evitar enfrentamiento directo.` });
+        }
+      });
+    }
+    if (!fx.length) return '';
+    return `<div class="tw-spec-effects">
+      ${fx.map(e => `
+        <div class="tw-spec-fx">
+          <span class="tw-spec-fx-icon">${e.icon}</span>
+          <div class="tw-spec-fx-text">
+            <span class="tw-spec-fx-name">${e.name}</span>
+            <span class="tw-spec-fx-desc">${e.desc}</span>
+          </div>
+        </div>`).join('')}
+    </div>`;
+  }
+
+  function _typeBonusBadges(def) {
+    const ROLE_NAMES = { cavalry:'Caballería', infantry:'Infantería', pikemen:'Piqueros', ranged:'Distancia', siege:'Asedio' };
+    const tags = [];
+    if (def.firesFirst) tags.push(`<span class="tw-bonus-tag fires-first">Dispara Primero</span>`);
+    if (def.charge) tags.push(`<span class="tw-bonus-tag charge">⚡ Carga +${Math.round(def.charge * 100)}%</span>`);
+    if (def.bonusVs) {
+      Object.entries(def.bonusVs).forEach(([role, mult]) => {
+        const label = ROLE_NAMES[role] || role;
+        const cls   = mult >= 1.5 ? 'counter' : mult >= 1.0 ? 'neutral' : 'weak';
+        tags.push(`<span class="tw-bonus-tag ${cls}">×${mult} vs ${label}</span>`);
+      });
+    }
+    return tags.length ? `<div class="tw-bonus-tags">${tags.join('')}</div>` : '';
   }
 
   function _maintStr(maint) {
@@ -1188,11 +1329,14 @@ const UI = (() => {
         <div class="tt-unit-flavor">${def.desc}</div>
         <div class="tt-divider"></div>
         <div class="tt-unit-stats">
-          ${statBar('Vida',      unit.hp,       unit.maxHp, unit.hp/unit.maxHp > 0.6 ? '#4aaa44' : unit.hp/unit.maxHp > 0.3 ? '#e09030' : '#d05040')}
-          ${statBar('Ataque',   unit.atk,      100,        '#c04020')}
-          ${statBar('Defensa',  unit.def,      100,        '#2060b0')}
-          ${statBar('Velocidad',unit.maxMoves, 5,          '#9060c0')}
+          ${statBar('Vida',    unit.hp,       unit.maxHp, unit.hp/unit.maxHp > 0.6 ? '#4aaa44' : unit.hp/unit.maxHp > 0.3 ? '#e09030' : '#d05040')}
+          ${statBar('ATK',    unit.atk,      120,        '#c04020')}
+          ${statBar('DEF',    unit.def,      80,         '#2060b0')}
+          ${statBar('ARM',    def.arm||0,    50,         '#6040a0')}
+          ${(def.ap||0) > 0 ? statBar('AP', def.ap, 100, '#a03020') : ''}
+          ${(def.rng||0) > 0 ? statBar('RNG', def.rng, 5, '#208040') : ''}
         </div>
+        ${_typeBonusBadges(def)}
         ${maint ? `<div class="tt-divider"></div><div class="tt-unit-maint">Mantenimiento: ${maint}/t</div>` : ''}
       </div>`;
     _positionTooltip(tt, card.getBoundingClientRect());
@@ -1233,7 +1377,7 @@ const UI = (() => {
           ${statBar('Vida',      def.hp,     100, '#4aaa44')}
           ${statBar('Ataque',   def.atk,    100, '#c04020')}
           ${statBar('Defensa',  def.def,    100, '#2060b0')}
-          ${statBar('Velocidad',def.moves,   5,  '#9060c0')}
+          ${statBar('Velocidad', Math.ceil(def.moves/2), 4, '#9060c0')}
         </div>
         <div class="tt-divider"></div>
         <div class="tt-bld-cost-row">
@@ -1305,6 +1449,267 @@ const UI = (() => {
     _positionTooltip(tt, card.getBoundingClientRect());
   }
 
+  // ── Leader panel (left sidebar) ──────────────
+  let _leaderPanelOpen = true;
+
+  function toggleLeaderPanel() {
+    const el  = document.getElementById('leader-panel');
+    const tab = document.getElementById('leader-tab');
+    if (!el) return;
+    _leaderPanelOpen = !_leaderPanelOpen;
+    el.style.display  = _leaderPanelOpen ? 'flex' : 'none';
+    if (tab) tab.style.display = _leaderPanelOpen ? 'none' : 'flex';
+  }
+
+  function updateLeaderPanel(leader, faction) {
+    const el  = document.getElementById('leader-panel');
+    const tab = document.getElementById('leader-tab');
+    if (!el) return;
+    if (!leader || !faction) {
+      el.style.display = 'none';
+      if (tab) tab.style.display = 'none';
+      return;
+    }
+
+    const factionColor = faction.color || '#4a9eff';
+
+    // Update tab
+    if (tab) {
+      tab.innerHTML = `<span style="color:${factionColor}">${faction.symbol}</span>`;
+      tab.style.display = _leaderPanelOpen ? 'none' : 'flex';
+    }
+    if (!_leaderPanelOpen) { el.style.display = 'none'; return; }
+
+    const traitHtml = (leader.traits || []).map(tid => {
+      const t = (typeof TRAITS !== 'undefined') && TRAITS[tid];
+      if (!t) return '';
+      return `<div class="lp-trait">
+        <span class="lp-trait-icon">${t.icon}</span>
+        <div class="lp-trait-body">
+          <span class="lp-trait-name">${t.name}</span>
+          <span class="lp-trait-desc">${t.desc}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Relations section — rows are clickable to open leader dialog
+    const relations = (typeof Game !== 'undefined' && Game.getRelations) ? Game.getRelations() : {};
+    const otherFactions = (typeof FACTIONS !== 'undefined') ? FACTIONS.filter(f => f.id !== faction.id) : [];
+    const relHtml = Object.keys(relations).length > 0 && otherFactions.length > 0 ? `
+      <div class="lp-divider"></div>
+      <div class="lp-section-label">Relaciones</div>
+      <div class="lp-relations">
+        ${otherFactions.map(f => {
+          const rel = relations[f.id] || 'neutral';
+          const icon = rel === 'war' ? '🔴' : rel === 'allied' ? '💙' : '🟡';
+          const fLeader = (f.leaders || [])[0];
+          return `<div class="lp-rel-row lp-rel-clickable" onclick="Game.openLeaderDialog('${f.id}')" title="Hablar con ${fLeader ? fLeader.name : f.name}">
+            <span class="lp-rel-sym" style="color:${f.color}">${f.symbol}</span>
+            <span class="lp-rel-name">${fLeader ? fLeader.name.split(' ')[0] : f.name.split(' ')[0]}</span>
+            <span class="lp-rel-icon">${icon}</span>
+            <span class="lp-rel-chat">💬</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <button class="lp-dipl-btn" onclick="Game.openDiplomacy()">⚜ Diplomacia</button>
+    ` : '';
+
+    el.innerHTML = `
+      <button class="lp-close-btn" onclick="UI.toggleLeaderPanel()" title="Ocultar panel">◀</button>
+      <div class="lp-portrait" style="border-color:${factionColor}44">
+        <div class="lp-symbol" style="color:${factionColor}">${faction.symbol}</div>
+      </div>
+      <div class="lp-name">${leader.name}</div>
+      <div class="lp-title">${leader.title}</div>
+      <div class="lp-faction" style="color:${factionColor}">${faction.name}</div>
+      <div class="lp-divider"></div>
+      <div class="lp-section-label">Rasgos</div>
+      <div class="lp-traits">${traitHtml}</div>
+      ${relHtml}
+    `;
+    el.style.display = 'flex';
+  }
+
+  // ── Diplomacy overview panel ──────────────────
+  function showDiplomacyPanel(factions, relations) {
+    let modal = document.getElementById('diplomacy-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'diplomacy-modal';
+      document.body.appendChild(modal);
+    }
+
+    const cardsHtml = factions.map(f => {
+      const rel = relations[f.id] || 'neutral';
+      const relIcon = rel === 'war' ? '🔴' : rel === 'allied' ? '💙' : '🟡';
+      const relText = rel === 'war' ? 'Guerra' : rel === 'allied' ? 'Aliados' : 'Neutral';
+      const relClass = rel === 'war' ? 'rel-war' : rel === 'allied' ? 'rel-allied' : 'rel-neutral';
+      const leader = (f.leaders || [])[0];
+
+      return `<div class="dipl-card" onclick="Game.openLeaderDialog('${f.id}')" style="cursor:pointer">
+        <div class="dipl-card-symbol" style="color:${f.color}">${f.symbol}</div>
+        <div class="dipl-card-info">
+          <div class="dipl-card-name" style="color:${f.color}">${f.name}</div>
+          ${leader ? `<div class="dipl-card-leader">${leader.title} — ${leader.name}</div>` : ''}
+          <div class="dipl-card-rel ${relClass}">${relIcon} ${relText}</div>
+        </div>
+        <div class="dipl-card-actions">
+          <button class="dipl-btn ally" onclick="event.stopPropagation();Game.openLeaderDialog('${f.id}')">💬 Hablar</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    modal.innerHTML = `
+      <div class="dipl-overlay" onclick="UI.closeDiplomacyPanel()"></div>
+      <div class="dipl-frame">
+        <div class="dipl-header">
+          <span>⚜ Relaciones Diplomáticas</span>
+          <button class="dipl-close" onclick="UI.closeDiplomacyPanel()">✕</button>
+        </div>
+        <div class="dipl-body">${cardsHtml}</div>
+      </div>`;
+    modal.style.display = 'block';
+  }
+
+  function closeDiplomacyPanel() {
+    const modal = document.getElementById('diplomacy-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  // ── Leader dialog (talk to individual leader) ──
+  const _leaderDialogLines = {
+    guerrero: {
+      war:     ['Tus ejércitos caerán. No habrá piedad.', 'La guerra es lo único que entiendo. Y aquí la traes.', '¿Pensabas que me acobardaría? Ven entonces.'],
+      neutral: ['Nos observamos con respeto mutuo. Por ahora.', 'Aún no hay motivo para el acero. Pero podría haberlo pronto.'],
+      allied:  ['Hombro con hombro en el campo de batalla. Así debe ser.', 'Tu causa es mi causa. Mis tropas están a tu servicio.'],
+    },
+    mercader: {
+      war:     ['Esta guerra es costosa. Podríamos llegar a un acuerdo más rentable.', 'Destruirte es malo para el comercio. Reconsidera.'],
+      neutral: ['El comercio entre nuestras tierras nos enriquecería a ambos.', 'Tenemos más en común de lo que crees.'],
+      allied:  ['Nuestra alianza es la mejor inversión que hemos hecho.', 'Juntos, los mercados del mundo son nuestros.'],
+    },
+    estratega: {
+      war:     ['Has cometido un error de cálculo. Lo pagarás.', 'Predije esta guerra. Y también predigo su resultado.'],
+      neutral: ['Te estudio. Tú me estudias. Una danza inteligente.', 'La neutralidad es temporal. Ambos lo sabemos.'],
+      allied:  ['Mis planes te incluyen. Confía en mis decisiones.', 'Juntos somos superiores. Las matemáticas no mienten.'],
+    },
+    piadoso: {
+      war:     ['Que los dioses nos perdonen por este conflicto.', 'Lamento que haya llegado a esto. Aún podemos evitar más sangre.'],
+      neutral: ['La paz es un don que debemos proteger juntos.', 'Mis oraciones incluyen la seguridad de tu pueblo.'],
+      allied:  ['Que los dioses bendigan nuestra unión.', 'Caminaremos juntos bajo su protección.'],
+    },
+    cruel: {
+      war:     ['Voy a destruirte con placer.', 'Tus lamentos serán música para mis oídos.'],
+      neutral: ['Aún no he decidido qué hacer contigo.', 'Disfruto de esta incertidumbre. Tú no tanto, imagino.'],
+      allied:  ['Eres útil por ahora. Veremos cuánto dura.', 'Traiciona mi confianza y aprenderás lo que soy capaz de hacer.'],
+    },
+  };
+
+  function _getLeaderDialogLine(leader, relation) {
+    const key = (leader.traits || [])[0] || 'estratega';
+    const pool = (_leaderDialogLines[key] || _leaderDialogLines.estratega)[relation] ||
+                 (_leaderDialogLines[key] || _leaderDialogLines.estratega).neutral;
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+
+  function showLeaderDialog(faction, relation) {
+    const leader = (faction.leaders || [])[0];
+    if (!leader) return;
+
+    closeDiplomacyPanel();
+
+    let modal = document.getElementById('leader-dialog-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'leader-dialog-modal';
+      document.body.appendChild(modal);
+    }
+
+    const relIcon  = relation === 'war' ? '🔴' : relation === 'allied' ? '💙' : '🟡';
+    const relText  = relation === 'war' ? 'Guerra' : relation === 'allied' ? 'Aliados' : 'Neutral';
+    const relClass = relation === 'war' ? 'rel-war' : relation === 'allied' ? 'rel-allied' : 'rel-neutral';
+    const dialogText = _getLeaderDialogLine(leader, relation);
+
+    const traitBadges = (leader.traits || []).map(tid => {
+      const t = (typeof TRAITS !== 'undefined') && TRAITS[tid];
+      return t ? `<span class="ld-trait-badge">${t.icon} ${t.name}</span>` : '';
+    }).join('');
+
+    let actHtml = '';
+    if (relation === 'war') {
+      actHtml = `<button class="dipl-btn peace" onclick="Game.setRelation('${faction.id}','neutral',100)">🕊 Proponer Paz <small>(-100 💰)</small></button>`;
+    } else if (relation === 'neutral') {
+      actHtml = `
+        <button class="dipl-btn war"  onclick="Game.setRelation('${faction.id}','war',0)">⚔ Declarar Guerra</button>
+        <button class="dipl-btn ally" onclick="Game.setRelation('${faction.id}','allied',200)">🤝 Proponer Alianza <small>(-200 💰)</small></button>`;
+    } else if (relation === 'allied') {
+      actHtml = `<button class="dipl-btn break" onclick="Game.setRelation('${faction.id}','neutral',0)">💔 Romper Alianza</button>`;
+    }
+
+    modal.innerHTML = `
+      <div class="ld-overlay" onclick="UI.closeLeaderDialog()"></div>
+      <div class="ld-frame">
+        <div class="ld-header" style="border-bottom-color:${faction.color}44">
+          <div class="ld-portrait" style="background:${faction.color}1a;border-color:${faction.color}55">
+            <span style="color:${faction.color};font-size:28px">${faction.symbol}</span>
+          </div>
+          <div class="ld-identity">
+            <div class="ld-leader-name" style="color:${faction.color}">${leader.name}</div>
+            <div class="ld-leader-title">${leader.title}</div>
+            <div class="ld-leader-faction">${faction.name}</div>
+            ${traitBadges ? `<div class="ld-trait-badges">${traitBadges}</div>` : ''}
+          </div>
+          <button class="dipl-close" onclick="UI.closeLeaderDialog()">✕</button>
+        </div>
+        <div class="ld-speech-area">
+          <div class="ld-speech-bubble">"${dialogText}"</div>
+        </div>
+        <div class="ld-footer">
+          <div class="dipl-card-rel ${relClass}" style="font-size:9px">${relIcon} ${relText}</div>
+          <div class="ld-actions">${actHtml}</div>
+        </div>
+      </div>`;
+    modal.style.display = 'block';
+  }
+
+  function closeLeaderDialog() {
+    const modal = document.getElementById('leader-dialog-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  // ── Event modal ───────────────────────────────
+  function showEvent(ev, cb) {
+    let el = document.getElementById('event-modal');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'event-modal';
+      document.body.appendChild(el);
+    }
+    el._evData = ev;
+    el._evCb   = cb;
+    el.innerHTML = `
+      <div class="ev-frame">
+        <div class="ev-icon">${ev.icon}</div>
+        <div class="ev-title">${ev.title}</div>
+        <div class="ev-desc">${ev.desc}</div>
+        <div class="ev-choices">
+          ${ev.choices.map((c, i) => `
+            <button class="ev-choice" onclick="UI._resolveEventChoice(${i})">${c.text}</button>`
+          ).join('')}
+        </div>
+      </div>`;
+    el.style.display = 'flex';
+  }
+
+  function _resolveEventChoice(idx) {
+    const el = document.getElementById('event-modal');
+    if (!el) return;
+    const ev = el._evData;
+    const cb = el._evCb;
+    el.style.display = 'none';
+    if (ev && cb) cb(ev.choices[idx]);
+  }
+
   // ── Init ─────────────────────────────────────
   function init() {
     _initTooltip();
@@ -1355,13 +1760,90 @@ const UI = (() => {
     el.innerHTML = html;
   }
 
+  // ── Battle log ────────────────────────────────
+  const _battleLog = [];
+  let _battleLogCounter = 0;
+
+  function addBattleEvent(ev) {
+    ev._id = ++_battleLogCounter;
+    ev._expanded = false;
+    _battleLog.unshift(ev);
+    if (_battleLog.length > 30) _battleLog.length = 30;
+    _renderBattleLog();
+  }
+
+  function _toggleBattleEvent(id) {
+    const ev = _battleLog.find(e => e._id === id);
+    if (ev) { ev._expanded = !ev._expanded; _renderBattleLog(); }
+  }
+
+  function _dismissBattleEvent(id) {
+    const idx = _battleLog.findIndex(e => e._id === id);
+    if (idx !== -1) { _battleLog.splice(idx, 1); _renderBattleLog(); }
+  }
+
+  function _renderBattleLog() {
+    const el = document.getElementById('battle-log-panel');
+    if (!el) return;
+    if (!_battleLog.length) { el.innerHTML = ''; return; }
+
+    const TERRAIN_LABEL = { plains:'Llanura', forest:'Bosque', mountain:'Montaña', desert:'Desierto', water:'Agua' };
+
+    const unitRow = u => {
+      const dmg    = u.startHp - u.endHp;
+      const killed = u.endHp === 0;
+      return `<div class="bl-unit${killed ? ' killed' : ''}">
+        <span class="bl-unit-icon">${u.icon}</span>
+        <span class="bl-unit-name">${u.name}</span>
+        ${killed
+          ? `<span class="bl-dead">☠</span>`
+          : `<span class="bl-dmg">-${dmg}</span><span class="bl-hp">${u.endHp}hp</span>`}
+      </div>`;
+    };
+
+    const evHtml = ev => {
+      const won = ev.winner === 'attacker';
+      const bodyHtml = ev._expanded ? `
+        <div class="bl-body">
+          <div class="bl-side">
+            <div class="bl-side-label">Tus tropas</div>
+            ${ev.attackers.map(unitRow).join('')}
+          </div>
+          <div class="bl-divider"></div>
+          <div class="bl-side">
+            <div class="bl-side-label">Enemigo</div>
+            ${ev.defenders.map(unitRow).join('')}
+          </div>
+        </div>` : '';
+
+      return `<div class="bl-event">
+        <div class="bl-meta" onclick="UI._toggleBattleEvent(${ev._id})">
+          <span class="bl-toggle">${ev._expanded ? '▾' : '▸'}</span>
+          <span class="bl-turn">T${ev.turn}</span>
+          <span class="bl-terrain">${TERRAIN_LABEL[ev.terrain] || ev.terrain}</span>
+          <span class="bl-result ${won ? 'win' : 'loss'}">${won ? '⚔ Victoria' : '☠ Derrota'}</span>
+          <button class="bl-dismiss" onclick="event.stopPropagation();UI._dismissBattleEvent(${ev._id})">×</button>
+        </div>
+        ${bodyHtml}
+      </div>`;
+    };
+
+    el.innerHTML = `<div class="bl-header-bar">⚔ Registro de Batallas</div>` +
+      _battleLog.map(evHtml).join('');
+  }
+
   return {
-    init, showPanel, showIdle, showUnit, showCity, showArmy, showGroup, updateHUD, toast, updateEmpirePanel,
+    init, showPanel, showIdle, showUnit, showCity, showArmy, showGroup, updateHUD, toast, updateEmpirePanel, addBattleEvent,
+    _toggleBattleEvent, _dismissBattleEvent,
     _openBuildingBrowser, _closeBuildingBrowser, _changeBrowserCat, _buildFromBrowser,
     _onSlotClick, _buildAndClose, _closeUpgradePicker,
     _showBldHover, _showUnitHover, _showUnitTypeHover, _hideHoverPanel,
     _openImgPicker, _closeImgPicker, _switchPickerCat, _buildFromPicker,
     _openRecruitModal, _closeRecruitModal, _switchRecruitTab, _recruitUnit,
     _openRaiseArmyModal, _closeRaiseArmyModal, _doRaiseArmy, _onDisbandClick,
+    showEvent, _resolveEventChoice,
+    updateLeaderPanel, toggleLeaderPanel,
+    showDiplomacyPanel, closeDiplomacyPanel,
+    showLeaderDialog, closeLeaderDialog,
   };
 })();
