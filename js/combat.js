@@ -46,9 +46,30 @@ const Combat = (() => {
     }
   }
 
-  // Prefer weakest target (finish off wounded units)
-  function _pickTarget(pool) {
-    return pool.reduce((min, u) => u.hp < min.hp ? u : min, pool[0]);
+  // Weighted-random pick among the most wounded units — biases toward
+  // finishing wounded regiments without every attacker dogpiling the
+  // single weakest target in the same round (which caused 1-kill-per-round
+  // grinding). Swap this out for pursuit/routing-aware targeting in Phase 2.
+  function _selectTarget(pool) {
+    if (pool.length === 1) return pool[0];
+    const candidates = [...pool].sort((a, b) => a.hp - b.hp).slice(0, Math.min(3, pool.length));
+    const weights = candidates.map((_, i) => candidates.length - i);
+    const total = weights.reduce((s, w) => s + w, 0);
+    let roll = Math.random() * total;
+    for (let i = 0; i < candidates.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return candidates[i];
+    }
+    return candidates[candidates.length - 1];
+  }
+
+  // Phase-1 stand-in for morale: a side stops fighting once it has lost a
+  // majority of its starting strength, instead of always fighting to 0.
+  // Replace the body with real morale accumulation in Phase 2 — callers
+  // only care about the boolean result.
+  function _isBroken(startCount, aliveCount, thresholdRatio = 0.5) {
+    if (startCount === 0) return false;
+    return (startCount - aliveCount) / startCount >= thresholdRatio;
   }
 
   function resolveBattle(attackers, defenders, terrain, options = {}) {
@@ -69,6 +90,10 @@ const Combat = (() => {
       _def: _scaledDef(u),
     }));
     const def = defenders.map(u => ({ ...u, _def: _scaledDef(u) }));
+    const attStart = att.length;
+    const defStart = def.length;
+    let attBroken = false;
+    let defBroken = false;
 
     // ── Phase 1: Ranged volleys (2 rounds) ─────────────
     // Ranged units fire twice before melee; no retaliation from non-ranged units
@@ -82,7 +107,7 @@ const Combat = (() => {
 
         attShooters.forEach(s => {
           const pool = def.filter(u => u.hp > 0 && !(u._def.rng > 0));
-          const tgt  = pool.length ? _pickTarget(pool) : _pickTarget(def.filter(u => u.hp > 0));
+          const tgt  = pool.length ? _selectTarget(pool) : _selectTarget(def.filter(u => u.hp > 0));
           if (!tgt) return;
           const dmg = Math.round(_dmg(s, s._def, tgt, tgt._def, 0.80) / terrainMult);
           tgt.hp = Math.max(0, tgt.hp - dmg);
@@ -90,7 +115,7 @@ const Combat = (() => {
         });
         defShooters.forEach(s => {
           const pool = att.filter(u => u.hp > 0 && !(u._def.rng > 0));
-          const tgt  = pool.length ? _pickTarget(pool) : _pickTarget(att.filter(u => u.hp > 0));
+          const tgt  = pool.length ? _selectTarget(pool) : _selectTarget(att.filter(u => u.hp > 0));
           if (!tgt) return;
           const dmg = Math.round(_dmg(s, s._def, tgt, tgt._def, 0.80) * terrainMult);
           tgt.hp = Math.max(0, tgt.hp - dmg);
@@ -101,35 +126,47 @@ const Combat = (() => {
       log.push('— Fase distancia finalizada —');
     }
 
+    attBroken = attBroken || _isBroken(attStart, att.length);
+    defBroken = defBroken || _isBroken(defStart, def.length);
+
+    // A broken side withdraws before inflicting/taking further casualties —
+    // skip remaining phases once either side has broken.
+    const stillFighting = !attBroken && !defBroken;
+
     // ── Phase 2: Cavalry charge ─────────────────────────
     // Each cavalry unit delivers one powerful strike with charge bonus
-    const attCav = att.filter(u => u._def.role === 'cavalry' && u.hp > 0);
-    const defCav = def.filter(u => u._def.role === 'cavalry' && u.hp > 0);
+    if (stillFighting) {
+      const attCav = att.filter(u => u._def.role === 'cavalry' && u.hp > 0);
+      const defCav = def.filter(u => u._def.role === 'cavalry' && u.hp > 0);
 
-    attCav.forEach(cav => {
-      const chargeMult = 1 + (cav._def.charge || 0);
-      const pool = def.filter(u => u.hp > 0 && u._def.role !== 'cavalry');
-      const tgt  = pool.length ? _pickTarget(pool) : def.find(u => u.hp > 0);
-      if (!tgt) return;
-      const dmg = Math.round(_dmg(cav, cav._def, tgt, tgt._def, chargeMult) / terrainMult);
-      tgt.hp = Math.max(0, tgt.hp - dmg);
-      log.push(`⚡ ${cav._def.name} CARGA → ${tgt._def.name}: -${dmg} HP`);
-    });
-    defCav.forEach(cav => {
-      const chargeMult = 1 + (cav._def.charge || 0);
-      const pool = att.filter(u => u.hp > 0 && u._def.role !== 'cavalry');
-      const tgt  = pool.length ? _pickTarget(pool) : att.find(u => u.hp > 0);
-      if (!tgt) return;
-      const dmg = Math.round(_dmg(cav, cav._def, tgt, tgt._def, chargeMult) * terrainMult);
-      tgt.hp = Math.max(0, tgt.hp - dmg);
-    });
+      attCav.forEach(cav => {
+        const chargeMult = 1 + (cav._def.charge || 0);
+        const pool = def.filter(u => u.hp > 0 && u._def.role !== 'cavalry');
+        const tgt  = pool.length ? _selectTarget(pool) : def.find(u => u.hp > 0);
+        if (!tgt) return;
+        const dmg = Math.round(_dmg(cav, cav._def, tgt, tgt._def, chargeMult) / terrainMult);
+        tgt.hp = Math.max(0, tgt.hp - dmg);
+        log.push(`⚡ ${cav._def.name} CARGA → ${tgt._def.name}: -${dmg} HP`);
+      });
+      defCav.forEach(cav => {
+        const chargeMult = 1 + (cav._def.charge || 0);
+        const pool = att.filter(u => u.hp > 0 && u._def.role !== 'cavalry');
+        const tgt  = pool.length ? _selectTarget(pool) : att.find(u => u.hp > 0);
+        if (!tgt) return;
+        const dmg = Math.round(_dmg(cav, cav._def, tgt, tgt._def, chargeMult) * terrainMult);
+        tgt.hp = Math.max(0, tgt.hp - dmg);
+      });
 
-    _removeKilled(att);
-    _removeKilled(def);
-    if (attCav.length || defCav.length) log.push('— Fase carga finalizada —');
+      _removeKilled(att);
+      _removeKilled(def);
+      if (attCav.length || defCav.length) log.push('— Fase carga finalizada —');
+
+      attBroken = attBroken || _isBroken(attStart, att.length);
+      defBroken = defBroken || _isBroken(defStart, def.length);
+    }
 
     // ── Phase 3: Melee rounds (up to 8) ────────────────
-    for (let round = 0; round < 8; round++) {
+    for (let round = 0; round < 8 && !attBroken && !defBroken; round++) {
       const aliveAtt = att.filter(u => u.hp > 0);
       const aliveDef = def.filter(u => u.hp > 0);
       if (!aliveAtt.length || !aliveDef.length) break;
@@ -139,12 +176,12 @@ const Combat = (() => {
       const attDmgMap = new Map();
 
       aliveAtt.forEach(a => {
-        const tgt = _pickTarget(aliveDef);
+        const tgt = _selectTarget(aliveDef);
         const dmg = Math.round(_dmg(a, a._def, tgt, tgt._def, 1.0) / terrainMult);
         defDmgMap.set(tgt, (defDmgMap.get(tgt) || 0) + dmg);
       });
       aliveDef.forEach(d => {
-        const tgt = _pickTarget(aliveAtt);
+        const tgt = _selectTarget(aliveAtt);
         const dmg = Math.round(_dmg(d, d._def, tgt, tgt._def, 1.0) * terrainMult);
         attDmgMap.set(tgt, (attDmgMap.get(tgt) || 0) + dmg);
       });
@@ -154,17 +191,25 @@ const Combat = (() => {
 
       _removeKilled(att);
       _removeKilled(def);
+
+      attBroken = attBroken || _isBroken(attStart, att.length);
+      defBroken = defBroken || _isBroken(defStart, def.length);
     }
 
-    const attWins = def.length === 0;
-    const defWins = att.length === 0;
-    // Ties go to attacker
-    const winner = defWins && !attWins ? 'defender' : 'attacker';
+    const attLost = att.length === 0 || attBroken;
+    const defLost = def.length === 0 || defBroken;
+    // Mutual wipe/stalemate or neither broke (full elimination by one side): attacker holds.
+    const winner = defLost && !attLost ? 'attacker' : (attLost && !defLost ? 'defender' : 'attacker');
 
     return {
       winner,
+      attBroken, defBroken,
       survivingAtt: att.map(u => ({ id: u.id, hp: u.hp })),
       survivingDef: def.map(u => ({ id: u.id, hp: u.hp })),
+      casualties: {
+        att: { start: attStart, lost: attStart - att.length },
+        def: { start: defStart, lost: defStart - def.length },
+      },
       log,
     };
   }

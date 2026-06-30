@@ -176,6 +176,12 @@
 }
 .bl-result.win  { color: #4adf70; background: rgba(40,160,60,0.15); }
 .bl-result.loss { color: #e06040; background: rgba(180,50,30,0.15); }
+.bl-survivors {
+  font-size: 7px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  opacity: 0.75;
+}
 
 .bl-side { margin-bottom: 3px; }
 .bl-side-label {
@@ -3994,6 +4000,7 @@ button.rm-recruit-slot:disabled {
 .dipl-card-rel.rel-war     { color: #e05040; background: rgba(180,40,30,0.15); border: 1px solid rgba(180,40,30,0.30); }
 .dipl-card-rel.rel-neutral { color: #d4a830; background: rgba(180,140,20,0.10); border: 1px solid rgba(180,140,20,0.25); }
 .dipl-card-rel.rel-allied  { color: #4a9eff; background: rgba(40,100,200,0.12); border: 1px solid rgba(40,100,200,0.28); }
+.dipl-card-rel.rel-trade   { color: #4ac890; background: rgba(30,160,110,0.12); border: 1px solid rgba(30,160,110,0.28); }
 .dipl-card-actions {
   display: flex;
   flex-direction: column;
@@ -4028,6 +4035,71 @@ button.rm-recruit-slot:disabled {
 .lp-rel-clickable:hover { background: rgba(200,160,30,0.10); }
 .lp-rel-chat { font-size: 10px; margin-left: auto; opacity: 0; transition: opacity 0.12s; }
 .lp-rel-clickable:hover .lp-rel-chat { opacity: 0.60; }
+
+/* ── Leader panel — house / age / bloodline ── */
+.lp-house-name {
+  font-family: var(--font-body);
+  font-size: 9px;
+  color: #a89060;
+  font-style: italic;
+  margin-top: 1px;
+  letter-spacing: 0.02em;
+}
+.lp-age {
+  font-family: var(--font-body);
+  font-size: 8px;
+  color: #6a5838;
+  margin-top: 2px;
+}
+.lp-bloodline {
+  font-family: var(--font-head);
+  font-size: 7px;
+  color: #8a3030;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-top: 3px;
+  padding: 2px 5px;
+  background: rgba(120,20,20,0.18);
+  border: 1px solid rgba(120,20,20,0.30);
+  border-radius: 2px;
+}
+
+/* ── Leader panel — skill bars ───────────────── */
+.lp-skills { display: flex; flex-direction: column; gap: 4px; width: 100%; }
+.lp-skill-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+}
+.lp-skill-lbl {
+  font-family: var(--font-head);
+  color: #a89060;
+  min-width: 54px;
+  font-size: 7px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.lp-skill-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255,255,255,0.10);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.lp-skill-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+.lp-skill-val {
+  font-family: var(--font-head);
+  color: #d4b870;
+  min-width: 18px;
+  text-align: right;
+  font-size: 7px;
+}
 
 /* ── Leader dialog modal ─────────────────────── */
 #leader-dialog-modal {

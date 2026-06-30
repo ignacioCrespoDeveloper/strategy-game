@@ -11,7 +11,9 @@ const Game = (() => {
     phase:              'idle',
     resources:          { gold: 5000, iron: 5000, food: 5000, wood: 5000 },
     turn:               1,
-    faction:            null,
+    kingdom:            null,   // selected Kingdom object
+    house:              null,   // selected Noble House object
+    faction:            null,   // alias for kingdom — backward compat for all FACTIONS references
     leader:             null,
     enemyFactionId:     null,
     relations:          {},   // { factionId: 'war'|'neutral'|'non_aggression'|'trade'|'alliance' }
@@ -86,6 +88,21 @@ const Game = (() => {
     return !!(lh && lh.c === army[0].c && lh.r === army[0].r);
   }
 
+  // Picks a free adjacent hex for a broken army (given by `owner`) to fall
+  // back to — land, no other owner's units present. Null if boxed in.
+  function _findRetreatHex(c, r, owner) {
+    const options = neighbors(c, r, (nc, nr) => !GameMap.isWater(nc, nr))
+      .filter(n => Units.getAllAt(n.c, n.r).every(u => u.owner === owner));
+    if (!options.length) return null;
+    return options[Math.floor(Math.random() * options.length)];
+  }
+
+  // Relocates a defeated army to a fallback hex and exhausts its turn.
+  // Standalone so Phase 2 pursuit/morale can trigger a retreat outside moveArmy.
+  function _executeRetreat(units, hex) {
+    units.forEach(u => { u.c = hex.c; u.r = hex.r; u.moves = 0; });
+  }
+
   function openDiplomacy() {
     const otherFactions = FACTIONS.filter(f =>
       f.id !== (state.faction && state.faction.id) && state.discoveredFactions.has(f.id)
@@ -95,10 +112,16 @@ const Game = (() => {
 
   function openLeaderDialog(factionId) {
     if (!state.discoveredFactions.has(factionId)) return;
-    const faction = FACTIONS.find(f => f.id === factionId);
-    if (!faction) return;
+    const kingdom = KINGDOMS.find(k => k.id === factionId);
+    if (!kingdom) return;
+    // Build a diplomatic contact by gathering all leaders from this kingdom's houses
+    const houseLeaders = (typeof NOBLE_HOUSES !== 'undefined')
+      ? NOBLE_HOUSES.filter(h => h.kingdomId === factionId).flatMap(h => h.leaders)
+      : [];
+    // showLeaderDialog expects a faction-shaped object with a .leaders array
+    const diplomaticTarget = Object.assign({}, kingdom, { leaders: houseLeaders });
     const relation = state.relations[factionId] || 'neutral';
-    UI.showLeaderDialog(faction, relation);
+    UI.showLeaderDialog(diplomaticTarget, relation);
   }
 
   function setRelation(factionId, newRel, cost) {
@@ -150,19 +173,21 @@ const Game = (() => {
     render();
   }
 
-  function init(faction, leader) {
-    state.faction = faction || null;
+  function init(kingdom, house, leader) {
+    state.kingdom = kingdom || null;
+    state.house   = house   || null;
+    state.faction = kingdom || null;   // backward compat alias
     state.leader  = leader  || null;
 
     // Show the game UI (was hidden while pre-game screen showed)
     document.getElementById('hud').style.display    = '';
     document.getElementById('layout').style.display = '';
 
-    // Tint HUD logo with faction color
-    if (faction) {
+    // Tint HUD logo with kingdom color
+    if (kingdom) {
       const logo = document.querySelector('.hud-logo');
-      logo.style.color = faction.color;
-      logo.title = `${faction.name} — ${leader ? leader.name : ''}`;
+      logo.style.color = kingdom.color;
+      logo.title = `${kingdom.name} — ${house ? house.name : ''} — ${leader ? leader.name : ''}`;
     }
 
     GameMap.init();
@@ -255,7 +280,7 @@ const Game = (() => {
     const lu = Units.spawn('commander', city.c, city.r, 'player');
     lu.isLeader = true;
     if (state.leader && state.leader.age === undefined) {
-      state.leader.age = 25 + Math.floor(Math.random() * 20);
+      state.leader.age = state.leader.startingAge || (25 + Math.floor(Math.random() * 20));
     }
 
     // Spawn garrison for all non-player cities
@@ -571,6 +596,27 @@ const Game = (() => {
         result.survivingDef.forEach(s => Units.awardXP(s.id, xpEach));
       }
 
+      // Sort surviving defenders into garrison (defends the city tile, never
+      // retreats) vs field units (can fall back to an adjacent hex).
+      const survivingDefUnits = result.survivingDef.map(s => Units.getAll().find(u => u.id === s.id)).filter(Boolean);
+      const defGarrison = survivingDefUnits.filter(u => u.isGarrison);
+      const defField     = survivingDefUnits.filter(u => !u.isGarrison);
+      const survivingAttUnits = result.survivingAtt.map(s => Units.getAll().find(u => u.id === s.id)).filter(Boolean);
+
+      let defRetreated = false, attRetreated = false;
+      let defenderHoldsHex = defGarrison.length > 0;
+
+      if (result.winner === 'attacker') {
+        if (result.defBroken && defField.length > 0) {
+          const hex = _findRetreatHex(next.c, next.r, defField[0].owner);
+          if (hex) { _executeRetreat(defField, hex); defRetreated = true; }
+          else defenderHoldsHex = true;
+        }
+      } else if (result.attBroken && survivingAttUnits.length > 0) {
+        const hex = _findRetreatHex(anchor.c, anchor.r, 'player');
+        if (hex) { _executeRetreat(survivingAttUnits, hex); attRetreated = true; }
+      }
+
       // Leader risk: if present and battle lost, 35% chance of retreating to nearest city
       if (isLeaderHere && result.winner === 'defender') {
         if (Math.random() < 0.35) {
@@ -594,6 +640,11 @@ const Game = (() => {
         turn: state.turn,
         terrain,
         winner: result.winner,
+        attBroken: result.attBroken,
+        defBroken: result.defBroken,
+        attRetreated,
+        defRetreated,
+        casualties: result.casualties,
         attackers: attSnap.map(u => {
           const def = UNIT_TYPES[u.type];
           return { name: def.name, icon: def.icon, maxHp: def.hp, startHp: u.hp,
@@ -606,18 +657,22 @@ const Game = (() => {
         }),
       });
 
-      if (result.winner === 'attacker') {
-        // Advance victorious units onto the captured hex
+      if (result.winner === 'attacker' && !defenderHoldsHex) {
+        // Advance victorious units onto the captured/cleared hex
         movable.filter(u => Units.getAll().find(uu => uu.id === u.id)).forEach(u => {
           u.c = next.c; u.r = next.r;
           u.moves = Math.max(0, u.moves - 1);
         });
         // Leader unit stays at its position (it's a physical unit that moves independently)
         tryCapture({ c: next.c, r: next.r, owner: 'player' });
-        UI.toast('⚔ ¡Victoria! Ejército enemigo derrotado.');
+        UI.toast(defRetreated ? '⚔ ¡Victoria! El enemigo se retira.' : '⚔ ¡Victoria! Ejército enemigo aniquilado.');
+      } else if (result.winner === 'attacker') {
+        // Won the fight but the defender still holds the hex (garrison or boxed-in retreat)
+        movable.forEach(u => { u.moves = 0; });
+        UI.toast('⚔ Victoria táctica — el enemigo resiste, sin vía de retirada.');
       } else {
         movable.forEach(u => { u.moves = 0; });
-        UI.toast('⚔ Retirada — derrota en batalla.');
+        UI.toast(attRetreated ? '☠ Derrota. Tu ejército se retira.' : '☠ Derrota. Tu ejército ha sido aniquilado.');
       }
 
       state.selectedGroup = state.selectedGroup.filter(id => Units.getAll().some(u => u.id === id));
@@ -886,15 +941,17 @@ const Game = (() => {
     });
   }
 
+  function getHouse() { return state.house; }
+
   return {
     init, disbandGroup, armyNearCity, deselect, splitUnit, raiseArmy,
-    getPlayerColor, getLeader, getFaction, isLeaderWithArmy,
+    getPlayerColor, getLeader, getFaction, getHouse, isLeaderWithArmy,
     getRelations, getDiscoveredFactions, getEnemyFaction,
     openDiplomacy, openLeaderDialog, setRelation,
   };
 })();
 
-// Boot — show faction/leader screen first, then init the game
+// Boot — show kingdom/house/leader screen first, then init the game
 window.addEventListener('DOMContentLoaded', () => {
-  PreGame.show((faction, leader) => Game.init(faction, leader));
+  PreGame.show((kingdom, house, leader) => Game.init(kingdom, house, leader));
 });

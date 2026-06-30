@@ -229,59 +229,8 @@ const TRAITS = {
   cruel:     { name: 'Cruel',     icon: '💀', desc: '+30 XP extra por cada unidad enemiga eliminada.', effect: { killXpBonus: 30 } },
 };
 
-// ── Facciones ───────────────────────────────────────────────────────
-const FACTIONS = [
-  {
-    id: 'norte',
-    name: 'Imperio del Norte',
-    symbol: '❄',
-    color: '#4a9eff',
-    desc: 'Forjado en el hielo y la guerra. El Imperio domina el norte con una disciplina de hierro y siglos de conquista.',
-    leaders: [
-      { id: 'magnus',  name: 'Magnus el Invicto', title: 'Gran General',   traits: ['estratega', 'guerrero'], desc: 'Nunca ha perdido una batalla campal. Su sola presencia inspira pavor en el enemigo.' },
-      { id: 'valdris', name: 'Sera Valdris',       title: 'Almirante',      traits: ['estratega', 'cruel'],    desc: 'Mente táctica sin igual. Especialista en maniobras de flanqueo y engaño.' },
-      { id: 'vorne',   name: 'Darius Vorne',       title: 'Comandante',     traits: ['guerrero', 'piadoso'],   desc: 'Implacable y frío como el invierno. Sus enemigos huyen antes de verle llegar.' },
-    ],
-  },
-  {
-    id: 'sur',
-    name: 'República del Sur',
-    symbol: '🌅',
-    color: '#e06030',
-    desc: 'Una república de mercaderes y soldados. El oro compra ejércitos; los ideales los mantienen unidos en batalla.',
-    leaders: [
-      { id: 'elara',   name: 'Elara Voss',    title: 'Cónsul',          traits: ['mercader', 'piadoso'],   desc: 'Diplomática antes que guerrera. Gana alianzas donde otros sólo ganan batallas.' },
-      { id: 'brennos', name: 'Marcus Brennos', title: 'Tribuno Militar', traits: ['guerrero', 'estratega'], desc: 'Héroe del pueblo. Sus soldados le siguen hasta la muerte con júbilo.' },
-      { id: 'calenta', name: 'Iva Calenta',    title: 'Pretora',         traits: ['mercader', 'cruel'],     desc: 'Jurista y estratega. Convierte las leyes de la guerra en ventajas propias.' },
-    ],
-  },
-  {
-    id: 'este',
-    name: 'Confederación del Este',
-    symbol: '🌲',
-    color: '#40b864',
-    desc: 'Una alianza de clanes y tribus libres. Feroces, impredecibles y leales sólo a quienes demuestran ser dignos.',
-    leaders: [
-      { id: 'zorel',   name: 'Zorel Khanessa', title: 'Gran Khanessa',          traits: ['estratega', 'mercader'], desc: 'Une a los clanes con voluntad de acero. Su voz es ley en las estepas del este.' },
-      { id: 'torund',  name: 'Torund el Gris',  title: 'Jarl',                   traits: ['guerrero', 'piadoso'],   desc: 'Anciano pero implacable. Combatió en cuarenta guerras y sigue de pie.' },
-      { id: 'ashford', name: 'Mira Ashford',    title: 'Capitana de Vanguardia', traits: ['cruel', 'estratega'],    desc: 'Joven, rápida y brillante. La mejor estratega táctica que el este ha dado.' },
-    ],
-  },
-  {
-    id: 'oeste',
-    name: 'Sultanato del Oeste',
-    symbol: '☀',
-    color: '#d4a020',
-    desc: 'Un sultanato próspero y milenario. Sus ejércitos son legión, su riqueza inagotable y su orgullo, inquebrantable.',
-    leaders: [
-      { id: 'rashid',  name: 'Amir Al-Rashid', title: 'Sultán',                traits: ['mercader', 'piadoso'],   desc: 'Gobernante absoluto y visionario. Lo que ordena se ejecuta sin demora ni cuestionamiento.' },
-      { id: 'selim',   name: 'Selim Dara',      title: 'Gran Visir',            traits: ['mercader', 'estratega'], desc: 'Maestro de la intriga y la estrategia a largo plazo. Nunca actúa sin plan.' },
-      { id: 'bashir',  name: 'Bashir Navarro',  title: 'Capitán de la Guardia', traits: ['guerrero', 'cruel'],     desc: 'Leal hasta la muerte y el mejor espadachín del sultanato. Protege lo que ama.' },
-    ],
-  },
-];
-
 // ── Eventos aleatorios ───────────────────────────────────────────────
+// NOTE: FACTIONS and KINGDOMS are defined in js/data/kingdoms.js
 const EVENTS = [
   {
     id: 'plaga',

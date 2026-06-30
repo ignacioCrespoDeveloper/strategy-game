@@ -538,7 +538,7 @@ const UI = (() => {
       if (f) {
         const relations = (typeof Game !== 'undefined' && Game.getRelations) ? Game.getRelations() : {};
         const rel = relations[f.id];
-        const relIcon = !rel ? '' : rel === 'war' ? '🔴' : rel === 'allied' ? '💙' : '🟡';
+        const relIcon = !rel ? '' : rel === 'war' ? '🔴' : rel === 'alliance' ? '💙' : rel === 'trade' ? '💹' : rel === 'non_aggression' ? '🛡' : '🟡';
         const isPlayer = city.owner === 'player';
         const isNeutralFaction = city.owner === 'faction';
         const treatarBtn = (isNeutralFaction || (city.owner === 'enemy')) && rel
@@ -1471,9 +1471,10 @@ const UI = (() => {
       return;
     }
 
-    const factionColor = faction.color || '#4a9eff';
+    const factionColor  = faction.color || '#4a9eff';
+    const house         = (typeof Game !== 'undefined' && Game.getHouse) ? Game.getHouse() : null;
+    const discoveredSet = (typeof Game !== 'undefined' && Game.getDiscoveredFactions) ? Game.getDiscoveredFactions() : null;
 
-    // Update tab
     if (tab) {
       tab.innerHTML = `<span style="color:${factionColor}">${faction.symbol}</span>`;
       tab.style.display = _leaderPanelOpen ? 'none' : 'flex';
@@ -1492,27 +1493,48 @@ const UI = (() => {
       </div>`;
     }).join('');
 
-    // Relations section — rows are clickable to open leader dialog
-    const relations = (typeof Game !== 'undefined' && Game.getRelations) ? Game.getRelations() : {};
-    const otherFactions = (typeof FACTIONS !== 'undefined') ? FACTIONS.filter(f => f.id !== faction.id) : [];
+    const skills = leader.skills || {};
+    const skillRow = (icon, label, val, color) =>
+      `<div class="lp-skill-row">
+        <span class="lp-skill-lbl">${icon} ${label}</span>
+        <div class="lp-skill-bar"><div class="lp-skill-fill" style="width:${val}%;background:${color}"></div></div>
+        <span class="lp-skill-val">${val}</span>
+      </div>`;
+    const skillsHtml = (skills.military !== undefined || skills.diplomacy !== undefined || skills.stewardship !== undefined) ? `
+      <div class="lp-divider"></div>
+      <div class="lp-section-label">Habilidades</div>
+      <div class="lp-skills">
+        ${skills.military    !== undefined ? skillRow('⚔','Militar',    skills.military,    '#c04020') : ''}
+        ${skills.diplomacy   !== undefined ? skillRow('⚜','Diplomacia', skills.diplomacy,   '#4a9eff') : ''}
+        ${skills.stewardship !== undefined ? skillRow('💰','Gestión',    skills.stewardship, '#c8940c') : ''}
+      </div>` : '';
+
+    const relations    = (typeof Game !== 'undefined' && Game.getRelations) ? Game.getRelations() : {};
+    const otherFactions = (typeof FACTIONS !== 'undefined')
+      ? FACTIONS.filter(f => f.id !== faction.id && (!discoveredSet || discoveredSet.has(f.id)))
+      : [];
     const relHtml = Object.keys(relations).length > 0 && otherFactions.length > 0 ? `
       <div class="lp-divider"></div>
       <div class="lp-section-label">Relaciones</div>
       <div class="lp-relations">
         ${otherFactions.map(f => {
           const rel = relations[f.id] || 'neutral';
-          const icon = rel === 'war' ? '🔴' : rel === 'allied' ? '💙' : '🟡';
-          const fLeader = (f.leaders || [])[0];
+          const houseLeaders = (typeof NOBLE_HOUSES !== 'undefined') ? NOBLE_HOUSES.filter(h => h.kingdomId === f.id).flatMap(h => h.leaders) : [];
+          const fLeader = houseLeaders[0] || (f.leaders || [])[0];
           return `<div class="lp-rel-row lp-rel-clickable" onclick="Game.openLeaderDialog('${f.id}')" title="Hablar con ${fLeader ? fLeader.name : f.name}">
             <span class="lp-rel-sym" style="color:${f.color}">${f.symbol}</span>
             <span class="lp-rel-name">${fLeader ? fLeader.name.split(' ')[0] : f.name.split(' ')[0]}</span>
-            <span class="lp-rel-icon">${icon}</span>
+            <span class="lp-rel-icon">${_relIcon(rel)}</span>
             <span class="lp-rel-chat">💬</span>
           </div>`;
         }).join('')}
       </div>
       <button class="lp-dipl-btn" onclick="Game.openDiplomacy()">⚜ Diplomacia</button>
     ` : '';
+
+    const age = leader.age || leader.startingAge;
+    const bloodlineBadge = (house && house.bloodlineId && typeof BLOODLINES !== 'undefined' && BLOODLINES[house.bloodlineId])
+      ? `<div class="lp-bloodline">🩸 ${BLOODLINES[house.bloodlineId].name}</div>` : '';
 
     el.innerHTML = `
       <button class="lp-close-btn" onclick="UI.toggleLeaderPanel()" title="Ocultar panel">◀</button>
@@ -1521,13 +1543,39 @@ const UI = (() => {
       </div>
       <div class="lp-name">${leader.name}</div>
       <div class="lp-title">${leader.title}</div>
+      ${house ? `<div class="lp-house-name">${house.crest || ''} ${house.name}</div>` : ''}
       <div class="lp-faction" style="color:${factionColor}">${faction.name}</div>
+      ${age ? `<div class="lp-age">Edad ${age}</div>` : ''}
+      ${bloodlineBadge}
       <div class="lp-divider"></div>
       <div class="lp-section-label">Rasgos</div>
       <div class="lp-traits">${traitHtml}</div>
+      ${skillsHtml}
       ${relHtml}
     `;
     el.style.display = 'flex';
+  }
+
+  // ── Relation helpers (5-state) ────────────────
+  function _relIcon(rel) {
+    if (rel === 'war')            return '🔴';
+    if (rel === 'alliance')       return '💙';
+    if (rel === 'trade')          return '💹';
+    if (rel === 'non_aggression') return '🛡';
+    return '🟡';
+  }
+  function _relText(rel) {
+    if (rel === 'war')            return 'Guerra';
+    if (rel === 'alliance')       return 'Alianza';
+    if (rel === 'trade')          return 'Comercio';
+    if (rel === 'non_aggression') return 'No agresión';
+    return 'Neutral';
+  }
+  function _relClass(rel) {
+    if (rel === 'war')      return 'rel-war';
+    if (rel === 'alliance') return 'rel-allied';
+    if (rel === 'trade' || rel === 'non_aggression') return 'rel-trade';
+    return 'rel-neutral';
   }
 
   // ── Diplomacy overview panel ──────────────────
@@ -1541,10 +1589,11 @@ const UI = (() => {
 
     const cardsHtml = factions.map(f => {
       const rel = relations[f.id] || 'neutral';
-      const relIcon = rel === 'war' ? '🔴' : rel === 'allied' ? '💙' : '🟡';
-      const relText = rel === 'war' ? 'Guerra' : rel === 'allied' ? 'Aliados' : 'Neutral';
-      const relClass = rel === 'war' ? 'rel-war' : rel === 'allied' ? 'rel-allied' : 'rel-neutral';
-      const leader = (f.leaders || [])[0];
+      const relIcon  = _relIcon(rel);
+      const relText  = _relText(rel);
+      const relClass = _relClass(rel);
+      const houseLeaders = (typeof NOBLE_HOUSES !== 'undefined') ? NOBLE_HOUSES.filter(h => h.kingdomId === f.id).flatMap(h => h.leaders) : [];
+      const leader = houseLeaders[0] || (f.leaders || [])[0];
 
       return `<div class="dipl-card" onclick="Game.openLeaderDialog('${f.id}')" style="cursor:pointer">
         <div class="dipl-card-symbol" style="color:${f.color}">${f.symbol}</div>
@@ -1581,27 +1630,27 @@ const UI = (() => {
     guerrero: {
       war:     ['Tus ejércitos caerán. No habrá piedad.', 'La guerra es lo único que entiendo. Y aquí la traes.', '¿Pensabas que me acobardaría? Ven entonces.'],
       neutral: ['Nos observamos con respeto mutuo. Por ahora.', 'Aún no hay motivo para el acero. Pero podría haberlo pronto.'],
-      allied:  ['Hombro con hombro en el campo de batalla. Así debe ser.', 'Tu causa es mi causa. Mis tropas están a tu servicio.'],
+      alliance: ['Hombro con hombro en el campo de batalla. Así debe ser.', 'Tu causa es mi causa. Mis tropas están a tu servicio.'],
     },
     mercader: {
       war:     ['Esta guerra es costosa. Podríamos llegar a un acuerdo más rentable.', 'Destruirte es malo para el comercio. Reconsidera.'],
       neutral: ['El comercio entre nuestras tierras nos enriquecería a ambos.', 'Tenemos más en común de lo que crees.'],
-      allied:  ['Nuestra alianza es la mejor inversión que hemos hecho.', 'Juntos, los mercados del mundo son nuestros.'],
+      alliance: ['Nuestra alianza es la mejor inversión que hemos hecho.', 'Juntos, los mercados del mundo son nuestros.'],
     },
     estratega: {
       war:     ['Has cometido un error de cálculo. Lo pagarás.', 'Predije esta guerra. Y también predigo su resultado.'],
       neutral: ['Te estudio. Tú me estudias. Una danza inteligente.', 'La neutralidad es temporal. Ambos lo sabemos.'],
-      allied:  ['Mis planes te incluyen. Confía en mis decisiones.', 'Juntos somos superiores. Las matemáticas no mienten.'],
+      alliance: ['Mis planes te incluyen. Confía en mis decisiones.', 'Juntos somos superiores. Las matemáticas no mienten.'],
     },
     piadoso: {
       war:     ['Que los dioses nos perdonen por este conflicto.', 'Lamento que haya llegado a esto. Aún podemos evitar más sangre.'],
       neutral: ['La paz es un don que debemos proteger juntos.', 'Mis oraciones incluyen la seguridad de tu pueblo.'],
-      allied:  ['Que los dioses bendigan nuestra unión.', 'Caminaremos juntos bajo su protección.'],
+      alliance: ['Que los dioses bendigan nuestra unión.', 'Caminaremos juntos bajo su protección.'],
     },
     cruel: {
       war:     ['Voy a destruirte con placer.', 'Tus lamentos serán música para mis oídos.'],
       neutral: ['Aún no he decidido qué hacer contigo.', 'Disfruto de esta incertidumbre. Tú no tanto, imagino.'],
-      allied:  ['Eres útil por ahora. Veremos cuánto dura.', 'Traiciona mi confianza y aprenderás lo que soy capaz de hacer.'],
+      alliance: ['Eres útil por ahora. Veremos cuánto dura.', 'Traiciona mi confianza y aprenderás lo que soy capaz de hacer.'],
     },
   };
 
@@ -1625,9 +1674,9 @@ const UI = (() => {
       document.body.appendChild(modal);
     }
 
-    const relIcon  = relation === 'war' ? '🔴' : relation === 'allied' ? '💙' : '🟡';
-    const relText  = relation === 'war' ? 'Guerra' : relation === 'allied' ? 'Aliados' : 'Neutral';
-    const relClass = relation === 'war' ? 'rel-war' : relation === 'allied' ? 'rel-allied' : 'rel-neutral';
+    const relIcon  = _relIcon(relation);
+    const relText  = _relText(relation);
+    const relClass = _relClass(relation);
     const dialogText = _getLeaderDialogLine(leader, relation);
 
     const traitBadges = (leader.traits || []).map(tid => {
@@ -1641,8 +1690,20 @@ const UI = (() => {
     } else if (relation === 'neutral') {
       actHtml = `
         <button class="dipl-btn war"  onclick="Game.setRelation('${faction.id}','war',0)">⚔ Declarar Guerra</button>
-        <button class="dipl-btn ally" onclick="Game.setRelation('${faction.id}','allied',200)">🤝 Proponer Alianza <small>(-200 💰)</small></button>`;
-    } else if (relation === 'allied') {
+        <button class="dipl-btn ally" onclick="Game.setRelation('${faction.id}','non_aggression',50)">🛡 No Agresión <small>(-50 💰)</small></button>
+        <button class="dipl-btn ally" onclick="Game.setRelation('${faction.id}','alliance',200)">🤝 Proponer Alianza <small>(-200 💰)</small></button>`;
+    } else if (relation === 'non_aggression') {
+      actHtml = `
+        <button class="dipl-btn war"   onclick="Game.setRelation('${faction.id}','war',0)">⚔ Declarar Guerra</button>
+        <button class="dipl-btn ally"  onclick="Game.setRelation('${faction.id}','trade',100)">💹 Acuerdo Comercial <small>(-100 💰)</small></button>
+        <button class="dipl-btn ally"  onclick="Game.setRelation('${faction.id}','alliance',150)">🤝 Proponer Alianza <small>(-150 💰)</small></button>
+        <button class="dipl-btn break" onclick="Game.setRelation('${faction.id}','neutral',0)">💔 Romper Pacto</button>`;
+    } else if (relation === 'trade') {
+      actHtml = `
+        <button class="dipl-btn war"   onclick="Game.setRelation('${faction.id}','war',0)">⚔ Declarar Guerra</button>
+        <button class="dipl-btn ally"  onclick="Game.setRelation('${faction.id}','alliance',100)">🤝 Proponer Alianza <small>(-100 💰)</small></button>
+        <button class="dipl-btn break" onclick="Game.setRelation('${faction.id}','neutral',0)">💔 Romper Acuerdo</button>`;
+    } else if (relation === 'alliance') {
       actHtml = `<button class="dipl-btn break" onclick="Game.setRelation('${faction.id}','neutral',0)">💔 Romper Alianza</button>`;
     }
 
@@ -1803,6 +1864,13 @@ const UI = (() => {
 
     const evHtml = ev => {
       const won = ev.winner === 'attacker';
+      const retreated = won ? ev.defRetreated : ev.attRetreated;
+      const resultLabel = won
+        ? (retreated ? '⚔ Victoria — enemigo se retira' : '⚔ Victoria — enemigo aniquilado')
+        : (retreated ? '☠ Derrota — te retiras' : '☠ Derrota — aniquilado');
+      const survivorsLabel = ev.casualties
+        ? `${ev.casualties.att.start - ev.casualties.att.lost}/${ev.casualties.att.start} supervivientes`
+        : '';
       const bodyHtml = ev._expanded ? `
         <div class="bl-body">
           <div class="bl-side">
@@ -1821,7 +1889,8 @@ const UI = (() => {
           <span class="bl-toggle">${ev._expanded ? '▾' : '▸'}</span>
           <span class="bl-turn">T${ev.turn}</span>
           <span class="bl-terrain">${TERRAIN_LABEL[ev.terrain] || ev.terrain}</span>
-          <span class="bl-result ${won ? 'win' : 'loss'}">${won ? '⚔ Victoria' : '☠ Derrota'}</span>
+          <span class="bl-result ${won ? 'win' : 'loss'}">${resultLabel}</span>
+          ${survivorsLabel ? `<span class="bl-survivors">${survivorsLabel}</span>` : ''}
           <button class="bl-dismiss" onclick="event.stopPropagation();UI._dismissBattleEvent(${ev._id})">×</button>
         </div>
         ${bodyHtml}

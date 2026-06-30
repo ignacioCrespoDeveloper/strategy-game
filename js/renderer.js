@@ -583,6 +583,25 @@ const Renderer = (() => {
       ctx.drawImage(_worldCanvas, 0, 0, _worldLogW(), _worldLogH());
     }
 
+    // ── 1.5. Fog of War dark overlay ──────────
+    if (exploredHexes && exploredHexes.size > 0) {
+      for (let row = 0; row < ROWS; row++) {
+        for (let col = 0; col < COLS; col++) {
+          const { x, y } = hexCenter(col, row, scale);
+          if (x < vx0 || x > vx1 || y < vy0 || y > vy1) continue;
+          const k = hexKey(col, row);
+          const isVisible  = visibleHexes && visibleHexes.has(k);
+          const isExplored = exploredHexes.has(k);
+          if (isVisible) continue;
+          ctx.save();
+          _hexPath(ctx, x, y, r);
+          ctx.fillStyle = isExplored ? 'rgba(10,12,20,0.50)' : 'rgba(0,0,0,0.88)';
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+
     // ── 2. Reachable hex overlay ─────────────
     // Hexagonal grid ONLY visible here (movement range on army select)
     for (let row = 0; row < ROWS; row++) {
