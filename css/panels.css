@@ -4063,6 +4063,315 @@ button.rm-recruit-slot:disabled {
   border: 1px solid rgba(120,20,20,0.30);
   border-radius: 2px;
 }
+.lp-victory-short {
+  font-family: var(--font-body);
+  font-size: 9px;
+  color: #c8a020;
+  font-style: italic;
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+/* ══════════════════════════════════════════════
+   LEGENDARY LORD SELECTION SCREEN
+   ══════════════════════════════════════════════ */
+
+/* Wider outer frame (overrides .pg-frame default width) */
+.pg-ll-frame {
+  width: min(1060px, 97vw);
+  max-height: 97vh;
+  align-items: stretch;
+  gap: 0;
+  padding: 28px 32px 24px;
+}
+
+/* Fixed header: logo + subtitle */
+.pg-ll-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+/* Two-column body */
+.pg-ll-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  min-height: 480px;
+}
+
+/* ── Left column: lord roster ──────────────── */
+.pg-ll-roster {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pg-ll-roster-label {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: #6a5838;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+/* Individual lord card in the roster */
+.pg-ll-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(150,110,30,0.15);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.pg-ll-card:hover {
+  background: rgba(255,255,255,0.05);
+  border-color: rgba(150,110,30,0.35);
+}
+.pg-ll-card-portrait {
+  font-size: 22px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.pg-ll-card-body {
+  overflow: hidden;
+}
+.pg-ll-card-name {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 9.5px;
+  color: #d4b870;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pg-ll-card-type {
+  font-family: var(--font-body);
+  font-size: 8px;
+  color: #6a5838;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pg-ll-selected {
+  background: rgba(var(--lc, 200,100,20), 0.12) !important;
+  border-color: var(--lc, #c8a020) !important;
+}
+.pg-ll-selected .pg-ll-card-name {
+  color: var(--lc, #c8a020);
+}
+
+/* ── Right column: info panel ──────────────── */
+.pg-ll-info {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(150,110,30,0.18);
+  border-radius: 3px;
+}
+
+/* Placeholder state (nothing selected) */
+.pg-ll-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #4a3820;
+}
+.pg-ll-placeholder-icon {
+  font-size: 36px;
+  opacity: 0.3;
+}
+.pg-ll-placeholder-text {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-style: italic;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* Header row inside info panel */
+.pg-ll-info-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(var(--lc, 150,110,30), 0.25);
+}
+.pg-ll-info-portrait {
+  font-size: 42px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.pg-ll-info-name {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.1;
+}
+.pg-ll-info-title {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: #a89060;
+  font-style: italic;
+  margin-top: 3px;
+}
+.pg-ll-info-age {
+  font-family: var(--font-body);
+  font-size: 9px;
+  color: #6a5838;
+  margin-top: 2px;
+}
+
+/* Description */
+.pg-ll-info-desc {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: #b8a070;
+  line-height: 1.6;
+}
+
+/* Strengths / weaknesses two columns */
+.pg-ll-sw {
+  display: flex;
+  gap: 12px;
+}
+.pg-ll-sw-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pg-ll-sw-label {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  color: #6a5838;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.pg-ll-sw-row {
+  font-family: var(--font-body);
+  font-size: 10px;
+  line-height: 1.4;
+  padding-left: 4px;
+}
+.pg-ll-str { color: #6ab060; }
+.pg-ll-wk  { color: #b05040; }
+
+/* Victory condition box */
+.pg-ll-victory {
+  padding: 8px 12px;
+  background: rgba(var(--lc, 150,110,30), 0.08);
+  border: 1px solid rgba(var(--lc, 150,110,30), 0.25);
+  border-radius: 3px;
+}
+.pg-ll-victory-label {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  color: #a89060;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.pg-ll-victory-short {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: #d4b870;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.pg-ll-victory-desc {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: #a89060;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+/* Starting bonuses section */
+.pg-ll-bonuses {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pg-ll-bonus-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pg-ll-bonus-lbl {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  color: #6a5838;
+  text-transform: uppercase;
+  flex: 0 0 130px;
+}
+.pg-ll-bonus-val {
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: #c8a020;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* Individual resource/unit chips */
+.pg-ll-res {
+  display: inline-block;
+  padding: 2px 6px;
+  background: rgba(200,160,32,0.10);
+  border: 1px solid rgba(200,160,32,0.20);
+  border-radius: 2px;
+  font-size: 10px;
+}
+.pg-ll-unit {
+  font-size: 16px;
+  line-height: 1;
+}
+.pg-ll-army {
+  gap: 4px;
+}
+.pg-ll-mech {
+  font-size: 10px;
+  color: #a89060;
+  font-style: italic;
+}
+
+/* Begin Campaign button */
+.pg-ll-start {
+  margin-top: auto;
+  align-self: flex-end;
+  padding: 9px 22px;
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  font-weight: 700;
+  background: linear-gradient(135deg, rgba(200,160,32,0.18) 0%, rgba(200,160,32,0.08) 100%);
+  border: 1px solid rgba(200,160,32,0.55);
+  color: #c8a020;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  text-transform: uppercase;
+}
+.pg-ll-start:hover {
+  background: rgba(200,160,32,0.28);
+  box-shadow: 0 0 16px rgba(200,160,32,0.20);
+}
 
 /* ── Leader panel — skill bars ───────────────── */
 .lp-skills { display: flex; flex-direction: column; gap: 4px; width: 100%; }
@@ -4211,3 +4520,187 @@ button.rm-recruit-slot:disabled {
   flex-wrap: wrap;
   gap: 6px;
 }
+
+/* ══════════════════════════════════════════════
+   CITY CAPTURE DECISION PANEL
+   ══════════════════════════════════════════════ */
+
+#capture-decision-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9500;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#capture-decision-modal .cd-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.60);
+}
+.cd-frame {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(180deg, #1a1308 0%, #0e0a04 100%);
+  border: 1px solid rgba(150,110,30,0.40);
+  border-radius: 3px;
+  padding: 22px 24px 18px;
+  width: min(580px, 95vw);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 0 60px rgba(0,0,0,0.85), 0 0 0 1px rgba(80,60,10,0.15) inset;
+}
+.cd-header {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.cd-city-name {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 15px;
+  color: #c8a020;
+  letter-spacing: 0.10em;
+}
+.cd-subtitle {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: #6a5838;
+  font-style: italic;
+}
+.cd-options {
+  display: flex;
+  gap: 10px;
+}
+.cd-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 10px 12px;
+  border: 1px solid rgba(150,110,30,0.25);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: transform 0.1s, opacity 0.15s;
+  text-align: center;
+  background: rgba(255,255,255,0.02);
+}
+.cd-option:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+}
+.cd-option--highlight {
+  box-shadow: 0 0 12px rgba(58,107,42,0.25) inset;
+}
+.cd-opt-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+.cd-opt-label {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.cd-opt-desc {
+  font-family: var(--font-body);
+  font-size: 9.5px;
+  color: #a89060;
+  line-height: 1.45;
+}
+
+/* Infection stage badge in city panel */
+.city-infection-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid;
+  border-radius: 2px;
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 7.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+
+/* ══════════════════════════════════════════════
+   VICTORY SCREEN
+   ══════════════════════════════════════════════ */
+
+#victory-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 99000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#victory-modal .victory-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.85);
+}
+.victory-frame {
+  position: relative;
+  z-index: 1;
+  background: linear-gradient(180deg, #1c1308 0%, #080604 100%);
+  border: 1px solid rgba(200,160,32,0.50);
+  border-radius: 3px;
+  padding: 40px 48px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  box-shadow: 0 0 100px rgba(200,160,32,0.20), 0 0 0 1px rgba(200,160,32,0.10) inset;
+  min-width: 320px;
+}
+.victory-icon {
+  font-size: 52px;
+  line-height: 1;
+}
+.victory-title {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #c8a020;
+  text-shadow: 0 0 40px rgba(200,160,32,0.50);
+}
+.victory-lord {
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  margin-top: 2px;
+}
+.victory-condition {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: #c8a020;
+  font-style: italic;
+}
+.victory-desc {
+  font-family: var(--font-body);
+  font-size: 10px;
+  color: #a89060;
+  max-width: 380px;
+  line-height: 1.6;
+  margin-top: 4px;
+}
+.victory-btn {
+  margin-top: 16px;
+  padding: 10px 28px;
+  font-family: var(--font-head, 'Cinzel', serif);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  background: rgba(200,160,32,0.15);
+  border: 1px solid rgba(200,160,32,0.50);
+  color: #c8a020;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.victory-btn:hover { background: rgba(200,160,32,0.30); }

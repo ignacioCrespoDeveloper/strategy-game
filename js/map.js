@@ -60,13 +60,15 @@ const GameMap = (() => {
     return zones;
   }
 
-  // Sum all resource/gold bonuses from a city's buildings
+  // Sum all resource/gold bonuses from a city's buildings (tree-aware)
   function _buildingBonuses(city) {
-    const b = { gold: 0, iron: 0, food: 0, wood: 0 };
+    const b    = { gold: 0, iron: 0, food: 0, wood: 0 };
+    const dt   = city.developmentType || 'standard';
+    const tree = (typeof BUILDING_TREES !== 'undefined' && BUILDING_TREES[dt]) || BUILDING_TYPES;
     Object.entries(city.buildings).forEach(([key, lvl]) => {
       if (!lvl || lvl <= 0) return;
-      const def    = BUILDING_TYPES[key];
-      const bonus  = def?.bonus?.[lvl - 1];
+      const def   = tree[key];
+      const bonus = def && def.bonus && def.bonus[lvl - 1];
       if (!bonus) return;
       if (bonus.gold) b.gold += bonus.gold;
       if (bonus.iron) b.iron += bonus.iron;
@@ -85,8 +87,9 @@ const GameMap = (() => {
       }
     });
 
-    // Player city income
+    // Player city income (infected cities produce no standard income)
     cities.filter(ci => ci.owner === 'player').forEach(ci => {
+      if (ci.developmentType === 'infected') return; // plague cities produce no gold/food
       const typeData = CITY_TYPES[ci.type || 'aldea'];
       Object.entries(typeData.income).forEach(([res, amt]) => {
         resources[res] = (resources[res] || 0) + amt;

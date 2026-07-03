@@ -119,6 +119,48 @@ const UNIT_TYPES = {
     trainTime: 0, mercenary: true,
   },
 
+  // ── Unidades de la Plaga (Lord of Plagues) ───────────
+  infected: {
+    name: 'Infectado', icon: '🧟', img: null,
+    hp: 55, atk: 20, def: 8, arm: 0, ap: 0, rng: 0, moves: 4, sight: 2,
+    role: 'infantry',
+    cost: { food: 10 },
+    maintenance: {},
+    abilities: ['Melee', 'Levy'],
+    desc: 'Cuerpos infectados. Baratos y numerosos, pero muy débiles.',
+    trainTime: 0, mercenary: false,
+  },
+  plague_bearer: {
+    name: 'Portador de Plaga', icon: '☠', img: null,
+    hp: 80, atk: 28, def: 12, arm: 5, ap: 0, rng: 0, moves: 4, sight: 2,
+    role: 'infantry',
+    cost: { food: 20, gold: 10 },
+    maintenance: { food: 1 },
+    abilities: ['Melee', 'Contagio'],
+    desc: 'Infantería principal de la plaga. Barata y numerosa.',
+    trainTime: 1, mercenary: false,
+  },
+  abomination: {
+    name: 'Abominación', icon: '💀', img: null,
+    hp: 200, atk: 35, def: 15, arm: 10, ap: 5, rng: 0, moves: 2, sight: 2,
+    role: 'infantry',
+    cost: { food: 60, gold: 40 },
+    maintenance: { food: 2 },
+    abilities: ['Tanque', 'Lento', 'Alta Resistencia'],
+    desc: 'Masa de carne corrompida. Muy resistente pero extremadamente lenta.',
+    trainTime: 2, mercenary: false,
+  },
+  lord_abomination: {
+    name: 'Gran Abominación', icon: '💀', img: null,
+    hp: 350, atk: 55, def: 20, arm: 15, ap: 10, rng: 0, moves: 1, sight: 2,
+    role: 'infantry',
+    cost: { food: 150, gold: 100 },
+    maintenance: { food: 5 },
+    abilities: ['Tanque Elite', 'Lentísimo', 'Aplastamiento'],
+    desc: 'La creación final de la plaga. Imparable. Solo pueden existir unos pocos.',
+    trainTime: 3, mercenary: false,
+  },
+
   // ── Unidades entrenables en ciudad ────────────────────
   warrior: {
     name: 'Infantería', icon: '⚔️', img: 'infanteria',
@@ -692,6 +734,69 @@ const BUILDING_TYPES = {
     bonus: [{ gold: 8 }, { gold: 14 }],
     effect: ['+8 💰/t', '+14 💰/t, rutas ultramar'],
     desc: 'Comercio marítimo de alto rendimiento.',
+  },
+};
+
+// ── Building trees by developmentType ─────────────────────────────────
+// BUILDING_TREES.standard aliases BUILDING_TYPES — no duplication.
+// Each Legendary Lord that has a unique city type adds a new key here.
+const BUILDING_TREES = {
+  standard: BUILDING_TYPES,
+
+  infected: {
+    // ── Fixed root — always present in infected cities ────────────
+    infection_pit: {
+      name: 'Fosa de Infección', icon: '☠', img: null, category: 'civil',
+      fixed: true,
+      cost: [], maxLevel: 1,
+      upgradesTo: ['mass_grave', 'plague_lab'],
+      buildTime: 0,
+      maintenance: {},
+      bonus: [{}],
+      effect: ['Centro de la infección. Inamovible.'],
+      desc: 'El corazón putrefacto de la ciudad. Propaga la plaga hacia fuera.',
+    },
+
+    // ── Military tier 1 ──────────────────────────────────────────
+    mass_grave: {
+      name: 'Fosa Común', icon: '💀', img: null, category: 'military',
+      upgradesFrom: 'infection_pit',
+      cost: [{ food: 30 }], maxLevel: 1,
+      upgradesTo: ['plague_lab'],
+      buildTime: 1,
+      maintenance: {},
+      bonus: [{}],
+      trains: { 1: ['infected', 'plague_bearer'] },
+      effect: ['Entrena Infectados y Portadores de Plaga.'],
+      desc: 'Reclutamiento masivo de portadores. Coste mínimo.',
+    },
+
+    // ── Military tier 2 ──────────────────────────────────────────
+    plague_lab: {
+      name: 'Laboratorio de Plaga', icon: '🧪', img: null, category: 'military',
+      upgradesFrom: 'mass_grave',
+      cost: [{ food: 60, gold: 30 }], maxLevel: 1,
+      upgradesTo: ['abomination_lab'],
+      buildTime: 2,
+      maintenance: { food: 1 },
+      bonus: [{}],
+      trains: { 1: ['infected', 'plague_bearer', 'abomination'] },
+      effect: ['Entrena Abominaciones. Mejora unidades de plaga.'],
+      desc: 'Experimentos con la plaga. Crea criaturas más poderosas.',
+    },
+
+    // ── Military tier 3 (elite) ───────────────────────────────────
+    abomination_lab: {
+      name: 'Laboratorio de Abominaciones', icon: '💀', img: null, category: 'military',
+      upgradesFrom: 'plague_lab',
+      cost: [{ food: 120, gold: 80 }], maxLevel: 1,
+      buildTime: 3,
+      maintenance: { food: 3 },
+      bonus: [{}],
+      trains: { 1: ['infected', 'plague_bearer', 'abomination', 'lord_abomination'] },
+      effect: ['Entrena la Gran Abominación. Máximo nivel militar de la plaga.'],
+      desc: 'La creación definitiva. Solo los más corrompidos sobreviven el proceso.',
+    },
   },
 };
 

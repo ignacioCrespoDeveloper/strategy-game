@@ -9,19 +9,39 @@ const Cities = (() => {
 
   function init() {
     list = CITY_SPAWNS.map(s => ({
-      c:         s.c,
-      r:         s.r,
-      name:      s.name,
-      owner:     s.owner,
-      factionId: null,
-      type:      'aldea',
-      pop:       50,
-      hp:        100,
-      maxHp:     100,
-      buildings: { town_hall: 1 },  // Ayuntamiento always present
-      queue:     [],
+      c:                    s.c,
+      r:                    s.r,
+      name:                 s.name,
+      owner:                s.owner,
+      factionId:            null,
+      type:                 'aldea',
+      pop:                  50,
+      hp:                   100,
+      maxHp:                100,
+      buildings:            { town_hall: 1 },
+      queue:                [],
+      developmentType:      'standard',
+      infectionStage:       null,
+      infectionTurnsAtStage: 0,
     }));
   }
+
+  // Returns the building catalog for this city's developmentType.
+  function _getTree(city) {
+    const dt = city.developmentType || 'standard';
+    return (typeof BUILDING_TREES !== 'undefined' && BUILDING_TREES[dt]) || BUILDING_TYPES;
+  }
+
+  // Looks up a building definition in the city's own tree.
+  function _treeLookup(city, key) {
+    return _getTree(city)[key] || null;
+  }
+
+  // Public: returns the full building catalog available to this city.
+  function getAvailableBuildings(city) { return _getTree(city); }
+
+  // Public: looks up a building def in the city's tree (used by ui.js).
+  function getBuildingDef(city, key)   { return _treeLookup(city, key); }
 
   function getAll()    { return list; }
   function getAt(c, r) { return list.find(ci => ci.c === c && ci.r === r) || null; }
@@ -71,7 +91,7 @@ const Cities = (() => {
     let maxHp = typeData.hp;
     Object.entries(city.buildings).forEach(([key, lvl]) => {
       if (!lvl || lvl <= 0) return;
-      const def   = BUILDING_TYPES[key];
+      const def   = _treeLookup(city, key);
       const bonus = def?.hpBonus?.[lvl - 1] || 0;
       maxHp += bonus;
     });
@@ -82,10 +102,11 @@ const Cities = (() => {
   // Food produced by this city per turn (from type income + buildings)
   function getCityFoodProduction(city) {
     const typeData = CITY_TYPES[city.type || 'aldea'];
+    if (city.developmentType === 'infected') return 0; // Infected cities produce no food
     let food = typeData.income.food || 0;
     Object.entries(city.buildings).forEach(([key, lvl]) => {
       if (!lvl || lvl <= 0) return;
-      const def = BUILDING_TYPES[key];
+      const def = _treeLookup(city, key);
       food += def?.bonus?.[lvl - 1]?.food || 0;
     });
     return food;
@@ -103,10 +124,11 @@ const Cities = (() => {
 
   // Population growth this turn (base 3 + building bonuses - famine)
   function getCityPopGrowth(city) {
+    if (city.developmentType === 'infected') return -5; // Population decays under infection
     let growth = POP_BASE_GROWTH;
     Object.entries(city.buildings).forEach(([key, lvl]) => {
       if (!lvl || lvl <= 0) return;
-      const def = BUILDING_TYPES[key];
+      const def = _treeLookup(city, key);
       growth += def?.bonus?.[lvl - 1]?.pop || 0;
     });
     if (getCityFoodBalance(city) < 0) growth -= 10;  // famine
@@ -134,7 +156,7 @@ const Cities = (() => {
     const trainable = new Set();
     Object.entries(city.buildings).forEach(([key, lvl]) => {
       if (!lvl || lvl <= 0) return;
-      const def = BUILDING_TYPES[key];
+      const def = _treeLookup(city, key);
       if (!def?.trains) return;
       for (let l = 1; l <= lvl; l++) {
         (def.trains[l] || []).forEach(u => trainable.add(u));
@@ -155,7 +177,7 @@ const Cities = (() => {
   // Buildings with upgradesFrom REPLACE their parent (same slot, no slot cost).
   // Upgrading an existing building to next level also costs no new slot.
   function buildBuilding(city, buildingKey, resources) {
-    const def = BUILDING_TYPES[buildingKey];
+    const def = _treeLookup(city, buildingKey);
     if (!def) return { ok: false, msg: 'Edificio desconocido.' };
     if (def.fixed) return { ok: false, msg: 'Este edificio es inamovible.' };
 
@@ -169,7 +191,7 @@ const Cities = (() => {
     if (def.upgradesFrom && currentLvl === 0) {
       const parentLvl = city.buildings[def.upgradesFrom] || 0;
       if (parentLvl === 0) {
-        const parentName = BUILDING_TYPES[def.upgradesFrom]?.name || def.upgradesFrom;
+        const parentName = _treeLookup(city, def.upgradesFrom)?.name || def.upgradesFrom;
         return { ok: false, msg: `Requiere ${parentName}.` };
       }
       parentKey = def.upgradesFrom;
@@ -238,6 +260,8 @@ const Cities = (() => {
   function processTurnEnd() {
     const spawns = [];
 
+    const infectionEvents = [];
+
     list.forEach(city => {
       // Advance queue
       city.queue = city.queue.filter(item => {
@@ -255,13 +279,19 @@ const Cities = (() => {
         return true;
       });
 
-      // Population growth (both player and enemy cities)
-      const growth  = getCityPopGrowth(city);
-      city.pop      = Math.max(0, (city.pop || 0) + growth);
-      checkPopLevel(city);
+      // Population growth/decay
+      const growth = getCityPopGrowth(city);
+      city.pop     = Math.max(0, (city.pop || 0) + growth);
+      if (city.developmentType !== 'infected') checkPopLevel(city);
+
+      // Infection stage progression for player-owned infected cities
+      if (city.owner === 'player' && city.infectionStage) {
+        const newStage = processInfection(city);
+        if (newStage) infectionEvents.push({ name: city.name, stage: newStage });
+      }
     });
 
-    return spawns;
+    return { spawns, infectionEvents };
   }
 
   function captureAt(c, r, newOwner) {
@@ -297,12 +327,59 @@ const Cities = (() => {
     const total = {};
     Object.entries(city.buildings).forEach(([key, lvl]) => {
       if (!lvl || lvl <= 0) return;
-      const def = BUILDING_TYPES[key];
+      const def = _treeLookup(city, key);
       Object.entries(def?.maintenance || {}).forEach(([k, v]) => {
         if (v > 0) total[k] = (total[k] || 0) + v;
       });
     });
     return total;
+  }
+
+  function setDevelopmentType(c, r, type) {
+    const city = getAt(c, r);
+    if (city) city.developmentType = type;
+  }
+
+  // Infects a city: transfers ownership, installs Infection Pit, begins Stage 1.
+  function infectCity(c, r) {
+    const city = getAt(c, r);
+    if (!city || city.owner === 'player') return null;
+    const prev = city.owner;
+    city.owner                = 'player';
+    city.developmentType      = 'infected';
+    city.infectionStage       = 1;
+    city.infectionTurnsAtStage = 0;
+    city.hp                   = Math.floor(city.maxHp * 0.3);
+    city.queue                = [];
+    city.buildings            = { infection_pit: 1 };
+    return { name: city.name, prev };
+  }
+
+  // Loots a city: returns resources, damages pop, does NOT change ownership.
+  function lootCity(c, r) {
+    const city = getAt(c, r);
+    if (!city) return null;
+    const loot = {
+      gold: Math.max(5, Math.floor((city.pop || 0) / 10)),
+      food: Math.max(5, Math.floor((city.pop || 0) / 20)),
+    };
+    city.pop = Math.max(10, Math.floor((city.pop || 0) * 0.6));
+    city.hp  = Math.floor(city.maxHp * 0.25);
+    return loot;
+  }
+
+  // Advances the infection stage of a single city.
+  // Returns the new stage number if it advanced, otherwise null.
+  const INFECTION_THRESHOLDS = [null, 3, 5]; // turns needed at each stage before advancing
+  function processInfection(city) {
+    if (!city.infectionStage || city.infectionStage >= 3) return null;
+    city.infectionTurnsAtStage = (city.infectionTurnsAtStage || 0) + 1;
+    if (city.infectionTurnsAtStage >= INFECTION_THRESHOLDS[city.infectionStage]) {
+      city.infectionStage++;
+      city.infectionTurnsAtStage = 0;
+      return city.infectionStage;
+    }
+    return null;
   }
 
   function getTotalBuildingMaintenanceForCities(cities) {
@@ -322,5 +399,7 @@ const Cities = (() => {
     getTrainableUnits, getTerrainInRadius, getGarrisonTypes,
     getCityFoodBalance, getCityFoodProduction, getCityFoodConsumption, getCityPopGrowth,
     recalcMaxHp, getTotalBuildingMaintenance, getTotalBuildingMaintenanceForCities,
+    setDevelopmentType, infectCity, lootCity, processInfection,
+    getAvailableBuildings, getBuildingDef,
   };
 })();

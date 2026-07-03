@@ -1,5 +1,5 @@
-// =============================================
-//  game.js — main controller, input handling
+﻿// =============================================
+//  game.js â€” main controller, input handling
 // =============================================
 
 const Game = (() => {
@@ -9,31 +9,69 @@ const Game = (() => {
     selectedGroup:      [],
     reachable:          [],
     phase:              'idle',
-    resources:          { gold: 5000, iron: 5000, food: 5000, wood: 5000 },
+    resources:          { gold: 150, iron: 10, food: 20, wood: 10 },
     turn:               1,
-    kingdom:            null,   // selected Kingdom object
-    house:              null,   // selected Noble House object
-    faction:            null,   // alias for kingdom — backward compat for all FACTIONS references
-    leader:             null,
+    lord:               null,   // the chosen LegendaryLord â€” campaign identity
     enemyFactionId:     null,
     relations:          {},   // { factionId: 'war'|'neutral'|'non_aggression'|'trade'|'alliance' }
     exploredHexes:      new Set(),
     discoveredFactions: new Set(),
   };
 
+  // ── City capture menus ─────────────────────────────────────────────
+  // Keyed by lord.captureStyle. Each entry is the options array shown in
+  // the City Capture Decision panel. Add a new key for each future lord style.
+  const CAPTURE_MENUS = {
+    standard: null, // null = auto-execute 'occupy', no panel shown
+
+    plague: [
+      {
+        id:    'occupy',
+        icon:  '🏰',
+        label: 'Ocupar',
+        desc:  'Toma la ciudad. Funciona como un asentamiento normal bajo tu control.',
+        color: '#4a6a3a',
+      },
+      {
+        id:    'loot',
+        icon:  '💰',
+        label: 'Saquear',
+        desc:  'Extrae oro y comida. Reduce la población. La ciudad no te pertenece.',
+        color: '#7a6a20',
+      },
+      {
+        id:        'infect',
+        icon:      '☠',
+        label:     'Infectar',
+        desc:      'La ciudad cae bajo la plaga. Solo las ciudades Completamente Infectadas (Etapa 3) cuentan para tu victoria.',
+        color:     '#3a6b2a',
+        highlight: true,
+      },
+    ],
+  };
+
+  // ── Victory checks ────────────────────────────────────────────────
+  // Keyed by lord.victoryCondition.checkId. Each function returns true when
+  // the victory condition is met. Add a new key for each future lord.
+  const VICTORY_CHECKS = {
+    five_infected_cities: () =>
+      Cities.getAll().filter(c => c.owner === 'player' && c.infectionStage === 3).length >= 5,
+  };
+
   // Returns the numeric effect value for a trait key, or defaultVal if not present
+  // Reads from state.lord.traits â€” every lord-specific bonus flows through here.
   function _traitEffect(key, defaultVal) {
-    if (!state.leader || !state.leader.traits) return defaultVal;
-    for (const tid of state.leader.traits) {
+    if (!state.lord || !state.lord.traits) return defaultVal;
+    for (const tid of state.lord.traits) {
       const t = (typeof TRAITS !== 'undefined') && TRAITS[tid];
       if (t && t.effect && key in t.effect) return t.effect[key];
     }
     return defaultVal;
   }
 
-  function getPlayerColor()        { return (state.faction && state.faction.color) || '#4a9eff'; }
-  function getLeader()             { return state.leader; }
-  function getFaction()            { return state.faction; }
+  function getPlayerColor()        { return state.lord ? state.lord.color : '#4a9eff'; }
+  function getLeader()             { return state.lord; }
+  function getFaction()            { return state.lord; }
   function getRelations()          { return state.relations; }
   function getDiscoveredFactions() { return state.discoveredFactions; }
   function getEnemyFaction()       { return state.enemyFactionId ? FACTIONS.find(f => f.id === state.enemyFactionId) || null : null; }
@@ -60,8 +98,8 @@ const Game = (() => {
         if (!state.relations[city.factionId]) state.relations[city.factionId] = 'neutral';
         const f = FACTIONS.find(f => f.id === city.factionId);
         if (f) {
-          UI.toast(`🔭 ¡Facción descubierta: ${f.name}!`, 4000);
-          UI.updateLeaderPanel(state.leader, state.faction);
+          UI.toast(`ðŸ”­ Â¡FacciÃ³n descubierta: ${f.name}!`, 4000);
+          UI.updateLeaderPanel(state.lord);
         }
       }
     });
@@ -89,7 +127,7 @@ const Game = (() => {
   }
 
   // Picks a free adjacent hex for a broken army (given by `owner`) to fall
-  // back to — land, no other owner's units present. Null if boxed in.
+  // back to â€” land, no other owner's units present. Null if boxed in.
   function _findRetreatHex(c, r, owner) {
     const options = neighbors(c, r, (nc, nr) => !GameMap.isWater(nc, nr))
       .filter(n => Units.getAllAt(n.c, n.r).every(u => u.owner === owner));
@@ -105,7 +143,7 @@ const Game = (() => {
 
   function openDiplomacy() {
     const otherFactions = FACTIONS.filter(f =>
-      f.id !== (state.faction && state.faction.id) && state.discoveredFactions.has(f.id)
+      f.id !== (state.lord && state.lord.id) && state.discoveredFactions.has(f.id)
     );
     UI.showDiplomacyPanel(otherFactions, state.relations);
   }
@@ -114,12 +152,8 @@ const Game = (() => {
     if (!state.discoveredFactions.has(factionId)) return;
     const kingdom = KINGDOMS.find(k => k.id === factionId);
     if (!kingdom) return;
-    // Build a diplomatic contact by gathering all leaders from this kingdom's houses
-    const houseLeaders = (typeof NOBLE_HOUSES !== 'undefined')
-      ? NOBLE_HOUSES.filter(h => h.kingdomId === factionId).flatMap(h => h.leaders)
-      : [];
-    // showLeaderDialog expects a faction-shaped object with a .leaders array
-    const diplomaticTarget = Object.assign({}, kingdom, { leaders: houseLeaders });
+    const syntheticLeader = { name: kingdom.name, title: `Ruler of ${kingdom.name}`, traits: [], skills: {} };
+    const diplomaticTarget = Object.assign({}, kingdom, { leaders: [syntheticLeader] });
     const relation = state.relations[factionId] || 'neutral';
     UI.showLeaderDialog(diplomaticTarget, relation);
   }
@@ -127,23 +161,23 @@ const Game = (() => {
   function setRelation(factionId, newRel, cost) {
     cost = cost || 0;
     if (cost > 0 && (state.resources.gold || 0) < cost) {
-      UI.toast(`Necesitas ${cost} 💰 para esta acción.`); return;
+      UI.toast(`Necesitas ${cost} ðŸ’° para esta acciÃ³n.`); return;
     }
     if (cost > 0) state.resources.gold -= cost;
     state.relations[factionId] = newRel;
     const f = FACTIONS.find(f => f.id === factionId);
     const fname = f ? f.name : factionId;
-    const suf = cost ? ` (-${cost}💰)` : '';
+    const suf = cost ? ` (-${cost}ðŸ’°)` : '';
     const msgs = {
-      war:           `⚔ ¡Guerra declarada contra ${fname}!`,
-      neutral:       `🕊 Relación normalizada con ${fname}.${suf}`,
-      non_aggression:`🛡 Pacto de No Agresión con ${fname}.${suf}`,
-      trade:         `💹 Tratado Comercial con ${fname}.${suf}`,
-      alliance:      `💙 Alianza Militar con ${fname}.${suf}`,
+      war:           `âš” Â¡Guerra declarada contra ${fname}!`,
+      neutral:       `ðŸ•Š RelaciÃ³n normalizada con ${fname}.${suf}`,
+      non_aggression:`ðŸ›¡ Pacto de No AgresiÃ³n con ${fname}.${suf}`,
+      trade:         `ðŸ’¹ Tratado Comercial con ${fname}.${suf}`,
+      alliance:      `ðŸ’™ Alianza Militar con ${fname}.${suf}`,
     };
-    UI.toast(msgs[newRel] || `Relación cambiada con ${fname}.`, 4000);
+    UI.toast(msgs[newRel] || `RelaciÃ³n cambiada con ${fname}.`, 4000);
     UI.updateHUD(state.resources, state.turn);
-    UI.updateLeaderPanel(state.leader, state.faction);
+    UI.updateLeaderPanel(state.lord);
     UI.closeLeaderDialog();
     render();
   }
@@ -173,21 +207,22 @@ const Game = (() => {
     render();
   }
 
-  function init(kingdom, house, leader) {
-    state.kingdom = kingdom || null;
-    state.house   = house   || null;
-    state.faction = kingdom || null;   // backward compat alias
-    state.leader  = leader  || null;
+  function init(lord) {
+    state.lord      = lord || null;
+    // Set starting resources from the chosen lord (each lord plays differently from turn 1)
+    if (lord && lord.startingResources) {
+      state.resources = { ...lord.startingResources };
+    }
 
     // Show the game UI (was hidden while pre-game screen showed)
     document.getElementById('hud').style.display    = '';
     document.getElementById('layout').style.display = '';
 
-    // Tint HUD logo with kingdom color
-    if (kingdom) {
+    // Tint HUD logo with lord color
+    if (lord) {
       const logo = document.querySelector('.hud-logo');
-      logo.style.color = kingdom.color;
-      logo.title = `${kingdom.name} — ${house ? house.name : ''} — ${leader ? leader.name : ''}`;
+      logo.style.color = lord.color;
+      logo.title = `${lord.name} â€” ${lord.title}`;
     }
 
     GameMap.init();
@@ -228,14 +263,11 @@ const Game = (() => {
   }
 
   function _onCityChosen(city) {
-    const playerFactionId = state.faction ? state.faction.id : null;
-
-    // Player claims capital
+    // Player claims capital (lord's faction is separate from world kingdoms)
     Cities.setOwner(city.c, city.r, 'player');
-    if (playerFactionId) Cities.setFaction(city.c, city.r, playerFactionId);
 
-    // Other factions (exclude player)
-    const otherFactions = FACTIONS.filter(f => f.id !== playerFactionId);
+    // All kingdoms become potential rivals (player is an independent lord, not one of them)
+    const otherFactions = FACTIONS;
 
     // Sort remaining neutral cities by distance from player (furthest first)
     const playerPx = hexCenter(city.c, city.r);
@@ -276,11 +308,15 @@ const Game = (() => {
       state.discoveredFactions.add(enemyFaction.id);
     }
 
-    // Spawn leader as a physical unit at the capital
+    // Spawn the lord as the commander unit at the capital
     const lu = Units.spawn('commander', city.c, city.r, 'player');
     lu.isLeader = true;
-    if (state.leader && state.leader.age === undefined) {
-      state.leader.age = state.leader.startingAge || (25 + Math.floor(Math.random() * 20));
+
+    // Spawn the lord's starting army at the capital
+    if (state.lord && state.lord.startingUnits) {
+      state.lord.startingUnits.forEach(type => {
+        if (UNIT_TYPES[type]) Units.spawn(type, city.c, city.r, 'player');
+      });
     }
 
     // Spawn garrison for all non-player cities
@@ -294,7 +330,7 @@ const Game = (() => {
 
     UI.updateHUD(state.resources, state.turn);
     UI.updateEmpirePanel(Cities.getAll(), GameMap.getPlayerNodes());
-    UI.updateLeaderPanel(state.leader, state.faction);
+    UI.updateLeaderPanel(state.lord);
     UI.showIdle();
 
     Renderer.centerOn(city.c, city.r);
@@ -303,7 +339,7 @@ const Game = (() => {
     render();
   }
 
-  // ── Click handler ───────────────────────────
+  // â”€â”€ Click handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function onMapClick(e) {
     const rect = e.target.getBoundingClientRect();
     const cam  = Renderer.getCamera();
@@ -313,13 +349,13 @@ const Game = (() => {
     const unit = Units.getAt(hex.c, hex.r);
     const city = Cities.getAt(hex.c, hex.r);
 
-    // ── City selection phase ────────────────
+    // â”€â”€ City selection phase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (state.phase === 'city-select') {
       if (city) _onCityChosen(city);
       return;
     }
 
-    // ── Army moving phase ───────────────────
+    // â”€â”€ Army moving phase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (state.phase === 'army-moving') {
       const isReachable = state.reachable.some(h => h.c === hex.c && h.r === hex.r);
       if (isReachable) {
@@ -327,18 +363,18 @@ const Game = (() => {
         render();
         return;
       }
-      // Not reachable — cancel move, then fall through to re-select
+      // Not reachable â€” cancel move, then fall through to re-select
       state.phase    = 'idle';
       state.reachable = [];
     }
 
-    // ── Player army ─────────────────────────
+    // â”€â”€ Player army â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (unit && unit.owner === 'player') {
       selectArmy(unit.c, unit.r);
       return;
     }
 
-    // ── Enemy army (view only) ──────────────
+    // â”€â”€ Enemy army (view only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (unit && unit.owner === 'enemy') {
       const enemyArmy = Units.getAllAt(unit.c, unit.r).filter(u => u.owner === 'enemy');
       state.selectedGroup = [];
@@ -351,7 +387,7 @@ const Game = (() => {
       return;
     }
 
-    // ── City ────────────────────────────────
+    // â”€â”€ City â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (city) {
       state.selectedGroup = [];
       state.selectedUnit  = null;
@@ -363,7 +399,7 @@ const Game = (() => {
       return;
     }
 
-    // ── Empty hex ───────────────────────────
+    // â”€â”€ Empty hex â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     state.selectedGroup = [];
     state.selectedUnit  = null;
     state.selectedCity  = null;
@@ -386,7 +422,7 @@ const Game = (() => {
 
   const ARMY_MAX = 10;
 
-  // ── Recruit unit into army ──
+  // â”€â”€ Recruit unit into army â”€â”€
   function onRecruit(type) {
     const army = getArmyUnits();
     if (!army.length) return;
@@ -395,7 +431,7 @@ const Game = (() => {
     if (!def) return;
 
     if (Units.getAllAt(c, r).filter(u => u.owner === 'player').length >= ARMY_MAX) {
-      UI.toast(`Máximo ${ARMY_MAX} unidades por ejército.`); return;
+      UI.toast(`MÃ¡ximo ${ARMY_MAX} unidades por ejÃ©rcito.`); return;
     }
 
     const cost = def.cost || {};
@@ -415,7 +451,7 @@ const Game = (() => {
       }
       cityHere.queue.push({ type: 'unit', key: type, turnsLeft: trainTime });
       UI.updateHUD(state.resources, state.turn);
-      UI.toast(`${def.name} en entrenamiento — ${trainTime} turno${trainTime > 1 ? 's' : ''}.`);
+      UI.toast(`${def.name} en entrenamiento â€” ${trainTime} turno${trainTime > 1 ? 's' : ''}.`);
       UI.showArmy(getArmyUnits(), state.resources, cityHere, onRecruit);
       render();
       return;
@@ -429,34 +465,84 @@ const Game = (() => {
     render();
   }
 
-  // ── Capture city/resource when unit lands ──
-  function tryCapture(unit) {
-    const cityResult = Cities.captureAt(unit.c, unit.r, unit.owner);
-    const resResult  = GameMap.processCapture(unit.c, unit.r, unit.owner);
-    if (cityResult) {
-      // Remove any surviving garrison of the previous owner
-      Units.getAllAt(unit.c, unit.r)
-        .filter(u => u.isGarrison && u.owner === cityResult.prev)
-        .forEach(u => Units.remove(u.id));
-
-      if (unit.owner === 'player') {
-        const capturedCity = Cities.getAt(unit.c, unit.r);
-        if (capturedCity && capturedCity.factionId && !state.discoveredFactions.has(capturedCity.factionId)) {
-          state.discoveredFactions.add(capturedCity.factionId);
-          if (!state.relations[capturedCity.factionId]) state.relations[capturedCity.factionId] = 'neutral';
-          UI.updateLeaderPanel(state.leader, state.faction);
-        }
-        UI.toast(`🏰 ${cityResult.name} conquistada!`);
-      } else {
-        // Enemy/faction captured a city — add new garrison for them
-        const cap = Cities.getAt(unit.c, unit.r);
-        if (cap) _spawnGarrison(cap);
+  // â”€â”€ Capture city/resource when unit lands â”€â”€
+  // Shared post-capture cleanup for player and AI captures.
+  function _afterCityCapture(cityResult, city, isPlayer) {
+    Units.getAllAt(city.c, city.r)
+      .filter(u => u.isGarrison && u.owner === cityResult.prev)
+      .forEach(u => Units.remove(u.id));
+    if (isPlayer) {
+      if (city.factionId && !state.discoveredFactions.has(city.factionId)) {
+        state.discoveredFactions.add(city.factionId);
+        if (!state.relations[city.factionId]) state.relations[city.factionId] = 'neutral';
+        UI.updateLeaderPanel(state.lord);
       }
+    } else {
+      _spawnGarrison(city);
     }
+    UI.updateHUD(state.resources, state.turn);
+  }
+
+  function tryCapture(unit) {
+    const resResult = GameMap.processCapture(unit.c, unit.r, unit.owner);
     if (unit.owner === 'player' && resResult) {
       UI.toast(`${RESOURCE_DEF[resResult.type].icon} Recurso capturado`);
+      UI.updateHUD(state.resources, state.turn);
     }
-    if (cityResult || resResult) UI.updateHUD(state.resources, state.turn);
+    const targetCity = Cities.getAt(unit.c, unit.r);
+    if (!targetCity || targetCity.owner === unit.owner) return;
+
+    if (unit.owner === 'player') {
+      const captureStyle = (state.lord && state.lord.captureStyle) || 'standard';
+      const options = CAPTURE_MENUS[captureStyle];
+      if (!options) {
+        _executeCapture('occupy', targetCity.c, targetCity.r);
+      } else {
+        UI.showCaptureDecision(targetCity, options, { c: unit.c, r: unit.r });
+      }
+    } else {
+      const cityResult = Cities.captureAt(unit.c, unit.r, unit.owner);
+      if (cityResult) _afterCityCapture(cityResult, Cities.getAt(unit.c, unit.r), false);
+    }
+  }
+
+  function executeCaptureDecision(hex, decisionId) {
+    _executeCapture(decisionId, hex.c, hex.r);
+    UI.closeCaptureDecision();
+    render();
+  }
+
+  function _executeCapture(decisionId, c, r) {
+    const city = Cities.getAt(c, r);
+    if (!city) return;
+    if (decisionId === 'occupy') {
+      const cityResult = Cities.captureAt(c, r, 'player');
+      if (cityResult) {
+        _afterCityCapture(cityResult, city, true);
+        _spawnGarrison(city);
+        UI.toast(`🏰 ${cityResult.name} conquistada.`);
+      }
+    } else if (decisionId === 'loot') {
+      const loot = Cities.lootCity(c, r);
+      if (loot) {
+        Object.entries(loot).forEach(([k, v]) => { state.resources[k] = (state.resources[k] || 0) + v; });
+        UI.toast(`💰 Saqueo: +${loot.gold}💰 +${loot.food}🌾. La ciudad sufre.`, 4000);
+        UI.updateHUD(state.resources, state.turn);
+      }
+    } else if (decisionId === 'infect') {
+      const cityResult = Cities.infectCity(c, r);
+      if (cityResult) {
+        _afterCityCapture(cityResult, city, true);
+        UI.toast(`☠ ${cityResult.name} ha sido infectada. La plaga comienza a corromperla...`, 5000);
+      }
+    }
+  }
+
+  function _checkVictory() {
+    const checkId = state.lord && state.lord.victoryCondition && state.lord.victoryCondition.checkId;
+    if (!checkId) return;
+    const check = VICTORY_CHECKS[checkId];
+    if (check && check()) UI.showVictoryScreen(state.lord);
   }
 
   function getArmyUnits() {
@@ -465,7 +551,7 @@ const Game = (() => {
       .filter(Boolean);
   }
 
-  // ── Army movement ───────────────────────────
+  // â”€â”€ Army movement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function beginArmyMove() {
     const allUnits     = getArmyUnits();
     const anyMovable   = allUnits.some(u => u.moves > 0);
@@ -487,7 +573,7 @@ const Game = (() => {
       return;
     }
 
-    // All units have moves — enter army-move mode
+    // All units have moves â€” enter army-move mode
     const minMoves = Math.min(...allUnits.map(u => u.moves));
     const anchor   = allUnits[0];
     const reachArr = bfsReach(
@@ -507,7 +593,7 @@ const Game = (() => {
     UI.showArmy(units, state.resources, city, onRecruit);
   }
 
-  // ── Extract single unit to move alone ───────
+  // â”€â”€ Extract single unit to move alone â”€â”€â”€â”€â”€â”€â”€
   function splitUnit(unitId) {
     const unit = Units.getAll().find(u => u.id === unitId);
     if (!unit || unit.moves === 0) return;
@@ -538,7 +624,7 @@ const Game = (() => {
 
     const alreadyThere = Units.getAllAt(next.c, next.r).filter(u => u.owner === 'player').length;
     if (alreadyThere > 0 && alreadyThere + movable.length > ARMY_MAX) {
-      UI.toast(`Fusión bloqueada — superaría el máximo de ${ARMY_MAX} unidades.`);
+      UI.toast(`FusiÃ³n bloqueada â€” superarÃ­a el mÃ¡ximo de ${ARMY_MAX} unidades.`);
       return;
     }
 
@@ -587,7 +673,7 @@ const Game = (() => {
           if (u && Units.awardXP(s.id, xpEach) && u.owner === 'player')
             levelUps.push(UNIT_TYPES[u.type].name);
         });
-        if (levelUps.length) UI.toast('★ ¡Nivel! ' + levelUps.join(', '), 3500);
+        if (levelUps.length) UI.toast('â˜… Â¡Nivel! ' + levelUps.join(', '), 3500);
       }
       if (result.survivingDef.length > 0) {
         const defKills = attSnap.length - result.survivingAtt.length;
@@ -631,7 +717,7 @@ const Game = (() => {
               lu.c = nearest.ci.c; lu.r = nearest.ci.r;
             }
           }
-          UI.toast(`☠ ${state.leader ? state.leader.name : 'El general'} ha sido rechazado y se retira.`, 5000);
+          UI.toast(`â˜  ${state.lord ? state.lord.name : 'El general'} ha sido rechazado y se retira.`, 5000);
         }
       }
 
@@ -665,14 +751,14 @@ const Game = (() => {
         });
         // Leader unit stays at its position (it's a physical unit that moves independently)
         tryCapture({ c: next.c, r: next.r, owner: 'player' });
-        UI.toast(defRetreated ? '⚔ ¡Victoria! El enemigo se retira.' : '⚔ ¡Victoria! Ejército enemigo aniquilado.');
+        UI.toast(defRetreated ? 'âš” Â¡Victoria! El enemigo se retira.' : 'âš” Â¡Victoria! EjÃ©rcito enemigo aniquilado.');
       } else if (result.winner === 'attacker') {
         // Won the fight but the defender still holds the hex (garrison or boxed-in retreat)
         movable.forEach(u => { u.moves = 0; });
-        UI.toast('⚔ Victoria táctica — el enemigo resiste, sin vía de retirada.');
+        UI.toast('âš” Victoria tÃ¡ctica â€” el enemigo resiste, sin vÃ­a de retirada.');
       } else {
         movable.forEach(u => { u.moves = 0; });
-        UI.toast(attRetreated ? '☠ Derrota. Tu ejército se retira.' : '☠ Derrota. Tu ejército ha sido aniquilado.');
+        UI.toast(attRetreated ? 'â˜  Derrota. Tu ejÃ©rcito se retira.' : 'â˜  Derrota. Tu ejÃ©rcito ha sido aniquilado.');
       }
 
       state.selectedGroup = state.selectedGroup.filter(id => Units.getAll().some(u => u.id === id));
@@ -712,7 +798,7 @@ const Game = (() => {
     }
   }
 
-  // ── Deselect / close panel ──────────────────
+  // â”€â”€ Deselect / close panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function deselect() {
     state.selectedGroup = [];
     state.selectedUnit  = null;
@@ -723,7 +809,7 @@ const Game = (() => {
     render();
   }
 
-  // ── Raise new army from city ────────────────
+  // â”€â”€ Raise new army from city â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function raiseArmy(type) {
     const city = state.selectedCity;
     if (!city) return;
@@ -742,7 +828,7 @@ const Game = (() => {
     if (trainTime > 0) {
       city.queue.push({ type: 'unit', key: type, turnsLeft: trainTime });
       UI.updateHUD(state.resources, state.turn);
-      UI.toast(`${def.name} en entrenamiento — ${trainTime} turno${trainTime > 1 ? 's' : ''}.`);
+      UI.toast(`${def.name} en entrenamiento â€” ${trainTime} turno${trainTime > 1 ? 's' : ''}.`);
       UI.showCity(city, state.resources, onBuild, onTrain);
       render();
       return;
@@ -750,13 +836,13 @@ const Game = (() => {
 
     Units.spawn(type, city.c, city.r, 'player');
     UI.updateHUD(state.resources, state.turn);
-    UI.toast(`Ejército levantado — ${def.name}`);
+    UI.toast(`EjÃ©rcito levantado â€” ${def.name}`);
     state.selectedCity = null;
     selectArmy(city.c, city.r);
     render();
   }
 
-  // ── Disband army ────────────────────────────
+  // â”€â”€ Disband army â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function disbandGroup() {
     const units = getArmyUnits();
     units.forEach(u => Units.remove(u.id));
@@ -764,18 +850,18 @@ const Game = (() => {
     state.phase = 'idle';
     state.reachable = [];
     UI.showIdle();
-    UI.toast(`Ejército disuelto (${units.length} unidad${units.length !== 1 ? 'es' : ''}).`);
+    UI.toast(`EjÃ©rcito disuelto (${units.length} unidad${units.length !== 1 ? 'es' : ''}).`);
     render();
   }
 
-  // ── Nearest player army to a city ──────────
+  // â”€â”€ Nearest player army to a city â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function armyNearCity(city, range = 2) {
     return Units.byOwner('player').find(u =>
       Math.max(Math.abs(u.c - city.c), Math.abs(u.r - city.r)) <= range
     );
   }
 
-  // ── Build building ──────────────────────────
+  // â”€â”€ Build building â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function onBuild(key) {
     if (!state.selectedCity) return;
     const result = Cities.buildBuilding(state.selectedCity, key, state.resources);
@@ -787,7 +873,7 @@ const Game = (() => {
     render();
   }
 
-  // ── Train unit ──────────────────────────────
+  // â”€â”€ Train unit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function onTrain(type) {
     if (!state.selectedCity) return;
     const city = state.selectedCity;
@@ -798,7 +884,7 @@ const Game = (() => {
     render();
   }
 
-  // ── End turn ───────────────────────────────
+  // â”€â”€ End turn â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   function endTurn() {
     Units.resetMoves('player');
     GameMap.collectIncome(Units.getAll(), Cities.getAll(), state.resources);
@@ -811,23 +897,28 @@ const Game = (() => {
     });
     const healMsgs  = GameMap.healUnits(Units.getAll(), Cities.getAll());
 
-    // Spawn trained units
-    Cities.processTurnEnd().forEach(s => {
+    // Spawn trained units + process infection stage advances
+    const { spawns, infectionEvents } = Cities.processTurnEnd();
+    spawns.forEach(s => {
       const spawnHex = findSpawnHex(s.c, s.r, s.owner);
       if (spawnHex) Units.spawn(s.type, spawnHex.c, spawnHex.r, s.owner);
+    });
+    infectionEvents.forEach(ev => {
+      const stageLabels = ['', 'Recién Infectada', 'Corrompida', '☠ Completamente Infectada'];
+      UI.toast(`☠ ${ev.name}: ${stageLabels[ev.stage] || `Etapa ${ev.stage}`}`, 5000);
     });
 
     // Passive XP per turn for all player units (staying in the field)
     Units.byOwner('player').forEach(u => Units.awardXP(u.id, 3));
 
-    // Trait: Mercader — +gold per player city
+    // Trait: Mercader â€” +gold per player city
     const goldPerCity = _traitEffect('goldPerCity', 0);
     if (goldPerCity > 0) {
       const n = Cities.getAll().filter(c => c.owner === 'player').length;
       state.resources.gold = (state.resources.gold || 0) + goldPerCity * n;
     }
 
-    // Trait: Piadoso — +pop growth per player city
+    // Trait: Piadoso â€” +pop growth per player city
     const popBonus = _traitEffect('popGrowthBonus', 0);
     if (popBonus > 0) {
       Cities.getAll().filter(c => c.owner === 'player').forEach(city => { city.pop += popBonus; });
@@ -847,7 +938,7 @@ const Game = (() => {
     }
 
     // Leader ages one year per turn
-    if (state.leader) state.leader.age = (state.leader.age || 30) + 1;
+    if (state.lord) state.lord.age = (state.lord.age || 30) + 1;
 
     // Trade / alliance income: +3 gold per active partner
     const tradeGold = Object.entries(state.relations)
@@ -873,11 +964,14 @@ const Game = (() => {
       UI.showIdle();
     }
 
-    let msg = `Turno ${state.turn} — ingresos cobrados`;
-    if (maintMsgs.length > 0) msg += `. ⚠️ ${maintMsgs[0]}`;
-    if (healMsgs.length > 0)  msg += `. 💊 ${healMsgs[0]}`;
+    let msg = `Turno ${state.turn} â€” ingresos cobrados`;
+    if (maintMsgs.length > 0) msg += `. âš ï¸ ${maintMsgs[0]}`;
+    if (healMsgs.length > 0)  msg += `. ðŸ’Š ${healMsgs[0]}`;
     UI.toast(msg, 3500);
     render();
+
+    // Victory check
+    _checkVictory();
 
     // Random event (25% chance per turn, delayed so toast is visible first)
     if (Math.random() < 0.25 && typeof EVENTS !== 'undefined' && EVENTS.length) {
@@ -886,7 +980,7 @@ const Game = (() => {
     }
   }
 
-  // Spawn at city hex (stacking allowed — joins existing army)
+  // Spawn at city hex (stacking allowed â€” joins existing army)
   function findSpawnHex(c, r, owner) {
     // Try to spawn at the nearest friendly army within 2 hexes
     if (owner === 'player' || owner === 'enemy') {
@@ -903,7 +997,7 @@ const Game = (() => {
     return candidates.find(h => !GameMap.isWater(h.c, h.r)) || null;
   }
 
-  // BFS pathfinding — returns array of hexes from start to goal, or null
+  // BFS pathfinding â€” returns array of hexes from start to goal, or null
   function bfsPath(sc, sr, gc, gr, maxMoves, isPassable, isBlocked) {
     if (sc === gc && sr === gr) return [{ c: sc, r: sr }];
     const visited = { [hexKey(sc, sr)]: null };
@@ -941,17 +1035,19 @@ const Game = (() => {
     });
   }
 
-  function getHouse() { return state.house; }
+  function getHouse() { return null; }
 
   return {
     init, disbandGroup, armyNearCity, deselect, splitUnit, raiseArmy,
     getPlayerColor, getLeader, getFaction, getHouse, isLeaderWithArmy,
     getRelations, getDiscoveredFactions, getEnemyFaction,
     openDiplomacy, openLeaderDialog, setRelation,
+    executeCaptureDecision,
   };
 })();
 
-// Boot — show kingdom/house/leader screen first, then init the game
+// Boot â€” show kingdom/house/leader screen first, then init the game
 window.addEventListener('DOMContentLoaded', () => {
   PreGame.show((kingdom, house, leader) => Game.init(kingdom, house, leader));
 });
+

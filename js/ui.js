@@ -274,6 +274,18 @@ const UI = (() => {
     _showCityDefault(city);
   }
 
+  function _infectionBadge(city) {
+    const labels = ['', 'Recién Infectada', 'Corrompida', '☠ Completamente Infectada'];
+    const colors = ['', '#4a8a3a', '#7a6a1a', '#3a8a2a'];
+    const s = city.infectionStage || 0;
+    const thresholds = [null, 3, 5];
+    const turnsLeft = s < 3 ? (thresholds[s] || 0) - (city.infectionTurnsAtStage || 0) : 0;
+    const progress = s < 3 ? ` · ${turnsLeft}t` : '';
+    return `<span class="city-infection-badge" style="background:${colors[s]}22;border-color:${colors[s]}66;color:${colors[s]}">
+      ☠ ${labels[s]}${progress}
+    </span>`;
+  }
+
   function _cityHtml(city, resources) {
     const typeData  = CITY_TYPES[city.type || 'aldea'];
     const queuedNew = (city.queue || []).filter(q => q.type === 'building' && !q.parentKey).length;
@@ -284,6 +296,7 @@ const UI = (() => {
       ? `<span class="city-owner-tag">${city.owner === 'enemy' ? '(Enemiga)' : '(Neutral)'}</span>` : '';
     const tierColors = ['#5a4010','#4a6010','#105a40','#405010'];
     const tierColor  = tierColors[typeData.tier] || '#5a4010';
+    const infBadge   = city.infectionStage ? _infectionBadge(city) : '';
 
     return `<div class="city-2col">
       <div class="city-slots-col">
@@ -291,6 +304,7 @@ const UI = (() => {
           <span class="tw-title city-name-compact">${city.name}</span>
           <span class="city-tier-badge city-tier-badge--sm" style="background:${tierColor}22;border-color:${tierColor}66;color:${tierColor}">${typeData.icon} ${typeData.name}</span>
           ${ownerTag}
+          ${infBadge}
           <span class="city-slots-count">${usedSlots}/${typeData.slots}</span>
           ${isPlayer ? `<button class="city-army-btn" onclick="UI._openRaiseArmyModal()" title="Levantar Ejército">⚔</button>` : ''}
         </div>
@@ -310,7 +324,7 @@ const UI = (() => {
     let cards = '';
     Object.entries(city.buildings).forEach(([key, lvl]) => {
       if (!lvl || lvl <= 0) return;
-      const def = BUILDING_TYPES[key];
+      const def = Cities.getBuildingDef(city, key);
       if (!def) return;
       const queuedUpgrade = queuedBuildings.find(q => q.parentKey === key) || null;
       cards += _buildingCard(key, def, city, resources, queuedUpgrade);
@@ -318,7 +332,7 @@ const UI = (() => {
 
     // New buildings currently under construction (no parent — occupy new slots)
     queuedBuildings.filter(q => !q.parentKey).forEach(q => {
-      cards += _buildingQueueCard(q);
+      cards += _buildingQueueCard(q, city);
     });
 
     for (let i = 0; i < Math.max(0, freeSlots); i++) {
@@ -333,8 +347,8 @@ const UI = (() => {
     </div>`;
   }
 
-  function _buildingQueueCard(q) {
-    const def = BUILDING_TYPES[q.key];
+  function _buildingQueueCard(q, city) {
+    const def = city ? Cities.getBuildingDef(city, q.key) : BUILDING_TYPES[q.key];
     if (!def) return '';
     const catColors = {
       military:'#7a1414', defense:'#2a1030', food:'#1e5a14',
@@ -383,7 +397,7 @@ const UI = (() => {
   // ── Upgrade picker (click a slot card) ───────
   function _onSlotClick(key) {
     if (!_currentCity) return;
-    const def = BUILDING_TYPES[key];
+    const def = Cities.getBuildingDef(_currentCity, key) || BUILDING_TYPES[key];
     if (!def) return;
     const lvl = _currentCity.buildings[key] || 0;
     if (lvl === 0) return;
@@ -401,8 +415,8 @@ const UI = (() => {
   }
 
   function _openUpgradePicker(key) {
-    const def    = BUILDING_TYPES[key];
     const city   = _currentCity;
+    const def    = Cities.getBuildingDef(city, key) || BUILDING_TYPES[key];
     const res    = _currentResources;
     const terrain = Cities.getTerrainInRadius(city);
     const lvl    = city.buildings[key] || 0;
@@ -433,7 +447,7 @@ const UI = (() => {
     // Branch upgrades (upgradesTo — child buildings)
     if (def.upgradesTo?.length) {
       def.upgradesTo.forEach(nextKey => {
-        const nd      = BUILDING_TYPES[nextKey];
+        const nd      = Cities.getBuildingDef(city, nextKey) || BUILDING_TYPES[nextKey];
         if (!nd) return;
         const nc      = nd.cost[0] || {};
         const terOk   = !nd.terrainReq || terrain.has(nd.terrainReq);
@@ -570,9 +584,9 @@ const UI = (() => {
   }
 
   function _showBldHover(key) {
-    const def = BUILDING_TYPES[key];
-    if (!def) return;
     const city = _currentCity;
+    const def  = (city ? Cities.getBuildingDef(city, key) : null) || BUILDING_TYPES[key];
+    if (!def) return;
     const lvl  = city ? (city.buildings[key] || 0) : 0;
     const lvlRoman = ['','I','II','III','IV','V'][lvl] || String(lvl);
     const res  = _currentResources || {};
@@ -741,8 +755,11 @@ const UI = (() => {
       </div>`;
     };
 
+    const cityTree = Cities.getAvailableBuildings(city);
+
     if (key) {
-      const def = BUILDING_TYPES[key];
+      const def = cityTree[key];
+      if (!def) return `<div class="ipc-header"><button class="ipc-close" onclick="UI._closeImgPicker()">✕</button></div>`;
       const lvl = city.buildings[key] || 0;
       const atMax = lvl >= def.maxLevel;
       const lvlRoman = ['','I','II','III','IV','V'][lvl] || String(lvl);
@@ -756,9 +773,9 @@ const UI = (() => {
         cards += _ipcCard(key, def, canAf, canAf, false, '', true,
           `${def.name} Lv ${nextRoman}`, `${_formatCost(nc)} ⏱${bt}t`, canAf ? '' : 'cant');
       }
-      if (def.upgradesTo?.length) {
+      if (def.upgradesTo && def.upgradesTo.length) {
         def.upgradesTo.forEach(nk => {
-          const nd = BUILDING_TYPES[nk]; if (!nd) return;
+          const nd = cityTree[nk]; if (!nd) return;
           const nc = nd.cost[0] || {};
           const terOk = !nd.terrainReq || terrain.has(nd.terrainReq);
           const popOk = !nd.popReq || (city.pop||0) >= nd.popReq;
@@ -785,7 +802,7 @@ const UI = (() => {
           ${c.icon} ${c.name}
         </button>`).join('');
 
-      const entries = Object.entries(BUILDING_TYPES).filter(([, d]) => d.category === cat);
+      const entries = Object.entries(cityTree).filter(([, d]) => d.category === cat);
       const cards = entries.map(([bkey, def]) => {
         const lvl = city.buildings[bkey] || 0;
         const isBuilt = lvl > 0;
@@ -800,7 +817,7 @@ const UI = (() => {
         const canBuild = !locked && canAf && !atMax;
         const lvlRoman = ['','I','II','III','IV','V'][lvl] || String(lvl);
         let lockNote = '';
-        if (!parentBuilt) lockNote = `🔒 Req. ${BUILDING_TYPES[parentKey]?.name||parentKey}`;
+        if (!parentBuilt) lockNote = `🔒 Req. ${(cityTree[parentKey] && cityTree[parentKey].name)||parentKey}`;
         else if (!terOk)  lockNote = `🔒 ${TNAMES[def.terrainReq]||def.terrainReq}`;
         else if (!popOk)  lockNote = `🔒 ${def.popReq} hab.`;
         const lvlLabel = isBuilt ? `${def.name} Lv ${lvlRoman}` : def.name;
@@ -834,8 +851,9 @@ const UI = (() => {
 
   function _openBuildingBrowser(focusKey) {
     if (!_currentCity) return;
-    if (focusKey && BUILDING_TYPES[focusKey]) {
-      _currentBrowserCat = BUILDING_TYPES[focusKey].category;
+    if (focusKey) {
+      const fd = Cities.getBuildingDef(_currentCity, focusKey) || BUILDING_TYPES[focusKey];
+      if (fd) _currentBrowserCat = fd.category;
     }
     let el = document.getElementById('building-browser');
     if (!el) {
@@ -878,9 +896,10 @@ const UI = (() => {
       </button>`).join('');
 
     const terrain  = Cities.getTerrainInRadius(city);
-    const roots    = Object.entries(BUILDING_TYPES)
+    const cityTree = Cities.getAvailableBuildings(city);
+    const roots    = Object.entries(cityTree)
       .filter(([, def]) => def.category === selectedCat && !def.upgradesFrom);
-    const treeHtml = roots.map(([key]) => _bbNodeHtml(key, city, resources, terrain)).join('');
+    const treeHtml = roots.map(([key]) => _bbNodeHtml(key, city, resources, terrain, cityTree)).join('');
 
     return `<div class="bb-header">
         <span class="bb-title">Explorar Edificios — ${city.name}</span>
@@ -894,8 +913,9 @@ const UI = (() => {
       </div>`;
   }
 
-  function _bbNodeHtml(key, city, resources, terrain) {
-    const def     = BUILDING_TYPES[key];
+  function _bbNodeHtml(key, city, resources, terrain, cityTree) {
+    const tree = cityTree || Cities.getAvailableBuildings(city);
+    const def  = tree[key];
     if (!def) return '';
     const lvl     = city.buildings[key] || 0;
     const isBuilt = lvl > 0;
@@ -923,7 +943,7 @@ const UI = (() => {
     if (atMax) {
       actionHtml = `<span class="bb-status maxed">✓ MAX</span>`;
     } else if (!parentBuilt) {
-      actionHtml = `<span class="bb-status locked">🔒 Req. ${BUILDING_TYPES[parentKey]?.name || parentKey}</span>`;
+      actionHtml = `<span class="bb-status locked">🔒 Req. ${(tree[parentKey] && tree[parentKey].name) || parentKey}</span>`;
     } else if (lockNote) {
       actionHtml = `<span class="bb-status locked">🔒 ${lockNote}</span>`;
     } else {
@@ -935,7 +955,7 @@ const UI = (() => {
     }
 
     const children = (def.upgradesTo || [])
-      .map(childKey => _bbNodeHtml(childKey, city, resources, terrain))
+      .map(childKey => _bbNodeHtml(childKey, city, resources, terrain, tree))
       .join('');
 
     return `<div class="bb-node-wrap">
@@ -1392,10 +1412,9 @@ const UI = (() => {
   // ── TW-style building tooltip ─────────────────
   function _showBuildingTooltip(card, tt) {
     const bkey = card.dataset.bkey;
-    const def  = BUILDING_TYPES[bkey];
-    if (!def) return;
-
     const city    = _currentCity;
+    const def  = (city ? Cities.getBuildingDef(city, bkey) : null) || BUILDING_TYPES[bkey];
+    if (!def) return;
     const res     = _currentResources;
     const lvl     = city ? (city.buildings[bkey] || 0) : 0;
     const atMax   = lvl >= def.maxLevel;
@@ -1461,27 +1480,26 @@ const UI = (() => {
     if (tab) tab.style.display = _leaderPanelOpen ? 'none' : 'flex';
   }
 
-  function updateLeaderPanel(leader, faction) {
+  function updateLeaderPanel(lord) {
     const el  = document.getElementById('leader-panel');
     const tab = document.getElementById('leader-tab');
     if (!el) return;
-    if (!leader || !faction) {
+    if (!lord) {
       el.style.display = 'none';
       if (tab) tab.style.display = 'none';
       return;
     }
 
-    const factionColor  = faction.color || '#4a9eff';
-    const house         = (typeof Game !== 'undefined' && Game.getHouse) ? Game.getHouse() : null;
+    const lordColor     = lord.color || '#4a9eff';
     const discoveredSet = (typeof Game !== 'undefined' && Game.getDiscoveredFactions) ? Game.getDiscoveredFactions() : null;
 
     if (tab) {
-      tab.innerHTML = `<span style="color:${factionColor}">${faction.symbol}</span>`;
+      tab.innerHTML = `<span style="color:${lordColor}">${lord.portrait}</span>`;
       tab.style.display = _leaderPanelOpen ? 'none' : 'flex';
     }
     if (!_leaderPanelOpen) { el.style.display = 'none'; return; }
 
-    const traitHtml = (leader.traits || []).map(tid => {
+    const traitHtml = (lord.traits || []).map(tid => {
       const t = (typeof TRAITS !== 'undefined') && TRAITS[tid];
       if (!t) return '';
       return `<div class="lp-trait">
@@ -1493,7 +1511,7 @@ const UI = (() => {
       </div>`;
     }).join('');
 
-    const skills = leader.skills || {};
+    const skills = lord.skills || {};
     const skillRow = (icon, label, val, color) =>
       `<div class="lp-skill-row">
         <span class="lp-skill-lbl">${icon} ${label}</span>
@@ -1509,9 +1527,9 @@ const UI = (() => {
         ${skills.stewardship !== undefined ? skillRow('💰','Gestión',    skills.stewardship, '#c8940c') : ''}
       </div>` : '';
 
-    const relations    = (typeof Game !== 'undefined' && Game.getRelations) ? Game.getRelations() : {};
+    const relations     = (typeof Game !== 'undefined' && Game.getRelations) ? Game.getRelations() : {};
     const otherFactions = (typeof FACTIONS !== 'undefined')
-      ? FACTIONS.filter(f => f.id !== faction.id && (!discoveredSet || discoveredSet.has(f.id)))
+      ? FACTIONS.filter(f => f.id !== lord.id && (!discoveredSet || discoveredSet.has(f.id)))
       : [];
     const relHtml = Object.keys(relations).length > 0 && otherFactions.length > 0 ? `
       <div class="lp-divider"></div>
@@ -1519,11 +1537,9 @@ const UI = (() => {
       <div class="lp-relations">
         ${otherFactions.map(f => {
           const rel = relations[f.id] || 'neutral';
-          const houseLeaders = (typeof NOBLE_HOUSES !== 'undefined') ? NOBLE_HOUSES.filter(h => h.kingdomId === f.id).flatMap(h => h.leaders) : [];
-          const fLeader = houseLeaders[0] || (f.leaders || [])[0];
-          return `<div class="lp-rel-row lp-rel-clickable" onclick="Game.openLeaderDialog('${f.id}')" title="Hablar con ${fLeader ? fLeader.name : f.name}">
+          return `<div class="lp-rel-row lp-rel-clickable" onclick="Game.openLeaderDialog('${f.id}')" title="Hablar con ${f.name}">
             <span class="lp-rel-sym" style="color:${f.color}">${f.symbol}</span>
-            <span class="lp-rel-name">${fLeader ? fLeader.name.split(' ')[0] : f.name.split(' ')[0]}</span>
+            <span class="lp-rel-name">${f.name.split(' ')[0]}</span>
             <span class="lp-rel-icon">${_relIcon(rel)}</span>
             <span class="lp-rel-chat">💬</span>
           </div>`;
@@ -1532,25 +1548,26 @@ const UI = (() => {
       <button class="lp-dipl-btn" onclick="Game.openDiplomacy()">⚜ Diplomacia</button>
     ` : '';
 
-    const age = leader.age || leader.startingAge;
-    const bloodlineBadge = (house && house.bloodlineId && typeof BLOODLINES !== 'undefined' && BLOODLINES[house.bloodlineId])
-      ? `<div class="lp-bloodline">🩸 ${BLOODLINES[house.bloodlineId].name}</div>` : '';
+    const victoryHtml = lord.victoryCondition ? `
+      <div class="lp-divider"></div>
+      <div class="lp-section-label">${lord.victoryCondition.icon} Victoria</div>
+      <div class="lp-victory-short">${lord.victoryCondition.short}</div>
+    ` : '';
 
     el.innerHTML = `
       <button class="lp-close-btn" onclick="UI.toggleLeaderPanel()" title="Ocultar panel">◀</button>
-      <div class="lp-portrait" style="border-color:${factionColor}44">
-        <div class="lp-symbol" style="color:${factionColor}">${faction.symbol}</div>
+      <div class="lp-portrait" style="border-color:${lordColor}44">
+        <div class="lp-symbol" style="color:${lordColor}">${lord.portrait}</div>
       </div>
-      <div class="lp-name">${leader.name}</div>
-      <div class="lp-title">${leader.title}</div>
-      ${house ? `<div class="lp-house-name">${house.crest || ''} ${house.name}</div>` : ''}
-      <div class="lp-faction" style="color:${factionColor}">${faction.name}</div>
-      ${age ? `<div class="lp-age">Edad ${age}</div>` : ''}
-      ${bloodlineBadge}
+      <div class="lp-name">${lord.name}</div>
+      <div class="lp-title">${lord.title}</div>
+      <div class="lp-faction" style="color:${lordColor}">${lord.playstyle}</div>
+      ${lord.age ? `<div class="lp-age">Edad ${lord.age}</div>` : ''}
       <div class="lp-divider"></div>
       <div class="lp-section-label">Rasgos</div>
       <div class="lp-traits">${traitHtml}</div>
       ${skillsHtml}
+      ${victoryHtml}
       ${relHtml}
     `;
     el.style.display = 'flex';
@@ -1592,14 +1609,10 @@ const UI = (() => {
       const relIcon  = _relIcon(rel);
       const relText  = _relText(rel);
       const relClass = _relClass(rel);
-      const houseLeaders = (typeof NOBLE_HOUSES !== 'undefined') ? NOBLE_HOUSES.filter(h => h.kingdomId === f.id).flatMap(h => h.leaders) : [];
-      const leader = houseLeaders[0] || (f.leaders || [])[0];
-
       return `<div class="dipl-card" onclick="Game.openLeaderDialog('${f.id}')" style="cursor:pointer">
         <div class="dipl-card-symbol" style="color:${f.color}">${f.symbol}</div>
         <div class="dipl-card-info">
           <div class="dipl-card-name" style="color:${f.color}">${f.name}</div>
-          ${leader ? `<div class="dipl-card-leader">${leader.title} — ${leader.name}</div>` : ''}
           <div class="dipl-card-rel ${relClass}">${relIcon} ${relText}</div>
         </div>
         <div class="dipl-card-actions">
@@ -1623,6 +1636,61 @@ const UI = (() => {
   function closeDiplomacyPanel() {
     const modal = document.getElementById('diplomacy-modal');
     if (modal) modal.style.display = 'none';
+  }
+
+  // ── City Capture Decision panel ──────────────
+  function showCaptureDecision(city, options, hex) {
+    let modal = document.getElementById('capture-decision-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'capture-decision-modal';
+      document.body.appendChild(modal);
+    }
+    const optCards = options.map(opt => `
+      <div class="cd-option${opt.highlight ? ' cd-option--highlight' : ''}"
+           style="border-color:${opt.color}55;background:${opt.color}18"
+           onclick="Game.executeCaptureDecision({c:${hex.c},r:${hex.r}},'${opt.id}')">
+        <div class="cd-opt-icon">${opt.icon}</div>
+        <div class="cd-opt-label" style="color:${opt.color}">${opt.label}</div>
+        <div class="cd-opt-desc">${opt.desc}</div>
+      </div>`).join('');
+    modal.innerHTML = `
+      <div class="cd-overlay"></div>
+      <div class="cd-frame">
+        <div class="cd-header">
+          <div class="cd-city-name">⚔ ${city.name}</div>
+          <div class="cd-subtitle">¿Qué harás con esta ciudad?</div>
+        </div>
+        <div class="cd-options">${optCards}</div>
+      </div>`;
+    modal.style.display = 'flex';
+  }
+
+  function closeCaptureDecision() {
+    const el = document.getElementById('capture-decision-modal');
+    if (el) el.style.display = 'none';
+  }
+
+  // ── Victory screen ────────────────────────────
+  function showVictoryScreen(lord) {
+    let modal = document.getElementById('victory-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'victory-modal';
+      document.body.appendChild(modal);
+    }
+    const vc = (lord && lord.victoryCondition) || {};
+    modal.innerHTML = `
+      <div class="victory-overlay"></div>
+      <div class="victory-frame">
+        <div class="victory-icon">${vc.icon || '👑'}</div>
+        <div class="victory-title">¡Victoria!</div>
+        <div class="victory-lord" style="color:${lord ? lord.color : '#c8a020'}">${lord ? lord.name : ''}</div>
+        <div class="victory-condition">${vc.short || 'Campaña completada.'}</div>
+        <div class="victory-desc">${vc.description || ''}</div>
+        <button class="victory-btn" onclick="location.reload()">Nueva Campaña</button>
+      </div>`;
+    modal.style.display = 'flex';
   }
 
   // ── Leader dialog (talk to individual leader) ──
@@ -1914,5 +1982,7 @@ const UI = (() => {
     updateLeaderPanel, toggleLeaderPanel,
     showDiplomacyPanel, closeDiplomacyPanel,
     showLeaderDialog, closeLeaderDialog,
+    showCaptureDecision, closeCaptureDecision,
+    showVictoryScreen,
   };
 })();
