@@ -3,94 +3,76 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Hexfront — Strategy Game</title>
+  <title>Realms — Age of Lords</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Text:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/main.css" />
-  <link rel="stylesheet" href="css/panels.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
-  <!-- Pre-game faction/leader selection screen -->
-  <div id="pre-game-screen" style="display:none"></div>
 
-  <!-- HUD (hidden until game starts) -->
-  <header id="hud" style="display:none">
-    <div id="hud-left">
-      <div class="hud-logo">⚔ HEXFRONT</div>
-      <div class="res-group">
-        <div class="res-pill" title="Gold">💰 <span id="r-gold">0</span><span class="res-net" id="rn-gold"></span></div>
-        <div class="res-pill" title="Iron">⚙️ <span id="r-iron">0</span><span class="res-net" id="rn-iron"></span></div>
-        <div class="res-pill" title="Food">🌾 <span id="r-food">0</span><span class="res-net" id="rn-food"></span></div>
-        <div class="res-pill" title="Wood">🌲 <span id="r-wood">0</span><span class="res-net" id="rn-wood"></span></div>
-      </div>
-    </div>
-    <div id="hud-right">
-      <div id="turn-display">Turn <span id="turn-num">1</span></div>
-      <button id="end-turn-btn">End Turn ↵</button>
-    </div>
-  </header>
+  <!-- Persistent top bar (hidden until login) -->
+  <div id="hud-bar" class="hidden"></div>
 
-  <!-- Map: full screen below HUD (hidden until game starts) -->
-  <main id="layout" style="display:none">
-    <div id="map-wrap">
-      <canvas id="mapCanvas"></canvas>
-    </div>
-  </main>
+  <!-- All screens are rendered here by app.js -->
+  <div id="screen-root"></div>
 
-  <!-- Bottom info panel — hidden when idle, slides up on selection -->
-  <div id="bottom-panel">
-    <div class="bp-frame">
-      <button class="bp-close" onclick="Game.deselect()">✕</button>
+  <!-- Toast notifications (always present) -->
+  <div id="toast-container"></div>
 
-      <!-- Unit panel (enemy view) -->
-      <div id="panel-unit" class="panel-section">
-        <div id="bp-unit-content"></div>
-      </div>
+  <!-- Dev reset button (remove before shipping) -->
+  <button id="dev-reset-btn" title="Wipe all saved data and restart"
+    style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
+           padding:0.4rem 0.8rem;font-size:0.72rem;font-weight:700;
+           background:#3a1010;border:1px solid #8a2020;border-radius:6px;
+           color:#e05050;cursor:pointer;opacity:0.7;letter-spacing:0.05em;"
+    onmouseenter="this.style.opacity='1'"
+    onmouseleave="this.style.opacity='0.7'"
+    onclick="if(confirm('Wipe all saved data and restart?')){StorageService.clearAll();location.reload();}">
+    ⚠ Reset Data
+  </button>
 
-      <!-- City panel -->
-      <div id="panel-city" class="panel-section">
-        <div id="bp-city-content"></div>
-      </div>
+  <!-- ── Core infrastructure ── -->
+  <script src="js/core/time.js"></script>
+  <script src="js/core/storage.js"></script>
+  <script src="js/core/events.js"></script>
 
-      <!-- Army panel -->
-      <div id="panel-group" class="panel-section">
-        <div id="bp-army-content"></div>
-      </div>
-    </div>
-  </div>
+  <!-- ── Data definitions ── -->
+  <script src="js/data/races.js"></script>
+  <script src="js/data/buildings.js"></script>
+  <script src="js/data/discoveries.js"></script>
+  <script src="js/data/lord-classes.js"></script>
+  <script src="js/data/tags.js"></script>
+  <script src="js/data/traits.js"></script>
+  <script src="js/data/abilities.js"></script>
+  <script src="js/data/units.js"></script>
 
-  <!-- Leader panel tab (visible when panel is collapsed) -->
-  <div id="leader-tab" style="display:none" onclick="UI.toggleLeaderPanel()" title="Abrir panel de líder"></div>
+  <!-- ── Domain services ── -->
+  <script src="js/domain/player.js"></script>
+  <script src="js/domain/lord.js"></script>
+  <script src="js/domain/world.js"></script>
+  <script src="js/domain/city.js"></script>
+  <script src="js/domain/city-stats.js"></script>
+  <script src="js/domain/events.js"></script>
+  <script src="js/domain/building-unlock.js"></script>
+  <script src="js/domain/construction.js"></script>
+  <script src="js/domain/production.js"></script>
+  <script src="js/domain/discovery.js"></script>
+  <script src="js/domain/army.js"></script>
+  <script src="js/domain/recruitment.js"></script>
 
-  <!-- Leader panel (top-left, always visible after game starts) -->
-  <div id="leader-panel" style="display:none"></div>
+  <!-- ── UI views ── -->
+  <script src="js/ui/auth-view.js"></script>
+  <script src="js/ui/lord-view.js"></script>
+  <script src="js/ui/map-view.js"></script>
+  <script src="js/ui/city-view.js"></script>
+  <script src="js/ui/lord-screen.js"></script>
+  <script src="js/ui/overview-screen.js"></script>
+  <script src="js/ui/hud.js"></script>
 
-  <!-- Empire sidebar (top-right, cities + resource nodes) -->
-  <div id="empire-panel"></div>
+  <!-- ── App router (must load last) ── -->
+  <script src="js/ui/app.js"></script>
 
-  <!-- Battle log (below empire panel) -->
-  <div id="battle-log-panel"></div>
-
-  <!-- Toast notification -->
-  <div id="toast"></div>
-
-  <!-- Unit tooltip (fixed, shown on hover over unit cards) -->
-  <div id="tw-tooltip"></div>
-
-  <!-- Scripts -->
-  <script src="js/data/kingdoms.js"></script>
-  <script src="js/data/legendary_lords.js"></script>
-  <script src="js/data.js"></script>
-  <script src="js/hex.js"></script>
-  <script src="js/map.js"></script>
-  <script src="js/combat.js"></script>
-  <script src="js/units.js"></script>
-  <script src="js/cities.js"></script>
-  <script src="js/renderer.js"></script>
-  <script src="js/ui.js"></script>
-  <script src="js/ai.js"></script>
-  <script src="js/pregame.js"></script>
-  <script src="js/game.js"></script>
 </body>
 </html>
