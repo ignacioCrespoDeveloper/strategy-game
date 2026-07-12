@@ -53,10 +53,39 @@ const DiscoveryService = (() => {
 
   // ── Public API ────────────────────────────────────────────────
 
+  // ── Camp level / type rolling ─────────────────────────────────
+
+  function _rollCampLevel(armyPower) {
+    let base;
+    if      (armyPower < 100)  base = 1;
+    else if (armyPower < 300)  base = 2;
+    else if (armyPower < 700)  base = 3;
+    else if (armyPower < 1400) base = 4;
+    else                       base = 5;
+
+    // ±1 variance so there's a challenge floor and a stretch goal
+    const roll = Math.floor(Math.random() * 3) - 1; // -1, 0, +1
+    return Math.max(1, Math.min(5, base + roll));
+  }
+
+  function _rollCampDetails(defId, armyPower) {
+    const campDef = CAMP_DEFS[defId];
+    if (!campDef) return null;
+
+    const [minLevel, maxLevel] = campDef.levelRange;
+    const level     = Math.max(minLevel, Math.min(maxLevel, _rollCampLevel(armyPower)));
+    const defenders = campDef.defenderRosterByLevel[level]
+      || campDef.defenderRosterByLevel[minLevel]
+      || [{ unitId: 'bandits', count: 2 }];
+
+    return { level, type: defId, defenders };
+  }
+
   // Perform a search on the lord's current tile.
   // Returns { def, record }.
   // record is null when category === 'nothing' (nothing is not stored).
-  function search(lord, playerId) {
+  // armyPower: optional — used to scale combat discovery difficulty.
+  function search(lord, playerId, armyPower) {
     if (lord.x == null || lord.y == null) {
       return { def: DISCOVERY_DEFS.nothing_found, record: null };
     }
@@ -79,6 +108,10 @@ const DiscoveryService = (() => {
       discoveredAt: now,
       expiresAt:    def.baseDuration > 0 ? now + def.baseDuration * 1000 : null,
     };
+
+    if (def.category === 'combat') {
+      record.campDetails = _rollCampDetails(def.id, armyPower || 0);
+    }
 
     const all = _getAll();
     if (!all[playerId]) all[playerId] = [];
@@ -128,17 +161,8 @@ const DiscoveryService = (() => {
   function _rollRewards(def) {
     const rewards = [];
 
-    if (def.id === 'bandit_camp') {
-      const win = Math.random() < 0.55;
-      rewards.push({ type: 'combat', outcome: win ? 'victory' : 'defeat' });
-      if (win) {
-        rewards.push({ type: 'gold', amount: _rand(50, 80) });
-        rewards.push({ type: 'xp',   amount: 50 });
-      } else {
-        rewards.push({ type: 'xp', amount: 20 });
-      }
-      return rewards;
-    }
+    // Combat discoveries are resolved by BattleEngine — no rewards here.
+    if (def.category === 'combat') return rewards;
 
     const base = _BASE_REWARDS[def.id];
     if (base) {
@@ -181,14 +205,15 @@ const DiscoveryService = (() => {
     const record      = records[idx];
     if (record.negotiated) return { ok: false, error: 'Already negotiated.' };
 
-    const def        = DISCOVERY_DEFS[record.definitionId];
-    const mercRoster = MERCENARY_ROSTER[def?.id];
-    if (!mercRoster) return { ok: false, error: 'Cannot negotiate with this discovery.' };
+    const def       = DISCOVERY_DEFS[record.definitionId];
+    const campDef   = CAMP_DEFS[def?.id];
+    const mercUnits = campDef?.mercenaryRoster;
+    if (!mercUnits || mercUnits.length === 0) return { ok: false, error: 'Cannot negotiate with this discovery.' };
 
-    records[idx] = { ...record, negotiated: true, mercenaryUnits: mercRoster.units };
+    records[idx] = { ...record, negotiated: true, mercenaryUnits: mercUnits };
     all[playerId] = records;
     _saveAll(all);
-    return { ok: true, record: records[idx], mercenaryUnits: mercRoster.units };
+    return { ok: true, record: records[idx], mercenaryUnits: mercUnits };
   }
 
   // Human-readable time remaining for a record.
@@ -202,5 +227,72 @@ const DiscoveryService = (() => {
     return `${Math.floor(s / 86400)}d`;
   }
 
-  return { search, claim, negotiate, getActive, expireOld, formatExpiry };
+  // ── Search log ────────────────────────────────────────────────
+  // Persistent per-player log of every search result, dismissible by the player.
+  const LOG_KEY = 'discovery_log';
+  function _getLog()        { return StorageService.get(LOG_KEY) || {}; }
+  function _saveLog(data)   { StorageService.set(LOG_KEY, data); }
+
+  function addLog(playerId, entry) {
+    const all = _getLog();
+    if (!all[playerId]) all[playerId] = [];
+    const id  = 'log_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
+    all[playerId].unshift({ id, ...entry, loggedAt: TimeService.now() });
+    if (all[playerId].length > 100) all[playerId] = all[playerId].slice(0, 100);
+    _saveLog(all);
+  }
+
+  function getLog(playerId) {
+    return (_getLog()[playerId] || []);
+  }
+
+  function dismissLog(playerId, logId) {
+    const all = _getLog();
+    if (!all[playerId]) return;
+    all[playerId] = all[playerId].filter(e => e.id !== logId);
+    _saveLog(all);
+  }
+
+  const META_KEY = 'disc_log_meta';
+  function markLogSeen(playerId) {
+    const meta = StorageService.get(META_KEY) || {};
+    meta[playerId] = TimeService.now();
+    StorageService.set(META_KEY, meta);
+  }
+
+  function getUnseenCount(playerId) {
+    const meta  = StorageService.get(META_KEY) || {};
+    const since = meta[playerId] || 0;
+    return getLog(playerId).filter(e => e.loggedAt > since).length;
+  }
+
+  // Debug helper: immediately create a bandit_camp discovery (bypasses random roll).
+  function spawnBanditCamp(lord, playerId, armyPower) {
+    const def     = DISCOVERY_DEFS['bandit_camp'];
+    const now     = TimeService.now();
+    const x       = lord.x ?? 0;
+    const y       = lord.y ?? 0;
+    const terrain = WorldService.getTerrain(x, y);
+
+    const record = {
+      id:           'disc_dbg_' + now + '_' + Math.random().toString(36).slice(2, 5),
+      definitionId: 'bandit_camp',
+      tileX:        x,
+      tileY:        y,
+      terrain:      terrain.id,
+      lordId:       lord.id,
+      discoveredAt: now,
+      expiresAt:    now + 86400 * 1000,
+      campDetails:  _rollCampDetails('bandit_camp', armyPower || 0),
+    };
+
+    const all = _getAll();
+    if (!all[playerId]) all[playerId] = [];
+    all[playerId].push(record);
+    _saveAll(all);
+
+    return { def, record };
+  }
+
+  return { search, claim, negotiate, getActive, expireOld, formatExpiry, addLog, getLog, dismissLog, markLogSeen, getUnseenCount, spawnBanditCamp };
 })();

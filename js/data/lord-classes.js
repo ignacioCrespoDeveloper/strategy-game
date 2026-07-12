@@ -58,6 +58,7 @@ const LORD_CLASSES = {
     name:        'Rogue',
     icon:        '🗡',
     color:       '#20b060',
+    portrait:    'assets/lord/rogue',
     description: 'Swift and elusive. Rogues excel at exploration and strike before the enemy knows they are there.',
     modifiers:   { speed: 3, attack: 1 },
     passive: {

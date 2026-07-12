@@ -60,5 +60,23 @@ const ArmyService = (() => {
     return get(lordId).units.reduce((sum, u) => sum + u.count, 0);
   }
 
-  return { get, save, addUnits, removeUnits, totalUnits };
+  // Apply battle losses and sub-model HP damage from a BattleReport.
+  // losses:    [{ unitId, modelsLost }]
+  // hpUpdates: [{ unitId, currentHp }] — persists front-model HP between battles
+  function applyBattleLosses(lordId, losses, hpUpdates = []) {
+    const army = get(lordId);
+    losses.forEach(({ unitId, modelsLost }) => {
+      const stack = army.units.find(u => u.unitId === unitId);
+      if (!stack) return;
+      stack.count = Math.max(0, stack.count - modelsLost);
+    });
+    hpUpdates.forEach(({ unitId, currentHp }) => {
+      const stack = army.units.find(u => u.unitId === unitId);
+      if (stack && stack.count > 0) stack.currentHp = Math.round(currentHp);
+    });
+    army.units = army.units.filter(u => u.count > 0);
+    save(army);
+  }
+
+  return { get, save, addUnits, removeUnits, totalUnits, applyBattleLosses };
 })();

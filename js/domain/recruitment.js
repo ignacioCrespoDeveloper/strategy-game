@@ -55,10 +55,11 @@ const RecruitmentService = (() => {
     return available;
   }
 
-  // Returns active, negotiated discovery records that offer mercenary units.
+  // Returns active discovery records that have a mercenary roster in CAMP_DEFS.
+  // No negotiation required — any active camp with a roster is immediately hirable.
   function getAvailableFromDiscoveries(playerId) {
     return DiscoveryService.getActive(playerId)
-      .filter(r => r.negotiated && r.mercenaryUnits && r.mercenaryUnits.length > 0);
+      .filter(r => CAMP_DEFS[r.definitionId]?.mercenaryRoster?.length > 0);
   }
 
   // Enqueue a unit training batch at a city. Deducts gold immediately.

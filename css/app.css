@@ -1547,7 +1547,91 @@ input {
   font-weight: normal;
 }
 
-/* Lord clickable button in info panel */
+/* ── Lord card in map tile panel ─────────── */
+.mip-lord-card {
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.mip-lord-card:last-child { border-bottom: none; }
+
+.mip-lord-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mip-lord-open-btn {
+  margin-left: auto;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 0.1rem 0.35rem;
+  line-height: 1.4;
+  flex-shrink: 0;
+  transition: border-color var(--transition), color var(--transition);
+}
+.mip-lord-open-btn:hover { border-color: var(--border-gold); color: var(--text-gold-light); }
+
+.mip-lord-status {
+  font-size: 0.64rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+  padding-left: 0.15rem;
+}
+
+.mip-lord-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.mip-action-btn-sm {
+  flex: 1;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.68rem;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.13);
+  background: rgba(255,255,255,0.05);
+  color: var(--text-primary);
+  transition: background var(--transition), border-color var(--transition);
+  white-space: nowrap;
+}
+.mip-action-btn-sm:hover { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.25); }
+
+.mip-cancel-move-link {
+  display: block;
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.3rem;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--transition);
+}
+.mip-cancel-move-link:hover { color: #e07060; }
+
+.mip-err-msg {
+  font-size: 0.65rem;
+  color: #e06060;
+  margin-top: 0.3rem;
+  padding: 0.2rem 0;
+}
+
+.mip-empty-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 0 1rem;
+}
+
+/* Lord clickable button in info panel (legacy) */
 .mip-lord-btn {
   display: flex;
   align-items: center;
@@ -1753,31 +1837,23 @@ input {
   overflow: hidden;
 }
 
-/* City artwork placeholder */
+/* City artwork */
 .cvl-artwork {
   width: 100%;
   height: 170px;
-  background: linear-gradient(160deg, #0d1a08 0%, #111828 55%, #0d0d1e 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #05020a;
   position: relative;
   overflow: hidden;
   border-bottom: 1px solid var(--border-muted);
   flex-shrink: 0;
 }
 
-.cvl-artwork-inner {
-  font-size: 4rem;
-  position: relative;
-  z-index: 1;
-  filter: drop-shadow(0 0 16px rgba(200,147,58,0.5));
-}
-
 .cvl-artwork-glow {
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at 50% 60%, rgba(200,147,58,0.12) 0%, transparent 65%);
+  background: linear-gradient(to bottom, transparent 55%, rgba(0,0,0,0.6) 100%);
+  pointer-events: none;
+  z-index: 1;
 }
 
 /* City info block */
@@ -2404,6 +2480,25 @@ input {
   border-bottom-color: var(--gold);
 }
 
+/* Unread badge on tab */
+.ls-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.1em;
+  height: 1.1em;
+  padding: 0 0.28em;
+  margin-left: 0.3em;
+  font-size: 0.62rem;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+  background: #b83020;
+  color: #fff;
+  border-radius: 8px;
+  vertical-align: middle;
+  line-height: 1;
+}
+
 .ls-content {
   flex: 1;
   overflow-y: auto;
@@ -2579,6 +2674,236 @@ input {
   background: var(--border-muted);
   margin: 0.4rem 0;
 }
+
+/* Header row: title + roster button side by side */
+.la-section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.la-section-header-row .la-section-title { margin-bottom: 0; }
+.ur-open-btn {
+  padding: 0.22rem 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(200,160,60,0.3);
+  background: rgba(200,160,60,0.07);
+  color: var(--text-gold);
+  cursor: pointer;
+  letter-spacing: 0.03em;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ur-open-btn:hover {
+  background: rgba(200,160,60,0.15);
+  border-color: rgba(200,160,60,0.6);
+}
+
+/* ── Unit Requirements overlay ───────────────── */
+.unit-req-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,0.72);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 2rem 1rem;
+  overflow-y: auto;
+}
+.unit-req-overlay.hidden { display: none; }
+.unit-req-panel {
+  background: #0e0b18;
+  border: 1px solid #3a2a5a;
+  border-radius: 10px;
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.8);
+  overflow: hidden;
+}
+.unit-req-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.9rem 1.2rem;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03);
+  flex-shrink: 0;
+}
+.unit-req-title {
+  font-family: var(--font-display);
+  font-size: 0.88rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-gold);
+}
+.unit-req-close {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  transition: background 0.15s, color 0.15s;
+}
+.unit-req-close:hover { background: rgba(200,60,60,0.2); color: #e08080; border-color: #8a3a3a; }
+.unit-req-body {
+  overflow-y: auto;
+  max-height: 76vh;
+  padding: 0.8rem 1rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ur-city-note {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  padding: 0.4rem 0.2rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 0.6rem;
+}
+.ur-city-note strong { color: var(--text-gold); }
+.ur-empty { color: var(--text-muted); font-size: 0.75rem; padding: 1rem 0; }
+
+/* Building group */
+.ur-building-group { display: flex; flex-direction: column; gap: 0; }
+.ur-building-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px 6px 0 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-bottom: none;
+  background: rgba(255,255,255,0.03);
+}
+.ur-building-header.ur-bld--missing  { border-color: rgba(180,60,60,0.3); background: rgba(180,60,60,0.05); }
+.ur-building-header.ur-bld--partial  { border-color: rgba(200,140,30,0.35); background: rgba(200,140,30,0.06); }
+.ur-building-header.ur-bld--complete { border-color: rgba(60,160,80,0.35); background: rgba(60,160,80,0.06); }
+.ur-bld-icon { font-size: 1.1rem; flex-shrink: 0; }
+.ur-bld-name-wrap { flex: 1; min-width: 0; }
+.ur-bld-name {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: block;
+}
+.ur-bld-desc {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ur-bld-level {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.ur-bld--missing  .ur-bld-level { color: #cc5555; }
+.ur-bld--partial  .ur-bld-level { color: #c8a030; }
+.ur-bld--complete .ur-bld-level { color: #50b870; }
+
+/* Unit rows */
+.ur-units {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  overflow: hidden;
+}
+.ur-unit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 0.7rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  transition: background 0.15s;
+}
+.ur-unit-row:last-child { border-bottom: none; }
+.ur-unit--unlocked { background: rgba(50,120,70,0.07); }
+.ur-unit--locked   { background: rgba(0,0,0,0.15); opacity: 0.75; }
+.ur-unit--unlocked:hover { background: rgba(50,120,70,0.12); }
+.ur-unit--locked:hover   { opacity: 1; }
+
+/* Unit portrait in the panel */
+.ur-unit-portrait {
+  width: 44px;
+  height: 54px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.ur-unit-img { width: 100%; height: 100%; object-fit: cover; }
+.ur-unit-img--icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.4rem;
+  background: rgba(255,255,255,0.04);
+}
+/* Tier border colors matching unit cards */
+.ur-portrait--elite   { border-color: #3a6a9a; }
+.ur-portrait--monster { border-color: #6a2a9a; }
+.ur-portrait--legendary { border-color: #c040ff; }
+
+.ur-unit-body { flex: 1; min-width: 0; }
+.ur-unit-name {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.18rem;
+}
+.ur-unit-req-line {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+.ur-tag {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.08rem 0.35rem;
+  border-radius: 3px;
+}
+.ur-tag--unlocked { background: rgba(50,160,80,0.2); color: #60d080; border: 1px solid rgba(50,160,80,0.3); }
+.ur-tag--locked   { background: rgba(180,60,60,0.15); color: #d07070; border: 1px solid rgba(180,60,60,0.25); }
+.ur-tag--progress { background: rgba(200,140,30,0.15); color: #c8a030; border: 1px solid rgba(200,140,30,0.25); }
+.ur-unit-stats {
+  display: flex;
+  gap: 0.45rem;
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.18rem;
+}
+.ur-unit-cost { font-size: 0.6rem; color: var(--text-muted); }
+
+/* Lock icon on the right */
+.ur-unit-status-icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  width: 1.2rem;
+  text-align: center;
+}
+.ur-unit--unlocked .ur-unit-status-icon { color: #50b870; }
+.ur-unit--locked   .ur-unit-status-icon { color: #887799; filter: grayscale(0.3); }
 
 /* ── Total War–style unit cards (recruited army) ───────────── */
 .la-unit-cards {
@@ -2933,6 +3258,46 @@ input {
   color: var(--text-muted);
   margin-bottom: 0.6rem;
 }
+.lov-section-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+.lov-section-row .lov-section-title { margin-bottom: 0; }
+.lov-army-power {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: #c8b840;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: 0 0 10px rgba(200,184,64,0.35);
+}
+.lov-army-power--over { color: #e05050; text-shadow: 0 0 10px rgba(220,80,80,0.4); }
+
+/* Army tab power chip */
+.la-army-cp {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: #c8b840;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  text-shadow: 0 0 10px rgba(200,184,64,0.35);
+}
+.la-army-cp--over { color: #e05050; text-shadow: 0 0 10px rgba(220,80,80,0.4); }
+
+/* Map info panel additions */
+.mip-note {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  margin-top: 0.3rem;
+  font-style: italic;
+}
+.mip-value--gold { color: var(--text-gold); }
+.mip-bandit-row { margin-bottom: 0.2rem; }
+
 .lov-section-divider {
   height: 1px;
   background: var(--border-muted);
@@ -3104,6 +3469,26 @@ input {
   color: #a8e8c0;
 }
 
+/* Debug "spawn camp" button — muted amber to distinguish from real actions */
+.lov-debug-btn {
+  align-self: flex-start;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.72rem;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: 3px;
+  border: 1px solid #6a5a2a;
+  background: linear-gradient(180deg, #3a3010 0%, #252008 100%);
+  color: #c8a840;
+  letter-spacing: 0.02em;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.lov-debug-btn:hover {
+  background: linear-gradient(180deg, #4a4018 0%, #352e0e 100%);
+  border-color: #8a7a3a;
+  color: #e8c860;
+}
+
 /* ── Unit card tooltip ────────────────────────── */
 .la-uc-wrap {
   position: relative;
@@ -3178,6 +3563,111 @@ input {
   color: var(--text-muted);
 }
 
+/* ── Stance picker (embedded in status section) ── */
+.lov-status--stanced {
+  color: #b070e0;
+  border-left: 2px solid #7a40b0;
+  padding-left: 0.55rem;
+}
+
+.lov-stance-desc-inline {
+  font-size: 0.67rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin: 0.3rem 0 0.4rem;
+}
+
+.lov-stance-picker {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.02);
+}
+.lov-stance-pick-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+.lov-stance-pick-btn {
+  padding: 0.22rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.04);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.lov-stance-pick-btn:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.3);
+  color: var(--text-primary);
+}
+.lov-stance-pick-btn--active {
+  background: rgba(100,60,180,0.25);
+  border-color: #7a50c0;
+  color: #c0a0ff;
+}
+.lov-stance-dur-sel {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.15);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+.lov-stance-start-btn {
+  padding: 0.22rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+  border-radius: var(--radius-sm);
+  border: 1px solid #4a5a8a;
+  background: linear-gradient(180deg, #1a2248 0%, #101530 100%);
+  color: #a0b0e0;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.lov-stance-start-btn:hover:not([disabled]) {
+  background: linear-gradient(180deg, #2a3260 0%, #1a2248 100%);
+  border-color: #8090c0;
+  color: #c0d0f0;
+}
+.lov-stance-start-btn[disabled] { opacity: 0.35; cursor: not-allowed; }
+.lov-stance-pick-desc {
+  margin-top: 0.35rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  min-height: 1em;
+}
+
+.lov-stance-exit-btn {
+  margin-top: 0.45rem;
+  padding: 0.22rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid #7a3a3a;
+  background: linear-gradient(180deg, #3a1a1a 0%, #241010 100%);
+  color: #e08080;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.lov-stance-exit-btn:hover {
+  background: linear-gradient(180deg, #5a2a2a 0%, #3a1818 100%);
+  border-color: #aa5050;
+  color: #f0a0a0;
+}
+
 /* ── Overview / Empire Dashboard ─────────────── */
 .ov-screen {
   display: flex;
@@ -3208,6 +3698,186 @@ input {
   border-bottom: 1px solid var(--border-accent);
   padding-bottom: 0.4rem;
   margin-bottom: 1rem;
+}
+.ov-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-accent);
+  padding-bottom: 0.4rem;
+  margin-bottom: 1rem;
+}
+.ov-section-row .ov-section-title {
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+/* ── Overview top tab nav (Empire / Intelligence) */
+.ov-top-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border-accent);
+  background: rgba(0,0,0,0.25);
+  padding: 0 1.5rem;
+  flex-shrink: 0;
+}
+.ov-top-tab {
+  padding: 0.65rem 1.25rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ov-top-tab:hover { color: var(--text-secondary); }
+.ov-top-tab--active {
+  color: var(--text-gold);
+  border-bottom-color: var(--text-gold);
+}
+
+/* ── Intelligence tab ───────────────────────── */
+.ov-intel-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 3rem 1rem;
+  color: var(--text-muted);
+}
+.ov-intel-empty-icon { font-size: 2rem; }
+.ov-intel-empty-text { font-family: var(--font-display); font-size: 0.9rem; color: var(--text-secondary); }
+.ov-intel-empty-sub  { font-size: 0.72rem; text-align: center; max-width: 28rem; line-height: 1.5; }
+
+.ov-intel-count {
+  font-family: var(--font-body);
+  font-size: 0.65rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 0.5rem;
+}
+
+.ov-intel-group { margin-bottom: 1.25rem; }
+.ov-intel-group-title {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.ov-intel-group-rows { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.ov-intel-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: var(--radius-sm);
+}
+.ov-intel-row-body { flex: 1; min-width: 0; }
+.ov-intel-row-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+.ov-intel-tier {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.ov-intel-coords { font-size: 0.67rem; color: var(--text-secondary); }
+.ov-intel-by     { font-size: 0.62rem; color: var(--text-muted); }
+.ov-intel-ago    { font-size: 0.6rem;  color: var(--text-muted); margin-left: auto; }
+.ov-intel-summary { font-size: 0.72rem; color: var(--text-primary); line-height: 1.4; }
+.ov-intel-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+.ov-intel-detail {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+}
+.ov-intel-dismiss {
+  flex-shrink: 0;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.65rem;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 3px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.ov-intel-dismiss:hover {
+  background: rgba(200,80,80,0.15);
+  border-color: #8a4040;
+  color: #e08080;
+}
+
+/* Recruit-lord modal selects row */
+.rl-selects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+/* ── Add card (city + lord) ──────────────────── */
+.ov-add-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 120px;
+  border-radius: var(--radius-lg);
+  border: 1px dashed var(--border-base);
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.18s, background 0.18s;
+}
+.ov-add-card:hover {
+  border-color: var(--text-gold);
+  background: rgba(200, 160, 60, 0.05);
+}
+.ov-add-icon {
+  font-size: 1.8rem;
+  font-weight: 300;
+  color: var(--text-muted);
+  line-height: 1;
+  transition: color 0.18s;
+}
+.ov-add-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-muted);
+  transition: color 0.18s;
+}
+.ov-add-card:hover .ov-add-icon,
+.ov-add-card:hover .ov-add-label {
+  color: var(--text-gold);
 }
 
 /* ── City cards ─────────────────────────────── */
@@ -3519,6 +4189,47 @@ input {
   transition: opacity var(--transition);
 }
 .ov-lord-card:hover .ov-lc-enter { opacity: 1; }
+
+/* Army power + stance badge in lord card */
+.ov-lc-power {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #c8b840;
+  white-space: nowrap;
+}
+.ov-lc-stance-badge {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: #c0a0ff;
+  background: rgba(100,60,180,0.2);
+  border: 1px solid rgba(100,60,180,0.35);
+  border-radius: 8px;
+  padding: 0.1rem 0.4rem;
+}
+
+/* Map button in overview lords section header */
+.ov-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.ov-section-row .ov-section-title { margin-bottom: 0; }
+.ov-map-btn {
+  padding: 0.28rem 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, #3a2510 0%, #5a3a18 100%);
+  color: var(--text-gold-light);
+  cursor: pointer;
+  transition: filter var(--transition);
+}
+.ov-map-btn:hover { filter: brightness(1.15); }
 
 .ov-lc-action-row {
   display: flex;
@@ -3863,7 +4574,13 @@ input {
   display: flex;
   align-items: flex-start;
   gap: 0.45rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+  padding: 0.1rem 0.2rem;
 }
+
+.cvl-stat-row2:hover { background: rgba(255,255,255,0.04); }
 
 .cvl-stat2-icon {
   font-size: 0.85rem;
@@ -4041,6 +4758,42 @@ input {
   border: 1px solid var(--border-base);
   border-radius: 10px;
   padding: 0.1rem 0.4rem;
+}
+
+/* ── Garrison section ─────────────────────────────────────────── */
+.cvl-garrison { display: flex; flex-direction: column; gap: 0.2rem; }
+
+.cvl-garrison-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.18rem 0;
+  font-size: 0.76rem;
+}
+.cvl-garrison-icon  { font-size: 0.9rem; width: 1.2rem; text-align: center; }
+.cvl-garrison-name  { flex: 1; color: var(--text-secondary); }
+.cvl-garrison-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-base);
+  border-radius: 8px;
+  padding: 0.05rem 0.35rem;
+}
+.cvl-garrison-empty {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.2rem 0;
+}
+
+/* ── Map intel garrison label ─────────────────────────────────── */
+.mip-intel-garrison-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0.3rem 0 0.1rem;
 }
 
 /* =============================================
@@ -4530,12 +5283,23 @@ input {
 .disc-coords    { color: var(--text-secondary); }
 .disc-expiry    { color: var(--text-muted); }
 .disc-expiry--soon { color: #e09030; font-weight: 600; }
+.disc-ago       { color: #777788; font-style: italic; }
 
 .disc-row-desc {
   font-size: 0.72rem;
   color: rgba(255,255,255,0.35);
   line-height: 1.35;
   margin-top: 0.1rem;
+}
+
+.disc-row-merc {
+  font-size: 0.68rem;
+  color: var(--text-gold);
+  margin-top: 0.3rem;
+  padding: 0.2rem 0.4rem;
+  background: rgba(200,160,60,0.07);
+  border-radius: 3px;
+  border-left: 2px solid rgba(200,160,60,0.35);
 }
 
 .disc-claim-btn {
@@ -4607,7 +5371,8 @@ input {
 .dc-event     { color: #c8b840; border-color: #6a6020; background: rgba(110,100,20,0.12); }
 .dc-trade     { color: #5aaae0; border-color: #2a6a9a; background: rgba(30,90,150,0.12); }
 .dc-quest     { color: #c060e0; border-color: #6a2a9a; background: rgba(100,40,160,0.12);}
-.dc-legendary { color: var(--text-gold-light); border-color: var(--border-gold); background: rgba(200,147,58,0.12); }
+.dc-legendary    { color: var(--text-gold-light); border-color: var(--border-gold); background: rgba(200,147,58,0.12); }
+.dc-intelligence { color: #70b8e0; border-color: #305a7a; background: rgba(40,90,130,0.14); }
 
 /* =============================================
    DISCOVERY POPUP — result overlay
@@ -4705,6 +5470,606 @@ input {
   margin-top: 0.1rem;
 }
 
+/* Hint line in combat discovery popup */
+.disc-popup-hint {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 5px;
+  padding: 0.45rem 0.65rem;
+  line-height: 1.45;
+  max-width: 320px;
+  text-align: left;
+}
+.disc-popup-hint + .disc-popup-hint { margin-top: 0.35rem; }
+.disc-popup-hint strong { color: var(--text-gold); }
+.disc-popup-hint em { font-style: normal; color: var(--text-muted); }
+
+/* ── Camp Preview (in pending discovery card) ───────────────────── */
+
+.camp-preview {
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(200,100,50,0.2);
+  border-radius: 6px;
+}
+.camp-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.camp-level-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: rgba(200,100,30,0.25);
+  border: 1px solid rgba(200,100,30,0.5);
+  color: #c8933a;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+}
+.camp-type-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.camp-unit-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+.camp-unit-chip {
+  font-size: 0.7rem;
+  padding: 0.15rem 0.4rem;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* ── Battle Result Screen ───────────────────────────────────────── */
+
+.br-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  padding: 0 1rem 2rem;
+  background: #0a0a0c;
+  color: var(--text-primary);
+  gap: 1.25rem;
+}
+
+.br-banner {
+  width: 100%;
+  max-width: 680px;
+  padding: 2rem 1.5rem 1.25rem;
+  text-align: center;
+  border-bottom: 2px solid;
+}
+.br-banner--victory {
+  border-color: #c8933a;
+  background: linear-gradient(180deg, rgba(180,120,30,0.18) 0%, transparent 100%);
+}
+.br-banner--defeat {
+  border-color: #8a2020;
+  background: linear-gradient(180deg, rgba(120,20,20,0.18) 0%, transparent 100%);
+}
+.br-banner-title {
+  font-family: 'Cinzel', serif;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.3rem;
+}
+.br-banner--victory .br-banner-title { color: #c8933a; }
+.br-banner--defeat  .br-banner-title { color: #c05050; }
+.br-banner-reason {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.br-summary-row {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.br-summary-row strong { color: var(--text-primary); }
+
+.br-armies {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 680px;
+  align-items: flex-start;
+}
+.br-army-col {
+  flex: 1;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+.br-army-header {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 0.6rem;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 0.4rem;
+}
+.br-vs-divider {
+  font-family: 'Cinzel', serif;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding-top: 2rem;
+  flex-shrink: 0;
+}
+
+.br-unit-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0;
+  font-size: 0.8rem;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.br-unit-row:last-child { border-bottom: none; }
+.br-unit-icon  { font-size: 1rem; flex-shrink: 0; }
+.br-unit-name  { flex: 1; color: var(--text-primary); }
+.br-unit-count { color: var(--text-secondary); font-size: 0.75rem; flex-shrink: 0; }
+
+.br-badge {
+  font-size: 0.67rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.br-badge--alive   { background: rgba(40,100,40,0.35); color: #6ec86e; border: 1px solid #3a7a3a; }
+.br-badge--wounded { background: rgba(130,90,20,0.35); color: #c8933a; border: 1px solid #7a5a20; }
+.br-badge--dead    { background: rgba(100,20,20,0.35); color: #c05050; border: 1px solid #6a2020; }
+
+.br-loot-row {
+  display: flex;
+  gap: 1.5rem;
+  font-size: 0.9rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.br-loot { color: #c8933a; font-weight: 600; }
+.br-xp   { color: #9bc87a; font-weight: 600; }
+
+.br-log-section {
+  width: 100%;
+  max-width: 680px;
+}
+.br-log-toggle {
+  width: 100%;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  padding: 0.55rem 1rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s;
+}
+.br-log-toggle:hover { background: rgba(255,255,255,0.07); }
+
+.br-log-body {
+  margin-top: 0.5rem;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  padding: 0.6rem 0.8rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+.br-log-body.hidden { display: none; }
+
+.br-log-line {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  padding: 0.15rem 0;
+  font-family: monospace;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.br-log-line:last-child { border-bottom: none; }
+.br-log-hit       { color: #a8b8c8; }
+.br-log-killed    { color: #c8933a; }
+.br-log-eliminated { color: #e05050; font-weight: 700; }
+.br-log-miss      { color: #606878; }
+.br-log-routed    { color: #e05050; font-weight: 700; }
+.br-log-retreated { color: #c8933a; }
+
+/* =============================================
+   CITY-VIEW OVERVIEW TAB — cvov-* system
+   ============================================= */
+
+.cvov-container {
+  padding-bottom: 2rem;
+}
+
+.cvov-section {
+  padding: 0.9rem 1.2rem;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.cvov-section:last-child { border-bottom: none; }
+
+.cvov-section-title {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* ── City Summary ─────────────────────────── */
+
+.cvov-summary-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.cvov-sum-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+}
+
+.cvov-sum-label { color: var(--text-muted); }
+
+.cvov-sum-val {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.cvov-tier-badge {
+  background: rgba(180, 140, 40, 0.2);
+  border: 1px solid rgba(180, 140, 40, 0.4);
+  color: var(--text-gold);
+  padding: 0.1rem 0.45rem;
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.cvov-growth {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.cvov-garrison-count {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: auto;
+}
+
+/* ── Tier progress bar ────────────────────── */
+
+.cvov-tier-prog {
+  padding: 0.7rem 1.2rem;
+  border-bottom: 1px solid var(--border-muted);
+  background: rgba(180, 140, 40, 0.04);
+}
+
+.cvov-tier-prog--max {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: var(--text-gold);
+  font-style: italic;
+}
+
+.cvov-tp-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.cvov-tp-tiers {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-gold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.cvov-tp-count {
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.cvov-tp-eta {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #4caf50;
+  min-width: 5rem;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.cvov-tp-eta--warn { color: var(--text-muted); font-weight: 400; font-style: italic; }
+
+.cvov-tp-track {
+  height: 5px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.3rem;
+}
+
+.cvov-tp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--gold-dark), var(--gold));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.cvov-tp-need {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* ── Building Slots ───────────────────────── */
+
+.cvov-slots-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.82rem;
+  margin-bottom: 0.35rem;
+}
+
+.cvov-slots-label { color: var(--text-secondary); }
+
+.cvov-slots-pct {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.cvov-slots-track {
+  height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.35rem;
+}
+
+.cvov-slots-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.cvov-slots-hint {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* ── Hero banner ──────────────────────────── */
+
+.cvov-hero {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  background: linear-gradient(135deg, rgba(180,140,40,0.08) 0%, rgba(30,28,22,0) 100%);
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.cvov-hero-art {
+  font-size: 2.6rem;
+  line-height: 1;
+  flex-shrink: 0;
+  filter: drop-shadow(0 2px 6px rgba(180,140,40,0.3));
+}
+
+.cvov-hero-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cvov-hero-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-gold);
+  letter-spacing: 0.04em;
+  margin-bottom: 0.3rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cvov-hero-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+  flex-wrap: wrap;
+}
+
+.cvov-hero-terrain {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.cvov-hero-pop {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.cvov-hero-pop-val {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.cvov-hero-pop-label {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.15rem;
+}
+
+.cvov-hero-pop-growth {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* ── Resource table ───────────────────────── */
+
+.cvov-res-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.cvov-res-thead {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 0 0 0.4rem;
+  border-bottom: 1px solid var(--border-muted);
+  margin-bottom: 0.2rem;
+}
+
+.cvov-res-th-res {
+  flex: 1;
+}
+
+.cvov-res-th {
+  width: 4.5rem;
+  text-align: right;
+}
+
+.cvov-res-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-size: 0.82rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.cvov-res-row:last-child { border-bottom: none; }
+
+.cvov-res-icon  { font-size: 0.9rem; margin-right: 0.35rem; }
+.cvov-res-name  { flex: 1; color: var(--text-secondary); display: flex; align-items: center; }
+.cvov-res-stock { width: 4.5rem; text-align: right; color: var(--text-primary); font-weight: 600; }
+.cvov-res-rate  { width: 4.5rem; text-align: right; font-size: 0.78rem; font-weight: 600; }
+
+.cvov-rate-pos  { color: #4caf50; }
+.cvov-rate-neg  { color: #f44336; }
+.cvov-rate-zero { color: var(--text-muted); }
+
+/* ── Landmark ─────────────────────────────── */
+
+.cvov-landmark-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+}
+
+.cvov-lm-icon { font-size: 1rem; }
+.cvov-lm-name { flex: 1; color: var(--text-gold); font-weight: 600; }
+
+/* ── Stat filter (left panel) ─────────────── */
+
+.cvl-stat-row2--selected {
+  background: rgba(180, 140, 40, 0.1) !important;
+  border-left: 2px solid var(--gold);
+  padding-left: 0.3rem;
+}
+
+.cvl-stat2-filter-icon {
+  font-size: 0.7rem;
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* ── Building card stat highlights ───────── */
+
+.bld2-card--stat-pos {
+  border-left: 3px solid #4caf50;
+  box-shadow: inset 3px 0 12px rgba(76, 175, 80, 0.07);
+}
+
+.bld2-card--stat-neg {
+  border-left: 3px solid #f44336;
+  box-shadow: inset 3px 0 12px rgba(244, 67, 54, 0.07);
+}
+
+.bld2-card--stat-muted {
+  opacity: 0.45;
+}
+
+.bld-eff-tag.eff-active {
+  outline: 1px solid currentColor;
+  font-weight: 700;
+  transform: scale(1.1);
+  display: inline-block;
+}
+.br-log-healed    { color: #6ec86e; }
+
+.br-continue-btn {
+  padding: 0.75rem 2.5rem;
+  background: linear-gradient(135deg, #2a1a08, #3d2a10);
+  border: 1px solid #c8933a;
+  border-radius: 8px;
+  color: #c8933a;
+  font-family: 'Cinzel', serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.br-continue-btn:hover {
+  background: linear-gradient(135deg, #3d2a10, #5a3e18);
+  box-shadow: 0 0 12px rgba(200,147,58,0.25);
+}
+
 .disc-popup-close {
   margin-top: 0.75rem;
   padding: 0.55rem 2rem;
@@ -4721,6 +6086,108 @@ input {
 }
 
 .disc-popup-close:hover { filter: brightness(1.1); }
+
+/* ── Discovery tab — log + pending ───────── */
+.disc-tab-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.5rem 0;
+}
+.disc-section-label {
+  font-family: var(--font-display);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.4rem 0.1rem 0.35rem;
+}
+.disc-section-divider {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,0.07);
+  margin: 0.6rem 0;
+}
+
+/* Log entry rows */
+.disc-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.disc-log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.02);
+}
+.disc-log-entry--nothing {
+  opacity: 0.5;
+  border-color: transparent;
+  background: transparent;
+}
+.disc-log-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+.disc-log-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.disc-log-name {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.disc-log-entry--nothing .disc-log-name {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+.disc-log-meta {
+  font-size: 0.63rem;
+  color: var(--text-muted);
+}
+.disc-log-rewards {
+  font-size: 0.68rem;
+  color: #8adb8a;
+  font-weight: 600;
+}
+.disc-log-outcome {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.disc-log-outcome--win  { color: #7adc7a; }
+.disc-log-outcome--loss { color: #e06060; }
+.disc-log-intel {
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.disc-log-dismiss {
+  flex-shrink: 0;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.65rem;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1.4;
+  align-self: flex-start;
+  transition: background 0.12s, color 0.12s;
+}
+.disc-log-dismiss:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text-primary);
+}
 
 /* =============================================
    OVERVIEW — Lord row mini-stats
@@ -5234,4 +6701,479 @@ input {
   color: var(--text-gold);
   font-weight: 600;
   margin-left: 0.25rem;
+}
+
+/* ── Battle History Tab (lord-screen) ──────────────────────────────── */
+
+.ls-tab-badge--neutral {
+  background: #4a5568;
+}
+
+.bh-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 1rem;
+  gap: 0.5rem;
+  color: var(--text-muted, #888);
+}
+.bh-empty-icon { font-size: 2.5rem; opacity: 0.4; }
+.bh-empty-msg  { font-size: 0.85rem; }
+.bh-empty-hint { font-size: 0.72rem; opacity: 0.7; }
+
+.bh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.bh-entry {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-left: 3px solid rgba(255,255,255,0.15);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+}
+.bh-entry.bh-victory { border-left-color: #c9973a; }
+.bh-entry.bh-defeat  { border-left-color: #a03030; }
+.bh-entry.bh-draw    { border-left-color: #6888aa; }
+
+.bh-entry-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.bh-outcome-badge {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15em 0.5em;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+.bh-victory .bh-outcome-badge { background: rgba(201,151,58,0.2);  color: #c9973a; }
+.bh-defeat  .bh-outcome-badge { background: rgba(160,48,48,0.2);   color: #e07070; }
+.bh-draw    .bh-outcome-badge { background: rgba(104,136,170,0.2); color: #9ab4cc; }
+
+.bh-camp-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary, #e8dcc8);
+  flex: 1;
+}
+
+.bh-date {
+  font-size: 0.65rem;
+  color: var(--text-muted, #888);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.bh-entry-stats {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--text-secondary, #aaa);
+  margin-bottom: 0.5rem;
+}
+.bh-entry-stats strong { color: var(--text-primary, #e8dcc8); }
+.bh-reason { margin-left: auto; opacity: 0.7; }
+
+.bh-log-toggle {
+  font-size: 0.72rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  color: var(--text-secondary, #aaa);
+  padding: 0.3rem 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: 100%;
+  text-align: left;
+}
+.bh-log-toggle:hover { background: rgba(255,255,255,0.08); }
+
+.bh-log-body {
+  margin-top: 0.5rem;
+}
+.bh-log-body.hidden { display: none; }
+
+.bh-unit-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.bh-unit-col-header {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted, #888);
+  margin-bottom: 0.3rem;
+  font-weight: 600;
+}
+.bh-unit-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.72rem;
+  color: var(--text-secondary, #bbb);
+  padding: 0.15rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.bh-unit-cnt { opacity: 0.8; }
+
+.bh-log-lines {
+  max-height: 200px;
+  overflow-y: auto;
+  background: rgba(0,0,0,0.3);
+  border-radius: 4px;
+  padding: 0.5rem 0.75rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.68rem;
+  line-height: 1.6;
+}
+.bh-log-hit       { color: #c8bfb0; }
+.bh-log-killed    { color: #e07060; }
+.bh-log-eliminated{ color: #ff4444; font-weight: 700; }
+.bh-log-miss      { color: #7a8a7a; }
+.bh-log-routed    { color: #ff8844; font-weight: 700; }
+.bh-log-retreated { color: #ddaa44; }
+.bh-log-healed    { color: #66bb66; }
+
+/* ── Activity Feed (overview-screen) ──────────────────────────────── */
+
+.ov-activity-feed {
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.af-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 360px;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.af-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
+  border-radius: 5px;
+  background: rgba(255,255,255,0.02);
+  border-left: 2px solid rgba(255,255,255,0.08);
+  transition: background 0.12s;
+}
+.af-entry:hover { background: rgba(255,255,255,0.04); }
+
+.af-entry.af-victory { border-left-color: #c9973a; }
+.af-entry.af-defeat  { border-left-color: #a03030; }
+.af-entry.af-draw    { border-left-color: #6888aa; }
+.af-entry.af-discovery { border-left-color: #5a8a5a; }
+.af-entry.af-move    { border-left-color: #5a7aaa; }
+.af-entry.af-action  { border-left-color: #7a6a4a; }
+
+.af-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.af-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.af-title  { font-size: 0.78rem; color: var(--text-primary, #e8dcc8); font-weight: 500; }
+.af-detail { font-size: 0.68rem; color: var(--text-secondary, #aaa); }
+
+.af-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.1rem;
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  color: var(--text-muted, #777);
+  white-space: nowrap;
+}
+.af-lord { opacity: 0.85; }
+.af-time { opacity: 0.7; }
+
+/* ── City tier + terrain images (overview cards) ───────────────────── */
+
+/* Terrain badge — bottom-left corner of the art panel */
+.ov-cc-terrain-badge {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 0.4rem;
+  width: 52px;
+  height: 36px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.15);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.5);
+  z-index: 2;
+  flex-shrink: 0;
+}
+.ov-cc-terrain-badge-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ov-cc-terrain-badge-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.55) 0%, transparent 55%);
+}
+.ov-cc-terrain-badge-label {
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 0.5rem;
+  color: #fff;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  pointer-events: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 2px;
+}
+/* Fallback for terrains with no image */
+.ov-cc-terrain-badge--icon {
+  position: absolute;
+  bottom: 0.4rem;
+  left: 0.4rem;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.6rem;
+  color: #ddd;
+  backdrop-filter: blur(4px);
+  z-index: 2;
+  width: auto;
+  height: auto;
+}
+
+/* ── City-view left panel artwork upgrade ──────────────────────────── */
+
+/* Replace old emoji-based artwork */
+.cvl-artwork {
+  position: relative;
+  overflow: hidden;
+}
+
+.cvl-artwork-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+  display: block;
+}
+
+/* Small terrain image — top-right corner */
+.cvl-artwork-terrain {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 56px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid rgba(255,255,255,0.2);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  z-index: 2;
+}
+
+/* Status badge overlaid on the artwork */
+.cvl-artwork-status {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+/* ── Overview city card — name row with inline status ─────────────── */
+
+.ov-cc-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* ── City overview hero — terrain image ────────────────────────────── */
+
+.cvov-hero-art {
+  width: 56px;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.cvov-hero-terrain-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* ── HUD notification bell ─────────────────────────────────────────── */
+
+.hud-notif-btn {
+  position: relative;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: var(--text-secondary, #bbb);
+  font-size: 1.1rem;
+  width: 2.2rem;
+  height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+.hud-notif-btn:hover {
+  background: rgba(200,147,58,0.12);
+  border-color: rgba(200,147,58,0.3);
+  color: var(--text-gold, #c9973a);
+}
+
+.hud-notif-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 1.1em;
+  height: 1.1em;
+  padding: 0 0.25em;
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 700;
+  font-family: system-ui, sans-serif;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  pointer-events: none;
+}
+.hud-notif-badge.hidden { display: none; }
+
+/* ── Overview — section toggle button ─────────────────────────────── */
+
+.ov-section-toggle {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: var(--text-muted, #888);
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+.ov-section-toggle:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text-primary, #e8dcc8);
+}
+
+.ov-section-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* ── Overview — Active movements panel ────────────────────────────── */
+
+.ov-mv-section {
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.ov-mv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.25rem 0 0.25rem 0;
+}
+
+.ov-mv-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  background: rgba(255,255,255,0.02);
+  border-radius: 5px;
+  border-left: 2px solid rgba(200,147,58,0.3);
+  font-size: 0.78rem;
+  flex-wrap: wrap;
+}
+
+.ov-mv-lord {
+  font-weight: 600;
+  color: var(--text-gold, #c9973a);
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.ov-mv-status {
+  color: var(--text-primary, #e8dcc8);
+  flex: 1;
+  min-width: 120px;
+}
+
+.ov-mv-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.ov-mv-bar {
+  width: 80px;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ov-mv-fill {
+  height: 100%;
+  background: var(--text-gold, #c9973a);
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+
+.ov-mv-time {
+  font-size: 0.68rem;
+  color: var(--text-muted, #888);
+  white-space: nowrap;
 }

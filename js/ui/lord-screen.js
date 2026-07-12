@@ -21,10 +21,10 @@ const LordScreen = (() => {
       _lord = LordService.getById(_lord.id);
     }
 
-    // Position migration for lords created before position tracking.
-    if (_lord.x == null && _lord.cityIds && _lord.cityIds.length > 0) {
-      const city = CityService.getById(_lord.cityIds[0]);
-      if (city) LordService.setPosition(_lord.id, city.x, city.y);
+    // If lord has no position, place them at the player's first city.
+    if (_lord.x == null) {
+      const firstCity = CityService.getPlayerCities(_player.id)[0];
+      if (firstCity) LordService.setPosition(_lord.id, firstCity.x, firstCity.y);
       _lord = LordService.getById(_lord.id);
     }
 
@@ -34,8 +34,18 @@ const LordScreen = (() => {
     if (completed.length > 0) {
       _lord = LordService.getById(_lord.id);
       completed.forEach(c => {
-        if (c.actionId === 'search_area') _resolveSearch();
-        else _toast(`✓ ${c.name} completed!`);
+        if (c.actionId === 'search_area') {
+          _resolveSearch();
+        } else if (c.actionId === 'move_lord') {
+          _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
+          ActivityService.log(_player.id, {
+            type: 'lord_moved', icon: '📍',
+            title: `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
+            detail: '', lordName: _lord.name,
+          });
+        } else {
+          _toast(`✓ ${c.name} completed!`);
+        }
         if (c.leveled > 0) _toast(`⭐ Level Up! Now Level ${_lord.level}.`);
       });
     }
@@ -71,6 +81,7 @@ const LordScreen = (() => {
     if (_lord.talentPoints == null) { _lord.talentPoints = 0;                      changed = true; }
     if (_lord.currentHp    == null) { _lord.currentHp    = LordService.getEffectiveStats(_lord).health; changed = true; }
     if (_lord.hpRegenAt    == null) { _lord.hpRegenAt    = TimeService.now();      changed = true; }
+    if (!_lord.stance)             { _lord.stance        = { id: 'idle', startedAt: null, finishAt: null }; changed = true; }
 
     if (changed) LordService.save(_lord);
   }
@@ -86,8 +97,8 @@ const LordScreen = (() => {
         <header class="ls-header">
           <button class="ls-back-btn" id="ls-back">← Overview</button>
           <div class="ls-title">
-            ${race.portrait
-              ? `<img class="ls-header-portrait" src="${race.portrait}" alt="${race.name}" />`
+            ${(cls?.portrait || race.portrait)
+              ? `<img class="ls-header-portrait" src="${cls?.portrait || race.portrait}" alt="${_lord.name}" />`
               : `<span class="ls-portrait">${race.icon || '👤'}</span>`}
             <span class="ls-lord-name">${_lord.name}</span>
             <span class="ls-race-badge">${race.name || ''}</span>
@@ -106,7 +117,8 @@ const LordScreen = (() => {
             <nav class="ls-tabs">
               <button class="ls-tab ${_activeTab === 'overview'  ? 'ls-tab--active' : ''}" data-tab="overview">📍 Overview</button>
               <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army">⚔ Army</button>
-              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery">🔍 Discovery</button>
+              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery">🔍 Discovery${(() => { const n = DiscoveryService.getUnseenCount(_player.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
+              <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">🗡 Batallas${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
             </nav>
             <div class="ls-content" id="ls-content"></div>
           </div>
@@ -114,8 +126,14 @@ const LordScreen = (() => {
         </div>
       </div>
 
-      <div class="disc-overlay hidden" id="disc-overlay">
-        <div class="disc-popup" id="disc-popup"></div>
+      <div class="unit-req-overlay hidden" id="unit-req-overlay">
+        <div class="unit-req-panel">
+          <div class="unit-req-header">
+            <span class="unit-req-title">🗂 Unit Roster</span>
+            <button class="unit-req-close" id="unit-req-close">✕</button>
+          </div>
+          <div class="unit-req-body" id="unit-req-body"></div>
+        </div>
       </div>
 
     `;
@@ -138,10 +156,11 @@ const LordScreen = (() => {
     const hpPct     = Math.min(100, Math.floor((curHp / maxHp) * 100));
     const mods      = cls?.modifiers || {};
 
-    // Portrait
-    const portraitHtml = race.portrait
+    // Portrait — class portrait takes priority over race portrait
+    const portraitSrc  = cls?.portrait || race.portrait;
+    const portraitHtml = portraitSrc
       ? `<div class="lsl-portrait-area lsl-portrait-area--image">
-           <img class="lsl-portrait-img" src="${race.portrait}" alt="${race.name}" />
+           <img class="lsl-portrait-img" src="${portraitSrc}" alt="${_lord.name}" />
            <div class="lsl-portrait-fade"></div>
            <div class="lsl-portrait-glow" style="background:radial-gradient(ellipse at 50% 80%, ${race.portraitGlow || 'rgba(200,147,58,0.25)'} 0%, transparent 70%)"></div>
            <div class="lsl-portrait-level">Lv ${level}</div>
@@ -210,7 +229,7 @@ const LordScreen = (() => {
       ${portraitHtml}
 
       <div class="lsl-info">
-        ${race.portrait ? '' : `
+        ${portraitSrc ? '' : `
           <div class="lsl-name">${_lord.name}</div>
           <div class="lsl-race">${race.name || ''}</div>
           ${cls ? `<div class="lsh-class-badge-row"><span class="lsh-class-badge" style="color:${cls.color};border-color:${cls.color}50">${cls.icon} ${cls.name}</span></div>` : ''}
@@ -292,9 +311,44 @@ const LordScreen = (() => {
           _renderTab();
           _startCountdown();
         });
+        document.getElementById('lov-debug-camp-btn')?.addEventListener('click', () => {
+          DiscoveryService.spawnBanditCamp(_lord, _player.id, _armyPower(_lord.id));
+          _lord = LordService.getById(_lord.id);
+          _renderTab();
+          _refreshDiscoveryBadge();
+        });
         document.getElementById('lov-move-btn')?.addEventListener('click', () => {
           _stopCountdown();
           App.navigate('map', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id), mode: 'move-lord' });
+        });
+        // Stance picker — toggle Ambush / Raid selection
+        document.querySelectorAll('.lov-stance-pick-btn[data-pick]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.lov-stance-pick-btn').forEach(b => b.classList.remove('lov-stance-pick-btn--active'));
+            btn.classList.add('lov-stance-pick-btn--active');
+            const def    = STANCE_DEFS[btn.dataset.pick];
+            const descEl = document.getElementById('lov-stance-desc');
+            if (descEl && def) descEl.textContent = def.description;
+            const startBtn = document.getElementById('lov-stance-start');
+            if (startBtn) { startBtn.disabled = false; startBtn.dataset.stance = btn.dataset.pick; }
+          });
+        });
+        document.getElementById('lov-stance-start')?.addEventListener('click', () => {
+          const startBtn = document.getElementById('lov-stance-start');
+          const stanceId = startBtn?.dataset?.stance;
+          const secs     = Number(document.getElementById('lov-stance-dur')?.value || 3600);
+          if (!stanceId) { _toast('Selecciona una postura primero.'); return; }
+          const result   = LordService.enterStance(_lord, stanceId, secs);
+          if (!result.ok) { _toast(result.error); return; }
+          _lord = LordService.getById(_lord.id);
+          _renderTab();
+          _startCountdown();
+        });
+        document.querySelector('.lov-stance-exit-btn')?.addEventListener('click', () => {
+          LordService.exitStance(_lord);
+          _lord = LordService.getById(_lord.id);
+          _renderTab();
+          _startCountdown();
         });
         break;
       case 'army':
@@ -302,9 +356,119 @@ const LordScreen = (() => {
         _bindArmyEvents();
         break;
       case 'discovery':
+        DiscoveryService.markLogSeen(_player.id);
+        _refreshDiscoveryBadge();
         content.innerHTML = _discoveriesHtml();
         _bindDiscoveryEvents();
         break;
+      case 'battles':
+        content.innerHTML = _battlesTabHtml();
+        _bindBattlesTabEvents();
+        break;
+    }
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────
+
+  function _unitPower(def) {
+    if (!def) return 0;
+    const s = def.combatStats || {};
+    return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
+  }
+
+  function _armyPower(lordId) {
+    const army = ArmyService.get(lordId);
+    return army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * u.count, 0);
+  }
+
+  // Detection difficulty per terrain — open terrain = easy to spot enemies.
+  const _TERRAIN_DETECTION = {
+    plains: 1.00, hills: 0.70, forest: 0.45,
+    mountain: 0.40, marsh: 0.40, desert: 0.80, coast: 0.90,
+  };
+  function _terrainDetectionMod(terrainId) { return _TERRAIN_DETECTION[terrainId] ?? 0.75; }
+
+  // Scan for enemy lords & cities on the current tile and log intel results.
+  // Called once per completed Search Area action, before the random discovery roll.
+  function _scanIntelligence(x, y, terrain) {
+    const terrainMod = _terrainDetectionMod(terrain.id);
+    const isRogue    = _lord.classId === 'rogue';
+    const classBonus = isRogue ? 1.8 : 1.0;
+
+    // Enemy cities on this tile — progressive scouting (vague → clear → precise)
+    CityService.getAll()
+      .filter(c => c.x === x && c.y === y && c.playerId !== _player.id)
+      .forEach(city => {
+        const existing     = IntelligenceService.getByType(_player.id, 'enemy_city')
+          .find(r => r.tileX === x && r.tileY === y);
+        const alreadyKnown = !!existing;
+        const garrison     = CityService.getGarrison(city);
+        const intelRec     = IntelligenceService.buildRecord(_lord, {
+          type:        'enemy_city',
+          tileX:       x,
+          tileY:       y,
+          currentTier: existing?.qualityTier ?? null,
+          rawData: {
+            name:          city.name,
+            population:    Math.floor(city.population || 0),
+            garrisonCount: garrison.reduce((s, r) => s + r.count, 0),
+            garrisonUnits: garrison,
+          },
+        });
+        if (!alreadyKnown) {
+          IntelligenceService.addRecord(_player.id, intelRec);
+        } else if (existing.qualityTier !== 'precise') {
+          // Upgrade existing record to higher tier
+          IntelligenceService.removeRecord(_player.id, existing.id);
+          IntelligenceService.addRecord(_player.id, intelRec);
+        }
+        DiscoveryService.addLog(_player.id, {
+          definitionId: 'enemy_city', tileX: x, tileY: y, terrain: terrain.id, rewards: [],
+          intelQuality: intelRec.qualityTier,
+          detail:       intelRec.data?.name || null,
+          alreadyKnown,
+        });
+      });
+
+    // Enemy lords on this tile (probability-based)
+    LordService.getAll()
+      .filter(l => l.x === x && l.y === y && l.playerId !== _player.id)
+      .forEach(lord => {
+        const visScore = VisibilityService.getVisibilityScore(lord);
+        const chance   = Math.min(1, (visScore / 100) * terrainMod * classBonus);
+        if (Math.random() >= chance) return;
+        const stanceDef = STANCE_DEFS[lord.stance?.id] || STANCE_DEFS.idle;
+        const intelRec  = IntelligenceService.buildRecord(_lord, {
+          type: 'enemy_lord', tileX: x, tileY: y,
+          ttl: 30 * 60,
+          rawData: {
+            armyCapacity: ArmyService.totalUnits(lord.id),
+            lastActivity: lord.actionQueue.length > 0 ? lord.actionQueue[0].actionId : 'idle',
+            lordClass:    isRogue ? lord.classId : null,
+            stanceId:     isRogue ? (lord.stance?.id || 'idle') : null,
+            stanceName:   isRogue ? stanceDef.name : null,
+          },
+        });
+        IntelligenceService.addRecord(_player.id, intelRec);
+        DiscoveryService.addLog(_player.id, {
+          definitionId: 'enemy_lord', tileX: x, tileY: y, terrain: terrain.id, rewards: [],
+          intelQuality: intelRec.qualityTier,
+          detail: isRogue ? `${stanceDef.icon} ${stanceDef.name}` : null,
+        });
+      });
+  }
+
+  function _refreshDiscoveryBadge() {
+    const btn = document.getElementById('ls-tab-discovery');
+    if (!btn) return;
+    const existing = btn.querySelector('.ls-tab-badge');
+    const n = DiscoveryService.getUnseenCount(_player.id);
+    if (n > 0 && !existing) {
+      btn.insertAdjacentHTML('beforeend', `<span class="ls-tab-badge">${n}</span>`);
+    } else if (n > 0 && existing) {
+      existing.textContent = n;
+    } else if (existing) {
+      existing.remove();
     }
   }
 
@@ -365,6 +529,7 @@ const LordScreen = (() => {
           <div class="lov-lc-btns">
             <button class="lov-search-btn" id="lov-search-btn">🔍 Search Area</button>
             <button class="lov-move-btn" id="lov-move-btn">🗺 Go to Map</button>
+            <button class="lov-debug-btn" id="lov-debug-camp-btn">🏕 Bandit Camp</button>
           </div>`;
       } else {
         searchHtml = isTraveling
@@ -393,10 +558,50 @@ const LordScreen = (() => {
       `;
     }
 
+    // ── Stance (own section, after Army) ─────────────────────────
+    const stanceObj  = LordService.getStance(_lord);
+    const stanceDef  = STANCE_DEFS[stanceObj.id] || STANCE_DEFS.idle;
+    const isInStance = LordService.isStanced(_lord);
+    let stanceHtml;
+    if (isInStance) {
+      const sRemain   = Math.max(0, Math.floor((stanceObj.finishAt - TimeService.now()) / 1000));
+      const totalMs   = stanceObj.finishAt - stanceObj.startedAt;
+      const elapsedMs = TimeService.now() - stanceObj.startedAt;
+      const sPct      = totalMs > 0 ? Math.min(100, Math.floor((elapsedMs / totalMs) * 100)) : 0;
+      stanceHtml = `
+        <div class="lov-status lov-status--stanced">${stanceDef.icon} Postura: ${stanceDef.name}</div>
+        <div class="lov-progress-row">
+          <div class="lov-bar"><div class="lov-fill" id="lov-stance-fill" style="width:${sPct}%"></div></div>
+          <span class="lov-timer" id="lov-stance-timer">${TimeService.formatDuration(sRemain)}</span>
+        </div>
+        <div class="lov-stance-desc-inline">${stanceDef.description}</div>
+        <button class="lov-stance-exit-btn">✕ Salir</button>
+      `;
+    } else {
+      stanceHtml = `
+        <div class="lov-stance-picker" id="lov-stance-picker">
+          <div class="lov-stance-pick-row">
+            <button class="lov-stance-pick-btn" data-pick="ambush"${busy ? ' disabled' : ''}>${STANCE_DEFS.ambush.icon} Ambush</button>
+            <button class="lov-stance-pick-btn" data-pick="raid"${busy ? ' disabled' : ''}>${STANCE_DEFS.raid.icon} Raid</button>
+            <select class="lov-stance-dur-sel" id="lov-stance-dur"${busy ? ' disabled' : ''}>
+              <option value="3600">1h</option>
+              <option value="7200">2h</option>
+              <option value="14400">4h</option>
+            </select>
+            <button class="lov-stance-start-btn" id="lov-stance-start" disabled>Iniciar</button>
+          </div>
+          <div class="lov-stance-pick-desc" id="lov-stance-desc">${busy ? 'No disponible mientras el lord está ocupado' : 'Selecciona una postura'}</div>
+        </div>
+      `;
+    }
+
     // ── Army ──────────────────────────────────────────────────────
     const army        = ArmyService.get(_lord.id);
     const totalUnits  = army.units.reduce((s, u) => s + u.count, 0);
     const totalUpkeep = army.units.reduce((s, u) => s + (UNIT_DEFS[u.unitId]?.upkeep || 0) * u.count, 0);
+    const totalPower  = _armyPower(_lord.id);
+    const maxPower    = LordService.getArmyPowerCap(_lord);
+    const overCap     = totalPower > maxPower;
     const armyHtml    = army.units.length === 0
       ? `<p class="lov-pos-none">No troops mustered — recruit from the Army tab.</p>`
       : `
@@ -420,8 +625,16 @@ const LordScreen = (() => {
         </div>
         <div class="lov-section-divider"></div>
         <div class="lov-section">
-          <div class="lov-section-title">Army</div>
+          <div class="lov-section-row">
+            <div class="lov-section-title">Army</div>
+            <span class="lov-army-power${overCap ? ' lov-army-power--over' : ''}">⚔ ${totalPower} / ${maxPower} CP</span>
+          </div>
           ${armyHtml}
+        </div>
+        <div class="lov-section-divider"></div>
+        <div class="lov-section">
+          <div class="lov-section-title">Postura</div>
+          ${stanceHtml}
         </div>
       </div>
     `;
@@ -465,7 +678,7 @@ const LordScreen = (() => {
 
   function _getLordCurrentCity() {
     if (_lord.x == null) return null;
-    return CityService.getLordCities(_lord.id).find(c => c.x === _lord.x && c.y === _lord.y) || null;
+    return CityService.getPlayerCities(_player.id).find(c => c.x === _lord.x && c.y === _lord.y) || null;
   }
 
   // ── Shared unit card builder ───────────────────────────────────
@@ -478,8 +691,12 @@ const LordScreen = (() => {
     return '';
   }
 
-  function _buildUnitCard(def, { removable = false } = {}) {
+  function _buildUnitCard(def, { removable = false, currentHp, maxHp } = {}) {
     const tierClass = _cardTierClass(def.category);
+    const hpMax  = maxHp     ?? def.combatStats.hp;
+    const hpCur  = currentHp ?? hpMax;
+    const hpPct  = Math.min(100, Math.max(0, Math.round((hpCur / hpMax) * 100)));
+    const hpColor = hpPct > 60 ? '#4caf50' : hpPct > 30 ? '#ff9800' : '#f44336';
     const portrait = def.image
       ? `<img src="${def.image}" class="la-uc-img" alt="${def.name}" loading="lazy">`
       : `<div class="la-uc-img la-uc-img--fallback">${def.icon}</div>`;
@@ -507,7 +724,7 @@ const LordScreen = (() => {
       <div class="la-uc-wrap">
         <div class="la-unit-card${tierClass ? ' ' + tierClass : ''}">
           <div class="la-uc-top">
-            <div class="la-uc-hpbar"><div class="la-uc-hpfill"></div></div>
+            <div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:${hpPct}%;background:${hpColor}"></div></div>
           </div>
           ${portrait}
           ${removeBtn}
@@ -531,13 +748,109 @@ const LordScreen = (() => {
 
   function _armyCardsHtml(army, opts = {}) {
     return army.units.flatMap(stack => {
-      const def = UNIT_DEFS[stack.unitId];
+      const def   = UNIT_DEFS[stack.unitId];
       if (!def) return [];
-      return Array.from({ length: stack.count }, () => _buildUnitCard(def, opts));
+      const maxHp = def.combatStats.hp;
+      return Array.from({ length: stack.count }, (_, idx) => {
+        // Front model (idx 0) may be damaged; models behind it are fresh
+        const currentHp = idx === 0 ? (stack.currentHp ?? maxHp) : maxHp;
+        return _buildUnitCard(def, { ...opts, currentHp, maxHp });
+      });
     }).join('');
   }
 
   const ARMY_LIMIT = 10;
+
+  // ── Unit Requirements panel ───────────────────────────────────
+
+  function _unitRequirementsHtml() {
+    const city       = _getLordCurrentCity();
+    const raceRoster = UNIT_ROSTER[_lord.race];
+    const race       = RACES[_lord.race];
+
+    if (!raceRoster) {
+      return `<p class="ur-empty">No unit roster defined for ${race?.name || _lord.race}.</p>`;
+    }
+
+    const cityNote = city
+      ? `Requisitos para <strong>${city.name}</strong>`
+      : '<em>Tu lord no está en una ciudad — los niveles de edificios no están disponibles.</em>';
+
+    const sections = Object.entries(raceRoster).map(([buildingId, levelMap]) => {
+      const bldDef       = BUILDING_DEFS[buildingId];
+      const currentLevel = city ? (city.buildings[buildingId] || 0) : -1;
+      const allMinLevels = Object.keys(levelMap).map(Number);
+      const maxRequired  = Math.max(...allMinLevels);
+
+      const levelEntries = Object.entries(levelMap)
+        .map(([lvl, unitIds]) => ({ minLevel: Number(lvl), unitIds }))
+        .sort((a, b) => a.minLevel - b.minLevel);
+
+      const unitsHtml = levelEntries.map(({ minLevel, unitIds }) =>
+        unitIds.map(unitId => {
+          const def      = UNIT_DEFS[unitId];
+          if (!def) return '';
+          const unlocked = currentLevel >= minLevel;
+          const portrait = def.image
+            ? `<img src="${def.image}" class="ur-unit-img" alt="${def.name}" loading="lazy">`
+            : `<div class="ur-unit-img ur-unit-img--icon">${def.icon}</div>`;
+          const tierClass = _cardTierClass(def.category);
+
+          return `
+            <div class="ur-unit-row ${unlocked ? 'ur-unit--unlocked' : 'ur-unit--locked'}">
+              <div class="ur-unit-portrait ur-portrait${tierClass ? '--' + tierClass.replace('la-unit-card--','') : ''}">${portrait}</div>
+              <div class="ur-unit-body">
+                <div class="ur-unit-name">${def.name}</div>
+                <div class="ur-unit-req-line">
+                  ${unlocked
+                    ? `<span class="ur-tag ur-tag--unlocked">✓ Desbloqueado</span>`
+                    : `<span class="ur-tag ur-tag--locked">🔒 Requiere ${bldDef?.name || buildingId} Lv ${minLevel}</span>`}
+                  ${!unlocked && currentLevel > 0
+                    ? `<span class="ur-tag ur-tag--progress">Tienes Lv ${currentLevel}</span>`
+                    : ''}
+                </div>
+                <div class="ur-unit-stats">
+                  <span title="Attack">⚔ ${def.combatStats.attack}</span>
+                  <span title="Defense">🛡 ${def.combatStats.defense}</span>
+                  <span title="HP">❤ ${def.combatStats.hp}</span>
+                  <span title="Speed">💨 ${def.combatStats.speed}</span>
+                </div>
+                <div class="ur-unit-cost">💰 ${def.goldCost} · ⏱ ${TimeService.formatDuration(def.recruitTime)} · 💸 ${def.upkeep}/24h</div>
+              </div>
+              <div class="ur-unit-status-icon">${unlocked ? '✓' : '🔒'}</div>
+            </div>
+          `;
+        }).join('')
+      ).join('');
+
+      const bldStatusClass = currentLevel < 0 ? '' :
+                             currentLevel === 0 ? 'ur-bld--missing' :
+                             currentLevel < maxRequired ? 'ur-bld--partial' : 'ur-bld--complete';
+
+      const bldLevelLabel = currentLevel < 0 ? '—'
+                          : currentLevel === 0 ? 'No construido'
+                          : `Lv ${currentLevel} / ${bldDef?.maxLevel || '?'}`;
+
+      return `
+        <div class="ur-building-group">
+          <div class="ur-building-header ${bldStatusClass}">
+            <span class="ur-bld-icon">${bldDef?.icon || '🏛'}</span>
+            <div class="ur-bld-name-wrap">
+              <span class="ur-bld-name">${bldDef?.name || buildingId}</span>
+              <span class="ur-bld-desc">${bldDef?.description?.split('.')[0] || ''}</span>
+            </div>
+            <span class="ur-bld-level">${bldLevelLabel}</span>
+          </div>
+          <div class="ur-units">${unitsHtml}</div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="ur-city-note">${cityNote}</div>
+      ${sections}
+    `;
+  }
 
   function _armyHtml() {
     const army        = ArmyService.get(_lord.id);
@@ -546,6 +859,9 @@ const LordScreen = (() => {
     const isTraveling = _lord.actionQueue.length > 0 && _lord.actionQueue[0].actionId === 'move_lord';
     const totalUnits  = army.units.reduce((s, u) => s + u.count, 0);
     const atLimit     = totalUnits >= ARMY_LIMIT;
+    const currentCP   = _armyPower(_lord.id);
+    const maxCP       = LordService.getArmyPowerCap(_lord);
+    const overCap     = currentCP > maxCP;
 
     // ── Current Army ───────────────────────────────────────────
     let armyListHtml;
@@ -604,11 +920,13 @@ const LordScreen = (() => {
         cardsHtml = `<p class="la-recruit-note">No units unlocked yet — build Barracks, Archery Range or Stables.</p>`;
       } else {
         cardsHtml = available.map(({ unitId }) => {
-          const def       = UNIT_DEFS[unitId];
+          const def        = UNIT_DEFS[unitId];
           if (!def) return '';
-          const canAfford = (player.coins || 0) >= def.goldCost;
-          const disabled  = busy || !canAfford || atLimit;
-          const btnLabel  = busy ? 'Training…' : atLimit ? 'Army Full' : canAfford ? 'Recruit' : 'No gold';
+          const canAfford  = (player.coins || 0) >= def.goldCost;
+          const unitCP     = _unitPower(def);
+          const wouldExceedCap = currentCP + unitCP > maxCP;
+          const disabled   = busy || !canAfford || atLimit || wouldExceedCap;
+          const btnLabel   = busy ? 'Training…' : atLimit ? 'Army Full' : wouldExceedCap ? '⚠ Límite CP' : canAfford ? 'Recruit' : 'No gold';
           return `
             <div class="la-recruit-card ${busy ? 'la-recruit-card--busy' : ''}">
               ${_unitPortraitHtml(def)}
@@ -632,7 +950,7 @@ const LordScreen = (() => {
       recruitSectionHtml = `${queueHtml}${cardsHtml}`;
     }
 
-    // ── Mercenaries (from negotiated discoveries) ──────────────
+    // ── Mercenaries (from active camp discoveries) ──────────────
     const mercDiscoveries = RecruitmentService.getAvailableFromDiscoveries(_player.id);
     let mercHtml = '';
     if (mercDiscoveries.length > 0) {
@@ -640,12 +958,14 @@ const LordScreen = (() => {
       const cityBusy   = cityQueue.length > 0;
       const mercGroups = mercDiscoveries.map(record => {
         const discDef = DISCOVERY_DEFS[record.definitionId];
-        const cards   = record.mercenaryUnits.map(unitId => {
-          const def       = UNIT_DEFS[unitId];
+        const cards   = (CAMP_DEFS[record.definitionId]?.mercenaryRoster || []).map(unitId => {
+          const def        = UNIT_DEFS[unitId];
           if (!def) return '';
-          const canAfford = (player.coins || 0) >= def.goldCost;
-          const disabled  = !canAfford || atLimit;
-          const btnLabel  = atLimit ? 'Army Full' : canAfford ? 'Hire' : 'No gold';
+          const canAfford  = (player.coins || 0) >= def.goldCost;
+          const unitCP     = _unitPower(def);
+          const wouldExceedCap = currentCP + unitCP > maxCP;
+          const disabled   = !canAfford || atLimit || wouldExceedCap;
+          const btnLabel   = atLimit ? 'Army Full' : wouldExceedCap ? '⚠ Límite CP' : canAfford ? 'Hire' : 'No gold';
           return `
             <div class="la-recruit-card">
               ${_unitPortraitHtml(def)}
@@ -676,10 +996,16 @@ const LordScreen = (() => {
 
     return `
       <div class="la-army-tab">
-        <div class="la-section-title">Army</div>
+        <div class="la-section-header-row">
+          <div class="la-section-title">Army</div>
+          <span class="la-army-cp${overCap ? ' la-army-cp--over' : ''}">⚔ ${currentCP} / ${maxCP} CP</span>
+        </div>
         ${armyListHtml}
         <div class="la-section-divider"></div>
-        <div class="la-section-title">Recruit</div>
+        <div class="la-section-header-row">
+          <div class="la-section-title">Recruit</div>
+          <button class="ur-open-btn" id="ur-open-btn">📋 Ver Requisitos</button>
+        </div>
         ${recruitSectionHtml}
         ${mercHtml}
       </div>
@@ -687,6 +1013,15 @@ const LordScreen = (() => {
   }
 
   function _bindArmyEvents() {
+    // Unit requirements panel
+    document.getElementById('ur-open-btn')?.addEventListener('click', () => {
+      const body    = document.getElementById('unit-req-body');
+      const overlay = document.getElementById('unit-req-overlay');
+      if (!body || !overlay) return;
+      body.innerHTML = _unitRequirementsHtml();
+      overlay.classList.remove('hidden');
+    });
+
     // Finish recruitment instantly
     document.getElementById('la-finish-recruit')?.addEventListener('click', _finishRecruitmentNow);
 
@@ -734,134 +1069,336 @@ const LordScreen = (() => {
 
   // ── Discovery tab ─────────────────────────────────────────────
 
-  function _discoveriesHtml() {
-    const active = DiscoveryService.getActive(_player.id);
+  function _timeAgo(ms) {
+    const s = Math.floor(ms / 1000);
+    if (s < 60)          return 'ahora mismo';
+    const m = Math.floor(s / 60);
+    if (m < 60)          return `hace ${m}m`;
+    const h = Math.floor(m / 60);
+    if (h < 24)          return `hace ${h}h`;
+    return `hace ${Math.floor(h / 24)}d`;
+  }
 
-    if (active.length === 0) {
+  function _discoveriesHtml() {
+    const pending = DiscoveryService.getActive(_player.id);
+    const log     = DiscoveryService.getLog(_player.id);
+
+    // Pending actions section
+    let pendingHtml = '';
+    if (pending.length > 0) {
+      const rows = pending.map(record => {
+        const def      = DISCOVERY_DEFS[record.definitionId];
+        if (!def) return '';
+        const catMeta  = DISCOVERY_CATEGORY_META[def.category] || DISCOVERY_CATEGORY_META.event;
+        const terrain  = TERRAIN_TYPES[record.terrain] || { icon: '?', name: record.terrain };
+        const expiry   = DiscoveryService.formatExpiry(record);
+        const expiring = record.expiresAt && (record.expiresAt - TimeService.now()) < 12 * 3600 * 1000;
+        const ago      = _timeAgo(TimeService.now() - record.discoveredAt);
+        const mercUnits = record.mercenaryUnits || [];
+        const mercLine  = mercUnits.length > 0
+          ? `<div class="disc-row-merc">💼 Disponibles: ${mercUnits.map(id => UNIT_DEFS[id]?.name || id).join(', ')}</div>`
+          : '';
+        const campPreview = _campPreviewHtml(record.campDetails);
+
+        return `
+          <div class="disc-row">
+            <div class="disc-row-icon">${def.icon}</div>
+            <div class="disc-row-body">
+              <div class="disc-row-top">
+                <span class="disc-row-name">${def.name}</span>
+                <span class="disc-cat-badge ${catMeta.cssClass}">${catMeta.icon} ${catMeta.label}</span>
+              </div>
+              <div class="disc-row-meta">
+                ${terrain.icon} ${terrain.name}
+                · <span class="disc-coords">(${record.tileX}, ${record.tileY})</span>
+                · <span class="${expiring ? 'disc-expiry--soon' : 'disc-expiry'}">⏱ ${expiry}</span>
+                · <span class="disc-ago">${ago}</span>
+              </div>
+              ${campPreview}
+              ${mercLine}
+            </div>
+            <button class="disc-claim-btn" data-record-id="${record.id}">⚔ Atacar</button>
+          </div>`;
+      }).join('');
+      pendingHtml = `
+        <div class="disc-section-label">⚔ Acciones pendientes</div>
+        <div class="disc-list">${rows}</div>`;
+    }
+
+    // Search log section
+    let logHtml = '';
+    if (log.length > 0) {
+      const entries = log.map(entry => {
+        const def       = DISCOVERY_DEFS[entry.definitionId];
+        const isNothing = !def || def.category === 'nothing';
+        const terrain   = TERRAIN_TYPES[entry.terrain] || { icon: '🌍', name: entry.terrain || '' };
+        const ago       = _timeAgo(TimeService.now() - entry.loggedAt);
+        const icon      = def ? def.icon : '❓';
+        const name      = def ? def.name : 'Exploración';
+
+        let rewardLine = '';
+        if (entry.wasAttack) {
+          const won = entry.combatOutcome === 'victory';
+          rewardLine = `<span class="disc-log-outcome ${won ? 'disc-log-outcome--win' : 'disc-log-outcome--loss'}">${won ? '⚔ Victoria' : '💀 Derrota'}</span>`;
+        } else if (entry.intelQuality) {
+          const INTEL_COLORS = { vague: '#888899', clear: '#c8b040', precise: '#40c0ff' };
+          const INTEL_LABELS = { vague: 'Vaga', clear: 'Clara', precise: 'Precisa' };
+          const col   = INTEL_COLORS[entry.intelQuality] || '#888899';
+          const label = INTEL_LABELS[entry.intelQuality] || entry.intelQuality;
+          const extra = entry.detail ? ` · ${entry.detail}` : '';
+          rewardLine = `<span class="disc-log-intel" style="color:${col}">👁 Intel ${label}${entry.alreadyKnown ? ' (ya conocida)' : ''}${extra}</span>`;
+        } else if (!isNothing && entry.rewards && entry.rewards.length > 0) {
+          const parts = entry.rewards
+            .filter(r => _RES_ICONS[r.type] && r.amount > 0)
+            .map(r => `${_RES_ICONS[r.type]}+${r.amount}`)
+            .join(' ');
+          if (parts) rewardLine = `<span class="disc-log-rewards">${parts}</span>`;
+        }
+
+        return `
+          <div class="disc-log-entry${isNothing ? ' disc-log-entry--nothing' : ''}">
+            <span class="disc-log-icon">${icon}</span>
+            <div class="disc-log-body">
+              <span class="disc-log-name">${isNothing ? 'Nada encontrado' : name}</span>
+              ${rewardLine}
+              <span class="disc-log-meta">${terrain.icon} (${entry.tileX ?? '?'}, ${entry.tileY ?? '?'}) · ${ago}</span>
+            </div>
+            <button class="disc-log-dismiss" data-log-id="${entry.id}" title="Descartar">✕</button>
+          </div>`;
+      }).join('');
+      logHtml = `
+        ${pending.length > 0 ? '<div class="disc-section-divider"></div>' : ''}
+        <div class="disc-section-label">📋 Historial</div>
+        <div class="disc-log-list">${entries}</div>`;
+    }
+
+    if (!pendingHtml && !logHtml) {
       return `
         <div class="la-placeholder">
           <div class="la-placeholder-icon">🔍</div>
-          <div class="la-placeholder-text">No Active Discoveries</div>
-          <div class="la-placeholder-sub">Use <strong>Search Area</strong> to explore tiles and uncover hidden opportunities.</div>
-        </div>
-      `;
+          <div class="la-placeholder-text">Sin historial aún</div>
+          <div class="la-placeholder-sub">Usa <strong>Search Area</strong> para explorar.</div>
+        </div>`;
     }
 
-    const _CLAIM_LABELS = {
-      combat:    '⚔ Fight',
-      resource:  '📦 Collect',
-      event:     '📜 Explore',
-      trade:     '🤝 Trade',
-      legendary: '✨ Claim',
-    };
+    return `<div class="disc-tab-body">${pendingHtml}${logHtml}</div>`;
+  }
 
-    const rows = active.map(record => {
-      const def      = DISCOVERY_DEFS[record.definitionId];
-      if (!def) return '';
-      const catMeta  = DISCOVERY_CATEGORY_META[def.category] || DISCOVERY_CATEGORY_META.event;
-      const terrain  = TERRAIN_TYPES[record.terrain] || { icon: '?', name: record.terrain };
-      const expiry   = DiscoveryService.formatExpiry(record);
-      const isExpiring = record.expiresAt && (record.expiresAt - TimeService.now()) < 12 * 3600 * 1000;
+  const _RES_ICONS = { gold: '💰', wood: '🪵', stone: '⛏', iron: '⚒', food: '🌾', xp: '⭐' };
+  const _ACTION_CATEGORIES = new Set(['combat']);
 
-      // Combat discoveries with a mercenary roster get Attack/Negotiate choice
-      const canNegotiate = def.category === 'combat' && MERCENARY_ROSTER[def.id];
-      let actionHtml;
-      if (record.negotiated) {
-        const unitNames = (record.mercenaryUnits || []).map(id => UNIT_DEFS[id]?.name || id).join(', ');
-        actionHtml = `
-          <div class="disc-negotiated-row">
-            <span class="disc-negotiated-badge">🤝 Negotiated — hire ${unitNames} in Army tab</span>
-            <button class="disc-dismiss-btn" data-record-id="${record.id}">✕ Dismiss</button>
-          </div>
-        `;
-      } else if (canNegotiate) {
-        actionHtml = `
-          <div class="disc-action-row">
-            <button class="disc-claim-btn" data-record-id="${record.id}">⚔ Fight</button>
-            <button class="disc-negotiate-btn" data-record-id="${record.id}">🤝 Negotiate</button>
-          </div>
-        `;
-      } else {
-        const claimLabel = _CLAIM_LABELS[def.category] || '✓ Claim';
-        actionHtml = `<button class="disc-claim-btn" data-record-id="${record.id}">${claimLabel}</button>`;
-      }
-
-      return `
-        <div class="disc-row">
-          <div class="disc-row-icon">${def.icon}</div>
-          <div class="disc-row-body">
-            <div class="disc-row-top">
-              <span class="disc-row-name">${def.name}</span>
-              <span class="disc-cat-badge ${catMeta.cssClass}">${catMeta.icon} ${catMeta.label}</span>
-            </div>
-            <div class="disc-row-meta">
-              ${terrain.icon} ${terrain.name}
-              · <span class="disc-coords">(${record.tileX}, ${record.tileY})</span>
-              · <span class="${isExpiring ? 'disc-expiry--soon' : 'disc-expiry'}">⏱ ${expiry}</span>
-            </div>
-            <div class="disc-row-desc">${def.description}</div>
-          </div>
-          ${actionHtml}
+  function _campPreviewHtml(cd) {
+    if (!cd) return '';
+    const campDef = CAMP_DEFS[cd.type] || {};
+    const chips = cd.defenders.map(d => {
+      const def = UNIT_DEFS[d.unitId];
+      return `<span class="camp-unit-chip">${def?.icon || '⚔'} ${def?.name || d.unitId} ×${d.count}</span>`;
+    }).join('');
+    return `
+      <div class="camp-preview">
+        <div class="camp-preview-header">
+          <span class="camp-level-badge">Nivel ${cd.level}</span>
+          <span class="camp-type-label">${campDef.icon || '⚔'} ${campDef.displayName || cd.type}</span>
         </div>
-      `;
+        <div class="camp-unit-chips">${chips}</div>
+      </div>`;
+  }
+
+  // ── Battles tab ───────────────────────────────────────────────
+
+  const _OUTCOME_META = {
+    victory: { label: 'Victoria', icon: '⚔', css: 'bh-victory' },
+    defeat:  { label: 'Derrota',  icon: '☠', css: 'bh-defeat'  },
+    draw:    { label: 'Empate',   icon: '🤝', css: 'bh-draw'    },
+  };
+
+  const _REASON_LABELS_TAB = {
+    eliminated: 'Eliminación total',
+    routed:     'Dispersión',
+    retreated:  'Retirada',
+    max_rounds: 'Duración máxima',
+  };
+
+  function _battlesTabHtml() {
+    const battles = BattleHistoryService.getForLord(_lord.id);
+
+    if (battles.length === 0) {
+      return `
+        <div class="bh-empty">
+          <div class="bh-empty-icon">🗡</div>
+          <p class="bh-empty-msg">Sin batallas registradas aún.</p>
+          <p class="bh-empty-hint">Ataca un campamento en la pestaña Descubrimientos.</p>
+        </div>`;
+    }
+
+    const rows = battles.map((b, idx) => {
+      const om     = _OUTCOME_META[b.outcome] || _OUTCOME_META.defeat;
+      const date   = new Date(b.at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
+      const time   = new Date(b.at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+      const loot   = b.outcome === 'victory' && b.goldEarned > 0 ? `+${b.goldEarned}💰 · ` : '';
+      return `
+        <div class="bh-entry ${om.css}" data-bh-idx="${idx}">
+          <div class="bh-entry-header">
+            <span class="bh-outcome-badge ${om.css}">${om.icon} ${om.label}</span>
+            <span class="bh-camp-name">${b.campIcon || '⚔'} ${b.campName}</span>
+            <span class="bh-date">${date} ${time}</span>
+          </div>
+          <div class="bh-entry-stats">
+            <span>Rondas: <strong>${b.rounds}</strong></span>
+            <span>Bajas: <strong>${b.modelsLost}</strong></span>
+            <span>${loot}+${b.xpEarned}⭐</span>
+            <span class="bh-reason">${_REASON_LABELS_TAB[b.reason] || b.reason}</span>
+          </div>
+          <button class="bh-log-toggle" data-bh-idx="${idx}">📜 Ver informe</button>
+          <div class="bh-log-body hidden" id="bh-log-${idx}">
+            ${b.report ? _battleLogHtml(b.report) : '<em>Informe no disponible</em>'}
+          </div>
+        </div>`;
     }).join('');
 
-    return `
-      <div class="disc-log-header">
-        <span>${active.length} active discover${active.length === 1 ? 'y' : 'ies'}</span>
-      </div>
-      <div class="disc-list">${rows}</div>
-    `;
+    return `<div class="bh-list">${rows}</div>`;
   }
 
-  // ── Discovery result popup ────────────────────────────────────
+  function _battleLogHtml(report) {
+    const _PHASE_LABELS_TAB = {
+      passive: 'Pasivo', ranged: 'Distancia', charge: 'Carga',
+      melee: 'Melee', morale: 'Moral', end_round: 'Fin ronda',
+    };
+    const _RESULT_LABELS_TAB = {
+      hit: 'golpe', killed: 'modelo muerto', eliminated: 'ELIMINADO',
+      miss: 'esquivado', routed: 'DISPERSADO', retreated: 'RETIRADA', healed: 'curado',
+    };
+
+    const unitCols = `
+      <div class="bh-unit-cols">
+        <div class="bh-unit-col">
+          <div class="bh-unit-col-header">Tu Ejército</div>
+          ${report.attacker.unitsStart.map(s => {
+            const surv = report.attacker.unitsSurviving.find(u => u.sourceId === s.sourceId);
+            const cnt  = surv?.count ?? 0;
+            const def  = UNIT_DEFS[s.sourceId];
+            const icon = def?.icon || '⚔';
+            const name = def?.name || s.sourceId;
+            const badge = cnt === 0 ? '☠' : cnt < s.count ? '🩹' : '✓';
+            return `<div class="bh-unit-row"><span>${icon} ${name}</span><span class="bh-unit-cnt">${badge} ${cnt}/${s.count}</span></div>`;
+          }).join('')}
+        </div>
+        <div class="bh-unit-col">
+          <div class="bh-unit-col-header">Enemigo</div>
+          ${report.defender.unitsStart.map(s => {
+            const surv = report.defender.unitsSurviving.find(u => u.sourceId === s.sourceId);
+            const cnt  = surv?.count ?? 0;
+            const def  = UNIT_DEFS[s.sourceId];
+            const icon = def?.icon || '⚔';
+            const name = def?.name || s.sourceId;
+            const badge = cnt === 0 ? '☠' : cnt < s.count ? '🩹' : '✓';
+            return `<div class="bh-unit-row"><span>${icon} ${name}</span><span class="bh-unit-cnt">${badge} ${cnt}/${s.count}</span></div>`;
+          }).join('')}
+        </div>
+      </div>`;
+
+    const logLines = report.events.map(e => {
+      const phase = _PHASE_LABELS_TAB[e.phase] || e.phase;
+      const res   = _RESULT_LABELS_TAB[e.result] || e.result;
+      if (!e.actorName || !e.targetName) {
+        return `<div class="bh-log-line bh-log-${e.result || 'hit'}">[R${e.round} ${phase}] ${e.result === 'routed' ? '💥' : '🚶'} ${res}</div>`;
+      }
+      if (e.result === 'healed') {
+        return `<div class="bh-log-line bh-log-healed">[R${e.round} ${phase}] ${e.actorName} ✚ ${-e.damage} curado</div>`;
+      }
+      const dmg   = e.damage > 0 ? ` ⚔ ${e.damage}` : '';
+      const trait = e.trait ? ` (${e.trait})` : '';
+      return `<div class="bh-log-line bh-log-${e.result || 'hit'}">[R${e.round} ${phase}] ${e.actorName} → ${e.targetName}${dmg}${trait} — ${res}</div>`;
+    }).join('');
+
+    return `${unitCols}<div class="bh-log-lines">${logLines}</div>`;
+  }
+
+  function _bindBattlesTabEvents() {
+    document.querySelectorAll('.bh-log-toggle[data-bh-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const body = document.getElementById(`bh-log-${btn.dataset.bhIdx}`);
+        if (body) body.classList.toggle('hidden');
+      });
+    });
+  }
+
+  // ── Search resolution ─────────────────────────────────────────
 
   function _resolveSearch() {
-    const result = DiscoveryService.search(_lord, _player.id);
-    _showDiscoveryPopup(result);
-  }
+    // Scan for enemy lords / cities on this tile before the random roll.
+    if (_lord.x != null) {
+      const terrain = WorldService.getTerrain(_lord.x, _lord.y);
+      _scanIntelligence(_lord.x, _lord.y, terrain);
+    }
 
-  function _showDiscoveryPopup(result) {
+    const result = DiscoveryService.search(_lord, _player.id, _armyPower(_lord.id));
     const { def, record } = result;
-    const catMeta = DISCOVERY_CATEGORY_META[def.category] || {};
-    const found   = def.category !== 'nothing';
-    const terrain = _lord.x != null ? WorldService.getTerrain(_lord.x, _lord.y) : null;
-    const expiry  = record ? DiscoveryService.formatExpiry(record) : null;
 
-    const popupEl = document.getElementById('disc-popup');
-    const overlay = document.getElementById('disc-overlay');
-    if (!popupEl || !overlay) return;
+    // Record to intelligence if this discovery has an intelType
+    if (record && def.intelType) {
+      const intelRec = IntelligenceService.buildRecord(_lord, {
+        type:    def.intelType,
+        tileX:   record.tileX,
+        tileY:   record.tileY,
+        ttl:     def.baseDuration || null,
+        rawData: { resourceType: def.name },
+      });
+      IntelligenceService.addRecord(_player.id, intelRec);
+    }
 
-    popupEl.innerHTML = `
-      <div class="disc-popup-header">
-        <span class="disc-popup-title">🔍 Area Searched</span>
-        ${terrain ? `<span class="disc-popup-tile">${terrain.icon} ${terrain.name} (${_lord.x}, ${_lord.y})</span>` : ''}
-      </div>
-      <div class="disc-popup-icon ${found ? 'disc-popup-icon--found' : 'disc-popup-icon--empty'}">${def.icon}</div>
-      <div class="disc-popup-name">${def.name}</div>
-      ${found ? `<div class="disc-cat-badge ${catMeta.cssClass}">${catMeta.icon} ${catMeta.label}</div>` : ''}
-      <div class="disc-popup-desc">${def.description}</div>
-      ${expiry ? `<div class="disc-popup-expiry">⏱ Lasts ${expiry}</div>` : ''}
-      <button class="disc-popup-close" id="disc-popup-close">Continue</button>
-    `;
-
-    overlay.classList.remove('hidden');
-    requestAnimationFrame(() => popupEl.classList.add('disc-popup--visible'));
-
-    document.getElementById('disc-popup-close')?.addEventListener('click', _closeDiscoveryPopup);
-    overlay.addEventListener('click', e => { if (e.target === overlay) _closeDiscoveryPopup(); }, { once: true });
-  }
-
-  function _closeDiscoveryPopup() {
-    const overlay = document.getElementById('disc-overlay');
-    const popup   = document.getElementById('disc-popup');
-    if (!overlay || !popup) return;
-    popup.classList.remove('disc-popup--visible');
-    setTimeout(() => {
-      overlay.classList.add('hidden');
+    if (!record || def.category === 'nothing') {
+      DiscoveryService.addLog(_player.id, {
+        definitionId: def.id,
+        tileX: _lord.x, tileY: _lord.y,
+        terrain: _lord.x != null ? (WorldService.getTerrain(_lord.x, _lord.y)?.id || 'unknown') : 'unknown',
+        rewards: [],
+      });
       _renderTab();
-      _startCountdown();
-    }, 260);
+      _refreshDiscoveryBadge();
+      return;
+    }
+
+    if (_ACTION_CATEGORIES.has(def.category)) {
+      DiscoveryService.addLog(_player.id, {
+        definitionId: def.id,
+        tileX: record.tileX, tileY: record.tileY,
+        terrain: record.terrain,
+        rewards: [],
+        recordId: record.id,
+      });
+      // Combat/action discoveries: log as pending encounter
+      ActivityService.log(_player.id, {
+        type:     'discovery',
+        icon:     def.icon || '🔍',
+        title:    `${def.name} descubierto`,
+        detail:   record.terrain ? `Terreno: ${record.terrain}` : '',
+        lordName: _lord.name,
+      });
+    } else {
+      // Everything else: auto-claim immediately
+      const claimed = DiscoveryService.claim(record.id, _player.id);
+      if (claimed.ok) _applyRewards(claimed.rewards);
+      DiscoveryService.addLog(_player.id, {
+        definitionId: def.id,
+        tileX: record.tileX, tileY: record.tileY,
+        terrain: record.terrain,
+        rewards: claimed.ok ? claimed.rewards : [],
+      });
+      // Resource/legendary discoveries: log with reward summary
+      const rewardStr = claimed.ok
+        ? claimed.rewards.filter(r => r.type !== 'xp').map(r => `+${r.amount} ${r.type}`).join(', ')
+        : '';
+      ActivityService.log(_player.id, {
+        type:     'discovery',
+        icon:     def.icon || '🔍',
+        title:    `${def.name} reclamado`,
+        detail:   rewardStr || `+${claimed.rewards?.find(r => r.type === 'xp')?.amount || 0}⭐`,
+        lordName: _lord.name,
+      });
+    }
+    _renderTab();
+    _refreshDiscoveryBadge();
   }
 
   // ── Discovery claim ───────────────────────────────────────────
@@ -870,100 +1407,90 @@ const LordScreen = (() => {
     document.querySelectorAll('.disc-claim-btn[data-record-id]').forEach(btn => {
       btn.addEventListener('click', () => _claimDiscovery(btn.dataset.recordId));
     });
-    document.querySelectorAll('.disc-negotiate-btn[data-record-id]').forEach(btn => {
-      btn.addEventListener('click', () => _negotiateDiscovery(btn.dataset.recordId));
-    });
-    document.querySelectorAll('.disc-dismiss-btn[data-record-id]').forEach(btn => {
+    document.querySelectorAll('.disc-log-dismiss[data-log-id]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const result = DiscoveryService.claim(btn.dataset.recordId, _player.id);
-        if (result.ok) { _toast('Discovery dismissed.'); _renderTab(); }
+        DiscoveryService.dismissLog(_player.id, btn.dataset.logId);
+        _renderTab();
       });
     });
   }
 
-  function _negotiateDiscovery(recordId) {
-    const result = DiscoveryService.negotiate(recordId, _player.id);
-    if (!result.ok) { _toast(result.error); return; }
-    const names = result.mercenaryUnits.map(id => UNIT_DEFS[id]?.name || id).join(', ');
-    _toast(`🤝 Negotiated! Hire ${names} in the Army tab.`);
-    _renderTab();
-  }
-
-  function _claimDiscovery(recordId) {
-    const result = DiscoveryService.claim(recordId, _player.id);
-    if (!result.ok) { _toast(result.error); return; }
-
-    const _RES_TYPES_CITY = ['food', 'wood', 'stone', 'iron'];
-    let xpGained = 0;
+  // Shared reward application — used by auto-resolve AND manual Attack
+  const _RES_TYPES_CITY = ['food', 'wood', 'stone', 'iron'];
+  function _applyRewards(rewards) {
+    let xpGained   = 0;
     let cityForRes = null;
-    result.rewards.forEach(r => {
-      if (r.type === 'xp') xpGained += r.amount;
-      if (r.type === 'gold') {
+    rewards.forEach(r => {
+      if (r.type === 'xp') {
+        xpGained += r.amount;
+      } else if (r.type === 'gold') {
         const p = PlayerService.getById(_player.id);
         PlayerService.update(_player.id, { coins: (p.coins || 0) + r.amount });
         _player = PlayerService.getById(_player.id);
-      }
-      if (_RES_TYPES_CITY.includes(r.type)) {
-        if (!cityForRes) cityForRes = _getLordCurrentCity() || (_lord.cityIds?.[0] ? CityService.getById(_lord.cityIds[0]) : null);
+      } else if (_RES_TYPES_CITY.includes(r.type)) {
+        if (!cityForRes) cityForRes = _getLordCurrentCity() || CityService.getPlayerCities(_player.id)[0] || null;
         if (cityForRes) {
           cityForRes.resources[r.type] = (cityForRes.resources[r.type] || 0) + r.amount;
           CityService.save(cityForRes);
         }
       }
     });
-
     if (xpGained > 0) {
       _lord.xp = (_lord.xp || 0) + xpGained;
       const leveled = LordService.checkLevelUp(_lord);
       LordService.save(_lord);
       _lord = LordService.getById(_lord.id);
-      if (leveled > 0) _toast(`⭐ Level Up! Now Level ${_lord.level}.`);
+      if (leveled > 0) _toast(`⭐ ¡Subiste de nivel! Ahora nivel ${_lord.level}.`);
     }
-
     HUD.refresh();
-    _showClaimPopup(result.def, result.rewards);
   }
 
-  const _RES_ICONS = { gold: '💰', wood: '🪵', stone: '⛏', iron: '⚒', food: '🌾', xp: '⭐' };
+  // Called when player clicks "⚔ Atacar" on a combat discovery
+  function _claimDiscovery(recordId) {
+    const result = DiscoveryService.claim(recordId, _player.id);
+    if (!result.ok) { _toast(result.error); return; }
+    if (!result.def || result.def.category !== 'combat') { return; }
 
-  function _showClaimPopup(def, rewards) {
-    const combat = rewards.find(r => r.type === 'combat');
-    const won    = combat?.outcome === 'victory';
+    // Build encounter dynamically from campDetails stored in the record
+    const cd       = result.record.campDetails;
+    const campDef  = CAMP_DEFS[cd?.type] || CAMP_DEFS[result.def.id] || {};
+    const baseLoot = CAMP_LEVEL_LOOT[cd?.level] || CAMP_LEVEL_LOOT[1];
+    const mult     = campDef.rewardMultiplier || 1.0;
+    const encounter = {
+      name:           `${campDef.displayName || 'Campamento'}${cd ? ` (Nivel ${cd.level})` : ''}`,
+      startingMorale: campDef.morale || 55,
+      loot:           { goldMin: Math.round(baseLoot.goldMin * mult), goldMax: Math.round(baseLoot.goldMax * mult) },
+      xpReward:       { win: Math.round(baseLoot.xpWin * mult), loss: Math.round(baseLoot.xpLoss * mult) },
+      defenders:      cd?.defenders || [{ unitId: 'bandits', count: 2 }, { unitId: 'bandit_archers', count: 1 }],
+    };
 
-    const rewardsHtml = rewards
-      .filter(r => _RES_ICONS[r.type] && r.amount > 0)
-      .map(r => `<div class="disc-claim-reward">${_RES_ICONS[r.type]} +${r.amount} ${r.type.charAt(0).toUpperCase() + r.type.slice(1)}</div>`)
-      .join('');
+    const ctx = BattleEngine.buildContext({
+      lord:     _lord,
+      army:     ArmyService.get(_lord.id),
+      encounter,
+      terrain:  result.record.terrain,
+    });
 
-    const bodyHtml = combat ? `
-      <div class="disc-popup-icon ${won ? 'disc-popup-icon--found' : 'disc-popup-icon--empty'}">${won ? '⚔' : '💀'}</div>
-      <div class="disc-popup-name ${won ? '' : 'disc-popup-name--defeat'}">${won ? 'Victory!' : 'Defeat'}</div>
-      <div class="disc-popup-desc">${won
-        ? 'Your lord cut through the enemy and claimed their spoils.'
-        : 'Overwhelmed by numbers, your lord retreated — but lives to fight again.'}</div>
-    ` : `
-      <div class="disc-popup-icon disc-popup-icon--found">${def.icon}</div>
-      <div class="disc-popup-name">Collected!</div>
-      <div class="disc-popup-desc">${def.description}</div>
-    `;
+    const report = BattleEngine.resolve(ctx);
+    report._meta = {
+      campName:  encounter.name,
+      campIcon:  campDef.icon  || '⚔',
+      campLevel: cd?.level     || 1,
+      terrain:   result.record.terrain,
+    };
 
-    const popupEl = document.getElementById('disc-popup');
-    const overlay = document.getElementById('disc-overlay');
-    if (!popupEl || !overlay) return;
+    DiscoveryService.addLog(_player.id, {
+      definitionId:  result.def.id,
+      tileX:         result.record.tileX,
+      tileY:         result.record.tileY,
+      terrain:       result.record.terrain,
+      rewards:       [],
+      wasAttack:     true,
+      combatOutcome: report.winner === 'attacker' ? 'victory' : 'defeat',
+    });
 
-    popupEl.innerHTML = `
-      <div class="disc-popup-header">
-        <span class="disc-popup-title">${def.icon} ${def.name}</span>
-      </div>
-      ${bodyHtml}
-      <div class="disc-claim-rewards">${rewardsHtml}</div>
-      <button class="disc-popup-close" id="disc-popup-close">Continue</button>
-    `;
-
-    overlay.classList.remove('hidden');
-    requestAnimationFrame(() => popupEl.classList.add('disc-popup--visible'));
-    document.getElementById('disc-popup-close')?.addEventListener('click', _closeDiscoveryPopup);
-    overlay.addEventListener('click', e => { if (e.target === overlay) _closeDiscoveryPopup(); }, { once: true });
+    _stopCountdown();
+    App.navigate('battle-result', { report, lord: _lord, player: _player });
   }
 
   // ── Events ────────────────────────────────────────────────────
@@ -976,6 +1503,13 @@ const LordScreen = (() => {
     document.getElementById('ls-map-btn')?.addEventListener('click', () => {
       _stopCountdown();
       App.navigate('map', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id) });
+    });
+
+    document.getElementById('unit-req-close')?.addEventListener('click', () => {
+      document.getElementById('unit-req-overlay')?.classList.add('hidden');
+    });
+    document.getElementById('unit-req-overlay')?.addEventListener('click', e => {
+      if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
     });
 
     document.querySelectorAll('.ls-tab').forEach(btn => {
@@ -1050,7 +1584,8 @@ const LordScreen = (() => {
     const hasAction      = _lord.actionQueue.length > 0;
     const currentCity    = _getLordCurrentCity();
     const hasRecruitment = currentCity && (currentCity.recruitmentQueue || []).length > 0;
-    if (!hasAction && !hasRecruitment) return;
+    const hasStance      = LordService.isStanced(_lord);
+    if (!hasAction && !hasRecruitment && !hasStance) return;
 
     _tickTimer = setInterval(() => {
       let needsRender = false;
@@ -1061,9 +1596,27 @@ const LordScreen = (() => {
         if (completed.length > 0) {
           _lord = LordService.getById(_lord.id);
           completed.forEach(c => {
-            if (c.actionId === 'search_area') _resolveSearch();
-            else if (c.actionId === 'move_lord') _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
-            else _toast(`✓ ${c.name} completed!`);
+            if (c.actionId === 'search_area') {
+              _resolveSearch();
+            } else if (c.actionId === 'move_lord') {
+              _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
+              ActivityService.log(_player.id, {
+                type:     'lord_moved',
+                icon:     '📍',
+                title:    `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
+                detail:   '',
+                lordName: _lord.name,
+              });
+            } else {
+              _toast(`✓ ${c.name} completed!`);
+              ActivityService.log(_player.id, {
+                type:     'action_complete',
+                icon:     '✓',
+                title:    `${c.name} completado`,
+                detail:   '',
+                lordName: _lord.name,
+              });
+            }
             if (c.leveled > 0) _toast(`⭐ Level Up! Now Level ${_lord.level}.`);
           });
           needsRender = true;
@@ -1075,6 +1628,27 @@ const LordScreen = (() => {
           const fillEl    = document.getElementById(`la-fill-${currId}`)  || document.getElementById('lov-fill');
           if (timerEl) timerEl.textContent = TimeService.formatDuration(remaining);
           if (fillEl)  fillEl.style.width  = `${prog}%`;
+        }
+      }
+
+      // ─ Stance tick ─
+      if (LordService.isStanced(_lord)) {
+        const prevStanceName = STANCE_DEFS[_lord.stance?.id]?.name || 'Stance';
+        const expired = LordService.tickStance(_lord);
+        if (expired) {
+          _lord = LordService.getById(_lord.id);
+          _toast(`${prevStanceName} stance ended.`);
+          needsRender = true;
+        } else {
+          const s         = LordService.getStance(_lord);
+          const sRemain   = Math.max(0, Math.floor((s.finishAt - TimeService.now()) / 1000));
+          const totalMs   = s.finishAt - s.startedAt;
+          const elapsedMs = TimeService.now() - s.startedAt;
+          const sPct      = totalMs > 0 ? Math.min(100, Math.floor((elapsedMs / totalMs) * 100)) : 0;
+          const timerEl   = document.getElementById('lov-stance-timer');
+          const fillEl    = document.getElementById('lov-stance-fill');
+          if (timerEl) timerEl.textContent = TimeService.formatDuration(sRemain);
+          if (fillEl)  fillEl.style.width  = `${sPct}%`;
         }
       }
 
@@ -1098,9 +1672,7 @@ const LordScreen = (() => {
 
       if (needsRender) {
         _stopCountdown();
-        const discOpen = document.getElementById('disc-overlay') &&
-                         !document.getElementById('disc-overlay').classList.contains('hidden');
-        if (!discOpen) _renderTab();
+        _renderTab();
         _startCountdown();
       }
     }, 1000);

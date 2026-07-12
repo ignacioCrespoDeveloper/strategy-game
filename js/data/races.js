@@ -25,22 +25,6 @@ const RACES = {
     },
   },
 
-  elf: {
-    id:          'elf',
-    name:        'Elf',
-    icon:        '🌿',
-    description: 'Ancient and patient. Elves command nature with ease, producing food and lumber far beyond other races. Their forests grow where others see barren land.',
-    bonusLabel:  '+30% food production · +30% wood production',
-    bonuses: {
-      food_production:    0.30,
-      wood_production:    0.30,
-      stone_production:   0.00,
-      iron_production:    0.00,
-      construction_speed: 0.00,
-      population_growth:  0.00,
-    },
-  },
-
   dwarf: {
     id:          'dwarf',
     name:        'Dwarf',
@@ -86,6 +70,24 @@ const RACES = {
       iron_production:     0.20,
       construction_speed: -0.10,
       population_growth:   0.00,
+    },
+  },
+
+  high_elf: {
+    id:          'high_elf',
+    name:        'High Elf',
+    icon:        '✨',
+    portrait:    'assets/lord/high_elf_lord.webp',
+    portraitGlow: 'rgba(180, 220, 255, 0.35)',
+    description: 'The firstborn of the Elves, masters of magic, diplomacy, and war in equal measure. High Elves produce the finest goods, construct in marble and mithril, and grow their society with patience born of centuries.',
+    bonusLabel:  '+20% culture · +15% food · −10% construction time',
+    bonuses: {
+      food_production:    0.15,
+      wood_production:    0.10,
+      stone_production:   0.00,
+      iron_production:    0.00,
+      construction_speed: -0.10,
+      population_growth:  0.05,
     },
   },
 

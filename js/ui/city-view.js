@@ -6,8 +6,9 @@ const CityView = (() => {
   let _city      = null;
   let _lord      = null;
   let _player    = null;
-  let _bldTab    = 'infrastructure';
-  let _tickTimer = null;
+  let _bldTab       = 'overview';
+  let _selectedStat = null;
+  let _tickTimer    = null;
 
   const RES = {
     food:  { icon: '🌾', name: 'Food'  },
@@ -17,6 +18,7 @@ const CityView = (() => {
   };
 
   const BLD_TABS = [
+    { id: 'overview',       label: 'Overview',       icon: '📊' },
     { id: 'infrastructure', label: 'Infrastructure', icon: '🏛' },
     { id: 'economy',        label: 'Economy',        icon: '💰' },
     { id: 'military',       label: 'Military',       icon: '⚔'  },
@@ -85,6 +87,13 @@ const CityView = (() => {
 
   // ── Left panel ────────────────────────────────────────────────
 
+  function _cityTierImg(thLevel) {
+    if (thLevel >= 16) return 'assets/city/tier4.jpg';
+    if (thLevel >= 11) return 'assets/city/tier3.jpg';
+    if (thLevel >= 6)  return 'assets/city/tier2.jpg';
+    return 'assets/city/tier1.webp';
+  }
+
   function _leftPanelHtml() {
     const race    = RACES[_lord?.race] || {};
     const terrain = WorldService.getTerrain(_city.x, _city.y);
@@ -106,19 +115,23 @@ const CityView = (() => {
     const mainStats  = ['happiness', 'corruption', 'hygiene', 'unemployment', 'religion', 'culture'];
     const extraStats = ['stability', 'security'];
 
+    const thLevel = _city.buildings.town_hall || 0;
+    const tierImg = _cityTierImg(thLevel);
+
     return `
       <div class="cvl-artwork">
-        <div class="cvl-artwork-inner">🏰</div>
+        <img class="cvl-artwork-img" src="${tierImg}" alt="${_city.name}" />
+        ${terrain?.image ? `<img class="cvl-artwork-terrain" src="${terrain.image}" alt="${terrain.name}" />` : ''}
         <div class="cvl-artwork-glow"></div>
+        <div class="cvl-artwork-status cvl-${status.id}">${status.label}</div>
       </div>
 
       <div class="cvl-city-header">
         <div class="cvl-city-name">${_city.name}</div>
-        <div class="cvl-status-badge cvl-${status.id}">${status.label}</div>
       </div>
       <div class="cvl-terrain-row">
         <span>${terrain.icon} ${terrain.name}</span>
-        <span class="cvl-owner-badge">${race.icon || ''} ${_lord?.name || '—'}</span>
+        <span class="cvl-owner-badge">${race.icon || ''} ${race.name || '—'}</span>
       </div>
 
       <div class="cvl-divider"></div>
@@ -154,22 +167,15 @@ const CityView = (() => {
         </div>
       ` : ''}
 
-      ${_city.landmark ? `
-        <div class="cvl-divider"></div>
-        <div class="cvl-landmark-badge-panel">
-          <span class="cvl-lm-icon">⭐</span>
-          <span class="cvl-lm-name">${BUILDING_DEFS[_city.landmark]?.name || _city.landmark}</span>
-          <span class="cvl-lm-level">Lv ${_city.buildings[_city.landmark] || 1}</span>
-        </div>
-      ` : ''}
     `;
   }
 
   function _statRowHtml(key, val) {
-    const meta   = CityStatsService.META[key];
-    const health = CityStatsService.getStatHealth(key, val);
+    const meta     = CityStatsService.META[key];
+    const health   = CityStatsService.getStatHealth(key, val);
+    const selected = _selectedStat === key;
     return `
-      <div class="cvl-stat-row2">
+      <div class="cvl-stat-row2 ${selected ? 'cvl-stat-row2--selected' : ''}" data-statkey="${key}">
         <span class="cvl-stat2-icon">${meta.icon}</span>
         <div class="cvl-stat2-body">
           <div class="cvl-stat2-top">
@@ -179,6 +185,7 @@ const CityView = (() => {
           </div>
           <div class="cvl-stat2-desc">${meta.desc}</div>
         </div>
+        ${selected ? '<span class="cvl-stat2-filter-icon">🔍</span>' : ''}
       </div>
     `;
   }
@@ -204,10 +211,7 @@ const CityView = (() => {
   }
 
   function _buildingsHtml() {
-    const buildings = Object.values(BUILDING_DEFS).filter(d => d.category === _bldTab);
-    const busy      = _city.constructionQueue.length > 0;
-
-    return `
+    const tabsHtml = `
       <div class="bld2-tabs">
         ${BLD_TABS.map(t => `
           <button class="bld2-tab ${_bldTab === t.id ? 'bld2-tab--active' : ''}" data-bldtab="${t.id}">
@@ -215,11 +219,211 @@ const CityView = (() => {
           </button>
         `).join('')}
       </div>
+    `;
 
-      ${_bldTab === 'landmarks' ? _landmarkHeaderHtml() : ''}
+    if (_bldTab === 'overview') {
+      return tabsHtml + _overviewTabHtml();
+    }
 
-      <div class="bld2-list">
-        ${buildings.map(def => _cardHtml(def, busy)).join('')}
+    const buildings = Object.values(BUILDING_DEFS).filter(d => d.category === _bldTab);
+    const busy      = _city.constructionQueue.length > 0;
+
+    return tabsHtml +
+      (_bldTab === 'landmarks' ? _landmarkHeaderHtml() : '') +
+      `<div class="bld2-list">${buildings.map(def => _cardHtml(def, busy)).join('')}</div>`;
+  }
+
+  function _overviewTabHtml() {
+    const stats    = CityStatsService.getStats(_city);
+    const status   = CityStatsService.getCityStatus(stats);
+    const rates    = ProductionService.getRates(_city, _lord);
+    const growth   = CityStatsService.getPopulationGrowthRate(_city, stats, rates);
+    const { level, usedSlots, maxSlots } = CityStatsService.getSlotInfo(_city);
+    const garrison = CityService.getGarrison(_city);
+    const terrain  = WorldService.getTerrain(_city.x, _city.y);
+    const race     = RACES[_lord?.race] || {};
+    const now      = TimeService.now();
+
+    const growthSign  = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
+    const growthClass = growth > 0 ? 'pop-growing' : growth < 0 ? 'pop-declining' : 'pop-stable';
+
+    const uniqueEvents = Object.values(
+      (_city.activeModifiers || [])
+        .filter(m => !m.expiresAt || now < m.expiresAt)
+        .reduce((acc, m) => { if (!acc[m.source]) acc[m.source] = m; return acc; }, {})
+    );
+
+    const slotPct   = maxSlots > 0 ? Math.min(100, Math.round((usedSlots / maxSlots) * 100)) : 0;
+    const slotColor = slotPct > 90 ? '#f44336' : slotPct > 70 ? '#ff9800' : '#4caf50';
+
+    const mainStats  = ['happiness', 'corruption', 'hygiene', 'unemployment', 'religion', 'culture'];
+    const extraStats = ['stability', 'security'];
+
+    const garrisonTotal = garrison.reduce((s, r) => s + r.count, 0);
+
+    const fmtRate = n => n === 0 ? '—' : (n > 0 ? '+' : '') + (Number.isInteger(n) ? n : n.toFixed(1));
+
+    // Tier progress
+    const TIER_THRESHOLDS = [0, 500, 2000, 5000, 15000];
+    const currentPop  = Math.floor(_city.population || 100);
+    const isMaxTier   = level >= 5;
+    const tierStart   = TIER_THRESHOLDS[level - 1] || 0;
+    const tierEnd     = isMaxTier ? null : TIER_THRESHOLDS[level];
+    const popToNext   = isMaxTier ? 0 : Math.max(0, tierEnd - currentPop);
+    const tierPct     = isMaxTier ? 100 : Math.min(100, Math.round(
+      ((currentPop - tierStart) / (tierEnd - tierStart)) * 100
+    ));
+
+    const _fmtEta = hours => {
+      if (hours < 1)       return '< 1h';
+      if (hours < 24)      return `${Math.round(hours)}h`;
+      const days = Math.floor(hours / 24);
+      const hrs  = Math.round(hours % 24);
+      if (days < 7)        return hrs > 0 ? `${days}d ${hrs}h` : `${days}d`;
+      const weeks = Math.floor(days / 7);
+      const remD  = days % 7;
+      return remD > 0 ? `${weeks}w ${remD}d` : `${weeks}w`;
+    };
+
+    let tierEta = '';
+    if (!isMaxTier) {
+      if (growth <= 0) {
+        tierEta = growth === 0 ? 'Population stagnant' : 'Population declining';
+      } else {
+        tierEta = '~' + _fmtEta(popToNext / growth);
+      }
+    }
+
+    return `
+      <div class="cvov-container">
+
+        <!-- Hero banner -->
+        <div class="cvov-hero">
+          <div class="cvov-hero-art">
+            ${terrain?.image
+              ? `<img class="cvov-hero-terrain-img" src="${terrain.image}" alt="${terrain.name}" />`
+              : terrain.icon}
+          </div>
+          <div class="cvov-hero-body">
+            <div class="cvov-hero-name">${_city.name}</div>
+            <div class="cvov-hero-meta">
+              <span class="cvov-tier-badge">Tier ${level}</span>
+              <span class="cvl-status-badge cvl-${status.id}">${status.label}</span>
+            </div>
+            <div class="cvov-hero-terrain">${terrain.icon} ${terrain.name} · ${race.icon || ''} ${race.name || '—'}</div>
+          </div>
+          <div class="cvov-hero-pop">
+            <div class="cvov-hero-pop-val">${currentPop.toLocaleString()}</div>
+            <div class="cvov-hero-pop-label">Population</div>
+            <div class="cvov-hero-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</div>
+          </div>
+        </div>
+
+        <!-- Tier progress -->
+        ${isMaxTier ? `
+        <div class="cvov-tier-prog cvov-tier-prog--max">
+          <span>⭐ Maximum Tier — City fully developed</span>
+        </div>
+        ` : `
+        <div class="cvov-tier-prog">
+          <div class="cvov-tp-row">
+            <span class="cvov-tp-tiers">Tier ${level} → Tier ${level + 1}</span>
+            <span class="cvov-tp-count">${currentPop.toLocaleString()} / ${tierEnd.toLocaleString()}</span>
+            <span class="cvov-tp-eta ${growth <= 0 ? 'cvov-tp-eta--warn' : ''}">${tierEta}</span>
+          </div>
+          <div class="cvov-tp-need">${popToNext.toLocaleString()} more population needed to reach Tier ${level + 1}</div>
+        </div>
+        `}
+
+        <div class="cvov-section">
+          <div class="cvov-section-title">🧱 Building Slots</div>
+          <div class="cvov-slots-header">
+            <span class="cvov-slots-label">Used: <strong>${usedSlots}</strong> / ${maxSlots}</span>
+            <span class="cvov-slots-pct" style="color:${slotColor}">${slotPct}%</span>
+          </div>
+          <div class="cvov-slots-track">
+            <div class="cvov-slots-fill" style="width:${slotPct}%;background:${slotColor}"></div>
+          </div>
+          <div class="cvov-slots-hint">Tier ${level} city · max ${maxSlots} slots · grow population for more</div>
+        </div>
+
+        <div class="cvov-section">
+          <div class="cvov-section-title">📦 Resources & Production</div>
+          <div class="cvov-res-table">
+            <div class="cvov-res-thead">
+              <span class="cvov-res-th-res">Resource</span>
+              <span class="cvov-res-th">Stock</span>
+              <span class="cvov-res-th">/ hr</span>
+              <span class="cvov-res-th">/ day</span>
+              <span class="cvov-res-th">/ week</span>
+            </div>
+            ${Object.entries(RES).map(([key, meta]) => {
+              const stock  = Math.floor(_city.resources[key] || 0);
+              const rate   = rates[key] || 0;
+              const day    = rate * 24;
+              const week   = rate * 24 * 7;
+              const rClass = rate > 0 ? 'cvov-rate-pos' : rate < 0 ? 'cvov-rate-neg' : 'cvov-rate-zero';
+              return `
+                <div class="cvov-res-row">
+                  <span class="cvov-res-name"><span class="cvov-res-icon">${meta.icon}</span>${meta.name}</span>
+                  <span class="cvov-res-stock">${stock.toLocaleString()}</span>
+                  <span class="cvov-res-rate ${rClass}">${fmtRate(rate)}</span>
+                  <span class="cvov-res-rate ${rClass}">${fmtRate(day)}</span>
+                  <span class="cvov-res-rate ${rClass}">${fmtRate(week)}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="cvov-section">
+          <div class="cvov-section-title">📊 City Status</div>
+          ${mainStats.map(key => _statRowHtml(key, stats[key])).join('')}
+        </div>
+
+        <div class="cvov-section">
+          <div class="cvov-section-title">🛡 City Defenses</div>
+          ${extraStats.map(key => _statRowHtml(key, stats[key])).join('')}
+        </div>
+
+        <div class="cvov-section">
+          <div class="cvov-section-title">⚔ Garrison <span class="cvov-garrison-count">${garrisonTotal} / 10</span></div>
+          ${garrison.length === 0
+            ? '<div class="cvl-garrison-empty">No garrison — build a Guard Post</div>'
+            : `<div class="cvl-garrison">${garrison.map(r => {
+                const def = UNIT_DEFS[r.unitId];
+                return `<div class="cvl-garrison-row">
+                  <span class="cvl-garrison-icon">${def?.icon || '⚔'}</span>
+                  <span class="cvl-garrison-name">${def?.name || r.unitId}</span>
+                  <span class="cvl-garrison-count">×${r.count}</span>
+                </div>`;
+              }).join('')}</div>`
+          }
+        </div>
+
+        ${_city.landmark ? `
+        <div class="cvov-section">
+          <div class="cvov-section-title">⭐ Landmark</div>
+          <div class="cvov-landmark-row">
+            <span class="cvov-lm-icon">${BUILDING_DEFS[_city.landmark]?.icon || '⭐'}</span>
+            <span class="cvov-lm-name">${BUILDING_DEFS[_city.landmark]?.name || _city.landmark}</span>
+            <span class="cvl-lm-level">Lv ${_city.buildings[_city.landmark] || 1}</span>
+          </div>
+        </div>
+        ` : ''}
+
+        ${uniqueEvents.length > 0 ? `
+        <div class="cvov-section">
+          <div class="cvov-section-title">⚡ Active Effects</div>
+          ${uniqueEvents.map(m => `
+            <div class="cvl-event-row">
+              <span class="cvl-event-name">${(m.source || '').replace('event:', '').replace(/_/g, ' ')}</span>
+              <span class="cvl-event-val ${m.value >= 0 ? 'text-success' : 'text-danger'}">${m.value >= 0 ? '+' : ''}${m.value} ${m.stat}</span>
+            </div>
+          `).join('')}
+        </div>
+        ` : ''}
+
       </div>
     `;
   }
@@ -274,12 +478,22 @@ const CityView = (() => {
       btnLabel = currentLvl === 0 ? '▶ Build' : '▲ Upgrade'; btnClass = 'bld2-btn--ready'; btnDisabled = false;
     }
 
+    let statHighlight = '';
+    if (_selectedStat) {
+      const checkEffects = def.effects ? def.effects(Math.max(1, currentLvl)) : [];
+      const impact = checkEffects
+        .filter(e => e.stat === _selectedStat)
+        .reduce((sum, e) => sum + e.value, 0);
+      statHighlight = impact > 0 ? 'bld2-card--stat-pos' : impact < 0 ? 'bld2-card--stat-neg' : 'bld2-card--stat-muted';
+    }
+
     const cardClasses = [
       'bld2-card',
-      locked   ? 'bld2-card--locked'   : '',
-      atMax    ? 'bld2-card--maxed'    : '',
-      inQueue  ? 'bld2-card--inqueue'  : '',
+      locked     ? 'bld2-card--locked'   : '',
+      atMax      ? 'bld2-card--maxed'    : '',
+      inQueue    ? 'bld2-card--inqueue'  : '',
       isLandmark ? 'bld2-card--landmark' : '',
+      statHighlight,
     ].filter(Boolean).join(' ');
 
     return `
@@ -307,8 +521,9 @@ const CityView = (() => {
                 ${effects.map(e => {
                   const meta = CityStatsService.META[e.stat];
                   if (!meta) return '';
-                  const cls = e.value >= 0 ? 'eff-pos' : 'eff-neg';
-                  return `<span class="bld-eff-tag ${cls}">${meta.icon} ${e.value > 0 ? '+' : ''}${e.value}</span>`;
+                  const cls     = e.value >= 0 ? 'eff-pos' : 'eff-neg';
+                  const active  = _selectedStat === e.stat ? ' eff-active' : '';
+                  return `<span class="bld-eff-tag ${cls}${active}" title="${meta.label}">${meta.icon} ${e.value > 0 ? '+' : ''}${e.value}</span>`;
                 }).filter(Boolean).join('')}
               </div>
             ` : ''}
@@ -395,11 +610,33 @@ const CityView = (() => {
   function _bindShellEvents() {
     document.getElementById('cv-back')?.addEventListener('click', () => {
       _stopCountdown();
+      _selectedStat = null;
       App.navigate('overview', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id) });
     });
     document.getElementById('cv-map-btn')?.addEventListener('click', () => {
       _stopCountdown();
+      _selectedStat = null;
       App.navigate('map', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id) });
+    });
+
+    // Delegate stat-row clicks on the permanent containers (fires once, survives innerHTML re-renders)
+    _bindStatDelegation('#cv-left');
+    _bindStatDelegation('#cv-bld-area');
+  }
+
+  function _bindStatDelegation(selector) {
+    const el = document.querySelector(selector);
+    if (!el || el._statDelegated) return;
+    el._statDelegated = true;
+    el.addEventListener('click', e => {
+      const row = e.target.closest('.cvl-stat-row2[data-statkey]');
+      if (!row) return;
+      const key = row.dataset.statkey;
+      _selectedStat = _selectedStat === key ? null : key;
+      const lp = document.getElementById('cv-left');
+      if (lp) lp.innerHTML = _leftPanelHtml();
+      if (_bldTab === 'overview' && _selectedStat) _bldTab = 'infrastructure';
+      _renderContent();
     });
   }
 

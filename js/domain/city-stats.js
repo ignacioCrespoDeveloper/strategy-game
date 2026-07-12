@@ -144,5 +144,34 @@ const CityStatsService = (() => {
     city.lastPopulationUpdate = TimeService.now();
   }
 
-  return { META, getModifiers, getStats, getCityStatus, getStatHealth, getPopulationGrowthRate, tickPopulation };
+  // ── City level & building slots ───────────────────────────────
+
+  const SLOT_TABLE = [
+    { minPop:     0, level: 1, maxSlots:  30 },
+    { minPop:   500, level: 2, maxSlots:  50 },
+    { minPop:  2000, level: 3, maxSlots:  80 },
+    { minPop:  5000, level: 4, maxSlots: 120 },
+    { minPop: 15000, level: 5, maxSlots: 180 },
+  ];
+
+  function getCityLevel(city) {
+    const pop = city.population || 100;
+    let row = SLOT_TABLE[0];
+    for (const entry of SLOT_TABLE) {
+      if (pop >= entry.minPop) row = entry;
+    }
+    return row.level;
+  }
+
+  function getSlotInfo(city) {
+    const pop  = city.population || 100;
+    let row = SLOT_TABLE[0];
+    for (const entry of SLOT_TABLE) {
+      if (pop >= entry.minPop) row = entry;
+    }
+    const usedSlots = Object.values(city.buildings || {}).reduce((s, v) => s + v, 0);
+    return { level: row.level, maxSlots: row.maxSlots, usedSlots };
+  }
+
+  return { META, getModifiers, getStats, getCityStatus, getStatHealth, getPopulationGrowthRate, tickPopulation, getCityLevel, getSlotInfo };
 })();

@@ -42,6 +42,10 @@ const App = (() => {
         HUD.show(data.player, data.lord);
         OverviewScreen.render(root, data);
         break;
+      case 'battle-result':
+        HUD.hide();
+        BattleResultView.render(root, data);
+        break;
       default:
         HUD.hide();
         root.innerHTML = '';

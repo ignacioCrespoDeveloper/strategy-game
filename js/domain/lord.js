@@ -74,12 +74,12 @@ const LordService = (() => {
       id, playerId,
       name: n, race: raceId, classId,
       createdAt:    TimeService.now(),
-      cityIds:      [],
       level:        1,
       xp:           0,
       xpToNext:     100,
       talentPoints: 0,
       actionQueue:  [],
+      stance:       { id: 'idle', startedAt: null, finishAt: null },
       baseStats:    { ...LORD_BASE_STATS },
       currentHp:    LORD_BASE_STATS.health,
       hpRegenAt:    TimeService.now(),
@@ -89,7 +89,8 @@ const LordService = (() => {
 
     lords[id] = lord;
     _saveAll(lords);
-    PlayerService.update(playerId, { lordId: id });
+    const hasExisting = Object.values(lords).some(l => l.playerId === playerId && l.id !== id);
+    if (!hasExisting) PlayerService.update(playerId, { lordId: id });
     return { ok: true, lord };
   }
 
@@ -101,14 +102,6 @@ const LordService = (() => {
     const lords = _getAll();
     lords[lord.id] = lord;
     _saveAll(lords);
-  }
-
-  function addCity(lordId, cityId) {
-    const lords = _getAll();
-    if (!lords[lordId]) return false;
-    if (!lords[lordId].cityIds.includes(cityId)) lords[lordId].cityIds.push(cityId);
-    _saveAll(lords);
-    return true;
   }
 
   function setPosition(lordId, x, y) {
@@ -126,6 +119,10 @@ const LordService = (() => {
   // Uses Chebyshev distance (diagonal = 1 tile).
   function enqueueMoveAction(lord, destX, destY) {
     if (lord.actionQueue.length > 0) return { ok: false, error: 'An action is already in progress.' };
+    if (isStanced(lord)) {
+      const def = STANCE_DEFS[lord.stance.id];
+      if (def?.restrictions.includes('move')) return { ok: false, error: `Cannot move while in ${def.name} stance.` };
+    }
 
     const speed    = getEffectiveStats(lord).speed;
     const fromX    = lord.x ?? destX;
@@ -143,6 +140,10 @@ const LordService = (() => {
     if (lord.actionQueue.length > 0) return { ok: false, error: 'An action is already in progress.' };
     const def = LORD_ACTIONS[actionId];
     if (!def) return { ok: false, error: 'Unknown action.' };
+    if (isStanced(lord)) {
+      const stanceDef = STANCE_DEFS[lord.stance.id];
+      if (stanceDef?.restrictions.includes('action')) return { ok: false, error: `Cannot perform actions while in ${stanceDef.name} stance.` };
+    }
 
     if (def.requiresPosition && lord.x == null) {
       return { ok: false, error: 'Your lord has no position. Found a city first.' };
@@ -241,10 +242,74 @@ const LordService = (() => {
     return Math.min(1, (TimeService.now() - item.startedAt) / totalMs);
   }
 
+  // ── Stance API ────────────────────────────────────────────────
+
+  function getStance(lord) {
+    return lord.stance || { id: 'idle', startedAt: null, finishAt: null };
+  }
+
+  // Returns true when lord is in a non-idle timed stance that hasn't expired yet.
+  function isStanced(lord) {
+    const s = getStance(lord);
+    if (s.id === 'idle') return false;
+    if (!s.finishAt) return false;
+    return TimeService.now() < s.finishAt;
+  }
+
+  // Enter a stance. Returns { ok, error? }.
+  function enterStance(lord, stanceId, durationSecs) {
+    const def = STANCE_DEFS[stanceId];
+    if (!def) return { ok: false, error: 'Unknown stance.' };
+    if (stanceId === 'idle') return { ok: false, error: 'Use exitStance() to return to idle.' };
+    if (isStanced(lord)) return { ok: false, error: `Already in ${STANCE_DEFS[lord.stance.id]?.name || lord.stance.id} stance.` };
+    if (lord.actionQueue.length > 0) return { ok: false, error: 'Cannot enter a stance while an action is in progress.' };
+    if (def.durations && !def.durations.includes(durationSecs)) {
+      return { ok: false, error: 'Invalid duration for this stance.' };
+    }
+    const now = TimeService.now();
+    lord.stance = { id: stanceId, startedAt: now, finishAt: now + durationSecs * 1000 };
+    save(lord);
+    return { ok: true };
+  }
+
+  // Exit current stance and return to idle.
+  function exitStance(lord) {
+    lord.stance = { id: 'idle', startedAt: null, finishAt: null };
+    save(lord);
+  }
+
+  // Check if stance timer has expired; if so, reset to idle.
+  // Returns true if stance just expired (so callers can notify the player).
+  function tickStance(lord) {
+    const s = getStance(lord);
+    if (s.id === 'idle' || !s.finishAt) return false;
+    if (TimeService.now() >= s.finishAt) {
+      lord.stance = { id: 'idle', startedAt: null, finishAt: null };
+      save(lord);
+      return true;
+    }
+    return false;
+  }
+
+  function getByPlayer(playerId) {
+    return Object.values(_getAll()).filter(l => l.playerId === playerId);
+  }
+
+  function getAll() {
+    return Object.values(_getAll());
+  }
+
+  // CP cap by lord level: Lv1=280, +80 per level.
+  function getArmyPowerCap(lord) {
+    return 200 + (lord.level || 1) * 80;
+  }
+
   return {
-    create, getById, save, addCity, setPosition,
+    create, getById, getByPlayer, getAll, save, setPosition,
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
     getEffectiveStats, getActionDuration,
+    getStance, isStanced, enterStance, exitStance, tickStance,
+    getArmyPowerCap,
   };
 })();

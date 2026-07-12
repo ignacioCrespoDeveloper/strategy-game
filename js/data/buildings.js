@@ -473,15 +473,283 @@ const BUILDING_DEFS = {
     ],
   },
 
+  guard_post: {
+    id:          'guard_post',
+    name:        'Guard Post',
+    icon:        '🛡',
+    category:    'military',
+    description: 'Barracks for city militia. Provides a standing garrison of City Guards and Militia Archers to defend the city walls.',
+    maxLevel:    5,
+    requires:    { town_hall: 1 },
+    cost:        level => ({
+      wood:  _scale(80,  1.4, level),
+      stone: _scale(120, 1.4, level),
+      iron:  _scale(40,  1.4, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(90, 1.5, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',     value:  4 * level },
+      { stat: 'unemployment', value: -3 * level },
+    ],
+    garrisonRoster: level => {
+      const guards  = [1, 2, 3, 4, 5][level - 1] ?? 1;
+      const archers = level >= 3 ? level - 2 : 0;
+      const roster  = [{ unitId: 'city_guard', count: guards }];
+      if (archers > 0) roster.push({ unitId: 'militia_archer', count: archers });
+      return roster;
+    },
+  },
+
+  fortress: {
+    id:          'fortress',
+    name:        'Fortress',
+    icon:        '🏯',
+    category:    'military',
+    description: 'A hardened stone fortress garrisoned by professional soldiers. Provides elite Garrison Soldiers and dramatically boosts city security.',
+    maxLevel:    3,
+    requires:    { guard_post: 3, barracks: 2 },
+    cost:        level => ({
+      wood:  _scale(300, 1.6, level),
+      stone: _scale(600, 1.6, level),
+      iron:  _scale(250, 1.6, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(600, 1.7, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  8 * level },
+      { stat: 'stability', value:  4 * level },
+      { stat: 'happiness', value: -2 * level },
+    ],
+    garrisonRoster: level => {
+      const soldiers = level * 2;
+      const archers  = level >= 2 ? (level - 1) * 2 : 0;
+      const roster   = [{ unitId: 'garrison_soldier', count: soldiers }];
+      if (archers > 0) roster.push({ unitId: 'militia_archer', count: archers });
+      return roster;
+    },
+  },
+
+  gunpowder_workshop: {
+    id:          'gunpowder_workshop',
+    name:        'Gunpowder Workshop',
+    icon:        '🔫',
+    category:    'military',
+    description: 'Imperial engineers produce blackpowder weapons and train Handgunners. The acrid smell of sulphur never quite leaves the district.',
+    maxLevel:    5,
+    requires:    { barracks: 2 },
+    unlockRequires: [{ type: 'race', id: 'human' }],
+    cost:        level => ({
+      wood:  _scale(150, 1.4, level),
+      stone: _scale(200, 1.4, level),
+      iron:  _scale(120, 1.5, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(180, 1.5, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  3 * level },
+      { stat: 'culture',   value:  2 * level },
+      { stat: 'happiness', value: -1 * level },
+    ],
+  },
+
+  engineering_guild: {
+    id:          'engineering_guild',
+    name:        'Engineering Guild',
+    icon:        '⚙',
+    category:    'military',
+    description: 'Where Imperial masterminds design war machines and steam-powered behemoths. Only the wealthiest cities can afford its ambitions.',
+    maxLevel:    3,
+    requires:    { town_hall: 5, barracks: 3, gunpowder_workshop: 2 },
+    unlockRequires: [{ type: 'race', id: 'human' }],
+    cost:        level => ({
+      wood:  _scale(400, 1.8, level),
+      stone: _scale(500, 1.8, level),
+      iron:  _scale(300, 1.8, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(480, 1.8, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  6 * level },
+      { stat: 'culture',   value:  4 * level },
+      { stat: 'stability', value:  3 * level },
+    ],
+  },
+
+  engineering_workshop: {
+    id:          'engineering_workshop',
+    name:        'Engineering Workshop',
+    icon:        '🔧',
+    category:    'military',
+    description: 'Dwarf master engineers perfect their craft here — from reliable Thunderer rifles to the terrifying war machines of the hold.',
+    maxLevel:    5,
+    requires:    { barracks: 2 },
+    unlockRequires: [{ type: 'race', id: 'dwarf' }],
+    cost:        level => ({
+      wood:  _scale(100, 1.4, level),
+      stone: _scale(250, 1.5, level),
+      iron:  _scale(180, 1.5, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(200, 1.5, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  4 * level },
+      { stat: 'culture',   value:  3 * level },
+      { stat: 'stability', value:  2 * level },
+    ],
+  },
+
+  slayer_lodge: {
+    id:          'slayer_lodge',
+    name:        'Slayer Lodge',
+    icon:        '🪓',
+    category:    'military',
+    description: 'A grim hall where oath-sworn Dwarfs train to seek a glorious death in battle. Its presence unnerves citizens — and terrifies enemies.',
+    maxLevel:    3,
+    requires:    { barracks: 3 },
+    unlockRequires: [{ type: 'race', id: 'dwarf' }],
+    cost:        level => ({
+      wood:  _scale(200, 1.6, level),
+      stone: _scale(300, 1.6, level),
+      iron:  _scale(150, 1.6, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(360, 1.6, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',    value:  5 * level },
+      { stat: 'stability',   value:  3 * level },
+      { stat: 'happiness',   value: -2 * level },
+    ],
+  },
+
+  eagle_tower: {
+    id:          'eagle_tower',
+    name:        'Eagle Tower',
+    icon:        '🦅',
+    category:    'military',
+    description: 'A high spire where trained Giant Eagles roost and Elven crews operate Eagle Claw bolt throwers. A potent symbol of High Elf military power.',
+    maxLevel:    3,
+    requires:    { archery_range: 2, barracks: 2 },
+    unlockRequires: [{ type: 'race', id: 'high_elf' }],
+    cost:        level => ({
+      wood:  _scale(300, 1.7, level),
+      stone: _scale(500, 1.7, level),
+      iron:  _scale(200, 1.7, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(600, 1.7, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  8 * level },
+      { stat: 'culture',   value:  4 * level },
+    ],
+  },
+
+  goblin_camp: {
+    id:          'goblin_camp',
+    name:        'Goblin Camp',
+    icon:        '👺',
+    category:    'military',
+    description: 'A chaotic sprawl of tents, bones, and crude bows where Goblin archers bicker, brawl, and occasionally practice shooting.',
+    maxLevel:    3,
+    requires:    { barracks: 1 },
+    unlockRequires: [{ type: 'race', id: 'orc' }],
+    cost:        level => ({
+      wood:  _scale(80,  1.5, level),
+      stone: _scale(40,  1.5, level),
+      iron:  _scale(20,  1.5, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(180, 1.5, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  3 * level },
+      { stat: 'happiness', value: -2 * level },
+    ],
+  },
+
+  boar_pens: {
+    id:          'boar_pens',
+    name:        'Boar Pens',
+    icon:        '🐗',
+    category:    'military',
+    description: 'Reinforced pens where war boars are bred, fed, and broken for battle. The smell alone discourages enemy scouts.',
+    maxLevel:    3,
+    requires:    { barracks: 2 },
+    unlockRequires: [{ type: 'race', id: 'orc' }],
+    cost:        level => ({
+      wood:  _scale(200, 1.6, level),
+      stone: _scale(150, 1.6, level),
+      iron:  _scale(100, 1.6, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(360, 1.6, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  5 * level },
+    ],
+  },
+
+  monster_den: {
+    id:          'monster_den',
+    name:        'Monster Den',
+    icon:        '👹',
+    category:    'military',
+    description: 'A pit dug deep enough to hold things that should not be held. Troll handlers and Spider riders train here, if they survive.',
+    maxLevel:    5,
+    requires:    { barracks: 3 },
+    unlockRequires: [{ type: 'race', id: 'orc' }],
+    cost:        level => ({
+      wood:  _scale(400, 1.7, level),
+      stone: _scale(350, 1.7, level),
+      iron:  _scale(150, 1.7, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(720, 1.7, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  10 * level },
+      { stat: 'happiness', value:  -5 * level },
+    ],
+  },
+
+  siege_workshop: {
+    id:          'siege_workshop',
+    name:        'Siege Workshop',
+    icon:        '🪨',
+    category:    'military',
+    description: 'Where Orc Meks and Goblin tinkerers build rock lobbers and other contraptions that may or may not work as intended.',
+    maxLevel:    3,
+    requires:    { barracks: 2 },
+    unlockRequires: [{ type: 'race', id: 'orc' }],
+    cost:        level => ({
+      wood:  _scale(300, 1.6, level),
+      stone: _scale(200, 1.6, level),
+      iron:  _scale(250, 1.6, level),
+      food:  0,
+    }),
+    buildTime:   level => _scale(480, 1.6, level),
+    production:  () => ({}),
+    effects:     level => [
+      { stat: 'security',  value:  6 * level },
+    ],
+  },
+
   dragon_lair: {
     id:          'dragon_lair',
     name:        'Dragon Lair',
     icon:        '🐲',
     category:    'military',
-    description: 'A vast underground cavern carved to house a living dragon. Among the most prestigious structures a Dark Elf city can possess.',
+    description: 'A vast cavern carved to house a living dragon. Only the most ancient and powerful elven civilisations can claim such a bond.',
     maxLevel:    3,
     requires:    { town_hall: 8, barracks: 5 },
-    unlockRequires: [{ type: 'race', id: 'dark_elf' }],
+    unlockRequires: [{ type: 'race', ids: ['dark_elf', 'high_elf'] }],
     cost:        level => ({
       wood:  _scale(1000, 2.0, level),
       stone: _scale(2000, 2.0, level),
@@ -539,7 +807,7 @@ const BUILDING_DEFS = {
     maxLevel:    5,
     requires:    { town_hall: 6 },
     unlockRequires: [
-      { type: 'race',         id: 'elf' },
+      { type: 'race',         id: 'high_elf' },
       { type: 'landmark_none' },
     ],
     cost:        level => ({

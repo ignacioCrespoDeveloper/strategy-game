@@ -19,6 +19,16 @@ const BuildingUnlockService = (() => {
   function check(city, lord, def) {
     const reasons = [];
 
+    // Building slot limit check
+    const currentLvl = city.buildings[def.id] || 0;
+    const atMax      = currentLvl >= def.maxLevel;
+    if (!atMax) {
+      const { usedSlots, maxSlots } = CityStatsService.getSlotInfo(city);
+      if (usedSlots >= maxSlots) {
+        reasons.push(`No building slots (${usedSlots}/${maxSlots}) — grow population to unlock more`);
+      }
+    }
+
     // Hard building prerequisites (from def.requires — same as ConstructionService checks)
     Object.entries(def.requires || {}).forEach(([reqId, reqLvl]) => {
       if ((city.buildings[reqId] || 0) < reqLvl) {
@@ -32,9 +42,10 @@ const BuildingUnlockService = (() => {
       switch (req.type) {
 
         case 'race': {
-          if (lord?.race !== req.id) {
-            const raceName = RACES[req.id]?.name || req.id;
-            reasons.push(`Requires Race: ${raceName}`);
+          const allowed = req.ids || [req.id];
+          if (!allowed.includes(lord?.race)) {
+            const names = allowed.map(r => RACES[r]?.name || r).join(' or ');
+            reasons.push(`Requires Race: ${names}`);
           }
           break;
         }
