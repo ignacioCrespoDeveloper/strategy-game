@@ -121,7 +121,6 @@ const CityView = (() => {
     return `
       <div class="cvl-artwork">
         <img class="cvl-artwork-img" src="${tierImg}" alt="${_city.name}" />
-        ${terrain?.image ? `<img class="cvl-artwork-terrain" src="${terrain.image}" alt="${terrain.name}" />` : ''}
         <div class="cvl-artwork-glow"></div>
         <div class="cvl-artwork-status cvl-${status.id}">${status.label}</div>
       </div>
@@ -170,10 +169,19 @@ const CityView = (() => {
     `;
   }
 
-  function _statRowHtml(key, val) {
+  function _statRowHtml(key, val, trend) {
     const meta     = CityStatsService.META[key];
     const health   = CityStatsService.getStatHealth(key, val);
     const selected = _selectedStat === key;
+
+    let trendHtml = '';
+    if (trend) {
+      const trendGood = (meta.goodHigh && trend === '▲') || (!meta.goodHigh && trend === '▼');
+      const trendBad  = (meta.goodHigh && trend === '▼') || (!meta.goodHigh && trend === '▲');
+      const trendCls  = trendGood ? 'cvov-stat-trend--good' : trendBad ? 'cvov-stat-trend--bad' : 'cvov-stat-trend--stable';
+      trendHtml = `<span class="cvov-stat-trend ${trendCls}">${trend}</span>`;
+    }
+
     return `
       <div class="cvl-stat-row2 ${selected ? 'cvl-stat-row2--selected' : ''}" data-statkey="${key}">
         <span class="cvl-stat2-icon">${meta.icon}</span>
@@ -182,6 +190,7 @@ const CityView = (() => {
             <span class="cvl-stat2-label">${meta.label}</span>
             <span class="cvl-stat2-val">${val}</span>
             <span class="cvl-stat2-health ${health.cssClass}">${health.label}</span>
+            ${trendHtml}
           </div>
           <div class="cvl-stat2-desc">${meta.desc}</div>
         </div>
@@ -258,6 +267,8 @@ const CityView = (() => {
 
     const mainStats  = ['happiness', 'corruption', 'hygiene', 'unemployment', 'religion', 'culture'];
     const extraStats = ['stability', 'security'];
+
+    const trends = CityStatsService.getStatTrends(_city, stats, growth);
 
     const garrisonTotal = garrison.reduce((s, r) => s + r.count, 0);
 
@@ -378,12 +389,12 @@ const CityView = (() => {
 
         <div class="cvov-section">
           <div class="cvov-section-title">📊 City Status</div>
-          ${mainStats.map(key => _statRowHtml(key, stats[key])).join('')}
+          ${mainStats.map(key => _statRowHtml(key, stats[key], trends[key])).join('')}
         </div>
 
         <div class="cvov-section">
           <div class="cvov-section-title">🛡 City Defenses</div>
-          ${extraStats.map(key => _statRowHtml(key, stats[key])).join('')}
+          ${extraStats.map(key => _statRowHtml(key, stats[key], trends[key])).join('')}
         </div>
 
         <div class="cvov-section">

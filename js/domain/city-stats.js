@@ -63,6 +63,13 @@ const CityStatsService = (() => {
       if (stats[stat] !== undefined) stats[stat] += value;
     });
 
+    // Population pressure — larger populations demand more services
+    const pop = city.population || 100;
+    if (pop > 100) {
+      stats.hygiene      -= Math.floor((pop - 100) / 500);
+      stats.unemployment += Math.floor((pop - 100) / 1000);
+    }
+
     _clamp(stats);
 
     // Cross-stat influences (intentionally simple arithmetic)
@@ -129,7 +136,32 @@ const CityStatsService = (() => {
     else if (stats.hygiene <  25) rate -= 1;
     else if (stats.hygiene <  10) rate -= 3;
 
+    // Too many bad statuses cause population decline
+    const warningCount = Object.keys(stats).filter(k => {
+      const h = getStatHealth(k, stats[k]);
+      return h.label === 'Warning' || h.label === 'Critical';
+    }).length;
+    if (warningCount >= 3) rate -= 2;
+    if (warningCount >= 5) rate -= 2;
+
     return Math.max(-8, Math.min(8, rate));
+  }
+
+  // ── Stat trend indicators ─────────────────────────────────────
+  // Returns { statId: '▲'|'▼'|'─' } based on how stats shift with population growth.
+
+  function getStatTrends(city, stats, growth) {
+    if (growth === 0) {
+      return Object.fromEntries(Object.keys(META).map(k => [k, '─']));
+    }
+    const futureCity  = { ...city, population: Math.max(1, (city.population || 100) + growth) };
+    const futureStats = getStats(futureCity);
+    return Object.fromEntries(
+      Object.keys(META).map(k => {
+        const delta = (futureStats[k] ?? 0) - (stats[k] ?? 0);
+        return [k, delta > 0 ? '▲' : delta < 0 ? '▼' : '─'];
+      })
+    );
   }
 
   // ── Population tick ───────────────────────────────────────────
@@ -173,5 +205,5 @@ const CityStatsService = (() => {
     return { level: row.level, maxSlots: row.maxSlots, usedSlots };
   }
 
-  return { META, getModifiers, getStats, getCityStatus, getStatHealth, getPopulationGrowthRate, tickPopulation, getCityLevel, getSlotInfo };
+  return { META, getModifiers, getStats, getCityStatus, getStatHealth, getPopulationGrowthRate, getStatTrends, tickPopulation, getCityLevel, getSlotInfo };
 })();

@@ -43,6 +43,7 @@ const LORD_CLASSES = {
     name:        'Warrior',
     icon:        '⚔',
     color:       '#c05040',
+    portrait:    'assets/lord/warrior.jpg',
     description: 'Masters of direct combat. Warriors lead from the front and inspire allies through sheer force of arms.',
     modifiers:   { attack: 2, defense: 2 },
     passive: {

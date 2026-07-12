@@ -108,10 +108,9 @@ const OverviewScreen = (() => {
           <div class="rl-selects">
             <div class="form-group">
               <label class="form-label">Race</label>
-              <select class="form-input" id="rl-race">
-                <option value="">— Choose Race —</option>
-                ${Object.values(RACES).map(r => `<option value="${r.id}">${r.icon} ${r.name}</option>`).join('')}
-              </select>
+              <div class="form-input form-input--locked">
+                ${(() => { const r = RACES[_lord?.race] || {}; return `${r.icon || ''} ${r.name || '—'}`; })()}
+              </div>
             </div>
             <div class="form-group">
               <label class="form-label">Class</label>
@@ -565,7 +564,6 @@ const OverviewScreen = (() => {
 
     document.getElementById('ov-recruit-lord-btn')?.addEventListener('click', () => {
       document.getElementById('rl-name').value = '';
-      document.getElementById('rl-race').value = _lord?.race || '';
       document.getElementById('rl-class').value = '';
       document.getElementById('rl-error').textContent = '';
       document.getElementById('recruit-modal').classList.remove('hidden');
@@ -603,7 +601,7 @@ const OverviewScreen = (() => {
 
   function _onRecruitConfirm() {
     const name    = document.getElementById('rl-name').value;
-    const raceId  = document.getElementById('rl-race').value;
+    const raceId  = _lord?.race || '';
     const classId = document.getElementById('rl-class').value;
     const errorEl = document.getElementById('rl-error');
     errorEl.textContent = '';
