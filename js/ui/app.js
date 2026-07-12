@@ -6,8 +6,56 @@ const App = (() => {
   const _root = () => document.getElementById('screen-root');
 
   // ── Boot ──────────────────────────────────────────────────────
-  function init() {
+  async function init() {
     _registerEvents();
+
+    // Supabase automatically restores the session from its own localStorage keys.
+    // Also handles OAuth redirects (Google sends the user back with a code in the URL).
+    const { data: { session } } = await SupabaseService.client.auth.getSession();
+    if (!session) { _goto('auth'); return; }
+
+    _root().innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;height:100vh;
+                  color:#b8963c;font-size:1rem;letter-spacing:0.15em;font-family:inherit;">
+        ⚔ &nbsp; CONNECTING…
+      </div>`;
+
+    try {
+      // Re-hydrate from Supabase to get the latest world + player data
+      const [storageResult, worldResult] = await Promise.all([
+        SupabaseService.client.from('storage').select('key, value').eq('player_id', session.user.id),
+        SupabaseService.client.from('world_state').select('key, value'),
+      ]);
+
+      const serverData = {};
+      storageResult.data?.forEach(row => { serverData[row.key] = row.value; });
+      worldResult.data?.forEach(row => { serverData[row.key] = row.value; });
+      StorageService.hydrate(serverData);
+
+      // Re-populate session keys from Supabase session
+      const username = session.user.user_metadata?.username
+        || session.user.email?.split('@')[0];
+
+      const players      = StorageService.get('players') || {};
+      const existingData = players[session.user.id];
+
+      players[session.user.id] = {
+        id:           session.user.id,
+        username:     username || 'Unknown',
+        coins:        existingData?.coins   ?? 9999,
+        credits:      existingData?.credits ?? 9999,
+        lordId:       existingData?.lordId  ?? null,
+        createdAt:    existingData?.createdAt ?? Date.now(),
+        passwordHash: '__supabase__',
+      };
+
+      localStorage.setItem('realms_players', JSON.stringify(players));
+      localStorage.setItem('realms_session',  JSON.stringify({ playerId: session.user.id }));
+
+    } catch (err) {
+      // Server unreachable — continue with cached localStorage data
+      console.warn('Hexfront: hydration failed, using cache:', err.message);
+    }
 
     const player = PlayerService.getSession();
     if (!player) { _goto('auth'); return; }
@@ -69,10 +117,16 @@ const App = (() => {
     EventBus.on('city:founded',  ({ player, lord })       => _goto('map', { player, lord }));
     EventBus.on('city:open',     ({ city, lord, player }) => _goto('city', { city, lord, player }));
     EventBus.on('city:back',     ({ player, lord })       => _goto('map', { player, lord }));
-    EventBus.on('lord:open',    ({ lord, player })       => _goto('lord-screen', { lord, player }));
-    EventBus.on('lord:back',    ({ player, lord })       => _goto('map', { player, lord }));
-    EventBus.on('overview:open',({ player, lord })       => _goto('overview', { player, lord }));
-    EventBus.on('player:logout', () => { PlayerService.logout(); HUD.hide(); _goto('auth'); });
+    EventBus.on('lord:open',     ({ lord, player })       => _goto('lord-screen', { lord, player }));
+    EventBus.on('lord:back',     ({ player, lord })       => _goto('map', { player, lord }));
+    EventBus.on('overview:open', ({ player, lord })       => _goto('overview', { player, lord }));
+    EventBus.on('player:logout', async () => {
+      await SupabaseService.client.auth.signOut();
+      PlayerService.logout();
+      StorageService.clearAll();
+      HUD.hide();
+      _goto('auth');
+    });
   }
 
   function navigate(screen, data) {
