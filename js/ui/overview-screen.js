@@ -7,7 +7,6 @@ const OverviewScreen = (() => {
   let _player          = null;
   let _root            = null;
   let _tickTimer       = null;
-  let _activeOvTab     = 'empire';
   let _movementsOpen   = true;
   let _citiesCollapsed = false;
   let _lordsCollapsed  = false;
@@ -18,8 +17,8 @@ const OverviewScreen = (() => {
     _stopTicker();
     _root   = root;
     _player = PlayerService.getById(player.id);
-    _lord   = LordService.getById(lord.id);
-    if (LordService.tickHp(_lord)) LordService.save(_lord);
+    _lord   = lord ? LordService.getById(lord.id) : null;
+    if (_lord && LordService.tickHp(_lord)) LordService.save(_lord);
     ActivityService.markSeen(_player.id);
     HUD.refresh();
     root.innerHTML = _shell();
@@ -34,16 +33,16 @@ const OverviewScreen = (() => {
   }
 
   function _startTicker() {
-    const cities     = CityService.getPlayerCities(_player.id);
-    const hasAction  = _lord.actionQueue.length > 0;
-    const hasConstr  = cities.some(c => c.constructionQueue.length > 0);
+    const cities    = CityService.getPlayerCities(_player.id);
+    const hasAction = _lord && _lord.actionQueue.length > 0;
+    const hasConstr = cities.some(c => c.constructionQueue.length > 0);
     if (!hasAction && !hasConstr) return;
 
     _tickTimer = setInterval(() => {
       let needsRerender = false;
 
       // Lord action
-      if (_lord.actionQueue.length > 0) {
+      if (_lord && _lord.actionQueue.length > 0) {
         const completed = LordService.tickActions(_lord);
         if (completed.length > 0) {
           _lord = LordService.getById(_lord.id);
@@ -72,7 +71,7 @@ const OverviewScreen = (() => {
 
       if (needsRerender) {
         _stopTicker();
-        _lord = LordService.getById(_lord.id);
+        if (_lord) _lord = LordService.getById(_lord.id);
         if (_root) {
           _root.innerHTML = _shell();
           _bindEvents();
@@ -85,19 +84,71 @@ const OverviewScreen = (() => {
   // ── Shell ─────────────────────────────────────────────────────
 
   function _shell() {
+    const cities = CityService.getPlayerCities(_player.id);
+    const lords  = LordService.getByPlayer(_player.id);
+    const showOnboarding = cities.length === 0 || lords.length === 0;
+
     return `
       <div class="ov-screen">
-        <nav class="ov-top-tabs">
-          <button class="ov-top-tab ${_activeOvTab === 'empire' ? 'ov-top-tab--active' : ''}" data-ov-tab="empire">Empire</button>
-          <button class="ov-top-tab ${_activeOvTab === 'intel'  ? 'ov-top-tab--active' : ''}" data-ov-tab="intel">Intelligence</button>
-        </nav>
         <div class="ov-body">
-          ${_activeOvTab === 'empire'
-            ? `${_movementsPanel()}${_citiesSection()}${_lordsSection()}${_activityFeedSection()}`
-            : _intelligenceSection()}
+          ${showOnboarding
+            ? `${_onboardingSection(cities, lords)}${_citiesSection()}${_lordsSection()}`
+            : `${_movementsPanel()}${_citiesSection()}${_lordsSection()}`
+          }
         </div>
       </div>
 
+      ${_recruitModal()}
+    `;
+  }
+
+  // ── Onboarding ────────────────────────────────────────────────
+
+  function _onboardingSection(cities, lords) {
+    const step1Done = cities.length > 0;
+    const step2Done = lords.length > 0;
+
+    return `
+      <section class="ov-section ov-onboarding">
+        <div class="ov-onboarding-title">⚔ Getting Started</div>
+        <div class="ov-onboarding-steps">
+
+          <div class="ov-step ${step1Done ? 'ov-step--done' : 'ov-step--active'}">
+            <div class="ov-step-num">${step1Done ? '✓' : '1'}</div>
+            <div class="ov-step-body">
+              <div class="ov-step-label">Found your first city</div>
+              <div class="ov-step-desc">Choose a location on the world map to establish your settlement.</div>
+              ${!step1Done ? `<button class="btn-primary ov-step-btn" id="ov-onboard-city-btn">🗺 Open World Map</button>` : ''}
+            </div>
+          </div>
+
+          <div class="ov-step ${step2Done ? 'ov-step--done' : (step1Done ? 'ov-step--active' : 'ov-step--pending')}">
+            <div class="ov-step-num">${step2Done ? '✓' : '2'}</div>
+            <div class="ov-step-body">
+              <div class="ov-step-label">Recruit your first Lord</div>
+              <div class="ov-step-desc">A lord commands your armies and explores the world on your behalf.</div>
+              ${step1Done && !step2Done ? `<button class="btn-primary ov-step-btn" id="ov-onboard-lord-btn">🎖 Recruit Lord</button>` : ''}
+            </div>
+          </div>
+
+        </div>
+      </section>
+    `;
+  }
+
+  // ── Recruit modal ─────────────────────────────────────────────
+
+  function _recruitModal() {
+    const raceField = _lord
+      ? `<div class="form-input form-input--locked">
+           ${(() => { const r = RACES[_lord.race] || {}; return `${r.icon || ''} ${r.name || '—'}`; })()}
+         </div>`
+      : `<select class="form-input" id="rl-race">
+           <option value="">— Choose Race —</option>
+           ${Object.values(RACES).map(r => `<option value="${r.id}">${r.icon} ${r.name}</option>`).join('')}
+         </select>`;
+
+    return `
       <div class="modal-overlay hidden" id="recruit-modal">
         <div class="modal-card">
           <h2 class="modal-title">Recruit a Lord</h2>
@@ -108,9 +159,7 @@ const OverviewScreen = (() => {
           <div class="rl-selects">
             <div class="form-group">
               <label class="form-label">Race</label>
-              <div class="form-input form-input--locked">
-                ${(() => { const r = RACES[_lord?.race] || {}; return `${r.icon || ''} ${r.name || '—'}`; })()}
-              </div>
+              ${raceField}
             </div>
             <div class="form-group">
               <label class="form-label">Class</label>
@@ -192,40 +241,58 @@ const OverviewScreen = (() => {
   // ── Cities section ────────────────────────────────────────────
 
   function _citiesSection() {
-    const cities = CityService.getPlayerCities(_player.id);
-    const cards  = cities.length
-      ? cities.map(_cityCard).join('')
-      : '';
+    const cities     = CityService.getPlayerCities(_player.id);
+    const cards      = cities.length ? cities.map(_cityCard).join('') : '';
+    const atLimit    = cities.length >= 5;
+    const coins      = PlayerService.getById(_player.id)?.coins || 0;
+    const canAfford  = cities.length === 0 || coins >= 25000;
 
     return `
       <section class="ov-section">
         <div class="ov-section-row">
-          <div class="ov-section-title">Cities</div>
+          <div class="ov-section-title">
+            Cities
+            <span class="ov-limit-badge">${cities.length}/5</span>
+            <span class="ov-cost-hint">💰 25,000 to found</span>
+          </div>
           <button class="ov-section-toggle" id="ov-toggle-cities">${_citiesCollapsed ? '▼' : '▲'}</button>
         </div>
         ${!_citiesCollapsed ? `
           <div class="ov-cities-grid">
             ${cards}
-            <div class="ov-add-card" id="ov-found-city-btn" title="Found a new city">
-              <span class="ov-add-icon">+</span>
-              <span class="ov-add-label">Found City</span>
-            </div>
+            ${!atLimit ? `
+              <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-found-city-btn" title="Found a new city — costs 25,000 gold">
+                <span class="ov-add-cost">💰 25,000</span>
+                <span class="ov-add-icon">+</span>
+                <span class="ov-add-label">Found City</span>
+              </div>` : ''}
           </div>` : ''}
       </section>
     `;
   }
 
   function _cityCard(city) {
-    const terrain   = WorldService.getTerrain(city.x, city.y);
-    const stats     = CityStatsService.getStats(city);
-    const status    = CityStatsService.getCityStatus(stats);
-    const bldCount  = Object.values(city.buildings).filter(v => v > 0).length;
-    const thLevel   = city.buildings.town_hall || 0;
-    const buildItem = city.constructionQueue.length > 0 ? city.constructionQueue[0] : null;
-    const buildDef  = buildItem ? BUILDING_DEFS[buildItem.buildingId] : null;
-    const buildPct  = buildItem ? Math.floor(ConstructionService.progress(city) * 100) : 0;
-    const buildSecs = buildItem ? ConstructionService.timeRemaining(city) : 0;
-    const tierImg   = _cityTierImg(thLevel);
+    const terrain    = WorldService.getTerrain(city.x, city.y);
+    const stats      = CityStatsService.getStats(city);
+    const status     = CityStatsService.getCityStatus(stats);
+    const thLevel    = city.buildings.town_hall || 0;
+    const slotInfo   = CityStatsService.getSlotInfo(city);
+    const prodRates  = ProductionService.getRates(city, _lord);
+    const growth     = CityStatsService.getPopulationGrowthRate(city, stats, prodRates);
+    const buildItem  = city.constructionQueue.length > 0 ? city.constructionQueue[0] : null;
+    const buildDef   = buildItem ? BUILDING_DEFS[buildItem.buildingId] : null;
+    const buildPct   = buildItem ? Math.floor(ConstructionService.progress(city) * 100) : 0;
+    const buildSecs  = buildItem ? ConstructionService.timeRemaining(city) : 0;
+    const tierImg    = _cityTierImg(thLevel);
+
+    let tierName = 'Tier I';
+    if      (thLevel >= 16) tierName = 'Tier IV';
+    else if (thLevel >= 11) tierName = 'Tier III';
+    else if (thLevel >= 6)  tierName = 'Tier II';
+
+    const growthSymbol = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
+    const growthClass  = growth > 0 ? 'ov-cc-grow--up' : growth < 0 ? 'ov-cc-grow--down' : 'ov-cc-grow--stable';
+    const growthLabel  = growth !== 0 ? ` ${growth > 0 ? '+' : ''}${growth}/hr` : '';
 
     return `
       <div class="ov-city-card" data-city-id="${city.id}">
@@ -247,19 +314,18 @@ const OverviewScreen = (() => {
           <div class="ov-cc-stats">
             <div class="ov-cc-stat">
               <span class="ov-cc-stat-label">Population</span>
-              <span class="ov-cc-stat-value">${Math.floor(city.population)}</span>
+              <span class="ov-cc-stat-value">
+                ${Math.floor(city.population)}
+                <span class="ov-cc-grow ${growthClass}">${growthSymbol}${growthLabel}</span>
+              </span>
             </div>
             <div class="ov-cc-stat">
-              <span class="ov-cc-stat-label">Happiness</span>
-              <span class="ov-cc-stat-value">${stats.happiness}%</span>
+              <span class="ov-cc-stat-label">Tier</span>
+              <span class="ov-cc-stat-value">${tierName}</span>
             </div>
             <div class="ov-cc-stat">
-              <span class="ov-cc-stat-label">Town Hall</span>
-              <span class="ov-cc-stat-value">Lv ${thLevel}</span>
-            </div>
-            <div class="ov-cc-stat">
-              <span class="ov-cc-stat-label">Buildings</span>
-              <span class="ov-cc-stat-value">${bldCount}</span>
+              <span class="ov-cc-stat-label">Slots</span>
+              <span class="ov-cc-stat-value">${slotInfo.usedSlots}/${slotInfo.maxSlots}</span>
             </div>
           </div>
           ${buildItem ? `<div class="ov-cc-construction">
@@ -289,23 +355,29 @@ const OverviewScreen = (() => {
   }
 
   function _lordsSection() {
-    const lords = LordService.getByPlayer(_player.id);
+    const lords      = LordService.getByPlayer(_player.id);
+    const atLimit    = lords.length >= 5;
+    const coins      = PlayerService.getById(_player.id)?.coins || 0;
+    const canAfford  = lords.length === 0 || coins >= 15000;
     return `
       <section class="ov-section">
         <div class="ov-section-row">
-          <div class="ov-section-title">Lords</div>
-          <div class="ov-section-row-actions">
-            <button class="ov-map-btn" id="ov-map-btn">🗺 World Map</button>
-            <button class="ov-section-toggle" id="ov-toggle-lords">${_lordsCollapsed ? '▼' : '▲'}</button>
+          <div class="ov-section-title">
+            Lords
+            <span class="ov-limit-badge">${lords.length}/5</span>
+            <span class="ov-cost-hint">💰 15,000 to recruit</span>
           </div>
+          <button class="ov-section-toggle" id="ov-toggle-lords">${_lordsCollapsed ? '▼' : '▲'}</button>
         </div>
         ${!_lordsCollapsed ? `
           <div class="ov-lords-grid">
             ${lords.map(_lordCard).join('')}
-            <div class="ov-add-card" id="ov-recruit-lord-btn" title="Recruit a new lord">
-              <span class="ov-add-icon">+</span>
-              <span class="ov-add-label">Recruit Lord</span>
-            </div>
+            ${!atLimit ? `
+              <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-recruit-lord-btn" title="Recruit a new lord — costs 15,000 gold">
+                <span class="ov-add-cost">💰 15,000</span>
+                <span class="ov-add-icon">+</span>
+                <span class="ov-add-label">Recruit Lord</span>
+              </div>` : ''}
           </div>` : ''}
       </section>
     `;
@@ -553,21 +625,33 @@ const OverviewScreen = (() => {
     });
 
     document.getElementById('ov-found-city-btn')?.addEventListener('click', () => {
+      const isFirst = CityService.getPlayerCities(_player.id).length === 0;
+      if (!isFirst) {
+        const coins = PlayerService.getById(_player.id)?.coins || 0;
+        if (coins < 25000) { _toast('Not enough gold — founding a city costs 💰 25,000.'); return; }
+      }
       _stopTicker();
       App.navigate('map', { player: _player, lord: _lord });
     });
 
-    document.getElementById('ov-map-btn')?.addEventListener('click', () => {
+    // Onboarding step buttons
+    document.getElementById('ov-onboard-city-btn')?.addEventListener('click', () => {
       _stopTicker();
       App.navigate('map', { player: _player, lord: _lord });
     });
 
+    document.getElementById('ov-onboard-lord-btn')?.addEventListener('click', () => {
+      _openRecruitModal();
+    });
+
+    // Recruit lord button (in lords section)
     document.getElementById('ov-recruit-lord-btn')?.addEventListener('click', () => {
-      document.getElementById('rl-name').value = '';
-      document.getElementById('rl-class').value = '';
-      document.getElementById('rl-error').textContent = '';
-      document.getElementById('recruit-modal').classList.remove('hidden');
-      setTimeout(() => document.getElementById('rl-name').focus(), 50);
+      const isFirst = LordService.getByPlayer(_player.id).length === 0;
+      if (!isFirst) {
+        const coins = PlayerService.getById(_player.id)?.coins || 0;
+        if (coins < 15000) { _toast('Not enough gold — recruiting a lord costs 💰 15,000.'); return; }
+      }
+      _openRecruitModal();
     });
 
     document.getElementById('rl-cancel')?.addEventListener('click', () => {
@@ -583,25 +667,28 @@ const OverviewScreen = (() => {
       if (e.key === 'Enter') _onRecruitConfirm();
     });
 
-    document.querySelectorAll('.ov-top-tab[data-ov-tab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        _activeOvTab = btn.dataset.ovTab;
-        _stopTicker();
-        if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
-      });
-    });
-
     document.querySelectorAll('.ov-intel-dismiss[data-record-id]').forEach(btn => {
       btn.addEventListener('click', () => {
         IntelligenceService.removeRecord(_player.id, btn.dataset.recordId);
-        if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
+        _rerender();
       });
     });
   }
 
+  function _openRecruitModal() {
+    document.getElementById('rl-name').value  = '';
+    document.getElementById('rl-class').value = '';
+    const raceEl = document.getElementById('rl-race');
+    if (raceEl) raceEl.value = '';
+    document.getElementById('rl-error').textContent = '';
+    document.getElementById('recruit-modal').classList.remove('hidden');
+    setTimeout(() => document.getElementById('rl-name').focus(), 50);
+  }
+
   function _onRecruitConfirm() {
     const name    = document.getElementById('rl-name').value;
-    const raceId  = _lord?.race || '';
+    const raceEl  = document.getElementById('rl-race');
+    const raceId  = raceEl ? raceEl.value : (_lord?.race || '');
     const classId = document.getElementById('rl-class').value;
     const errorEl = document.getElementById('rl-error');
     errorEl.textContent = '';
@@ -609,13 +696,24 @@ const OverviewScreen = (() => {
     const result = LordService.create(_player.id, name, raceId, classId);
     if (!result.ok) { errorEl.textContent = result.error; return; }
 
+    // Keep local state up to date — first lord sets player.lordId
+    const freshPlayer = PlayerService.getById(_player.id);
+    if (freshPlayer) _player = freshPlayer;
+    if (!_lord && result.lord) _lord = result.lord;
+
     document.getElementById('recruit-modal').classList.add('hidden');
-    _stopTicker();
-    if (_root) {
-      _root.innerHTML = _shell();
-      _bindEvents();
-      _startTicker();
-    }
+    HUD.show(_player, _lord);
+    Nav.show(_player, _lord, 'home');
+    _rerender();
+  }
+
+  function _toast(msg) {
+    const c = document.getElementById('toast-container');
+    if (!c) return;
+    const el = document.createElement('div');
+    el.className = 'toast'; el.textContent = msg;
+    c.appendChild(el);
+    setTimeout(() => el.remove(), 3200);
   }
 
   return { render, stop };

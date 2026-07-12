@@ -58,6 +58,9 @@ const LordService = (() => {
 
   // ── CRUD ─────────────────────────────────────────────────────
 
+  const RECRUIT_COST = 15000;
+  const MAX_LORDS    = 5;
+
   function create(playerId, name, raceId, classId) {
     const n = (name || '').trim();
     if (n.length < 2)           return { ok: false, error: 'Lord name must be at least 2 characters.' };
@@ -66,8 +69,17 @@ const LordService = (() => {
     if (!LORD_CLASSES[classId]) return { ok: false, error: 'Select a class before continuing.' };
 
     const lords = _getAll();
+    const playerLords = Object.values(lords).filter(l => l.playerId === playerId);
+    if (playerLords.length >= MAX_LORDS) return { ok: false, error: `Maximum of ${MAX_LORDS} lords reached.` };
+
     const taken = Object.values(lords).some(l => l.name.toLowerCase() === n.toLowerCase());
     if (taken) return { ok: false, error: 'A lord with that name already exists.' };
+
+    const isFirst = playerLords.length === 0;
+    if (!isFirst) {
+      const spend = PlayerService.spendCoins(playerId, RECRUIT_COST);
+      if (!spend.ok) return { ok: false, error: `Recruiting costs ${RECRUIT_COST.toLocaleString()} 💰 gold. ${spend.error}` };
+    }
 
     const id  = _generateId();
     const lord = {

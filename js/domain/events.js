@@ -22,8 +22,8 @@ const EventService = (() => {
       cooldown: 24 * 3600,
       condition: (city, stats) => stats.hygiene < 20,
       trigger: (city) => {
-        const loss = Math.max(5, Math.floor((city.population || 100) * 0.08));
-        city.population = Math.max(10, (city.population || 100) - loss);
+        const loss = Math.max(50, Math.floor((city.population || 1000) * 0.08));
+        city.population = Math.max(100, (city.population || 1000) - loss);
         _addModifier(city, 'happiness', -12, 'event:disease_outbreak', 6 * 3600);
         return `🦠 Disease swept through ${city.name}! ${loss} people died.`;
       },
@@ -40,10 +40,10 @@ const EventService = (() => {
     {
       id:       'immigration_wave',
       cooldown: 48 * 3600,
-      condition: (city, stats) => stats.happiness >= 80 && (city.population || 100) < 800,
+      condition: (city, stats) => stats.happiness >= 80 && (city.population || 1000) < 8000,
       trigger: (city) => {
-        const gain = Math.max(10, Math.floor((city.population || 100) * 0.12));
-        city.population = (city.population || 100) + gain;
+        const gain = Math.max(100, Math.floor((city.population || 1000) * 0.12));
+        city.population = (city.population || 1000) + gain;
         return `👥 Prosperity draws settlers to ${city.name}! +${gain} people.`;
       },
     },

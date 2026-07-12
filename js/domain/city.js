@@ -31,6 +31,9 @@ const CityService = (() => {
     return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   }
 
+  const FOUND_COST  = 25000;
+  const MAX_CITIES  = 5;
+
   // Found a new city on a tile.
   // Returns { ok, city, error }.
   function found(playerId, name, x, y) {
@@ -38,8 +41,17 @@ const CityService = (() => {
     if (n.length < 2)  return { ok: false, error: 'City name must be at least 2 characters.' };
     if (n.length > 30) return { ok: false, error: 'City name cannot exceed 30 characters.' };
 
+    const existing = getPlayerCities(playerId);
+    if (existing.length >= MAX_CITIES) return { ok: false, error: `Maximum of ${MAX_CITIES} cities reached.` };
+
     if (!WorldService.isInBounds(x, y))  return { ok: false, error: 'Tile is out of bounds.' };
     if (WorldService.isOccupied(x, y))   return { ok: false, error: 'This tile is already occupied.' };
+
+    const isFirst = existing.length === 0;
+    if (!isFirst) {
+      const spend = PlayerService.spendCoins(playerId, FOUND_COST);
+      if (!spend.ok) return { ok: false, error: `Founding costs ${FOUND_COST.toLocaleString()} 💰 gold. ${spend.error}` };
+    }
 
     const cities = _getAll();
     const id     = _generateId();
@@ -51,7 +63,7 @@ const CityService = (() => {
       name:     n,
       x,
       y,
-      population:           100,
+      population:           1000,
       buildings:            { town_hall: 1 },
       resources:            { food: 5000, wood: 5000, stone: 5000, iron: 5000 },
       lastResourceUpdate:   now,

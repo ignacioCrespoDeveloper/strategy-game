@@ -59,16 +59,6 @@ const CityView = (() => {
     const race = RACES[_lord?.race] || {};
     return `
       <div class="city-view">
-        <header class="cv-header">
-          <button class="cv-back-btn" id="cv-back">← Overview</button>
-          <div class="cv-city-title">
-            <span class="cv-city-icon">🏰</span>
-            <span class="cv-city-name">${_city.name}</span>
-            <span class="cv-city-coords">(${_city.x}, ${_city.y})</span>
-          </div>
-          <div class="cv-lord-badge">${race.icon || ''} ${_lord?.name || ''}</div>
-        </header>
-
         <div class="cv-body">
           <aside class="cv-left" id="cv-left">
             ${_leftPanelHtml()}
@@ -137,7 +127,7 @@ const CityView = (() => {
 
       <div class="cvl-pop-row">
         <span class="cvl-pop-label">👥 Population</span>
-        <span class="cvl-pop-value">${Math.floor(_city.population || 100)}</span>
+        <span class="cvl-pop-value">${Math.floor(_city.population || 1000)}</span>
         <span class="cvl-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</span>
       </div>
 
@@ -234,7 +224,14 @@ const CityView = (() => {
       return tabsHtml + _overviewTabHtml();
     }
 
-    const buildings = Object.values(BUILDING_DEFS).filter(d => d.category === _bldTab);
+    const buildings = Object.values(BUILDING_DEFS)
+      .filter(d => d.category === _bldTab)
+      .filter(def => {
+        const currentLvl = _city.buildings[def.id] || 0;
+        if (currentLvl > 0) return true; // already built — always show
+        const { locked } = BuildingUnlockService.check(_city, _lord, def);
+        return !locked;
+      });
     const busy      = _city.constructionQueue.length > 0;
 
     return tabsHtml +
@@ -275,8 +272,8 @@ const CityView = (() => {
     const fmtRate = n => n === 0 ? '—' : (n > 0 ? '+' : '') + (Number.isInteger(n) ? n : n.toFixed(1));
 
     // Tier progress
-    const TIER_THRESHOLDS = [0, 500, 2000, 5000, 15000];
-    const currentPop  = Math.floor(_city.population || 100);
+    const TIER_THRESHOLDS = [0, 5000, 15000, 40000, 100000];
+    const currentPop  = Math.floor(_city.population || 1000);
     const isMaxTier   = level >= 5;
     const tierStart   = TIER_THRESHOLDS[level - 1] || 0;
     const tierEnd     = isMaxTier ? null : TIER_THRESHOLDS[level];

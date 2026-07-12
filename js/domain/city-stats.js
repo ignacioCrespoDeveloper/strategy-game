@@ -10,12 +10,12 @@ const CityStatsService = (() => {
 
   // Base values before any modifiers
   const BASE = {
-    corruption:   10,
-    happiness:    50,
-    hygiene:      20,
-    unemployment: 30,
-    religion:     40,
-    culture:      20,
+    corruption:   0,
+    happiness:    75,
+    hygiene:      75,
+    unemployment: 0,
+    religion:     75,
+    culture:      75,
     stability:    50,
     security:     20,
   };
@@ -64,10 +64,10 @@ const CityStatsService = (() => {
     });
 
     // Population pressure — larger populations demand more services
-    const pop = city.population || 100;
-    if (pop > 100) {
-      stats.hygiene      -= Math.floor((pop - 100) / 500);
-      stats.unemployment += Math.floor((pop - 100) / 1000);
+    const pop = city.population || 1000;
+    if (pop > 1000) {
+      stats.hygiene      -= Math.floor((pop - 1000) / 5000);
+      stats.unemployment += Math.floor((pop - 1000) / 10000);
     }
 
     _clamp(stats);
@@ -124,27 +124,27 @@ const CityStatsService = (() => {
     let rate = 0;
     const food = productionRates.food || 0;
 
-    if      (food > 0)                            rate += 2;
-    else if (food === 0 && (city.population || 100) > 100) rate -= 1;
+    if      (food > 0)                              rate += 200;
+    else if (food === 0 && (city.population || 1000) > 1000) rate -= 50;
 
-    if      (stats.happiness >= 70) rate += 2;
-    else if (stats.happiness >= 50) rate += 1;
-    else if (stats.happiness < 20)  rate -= 3;
-    else if (stats.happiness < 35)  rate -= 1;
+    if      (stats.happiness >= 70) rate += 200;
+    else if (stats.happiness >= 50) rate += 100;
+    else if (stats.happiness < 20)  rate -= 300;
+    else if (stats.happiness < 35)  rate -= 100;
 
-    if      (stats.hygiene >= 60) rate += 1;
-    else if (stats.hygiene <  25) rate -= 1;
-    else if (stats.hygiene <  10) rate -= 3;
+    if      (stats.hygiene >= 60) rate += 100;
+    else if (stats.hygiene <  25) rate -= 100;
+    else if (stats.hygiene <  10) rate -= 300;
 
     // Too many bad statuses cause population decline
     const warningCount = Object.keys(stats).filter(k => {
       const h = getStatHealth(k, stats[k]);
       return h.label === 'Warning' || h.label === 'Critical';
     }).length;
-    if (warningCount >= 3) rate -= 2;
-    if (warningCount >= 5) rate -= 2;
+    if (warningCount >= 3) rate -= 200;
+    if (warningCount >= 5) rate -= 200;
 
-    return Math.max(-8, Math.min(8, rate));
+    return Math.max(-800, Math.min(800, rate));
   }
 
   // ── Stat trend indicators ─────────────────────────────────────
@@ -154,7 +154,7 @@ const CityStatsService = (() => {
     if (growth === 0) {
       return Object.fromEntries(Object.keys(META).map(k => [k, '─']));
     }
-    const futureCity  = { ...city, population: Math.max(1, (city.population || 100) + growth) };
+    const futureCity  = { ...city, population: Math.max(1, (city.population || 1000) + growth) };
     const futureStats = getStats(futureCity);
     return Object.fromEntries(
       Object.keys(META).map(k => {
@@ -171,7 +171,7 @@ const CityStatsService = (() => {
     const stats = getStats(city);
     const rate  = getPopulationGrowthRate(city, stats, productionRates);
     if (rate !== 0) {
-      city.population = Math.max(1, Math.round((city.population || 100) + rate * elapsed));
+      city.population = Math.max(1, Math.round((city.population || 1000) + rate * elapsed));
     }
     city.lastPopulationUpdate = TimeService.now();
   }
@@ -179,15 +179,15 @@ const CityStatsService = (() => {
   // ── City level & building slots ───────────────────────────────
 
   const SLOT_TABLE = [
-    { minPop:     0, level: 1, maxSlots:  30 },
-    { minPop:   500, level: 2, maxSlots:  50 },
-    { minPop:  2000, level: 3, maxSlots:  80 },
-    { minPop:  5000, level: 4, maxSlots: 120 },
-    { minPop: 15000, level: 5, maxSlots: 180 },
+    { minPop:     0, level: 1, maxSlots:  60 },
+    { minPop:  5000, level: 2, maxSlots: 100 },
+    { minPop: 15000, level: 3, maxSlots: 150 },
+    { minPop: 40000, level: 4, maxSlots: 220 },
+    { minPop: 100000, level: 5, maxSlots: 320 },
   ];
 
   function getCityLevel(city) {
-    const pop = city.population || 100;
+    const pop = city.population || 1000;
     let row = SLOT_TABLE[0];
     for (const entry of SLOT_TABLE) {
       if (pop >= entry.minPop) row = entry;
@@ -196,7 +196,7 @@ const CityStatsService = (() => {
   }
 
   function getSlotInfo(city) {
-    const pop  = city.population || 100;
+    const pop  = city.population || 1000;
     let row = SLOT_TABLE[0];
     for (const entry of SLOT_TABLE) {
       if (pop >= entry.minPop) row = entry;

@@ -42,7 +42,7 @@ const App = (() => {
       players[session.user.id] = {
         id:           session.user.id,
         username:     username || 'Unknown',
-        coins:        existingData?.coins   ?? 9999,
+        coins:        existingData?.coins   ?? 100000,
         credits:      existingData?.credits ?? 9999,
         lordId:       existingData?.lordId  ?? null,
         createdAt:    existingData?.createdAt ?? Date.now(),
@@ -67,34 +67,52 @@ const App = (() => {
     const root = _root();
     switch (screen) {
       case 'auth':
+        Nav.hide();
         HUD.hide();
         AuthView.render(root);
         break;
       case 'create-lord':
+        Nav.hide();
         HUD.hide();
         LordView.render(root, data);
         break;
       case 'map':
         HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'map');
         MapView.render(root, data);
         break;
       case 'city':
         HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'home');
         CityView.render(root, data);
         break;
       case 'lord-screen':
         HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'home');
         LordScreen.render(root, data);
         break;
       case 'overview':
         HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'home');
         OverviewScreen.render(root, data);
         break;
+      case 'activity':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'activity');
+        ActivityScreen.render(root, data);
+        break;
+      case 'tech-tree':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'tech-tree');
+        TechTreeScreen.render(root, data);
+        break;
       case 'battle-result':
+        Nav.hide();
         HUD.hide();
         BattleResultView.render(root, data);
         break;
       default:
+        Nav.hide();
         HUD.hide();
         root.innerHTML = '';
     }
@@ -102,11 +120,7 @@ const App = (() => {
 
   // ── State logic ───────────────────────────────────────────────
   function _afterAuth(player) {
-    if (!player.lordId) {
-      _goto('create-lord', { player });
-      return;
-    }
-    const lord = LordService.getById(player.lordId);
+    const lord = player.lordId ? LordService.getById(player.lordId) : null;
     _goto('overview', { player, lord });
   }
 
@@ -124,6 +138,7 @@ const App = (() => {
       await SupabaseService.client.auth.signOut();
       PlayerService.logout();
       StorageService.clearAll();
+      Nav.hide();
       HUD.hide();
       _goto('auth');
     });

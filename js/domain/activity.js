@@ -32,6 +32,7 @@ const ActivityService = (() => {
     all[playerId].unshift({ id, at: TimeService.now(), ...entry });
     if (all[playerId].length > MAX_PER) all[playerId] = all[playerId].slice(0, MAX_PER);
     _saveAll(all);
+    EventBus.emit('activity:added', { playerId });
   }
 
   function get(playerId) {

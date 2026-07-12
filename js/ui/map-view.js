@@ -204,6 +204,60 @@ const MapView = (() => {
       }
     });
 
+    // ── Active movement arrows (lords already travelling) ────
+    // Uses full lord list (not myLords) so lords with x=null (first move) are included.
+    if (_player) {
+      LordService.getByPlayer(_player.id).forEach(lord => {
+        const qItem = lord.actionQueue && lord.actionQueue[0];
+        if (!qItem || qItem.actionId !== 'move_lord' || qItem.destX == null) return;
+        if (_movingLord && _movingLord.id === lord.id) return;
+
+        const tox = _offset.x + qItem.destX * STEP + TILE / 2;
+        const toy = _offset.y + qItem.destY * STEP + TILE / 2;
+
+        if (lord.x != null) {
+          const fx = _offset.x + lord.x * STEP + TILE / 2;
+          const fy = _offset.y + lord.y * STEP + TILE / 2;
+
+          // Dashed travel line
+          _ctx.beginPath();
+          _ctx.moveTo(fx, fy);
+          _ctx.lineTo(tox, toy);
+          _ctx.strokeStyle = 'rgba(100, 200, 255, 0.85)';
+          _ctx.lineWidth   = 2.5;
+          _ctx.setLineDash([5, 4]);
+          _ctx.stroke();
+          _ctx.setLineDash([]);
+
+          // Arrowhead at destination
+          const angle = Math.atan2(toy - fy, tox - fx);
+          _ctx.beginPath();
+          _ctx.moveTo(tox, toy);
+          _ctx.lineTo(tox - 10 * Math.cos(angle - 0.4), toy - 10 * Math.sin(angle - 0.4));
+          _ctx.lineTo(tox - 10 * Math.cos(angle + 0.4), toy - 10 * Math.sin(angle + 0.4));
+          _ctx.closePath();
+          _ctx.fillStyle = 'rgba(100, 200, 255, 0.95)';
+          _ctx.fill();
+        }
+
+        // Destination tile border (always shown, even for lords with null x)
+        const dtx = _offset.x + qItem.destX * STEP;
+        const dty = _offset.y + qItem.destY * STEP;
+        _ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+        _ctx.lineWidth   = 2;
+        _ctx.setLineDash([3, 3]);
+        _roundRect(dtx + 1, dty + 1, TILE - 2, TILE - 2, 2);
+        _ctx.stroke();
+        _ctx.setLineDash([]);
+
+        // Destination marker dot
+        _ctx.beginPath();
+        _ctx.arc(tox, toy, 4, 0, Math.PI * 2);
+        _ctx.fillStyle = 'rgba(100, 200, 255, 0.9)';
+        _ctx.fill();
+      });
+    }
+
     // ── Move mode overlay ─────────────────────────────────────
     if (_movingLord && _movingLord.x != null) {
       const lx = _offset.x + _movingLord.x * STEP;
@@ -821,7 +875,7 @@ const MapView = (() => {
   }
 
   function _onFoundConfirm() {
-    if (!_pendingTile || !_lord) return;
+    if (!_pendingTile) return;
     const name    = document.getElementById('city-name-input').value;
     const errorEl = document.getElementById('found-error');
     errorEl.textContent = '';
@@ -830,7 +884,7 @@ const MapView = (() => {
     if (!result.ok) { errorEl.textContent = result.error; return; }
 
     _closeModal();
-    _lord = LordService.getById(_lord.id);
+    if (_lord) _lord = LordService.getById(_lord.id);
     const updatedPlayer = PlayerService.getById(_player.id);
     _draw();
     _updatePrompt();

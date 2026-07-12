@@ -65,6 +65,16 @@ const BuildingUnlockService = (() => {
           break;
         }
 
+        case 'city_tier': {
+          const TIER_POPS = [0, 0, 5000, 15000, 40000, 100000];
+          const level = CityStatsService.getCityLevel(city);
+          if (level < req.minTier) {
+            const needPop = (TIER_POPS[req.minTier] || 0).toLocaleString();
+            reasons.push(`Requires City Tier ${req.minTier} (${needPop}+ population)`);
+          }
+          break;
+        }
+
         case 'tech': {
           // Technology system not implemented yet — always locked
           reasons.push(`Requires Technology: ${req.label || req.id}`);

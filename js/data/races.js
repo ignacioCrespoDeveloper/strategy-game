@@ -57,22 +57,6 @@ const RACES = {
     },
   },
 
-  vampire: {
-    id:          'vampire',
-    name:        'Vampire',
-    icon:        '🦇',
-    description: 'Ancient lords of the night. Vampires raise colossal stone fortresses and arm their thralls in iron, but have no use for harvests — their cities feed on souls, not grain.',
-    bonusLabel:  '+30% stone · +20% iron · −50% food production',
-    bonuses: {
-      food_production:    -0.50,
-      wood_production:     0.00,
-      stone_production:    0.30,
-      iron_production:     0.20,
-      construction_speed: -0.10,
-      population_growth:   0.00,
-    },
-  },
-
   high_elf: {
     id:          'high_elf',
     name:        'High Elf',

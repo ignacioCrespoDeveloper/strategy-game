@@ -94,19 +94,6 @@ const LordScreen = (() => {
     return `
       <div class="ls-fullscreen">
 
-        <header class="ls-header">
-          <button class="ls-back-btn" id="ls-back">← Overview</button>
-          <div class="ls-title">
-            ${(cls?.portrait || race.portrait)
-              ? `<img class="ls-header-portrait" src="${cls?.portrait || race.portrait}" alt="${_lord.name}" />`
-              : `<span class="ls-portrait">${race.icon || '👤'}</span>`}
-            <span class="ls-lord-name">${_lord.name}</span>
-            <span class="ls-race-badge">${race.name || ''}</span>
-            ${cls ? `<span class="ls-class-badge" style="color:${cls.color};border-color:${cls.color}40">${cls.icon} ${cls.name}</span>` : ''}
-            <button class="ls-map-btn" id="ls-map-btn">🗺 World Map</button>
-          </div>
-        </header>
-
         <div class="ls-body">
 
           <aside class="ls-left" id="ls-left">
@@ -148,7 +135,6 @@ const LordScreen = (() => {
     const xp      = _lord.xp || 0;
     const xpNext  = _lord.xpToNext || 100;
     const xpPct   = Math.min(100, Math.floor((xp / xpNext) * 100));
-    const talent  = _lord.talentPoints || 0;
 
     const effective = LordService.getEffectiveStats(_lord);
     const maxHp     = effective.health;
@@ -213,17 +199,6 @@ const LordScreen = (() => {
       </div>
     ` : '';
 
-    // Talent points
-    const talentHtml = `
-      <div class="cvl-divider"></div>
-      <div class="lsh-section">
-        <div class="lsh-section-title">Talent Points</div>
-        ${talent > 0
-          ? `<div class="lsh-talent-available">✦ ${talent} Point${talent !== 1 ? 's' : ''} Available</div>`
-          : `<div class="lsh-talent-none">Level up to earn Talent Points</div>`}
-        <button class="lsh-talent-tree-btn" disabled>✦ Talent Tree (coming soon)</button>
-      </div>
-    `;
 
     return `
       ${portraitHtml}
@@ -259,7 +234,6 @@ const LordScreen = (() => {
       </div>
 
       ${passiveHtml}
-      ${talentHtml}
 
     `;
   }
