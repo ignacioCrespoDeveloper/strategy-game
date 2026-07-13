@@ -413,7 +413,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Trains ranged units. Provides a steady stream of disciplined skirmishers and crossbow warriors.',
     maxLevel:    10,
-    requires:    { town_hall: 2 },
+    requires:    { town_hall: 3 },
     cost:        level => ({
       wood:  _scale(150, 1.4, level),
       stone: _scale(100, 1.4, level),
@@ -435,7 +435,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Breeds and trains war horses and cavalry mounts. Unlocks fast-moving military units.',
     maxLevel:    10,
-    requires:       { town_hall: 3, barracks: 1 },
+    requires:       { town_hall: 5, barracks: 2 },
     unlockRequires: [{ type: 'city_tier', minTier: 2 }],
     cost:        level => ({
       wood:  _scale(200, 1.4, level),
@@ -458,7 +458,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'A reinforced pit where Dark Elf beastmasters tame and train war monsters. Only the most disciplined handlers survive.',
     maxLevel:    5,
-    requires:    { barracks: 3 },
+    requires:    { town_hall: 7, barracks: 3 },
     unlockRequires: [{ type: 'race', id: 'dark_elf' }, { type: 'city_tier', minTier: 4 }],
     cost:        level => ({
       wood:  _scale(400, 1.6, level),
@@ -541,7 +541,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Imperial engineers produce blackpowder weapons and train Handgunners. The acrid smell of sulphur never quite leaves the district.',
     maxLevel:    5,
-    requires:    { barracks: 2 },
+    requires:    { town_hall: 5, barracks: 2 },
     unlockRequires: [{ type: 'race', id: 'human' }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
       wood:  _scale(150, 1.4, level),
@@ -565,7 +565,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Where Imperial masterminds design war machines and steam-powered behemoths. Only the wealthiest cities can afford its ambitions.',
     maxLevel:    3,
-    requires:    { town_hall: 5, barracks: 3, gunpowder_workshop: 2 },
+    requires:    { town_hall: 7, barracks: 3, gunpowder_workshop: 2 },
     unlockRequires: [{ type: 'race', id: 'human' }, { type: 'city_tier', minTier: 4 }],
     cost:        level => ({
       wood:  _scale(400, 1.8, level),
@@ -589,7 +589,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Dwarf master engineers perfect their craft here — from reliable Thunderer rifles to the terrifying war machines of the hold.',
     maxLevel:    5,
-    requires:    { barracks: 2 },
+    requires:    { town_hall: 5, barracks: 2 },
     unlockRequires: [{ type: 'race', id: 'dwarf' }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
       wood:  _scale(100, 1.4, level),
@@ -613,7 +613,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'A grim hall where oath-sworn Dwarfs train to seek a glorious death in battle. Its presence unnerves citizens — and terrifies enemies.',
     maxLevel:    3,
-    requires:    { barracks: 3 },
+    requires:    { town_hall: 5, barracks: 3 },
     unlockRequires: [{ type: 'race', id: 'dwarf' }, { type: 'city_tier', minTier: 4 }],
     cost:        level => ({
       wood:  _scale(200, 1.6, level),
@@ -637,7 +637,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'A high spire where trained Giant Eagles roost and Elven crews operate Eagle Claw bolt throwers. A potent symbol of High Elf military power.',
     maxLevel:    3,
-    requires:    { archery_range: 2, barracks: 2 },
+    requires:    { town_hall: 5, archery_range: 2, barracks: 2 },
     unlockRequires: [{ type: 'race', id: 'high_elf' }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
       wood:  _scale(300, 1.7, level),
@@ -683,7 +683,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Reinforced pens where war boars are bred, fed, and broken for battle. The smell alone discourages enemy scouts.',
     maxLevel:    3,
-    requires:    { barracks: 2 },
+    requires:    { town_hall: 5, barracks: 2 },
     unlockRequires: [{ type: 'race', id: 'orc' }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
       wood:  _scale(200, 1.6, level),
@@ -705,7 +705,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'A pit dug deep enough to hold things that should not be held. Troll handlers and Spider riders train here, if they survive.',
     maxLevel:    5,
-    requires:    { barracks: 3 },
+    requires:    { town_hall: 7, barracks: 3 },
     unlockRequires: [{ type: 'race', id: 'orc' }, { type: 'city_tier', minTier: 4 }],
     cost:        level => ({
       wood:  _scale(400, 1.7, level),
@@ -728,8 +728,8 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Where Orc Meks and Goblin tinkerers build rock lobbers and other contraptions that may or may not work as intended.',
     maxLevel:    3,
-    requires:    { barracks: 2 },
-    unlockRequires: [{ type: 'race', id: 'orc' }, { type: 'city_tier', minTier: 4 }],
+    requires:    { town_hall: 5, barracks: 2 },
+    unlockRequires: [{ type: 'race', id: 'orc' }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
       wood:  _scale(300, 1.6, level),
       stone: _scale(200, 1.6, level),
@@ -750,7 +750,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'A vast cavern carved to house a living dragon. Only the most ancient and powerful elven civilisations can claim such a bond.',
     maxLevel:    3,
-    requires:    { town_hall: 8, barracks: 5 },
+    requires:    { town_hall: 9, barracks: 5 },
     unlockRequires: [{ type: 'race', ids: ['dark_elf', 'high_elf'] }, { type: 'city_tier', minTier: 5 }],
     cost:        level => ({
       wood:  _scale(1000, 2.0, level),

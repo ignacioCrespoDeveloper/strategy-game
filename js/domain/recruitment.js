@@ -11,11 +11,18 @@
 //    [{ unitId, count, lordId, startedAt, finishAt }]
 //
 //  Only one batch trains at a time (same pattern as constructionQueue).
+//
+//  Guards enforced at enqueue():
+//    1. Gold cost (from player.coins)
+//    2. Resource cost (from city.resources: iron/wood/food per unit × count)
+//    3. Population cost (from city.freePopulation; 0 for mercenaries)
+//    4. Army slot limit (max 10 units)
+//    5. Army weight limit (sum of armyWeight ≤ lord command capacity)
+//    6. Legendary gate: armyWeight 12 requires lord level ≥ 12
 // =============================================
 
 const RecruitmentService = (() => {
 
-  // Migration guard — add recruitmentQueue to cities that predate this system.
   function _migrateCity(city) {
     if (!city.recruitmentQueue) {
       city.recruitmentQueue = [];
@@ -24,7 +31,6 @@ const RecruitmentService = (() => {
   }
 
   // Returns units available for recruitment from `city`, given `lord`'s race.
-  // Each entry: { unitId, building, minLevel }
   function getAvailableFromCity(lord, city) {
     const raceRoster = UNIT_ROSTER[lord.race];
     if (!raceRoster) return [];
@@ -36,7 +42,6 @@ const RecruitmentService = (() => {
       const bldLevel = city.buildings[buildingId] || 0;
       if (bldLevel === 0) return;
 
-      // Sort level thresholds ascending so unlocks appear in order
       Object.keys(levelMap)
         .map(Number)
         .sort((a, b) => a - b)
@@ -55,14 +60,21 @@ const RecruitmentService = (() => {
     return available;
   }
 
-  // Returns active discovery records that have a mercenary roster in CAMP_DEFS.
-  // No negotiation required — any active camp with a roster is immediately hirable.
   function getAvailableFromDiscoveries(playerId) {
     return DiscoveryService.getActive(playerId)
       .filter(r => CAMP_DEFS[r.definitionId]?.mercenaryRoster?.length > 0);
   }
 
-  // Enqueue a unit training batch at a city. Deducts gold immediately.
+  // Current total armyWeight for a lord's army.
+  function _totalWeight(lordId) {
+    const army = ArmyService.get(lordId);
+    return army.units.reduce((sum, stack) => {
+      const def = UNIT_DEFS[stack.unitId];
+      return sum + (def?.armyWeight || 1) * stack.count;
+    }, 0);
+  }
+
+  // Enqueue a unit training batch at a city. Deducts gold + resources immediately.
   // Returns { ok, error? }.
   function enqueue(lord, city, unitId, count) {
     _migrateCity(city);
@@ -74,19 +86,72 @@ const RecruitmentService = (() => {
     const def = UNIT_DEFS[unitId];
     if (!def) return { ok: false, error: 'Unknown unit.' };
 
+    // ── Slot limit ────────────────────────────────────────────────
     const ARMY_LIMIT  = 10;
     const currentSize = ArmyService.totalUnits(lord.id);
     if (currentSize + count > ARMY_LIMIT) {
       return { ok: false, error: `Army is full (${currentSize}/${ARMY_LIMIT}). Dismiss units first.` };
     }
 
-    const totalCost = def.goldCost * count;
-    const player    = PlayerService.getById(lord.playerId);
-    if ((player.coins || 0) < totalCost) {
-      return { ok: false, error: `Need ${totalCost}💰, have ${player.coins || 0}💰.` };
+    // ── Legendary gate: lord must be level ≥ 12 ──────────────────
+    if ((def.armyWeight || 1) >= 12 && (lord.level || 1) < 12) {
+      return { ok: false, error: `Only a lord of level 12 or higher can command a ${def.name}.` };
     }
 
-    PlayerService.update(lord.playerId, { coins: player.coins - totalCost });
+    // ── Army weight limit ─────────────────────────────────────────
+    const capacity    = LordService.getCommandCapacity(lord);
+    const usedWeight  = _totalWeight(lord.id);
+    const addedWeight = (def.armyWeight || 1) * count;
+    if (usedWeight + addedWeight > capacity) {
+      return {
+        ok: false,
+        error: `Not enough command capacity. Used ${usedWeight}/${capacity} pts. ${def.name} costs ${def.armyWeight || 1} pts each.`,
+      };
+    }
+
+    // ── Gold cost ─────────────────────────────────────────────────
+    const totalGold = def.goldCost * count;
+    const player    = PlayerService.getById(lord.playerId);
+    if ((player.coins || 0) < totalGold) {
+      return { ok: false, error: `Need ${totalGold}💰, have ${player.coins || 0}💰.` };
+    }
+
+    // ── Resource cost ─────────────────────────────────────────────
+    const rc = def.resourceCost || {};
+    const resShortages = [];
+    Object.entries(rc).forEach(([res, perUnit]) => {
+      const needed  = perUnit * count;
+      const have    = Math.floor(city.resources[res] || 0);
+      if (have < needed) resShortages.push(`${needed} ${res} (have ${have})`);
+    });
+    if (resShortages.length > 0) {
+      return { ok: false, error: `Not enough resources: ${resShortages.join(', ')}.` };
+    }
+
+    // ── Population cost (skip for mercenaries: race null) ─────────
+    const popCost = (def.populationCost || 0) * count;
+    if (popCost > 0 && def.race !== null) {
+      const freePop = Math.floor(city.freePopulation ?? 0);
+      if (freePop < popCost) {
+        return {
+          ok: false,
+          error: `Not enough free population (need ${popCost}, have ${freePop}). Hire mercenaries instead — they require no population.`,
+        };
+      }
+    }
+
+    // ── Deduct gold ───────────────────────────────────────────────
+    PlayerService.update(lord.playerId, { coins: player.coins - totalGold });
+
+    // ── Deduct resources ──────────────────────────────────────────
+    Object.entries(rc).forEach(([res, perUnit]) => {
+      city.resources[res] = (city.resources[res] || 0) - perUnit * count;
+    });
+
+    // ── Deduct population ─────────────────────────────────────────
+    if (popCost > 0 && def.race !== null) {
+      city.freePopulation = Math.max(0, (city.freePopulation ?? 0) - popCost);
+    }
 
     const now      = TimeService.now();
     const duration = def.recruitTime * count * 1000;
@@ -100,7 +165,6 @@ const RecruitmentService = (() => {
   }
 
   // Complete any finished batches. Adds units to the lord's army.
-  // Returns completed job records (may be empty).
   function tick(city) {
     _migrateCity(city);
     if (city.recruitmentQueue.length === 0) return [];

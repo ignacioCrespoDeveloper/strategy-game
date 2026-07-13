@@ -111,6 +111,11 @@ const App = (() => {
         HUD.hide();
         BattleResultView.render(root, data);
         break;
+      case 'battle-simulator':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'battle-simulator');
+        BattleSimulator.render(root, data);
+        break;
       default:
         Nav.hide();
         HUD.hide();

@@ -38,11 +38,89 @@ const DISCOVERY_DEFS = {
     },
   },
 
-  // ── Resource ──────────────────────────────────────────────────
+  // ── Resource — Tier 1 (common, modest yield) ──────────────────
+
+  iron_vein: {
+    id:          'iron_vein',
+    name:        'Iron Vein',
+    tier:        1,
+    intelType:   'resources',
+    description: 'A surface iron vein, easy to chip away and carry back to the city.',
+    icon:        '🔩',
+    category:    'resource',
+    baseWeight:  18,
+    baseDuration: 1 * 24 * 3600,
+    terrainMultipliers: {
+      hills: 3.0, mountain: 2.0, desert: 0.8, plains: 0.5, forest: 0.3, marsh: 0.1,
+    },
+  },
+
+  cliff_face: {
+    id:          'cliff_face',
+    name:        'Cliff Face',
+    tier:        1,
+    intelType:   'resources',
+    description: 'A rocky outcrop with loose, workable stone — easy pickings for a labour party.',
+    icon:        '🗿',
+    category:    'resource',
+    baseWeight:  18,
+    baseDuration: 2 * 24 * 3600,
+    terrainMultipliers: {
+      mountain: 3.0, hills: 2.5, desert: 1.0, plains: 0.3, forest: 0.2, marsh: 0.1,
+    },
+  },
+
+  fertile_fields: {
+    id:          'fertile_fields',
+    name:        'Fertile Fields',
+    tier:        1,
+    intelType:   'resources',
+    description: 'Abandoned farmland, still rich with soil. A quick harvest would fill many baskets.',
+    icon:        '🌾',
+    category:    'resource',
+    baseWeight:  20,
+    baseDuration: 1 * 24 * 3600,
+    terrainMultipliers: {
+      plains: 4.0, hills: 1.0, forest: 0.5, marsh: 0.5, mountain: 0.1, desert: 0.0,
+    },
+  },
+
+  river_crossing: {
+    id:          'river_crossing',
+    name:        'River Crossing',
+    tier:        1,
+    intelType:   'resources',
+    description: 'A ford where fish congregate and fresh water flows freely. Good for a quick supply run.',
+    icon:        '🎣',
+    category:    'resource',
+    baseWeight:  16,
+    baseDuration: 2 * 24 * 3600,
+    terrainMultipliers: {
+      marsh: 3.0, plains: 2.0, forest: 2.0, hills: 1.0, mountain: 0.5, desert: 0.0,
+    },
+  },
+
+  coin_cache: {
+    id:          'coin_cache',
+    name:        'Coin Cache',
+    tier:        1,
+    intelType:   'resources',
+    description: 'A small pouch of coins hidden beneath a stone. Better than nothing.',
+    icon:        '🪙',
+    category:    'resource',
+    baseWeight:  10,
+    baseDuration: 1 * 24 * 3600,
+    terrainMultipliers: {
+      plains: 1.5, forest: 1.3, hills: 1.2, desert: 1.5, mountain: 1.0, marsh: 0.8,
+    },
+  },
+
+  // ── Resource — Tier 2 (standard) ──────────────────────────────
 
   timber_cache: {
     id:          'timber_cache',
     name:        'Timber Cache',
+    tier:        2,
     intelType:   'resources',
     description: 'A stack of felled logs left by loggers who never returned. Quality wood, ready for the taking.',
     icon:        '🪵',
@@ -50,13 +128,14 @@ const DISCOVERY_DEFS = {
     baseWeight:  15,
     baseDuration: 3 * 24 * 3600,
     terrainMultipliers: {
-      forest: 3.0, plains: 0.8, hills: 0.5, marsh: 1.5, mountain: 0.2, desert: 0.0,
+      forest: 3.0, marsh: 1.5, plains: 0.8, hills: 0.5, mountain: 0.2, desert: 0.0,
     },
   },
 
   abandoned_mine: {
     id:          'abandoned_mine',
     name:        'Abandoned Mine',
+    tier:        2,
     intelType:   'resources',
     description: 'An old mine shaft sealed by a cave-in. Its veins still run rich with iron ore.',
     icon:        '⛏',
@@ -71,6 +150,7 @@ const DISCOVERY_DEFS = {
   stone_deposit: {
     id:          'stone_deposit',
     name:        'Stone Deposit',
+    tier:        2,
     intelType:   'resources',
     description: 'A rich vein of quality building stone breaks the surface here, ready to be quarried.',
     icon:        '🪨',
@@ -85,6 +165,7 @@ const DISCOVERY_DEFS = {
   wild_game: {
     id:          'wild_game',
     name:        'Wild Game',
+    tier:        2,
     intelType:   'resources',
     description: 'Rich hunting grounds. Your hunters could fill the city larders from this land.',
     icon:        '🦌',
@@ -99,6 +180,7 @@ const DISCOVERY_DEFS = {
   lost_treasure: {
     id:          'lost_treasure',
     name:        'Lost Treasure',
+    tier:        2,
     intelType:   'resources',
     description: 'A buried chest, heavy with coins and gemstones. Someone hid this long ago and never came back.',
     icon:        '💰',
@@ -107,6 +189,83 @@ const DISCOVERY_DEFS = {
     baseDuration: 2 * 24 * 3600,
     terrainMultipliers: {
       desert: 2.0, forest: 1.5, plains: 1.2, hills: 1.0, mountain: 0.8, marsh: 0.5,
+    },
+  },
+
+  // ── Resource — Tier 3 (rare, large yield) ─────────────────────
+
+  ancient_forest: {
+    id:          'ancient_forest',
+    name:        'Ancient Forest',
+    tier:        3,
+    intelType:   'resources',
+    description: 'A grove of primordial trees, untouched for centuries. Their timber alone could supply a city for months.',
+    icon:        '🌲',
+    category:    'resource',
+    baseWeight:  4,
+    baseDuration: 10 * 24 * 3600,
+    terrainMultipliers: {
+      forest: 5.0, marsh: 1.5, hills: 0.5, plains: 0.2, mountain: 0.1, desert: 0.0,
+    },
+  },
+
+  deep_ore_shaft: {
+    id:          'deep_ore_shaft',
+    name:        'Deep Ore Shaft',
+    tier:        3,
+    intelType:   'resources',
+    description: 'A massive natural iron deposit, rich enough to arm a dozen armies. The ore practically falls from the walls.',
+    icon:        '⚙',
+    category:    'resource',
+    baseWeight:  3,
+    baseDuration: 14 * 24 * 3600,
+    terrainMultipliers: {
+      mountain: 4.0, hills: 2.5, desert: 0.8, plains: 0.2, forest: 0.1, marsh: 0.0,
+    },
+  },
+
+  marble_quarry: {
+    id:          'marble_quarry',
+    name:        'Marble Quarry',
+    tier:        3,
+    intelType:   'resources',
+    description: 'An entire mountainside of premium marble. Whoever controls this site can build in a style that endures.',
+    icon:        '🏛',
+    category:    'resource',
+    baseWeight:  3,
+    baseDuration: 14 * 24 * 3600,
+    terrainMultipliers: {
+      mountain: 4.0, hills: 2.0, desert: 1.0, plains: 0.2, forest: 0.1, marsh: 0.0,
+    },
+  },
+
+  bountiful_hunt: {
+    id:          'bountiful_hunt',
+    name:        'Bountiful Hunting Ground',
+    tier:        3,
+    intelType:   'resources',
+    description: 'An exceptional stretch of wilderness teeming with prey. Your hunters could feed an entire army from this land.',
+    icon:        '🦬',
+    category:    'resource',
+    baseWeight:  4,
+    baseDuration: 7 * 24 * 3600,
+    terrainMultipliers: {
+      forest: 4.0, plains: 2.5, hills: 1.5, marsh: 1.0, mountain: 0.3, desert: 0.0,
+    },
+  },
+
+  buried_vault: {
+    id:          'buried_vault',
+    name:        'Buried Vault',
+    tier:        3,
+    intelType:   'resources',
+    description: 'A sealed underground chamber stuffed with the wealth of some long-dead lord. The dust of ages guards it still.',
+    icon:        '🏺',
+    category:    'resource',
+    baseWeight:  2,
+    baseDuration: 7 * 24 * 3600,
+    terrainMultipliers: {
+      desert: 3.0, mountain: 2.0, hills: 1.5, plains: 1.0, forest: 1.0, marsh: 0.5,
     },
   },
 

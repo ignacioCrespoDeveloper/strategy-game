@@ -9,7 +9,7 @@ const LORD_ACTIONS = {
     icon:             '🔍',
     desc:             'Search the current tile for hidden opportunities.',
     duration:         300,
-    xpReward:         5,
+    xpReward:         8,
     requiresPosition: true,
   },
   move_lord: {
@@ -43,23 +43,42 @@ const LordService = (() => {
     return result;
   }
 
-  // Returns the real action duration (seconds), applying any class passive effects.
-  // Rogue Explorer: Search Area takes 50% of base time.
+  // Returns the real action duration (seconds), applying fatigue tier and class passive.
+  // Fatigue tiers: 0-7 searches → 5m, 8-14 → 15m, 15+ → 30m.
+  // Rogue Explorer passive (searchDurationMult) applied on top.
   function getActionDuration(lord, actionId) {
-    const def     = LORD_ACTIONS[actionId];
+    const def = LORD_ACTIONS[actionId];
     if (!def) return 0;
-    const cls     = LORD_CLASSES[lord.classId];
-    const effects = cls?.passive?.effects || {};
-    if (actionId === 'search_area' && effects.searchDurationMult != null) {
-      return Math.round(def.duration * effects.searchDurationMult);
+    if (actionId === 'search_area') {
+      const base    = DiscoveryService.getSearchDuration(lord.id);
+      const cls     = LORD_CLASSES[lord.classId];
+      const effects = cls?.passive?.effects || {};
+      if (effects.searchDurationMult != null) {
+        return Math.round(base * effects.searchDurationMult);
+      }
+      return base;
     }
     return def.duration;
   }
 
   // ── CRUD ─────────────────────────────────────────────────────
 
-  const RECRUIT_COST = 15000;
-  const MAX_LORDS    = 5;
+  const MAX_LORDS = 5;
+
+  // Cost to recruit lord N (1-indexed): 400 × 1.5^(N-1), rounded.
+  function getRecruitCost(existingLordCount) {
+    return Math.round(400 * Math.pow(1.5, existingLordCount));
+  }
+
+  // Gold/hour upkeep for a lord: 5 base + 1 per level.
+  function getUpkeepPerHour(lord) {
+    return 5 + (lord.level || 1);
+  }
+
+  // Command capacity: max army points this lord can field.
+  function getCommandCapacity(lord) {
+    return 6 + 2 * (lord.level || 1);
+  }
 
   function create(playerId, name, raceId, classId) {
     const n = (name || '').trim();
@@ -75,11 +94,9 @@ const LordService = (() => {
     const taken = Object.values(lords).some(l => l.name.toLowerCase() === n.toLowerCase());
     if (taken) return { ok: false, error: 'A lord with that name already exists.' };
 
-    const isFirst = playerLords.length === 0;
-    if (!isFirst) {
-      const spend = PlayerService.spendCoins(playerId, RECRUIT_COST);
-      if (!spend.ok) return { ok: false, error: `Recruiting costs ${RECRUIT_COST.toLocaleString()} 💰 gold. ${spend.error}` };
-    }
+    const cost = getRecruitCost(playerLords.length);
+    const spend = PlayerService.spendCoins(playerId, cost);
+    if (!spend.ok) return { ok: false, error: `Recruiting costs ${cost.toLocaleString()} 💰 gold. ${spend.error}` };
 
     const id  = _generateId();
     const lord = {
@@ -88,7 +105,7 @@ const LordService = (() => {
       createdAt:    TimeService.now(),
       level:        1,
       xp:           0,
-      xpToNext:     100,
+      xpToNext:     150,
       talentPoints: 0,
       actionQueue:  [],
       stance:       { id: 'idle', startedAt: null, finishAt: null },
@@ -204,7 +221,8 @@ const LordService = (() => {
     while ((lord.xp || 0) >= (lord.xpToNext || 100)) {
       lord.xp           = Math.max(0, lord.xp - lord.xpToNext);
       lord.level        = (lord.level || 1) + 1;
-      lord.xpToNext     = lord.level * 150;
+      // XP curve: cumulative 50×N² → xpToNext at level N = 50×(2N+1)
+      lord.xpToNext     = 50 * (2 * lord.level + 1);
       lord.talentPoints = (lord.talentPoints || 0) + 1;
 
       for (const key of Object.keys(LORD_BASE_STATS)) {
@@ -318,6 +336,7 @@ const LordService = (() => {
 
   return {
     create, getById, getByPlayer, getAll, save, setPosition,
+    getRecruitCost, getUpkeepPerHour, getCommandCapacity,
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
     getEffectiveStats, getActionDuration,

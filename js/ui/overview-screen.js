@@ -244,8 +244,10 @@ const OverviewScreen = (() => {
     const cities     = CityService.getPlayerCities(_player.id);
     const cards      = cities.length ? cities.map(_cityCard).join('') : '';
     const atLimit    = cities.length >= 5;
+    const foundCost  = CityService.getFoundCost(cities.length);
     const coins      = PlayerService.getById(_player.id)?.coins || 0;
-    const canAfford  = cities.length === 0 || coins >= 25000;
+    const canAfford  = foundCost === 0 || coins >= foundCost;
+    const costLabel  = foundCost === 0 ? 'Free' : `💰 ${foundCost.toLocaleString()}`;
 
     return `
       <section class="ov-section">
@@ -253,7 +255,7 @@ const OverviewScreen = (() => {
           <div class="ov-section-title">
             Cities
             <span class="ov-limit-badge">${cities.length}/5</span>
-            <span class="ov-cost-hint">💰 25,000 to found</span>
+            ${!atLimit ? `<span class="ov-cost-hint">${costLabel} to found</span>` : ''}
           </div>
           <button class="ov-section-toggle" id="ov-toggle-cities">${_citiesCollapsed ? '▼' : '▲'}</button>
         </div>
@@ -261,8 +263,9 @@ const OverviewScreen = (() => {
           <div class="ov-cities-grid">
             ${cards}
             ${!atLimit ? `
-              <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-found-city-btn" title="Found a new city — costs 25,000 gold">
-                <span class="ov-add-cost">💰 25,000</span>
+              <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-found-city-btn"
+                   data-cost="${foundCost}" title="Found a new city — costs ${costLabel}">
+                <span class="ov-add-cost">${costLabel}</span>
                 <span class="ov-add-icon">+</span>
                 <span class="ov-add-label">Found City</span>
               </div>` : ''}
@@ -355,17 +358,20 @@ const OverviewScreen = (() => {
   }
 
   function _lordsSection() {
-    const lords      = LordService.getByPlayer(_player.id);
-    const atLimit    = lords.length >= 5;
-    const coins      = PlayerService.getById(_player.id)?.coins || 0;
-    const canAfford  = lords.length === 0 || coins >= 15000;
+    const lords       = LordService.getByPlayer(_player.id);
+    const atLimit     = lords.length >= 5;
+    const recruitCost = LordService.getRecruitCost(lords.length);
+    const coins       = PlayerService.getById(_player.id)?.coins || 0;
+    const canAfford   = coins >= recruitCost;
+    const costLabel   = `💰 ${recruitCost.toLocaleString()}`;
+
     return `
       <section class="ov-section">
         <div class="ov-section-row">
           <div class="ov-section-title">
             Lords
             <span class="ov-limit-badge">${lords.length}/5</span>
-            <span class="ov-cost-hint">💰 15,000 to recruit</span>
+            ${!atLimit ? `<span class="ov-cost-hint">${costLabel} to recruit</span>` : ''}
           </div>
           <button class="ov-section-toggle" id="ov-toggle-lords">${_lordsCollapsed ? '▼' : '▲'}</button>
         </div>
@@ -373,8 +379,9 @@ const OverviewScreen = (() => {
           <div class="ov-lords-grid">
             ${lords.map(_lordCard).join('')}
             ${!atLimit ? `
-              <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-recruit-lord-btn" title="Recruit a new lord — costs 15,000 gold">
-                <span class="ov-add-cost">💰 15,000</span>
+              <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-recruit-lord-btn"
+                   data-cost="${recruitCost}" title="Recruit a new lord — costs ${costLabel}">
+                <span class="ov-add-cost">${costLabel}</span>
                 <span class="ov-add-icon">+</span>
                 <span class="ov-add-label">Recruit Lord</span>
               </div>` : ''}
@@ -624,11 +631,12 @@ const OverviewScreen = (() => {
       });
     });
 
-    document.getElementById('ov-found-city-btn')?.addEventListener('click', () => {
-      const isFirst = CityService.getPlayerCities(_player.id).length === 0;
-      if (!isFirst) {
-        const coins = PlayerService.getById(_player.id)?.coins || 0;
-        if (coins < 25000) { _toast('Not enough gold — founding a city costs 💰 25,000.'); return; }
+    document.getElementById('ov-found-city-btn')?.addEventListener('click', e => {
+      const cost  = parseInt(e.currentTarget.dataset.cost || '0', 10);
+      const coins = PlayerService.getById(_player.id)?.coins || 0;
+      if (cost > 0 && coins < cost) {
+        _toast(`Not enough gold — founding this city costs 💰 ${cost.toLocaleString()}.`);
+        return;
       }
       _stopTicker();
       App.navigate('map', { player: _player, lord: _lord });
@@ -645,11 +653,12 @@ const OverviewScreen = (() => {
     });
 
     // Recruit lord button (in lords section)
-    document.getElementById('ov-recruit-lord-btn')?.addEventListener('click', () => {
-      const isFirst = LordService.getByPlayer(_player.id).length === 0;
-      if (!isFirst) {
-        const coins = PlayerService.getById(_player.id)?.coins || 0;
-        if (coins < 15000) { _toast('Not enough gold — recruiting a lord costs 💰 15,000.'); return; }
+    document.getElementById('ov-recruit-lord-btn')?.addEventListener('click', e => {
+      const cost  = parseInt(e.currentTarget.dataset.cost || '0', 10);
+      const coins = PlayerService.getById(_player.id)?.coins || 0;
+      if (cost > 0 && coins < cost) {
+        _toast(`Not enough gold — recruiting a lord costs 💰 ${cost.toLocaleString()}.`);
+        return;
       }
       _openRecruitModal();
     });

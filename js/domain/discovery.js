@@ -23,11 +23,46 @@
 // =============================================
 
 const DiscoveryService = (() => {
-  const KEY = 'discoveries';
+  const KEY         = 'discoveries';
+  const FATIGUE_KEY = 'search_fatigue';
 
   function _getAll()       { return StorageService.get(KEY) || {}; }
   function _saveAll(data)  { StorageService.set(KEY, data); }
   function _forPlayer(pid) { return _getAll()[pid] || []; }
+
+  // ── Search fatigue ────────────────────────────────────────────
+  // Tracks per-lord daily search count. Resets at midnight (UTC date key).
+  function _todayKey()  { return new Date().toISOString().slice(0, 10); }
+  function _getFatigue(){ return StorageService.get(FATIGUE_KEY) || {}; }
+
+  function _lordFatigue(lordId) {
+    const f = _getFatigue()[lordId];
+    if (!f || f.date !== _todayKey()) return { count: 0, date: _todayKey() };
+    return f;
+  }
+
+  // Returns the search_area action duration in seconds based on daily fatigue count.
+  // Tier 1 (0-7 searches): 5 min · Tier 2 (8-14): 15 min · Tier 3 (15+): 30 min
+  function getSearchDuration(lordId) {
+    const count = _lordFatigue(lordId).count;
+    if (count < 8)  return 300;
+    if (count < 15) return 900;
+    return 1800;
+  }
+
+  function incrementFatigue(lordId) {
+    const f     = _getFatigue();
+    const today = _todayKey();
+    const curr  = f[lordId];
+    f[lordId]   = (curr && curr.date === today)
+      ? { count: curr.count + 1, date: today }
+      : { count: 1, date: today };
+    StorageService.set(FATIGUE_KEY, f);
+  }
+
+  function getFatigueCount(lordId) {
+    return _lordFatigue(lordId).count;
+  }
 
   // ── Weighted random roll ──────────────────────────────────────
 
@@ -90,6 +125,9 @@ const DiscoveryService = (() => {
       return { def: DISCOVERY_DEFS.nothing_found, record: null };
     }
 
+    // Every search attempt counts toward fatigue (even nothing found).
+    incrementFatigue(lord.id);
+
     const terrain = WorldService.getTerrain(lord.x, lord.y);
     const def     = _roll(terrain.id);
 
@@ -140,16 +178,39 @@ const DiscoveryService = (() => {
 
   // ── Reward logic ──────────────────────────────────────────────
 
+  // Which resource each discovery yields (value just needs to be truthy).
+  // Actual amount is determined by def.tier + lord level in _rollRewards.
   const _BASE_REWARDS = {
-    timber_cache:     { wood: 150,  xp: 30  },
-    abandoned_mine:   { iron: 100,  xp: 40  },
-    stone_deposit:    { stone: 120, xp: 30  },
-    wild_game:        { food: 200,  xp: 20  },
-    lost_treasure:    { gold: 100,  xp: 60  },
-    ancient_ruins:    {             xp: 80  },
-    merchant_caravan: { gold: 70,   xp: 20  },
-    ancient_relic:    { gold: 150,  xp: 160 },
-    bog_crystal:      { gold: 120,  xp: 120 },
+    // Tier 1
+    iron_vein:        { iron: 1,  xp: 15 },
+    cliff_face:       { stone: 1, xp: 15 },
+    fertile_fields:   { food: 1,  xp: 15 },
+    river_crossing:   { food: 1,  xp: 15 },
+    coin_cache:       { gold: 1,  xp: 15 },
+    // Tier 2
+    timber_cache:     { wood: 1,  xp: 30 },
+    abandoned_mine:   { iron: 1,  xp: 40 },
+    stone_deposit:    { stone: 1, xp: 30 },
+    wild_game:        { food: 1,  xp: 20 },
+    lost_treasure:    { gold: 1,  xp: 60 },
+    // Tier 3
+    ancient_forest:   { wood: 1,  xp: 70  },
+    deep_ore_shaft:   { iron: 1,  xp: 80  },
+    marble_quarry:    { stone: 1, xp: 80  },
+    bountiful_hunt:   { food: 1,  xp: 60  },
+    buried_vault:     { gold: 1,  xp: 100 },
+    // Event / trade / legendary
+    ancient_ruins:    {           xp: 80  },
+    merchant_caravan: { gold: 1,  xp: 20  },
+    ancient_relic:    { gold: 1,  xp: 160 },
+    bog_crystal:      { gold: 1,  xp: 120 },
+  };
+
+  // Loot ranges by tier: [min, max] for resources and gold respectively.
+  const _TIER_RANGES = {
+    1: { res: [20,  60],  gold: [30,  80]  },
+    2: { res: [40,  120], gold: [50,  150] },
+    3: { res: [100, 250], gold: [150, 400] },
   };
 
   function _rand(min, max) {
@@ -158,15 +219,34 @@ const DiscoveryService = (() => {
 
   const _RES_TYPES = ['gold', 'food', 'wood', 'stone', 'iron'];
 
-  function _rollRewards(def) {
+  // Rolls loot for a discovery. Amounts scale by def.tier (1-3) × lord level.
+  // Tier 1 → small, Tier 2 → medium, Tier 3 → large. Lord level adds +12%/level.
+  function _rollRewards(def, lordLevel) {
     const rewards = [];
+    const level   = Math.max(1, lordLevel || 1);
+    const scalar  = 1 + 0.12 * (level - 1);
 
     // Combat discoveries are resolved by BattleEngine — no rewards here.
     if (def.category === 'combat') return rewards;
 
+    const tier   = def.tier || 2;
+    const ranges = _TIER_RANGES[tier] || _TIER_RANGES[2];
+
     const base = _BASE_REWARDS[def.id];
     if (base) {
-      _RES_TYPES.forEach(t => { if (base[t] > 0) rewards.push({ type: t, amount: base[t] }); });
+      _RES_TYPES.forEach(t => {
+        if (!base[t] || base[t] <= 0) return;
+        let amount;
+        if (t === 'gold') {
+          // lost_treasure has a fixed override range; others use tier range
+          const [min, max] = def.id === 'lost_treasure' ? [80, 200] : ranges.gold;
+          amount = Math.floor(_rand(min, max) * scalar);
+        } else {
+          const [min, max] = ranges.res;
+          amount = Math.floor(_rand(min, max) * scalar);
+        }
+        rewards.push({ type: t, amount });
+      });
       if (base.xp > 0) rewards.push({ type: 'xp', amount: base.xp });
     } else {
       rewards.push({ type: 'xp', amount: 20 });
@@ -175,7 +255,8 @@ const DiscoveryService = (() => {
   }
 
   // Claim a discovery: compute rewards, remove record, return { ok, def, record, rewards }.
-  function claim(recordId, playerId) {
+  // Pass `lord` (optional) to scale loot by lord level.
+  function claim(recordId, playerId, lord) {
     const all     = _getAll();
     const records = all[playerId] || [];
     const idx     = records.findIndex(r => r.id === recordId);
@@ -185,7 +266,7 @@ const DiscoveryService = (() => {
     const def     = DISCOVERY_DEFS[record.definitionId];
     if (!def) return { ok: false, error: 'Unknown discovery type.' };
 
-    const rewards = _rollRewards(def);
+    const rewards = _rollRewards(def, lord?.level);
     records.splice(idx, 1);
     all[playerId] = records;
     _saveAll(all);
@@ -294,5 +375,10 @@ const DiscoveryService = (() => {
     return { def, record };
   }
 
-  return { search, claim, negotiate, getActive, expireOld, formatExpiry, addLog, getLog, dismissLog, markLogSeen, getUnseenCount, spawnBanditCamp };
+  return {
+    search, claim, negotiate, getActive, expireOld, formatExpiry,
+    addLog, getLog, dismissLog, markLogSeen, getUnseenCount,
+    spawnBanditCamp,
+    getSearchDuration, incrementFatigue, getFatigueCount,
+  };
 })();

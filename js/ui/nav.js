@@ -78,12 +78,13 @@ const Nav = (() => {
 
     const hasNotif = unseenCount > 0;
     const links = [
-      { page: 'home',      icon: '🏠', label: 'Home' },
-      { page: 'map',       icon: '🗺',  label: 'World Map' },
-      { page: 'activity',  icon: '📋', label: 'Activity', badge: unseenCount, notif: hasNotif },
-      { page: 'tech-tree', icon: '📚', label: 'Tech Tree' },
-      { page: 'rankings',  icon: '📊', label: 'Rankings' },
-      { page: 'account',   icon: '⚙',  label: 'Account' },
+      { page: 'home',             icon: '🏠', label: 'Home' },
+      { page: 'map',              icon: '🗺',  label: 'World Map' },
+      { page: 'activity',         icon: '📋', label: 'Activity', badge: unseenCount, notif: hasNotif },
+      { page: 'tech-tree',        icon: '📚', label: 'Tech Tree' },
+      { page: 'battle-simulator', icon: '⚔',  label: 'Battle Sim' },
+      { page: 'rankings',         icon: '📊', label: 'Rankings' },
+      { page: 'account',          icon: '⚙',  label: 'Account' },
     ];
 
     return `
@@ -145,6 +146,12 @@ const Nav = (() => {
       const player = PlayerService.getSession();
       const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
       App.navigate('tech-tree', { player, lord });
+    });
+
+    document.querySelector('[data-nav-page="battle-simulator"]')?.addEventListener('click', () => {
+      const player = PlayerService.getSession();
+      const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
+      App.navigate('battle-simulator', { player, lord });
     });
 
     document.querySelector('[data-nav-page="rankings"]')?.addEventListener('click', () => {

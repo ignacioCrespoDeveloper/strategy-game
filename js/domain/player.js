@@ -56,8 +56,8 @@ const PlayerService = (() => {
       passwordHash: _hash(password),
       createdAt:    TimeService.now(),
       lordId:       null,
-      coins:        100000,
-      credits:      9999,
+      coins:        600,
+      credits:      0,
     };
 
     players[player.id] = player;

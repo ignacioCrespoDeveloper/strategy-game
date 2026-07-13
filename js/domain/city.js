@@ -31,8 +31,14 @@ const CityService = (() => {
     return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   }
 
-  const FOUND_COST  = 25000;
   const MAX_CITIES  = 5;
+
+  // Cost to found city N (1-indexed). First city is always free.
+  // 2nd: 800g, 3rd: 1600g, 4th: 3200g, 5th: 6400g (×2 each time).
+  function getFoundCost(existingCount) {
+    if (existingCount === 0) return 0;
+    return 800 * Math.pow(2, existingCount - 1);
+  }
 
   // Found a new city on a tile.
   // Returns { ok, city, error }.
@@ -47,16 +53,18 @@ const CityService = (() => {
     if (!WorldService.isInBounds(x, y))  return { ok: false, error: 'Tile is out of bounds.' };
     if (WorldService.isOccupied(x, y))   return { ok: false, error: 'This tile is already occupied.' };
 
-    const isFirst = existing.length === 0;
-    if (!isFirst) {
-      const spend = PlayerService.spendCoins(playerId, FOUND_COST);
-      if (!spend.ok) return { ok: false, error: `Founding costs ${FOUND_COST.toLocaleString()} 💰 gold. ${spend.error}` };
+    const cost = getFoundCost(existing.length);
+    if (cost > 0) {
+      const spend = PlayerService.spendCoins(playerId, cost);
+      if (!spend.ok) return { ok: false, error: `Founding costs ${cost.toLocaleString()} 💰 gold. ${spend.error}` };
     }
 
     const cities = _getAll();
     const id     = _generateId();
     const now    = TimeService.now();
 
+    // First city gets starter resources; subsequent cities start lean.
+    const isFirst = existing.length === 0;
     const city = {
       id,
       playerId,
@@ -64,8 +72,11 @@ const CityService = (() => {
       x,
       y,
       population:           1000,
+      freePopulation:       3,
       buildings:            { town_hall: 1 },
-      resources:            { food: 5000, wood: 5000, stone: 5000, iron: 5000 },
+      resources:            isFirst
+        ? { food: 300, wood: 250, stone: 150, iron: 50 }
+        : { food: 100, wood: 100, stone: 50,  iron: 20 },
       lastResourceUpdate:   now,
       lastPopulationUpdate: now,
       constructionQueue:    [],
@@ -120,5 +131,5 @@ const CityService = (() => {
     return roster;
   }
 
-  return { found, getById, getAll, getPlayerCities, save, getGarrison };
+  return { found, getFoundCost, getById, getAll, getPlayerCities, save, getGarrison };
 })();
