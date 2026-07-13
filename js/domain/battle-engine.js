@@ -373,11 +373,18 @@ const BattleEngine = (() => {
   }
 
   function _buildReport(ctx, winner, reason, rounds, events) {
-    const enc     = ctx.encounter || COMBAT_ENCOUNTERS.bandit_camp;
-    const lootGold = winner === 'attacker'
-      ? Math.floor(enc.loot.goldMin + Math.random() * (enc.loot.goldMax - enc.loot.goldMin))
-      : 0;
-    const xpEarned = winner === 'attacker' ? enc.xpReward.win : enc.xpReward.loss;
+    // ctx.encounter is absent when called from the battle simulator (no PvE encounter)
+    const enc = ctx.encounter || null;
+    let lootGold = 0;
+    let xpEarned = 0;
+    if (enc) {
+      if (winner === 'attacker') {
+        lootGold = Math.floor((enc.loot?.goldMin ?? 0) + Math.random() * ((enc.loot?.goldMax ?? 0) - (enc.loot?.goldMin ?? 0)));
+        xpEarned = enc.xpReward?.win ?? 0;
+      } else {
+        xpEarned = enc.xpReward?.loss ?? 0;
+      }
+    }
 
     return {
       winner,

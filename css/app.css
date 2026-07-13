@@ -1,8 +1,8 @@
-/* =============================================
-   app.css — Design system + all screens
+﻿/* =============================================
+   app.css â€” Design system + all screens
    ============================================= */
 
-/* ── Design Tokens ─────────────────────────── */
+/* â”€â”€ Design Tokens â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
   /* Backgrounds */
   --bg-deep:      #080c18;
@@ -46,7 +46,7 @@
   --transition: 160ms ease;
 }
 
-/* ── Reset ──────────────────────────────────── */
+/* â”€â”€ Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -80,7 +80,7 @@ input {
   color: inherit;
 }
 
-/* ── Screen root ────────────────────────────── */
+/* â”€â”€ Screen root â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #screen-root {
   position: fixed;
   inset: 0;
@@ -96,7 +96,7 @@ body.nav-open #screen-root {
   left: 200px;
 }
 
-/* ── Left nav sidebar ───────────────────────── */
+/* â”€â”€ Left nav sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #nav-sidebar {
   position: fixed;
   top: 52px;
@@ -113,7 +113,7 @@ body.nav-open #screen-root {
 
 #nav-sidebar.hidden { display: none; }
 
-/* ── Hamburger (HUD) ────────────────────────── */
+/* â”€â”€ Hamburger (HUD) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hud-hamburger {
   width: 36px;
   height: 36px;
@@ -133,7 +133,7 @@ body.nav-open #screen-root {
   color: var(--text-primary);
 }
 
-/* ── Nav header row ─────────────────────────── */
+/* â”€â”€ Nav header row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .nav-header {
   display: flex;
   align-items: center;
@@ -264,7 +264,7 @@ body.nav-open #screen-root {
 
 .nav-badge--hidden { display: none; }
 
-/* ── Tech Tree screen ───────────────────────── */
+/* â”€â”€ Tech Tree screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .tt-screen {
   display: flex;
   flex-direction: column;
@@ -431,7 +431,7 @@ body.nav-open #screen-root {
   overflow: hidden;
 }
 
-/* Portrait — left column */
+/* Portrait â€” left column */
 .tt-uc-portrait {
   flex-shrink: 0;
   width: 62px;
@@ -449,7 +449,7 @@ body.nav-open #screen-root {
 }
 .tt-uc-icon { font-size: 1.6rem; line-height: 1; }
 
-/* Info — right column */
+/* Info â€” right column */
 .tt-uc-body {
   flex: 1;
   min-width: 0;
@@ -517,7 +517,7 @@ body.nav-open #screen-root {
   color: var(--text-muted);
 }
 
-/* Locked card overlay — diagonal stripes */
+/* Locked card overlay â€” diagonal stripes */
 .tt-bld-card.tt-card--locked,
 .tt-unit-card.tt-card--locked {
   position: relative;
@@ -555,7 +555,7 @@ body.nav-open #screen-root {
 }
 .tt-bld-card { position: relative; }
 
-/* ── Activity screen ────────────────────────── */
+/* â”€â”€ Activity screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .act-screen {
   display: flex;
   flex-direction: column;
@@ -620,7 +620,7 @@ body.nav-open #screen-root {
   line-height: 1.5;
 }
 
-/* ── Onboarding section ─────────────────────── */
+/* â”€â”€ Onboarding section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-onboarding {
   border: 1px solid var(--border-gold) !important;
   background: rgba(200, 147, 58, 0.05);
@@ -706,7 +706,7 @@ body.nav-open #screen-root {
   padding: 0.35rem 0.9rem !important;
 }
 
-/* ── Toast ──────────────────────────────────── */
+/* â”€â”€ Toast â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #toast-container {
   position: fixed;
   bottom: 2rem;
@@ -1063,7 +1063,7 @@ body.nav-open #screen-root {
   gap: 0.75rem;
 }
 
-/* Race preview panel — appears after selecting a race */
+/* Race preview panel â€” appears after selecting a race */
 .lord-race-preview {
   background: var(--bg-raised);
   border: 1px solid var(--border-accent);
@@ -1155,7 +1155,7 @@ body.nav-open #screen-root {
 .topbar { flex-shrink: 0; }
 .map-area { flex: 1 1 auto; }
 
-/* ── Top bar ─────────────────────────────── */
+/* â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .topbar {
   grid-area: topbar;
   display: flex;
@@ -1221,14 +1221,14 @@ body.nav-open #screen-root {
   color: var(--text-gold);
 }
 
-/* ── Game body (below topbar) ────────────── */
+/* â”€â”€ Game body (below topbar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .game-body {
   grid-area: body;
   display: flex;
   overflow: hidden;
 }
 
-/* ── Resource sidebar ────────────────────── */
+/* â”€â”€ Resource sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .resource-sidebar {
   flex: 0 0 220px;
   background: var(--bg-surface);
@@ -1282,7 +1282,7 @@ body.nav-open #screen-root {
   color: var(--text-danger);
 }
 
-/* ── Map area ────────────────────────────── */
+/* â”€â”€ Map area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .map-area {
   flex: 1 1 auto;
   overflow: hidden;
@@ -1310,7 +1310,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   CITY VIEW — Full screen, OGame style
+   CITY VIEW â€” Full screen, OGame style
    ============================================= */
 
 .city-view {
@@ -1322,7 +1322,7 @@ body.nav-open #screen-root {
   overflow: hidden;
 }
 
-/* ── City header ─────────────────────────── */
+/* â”€â”€ City header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cv-header {
   display: flex;
   align-items: center;
@@ -1384,7 +1384,7 @@ body.nav-open #screen-root {
   color: var(--text-muted);
 }
 
-/* Resources bar — centered, grows to fill space */
+/* Resources bar â€” centered, grows to fill space */
 .cv-res-bar {
   flex: 1;
   display: flex;
@@ -1408,7 +1408,7 @@ body.nav-open #screen-root {
   flex-shrink: 0;
 }
 
-/* ── Construction queue banner ───────────── */
+/* â”€â”€ Construction queue banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cv-queue-banner {
   background: var(--bg-raised);
   border-bottom: 1px solid var(--border-accent);
@@ -1438,7 +1438,7 @@ body.nav-open #screen-root {
 }
 .cv-queue-timer { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; }
 
-/* ── Tab navigation ──────────────────────── */
+/* â”€â”€ Tab navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cv-tabs {
   display: flex;
   gap: 0;
@@ -1461,14 +1461,14 @@ body.nav-open #screen-root {
 .cv-tab:hover      { color: var(--text-secondary); }
 .cv-tab--active    { color: var(--text-gold); border-bottom-color: var(--gold); }
 
-/* ── Tab content area ────────────────────── */
+/* â”€â”€ Tab content area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cv-content {
   flex: 1;
   overflow-y: auto;
   padding: 1.5rem;
 }
 
-/* ── Overview tab ────────────────────────── */
+/* â”€â”€ Overview tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -1503,7 +1503,7 @@ body.nav-open #screen-root {
 .ov-value { color: var(--text-primary); font-weight: 500; }
 .ov-rate  { font-size: 0.72rem; color: var(--text-success); margin-left: 0.4rem; }
 
-/* ── Buildings tab ───────────────────────── */
+/* â”€â”€ Buildings tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bld-list {
   display: flex;
   flex-direction: column;
@@ -1601,7 +1601,7 @@ body.nav-open #screen-root {
   font-size: 0.72rem;
 }
 
-/* ── Modal overlay ───────────────────────── */
+/* â”€â”€ Modal overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -1681,7 +1681,7 @@ body.nav-open #screen-root {
   filter: none;
 }
 
-/* ── Form elements (reused in modals) ──────── */
+/* â”€â”€ Form elements (reused in modals) â”€â”€â”€â”€â”€â”€â”€â”€ */
 .form-group {
   display: flex;
   flex-direction: column;
@@ -1723,7 +1723,7 @@ body.nav-open #screen-root {
   min-height: 1em;
 }
 
-/* ── Race selection grid ─────────────────── */
+/* â”€â”€ Race selection grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .race-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1769,21 +1769,21 @@ body.nav-open #screen-root {
   margin-top: 0.25rem;
 }
 
-/* ── Resource grid (2-col in city panel) ─── */
+/* â”€â”€ Resource grid (2-col in city panel) â”€â”€â”€ */
 .res-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.4rem;
 }
 
-/* ── Building cost line ──────────────────── */
+/* â”€â”€ Building cost line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .building-cost {
   font-size: 0.7rem;
   color: var(--text-muted);
   margin-top: 0.1rem;
 }
 
-/* ── Ready-to-build upgrade button ──────── */
+/* â”€â”€ Ready-to-build upgrade button â”€â”€â”€â”€â”€â”€â”€â”€ */
 .upgrade-btn--ready {
   background: linear-gradient(180deg, #2a4a2a 0%, #1a3a1a 100%);
   border-color: #4a8a4a;
@@ -1795,7 +1795,7 @@ body.nav-open #screen-root {
   color: #aaffaa;
 }
 
-/* ── Utility ─────────────────────────────── */
+/* â”€â”€ Utility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .hidden { display: none !important; }
 
 .divider {
@@ -1811,7 +1811,7 @@ body.nav-open #screen-root {
 .text-success { color: var(--text-success); }
 
 /* =============================================
-   HUD — Persistent top bar
+   HUD â€” Persistent top bar
    ============================================= */
 
 #hud-bar {
@@ -1832,7 +1832,7 @@ body.nav-open #screen-root {
   display: none !important;
 }
 
-/* Resources — left */
+/* Resources â€” left */
 .hud-resources {
   display: flex;
   align-items: center;
@@ -1869,7 +1869,7 @@ body.nav-open #screen-root {
   color: var(--text-primary);
 }
 
-/* Lord — center */
+/* Lord â€” center */
 .hud-lord-center {
   display: flex;
   align-items: center;
@@ -1915,7 +1915,7 @@ body.nav-open #screen-root {
   margin-top: 1px;
 }
 
-/* Sign-out — right */
+/* Sign-out â€” right */
 .hud-right {
   display: flex;
   align-items: center;
@@ -1965,7 +1965,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   MAP SCREEN — canvas + right info panel
+   MAP SCREEN â€” canvas + right info panel
    ============================================= */
 
 .map-screen {
@@ -1977,7 +1977,7 @@ body.nav-open #screen-root {
   position: relative;
 }
 
-/* ── Move lord banner ────────────────────── */
+/* â”€â”€ Move lord banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .map-move-bar {
   flex-shrink: 0;
   display: flex;
@@ -2010,7 +2010,7 @@ body.nav-open #screen-root {
 }
 .map-cancel-move-btn:hover { filter: brightness(1.2); }
 
-/* ── Map body row (area + optional panel) ── */
+/* â”€â”€ Map body row (area + optional panel) â”€â”€ */
 .map-body {
   flex: 1 1 auto;
   display: flex;
@@ -2025,7 +2025,7 @@ body.nav-open #screen-root {
   background: var(--bg-deep);
 }
 
-/* ── Map right info panel ──────────────────── */
+/* â”€â”€ Map right info panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .map-info-panel {
   flex: 0 0 260px;
   background: var(--bg-surface);
@@ -2177,7 +2177,7 @@ body.nav-open #screen-root {
   font-size: 0.82rem;
 }
 
-/* ── Map panel — terrain + lord sections ─── */
+/* â”€â”€ Map panel â€” terrain + lord sections â”€â”€â”€ */
 .mip-section-label {
   font-size: 0.6rem;
   color: var(--text-muted);
@@ -2198,7 +2198,7 @@ body.nav-open #screen-root {
   font-weight: normal;
 }
 
-/* ── Lord card in map tile panel ─────────── */
+/* â”€â”€ Lord card in map tile panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .mip-lord-card {
   padding: 0.55rem 0;
   border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -2332,7 +2332,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   LORD PANEL — modal overlay
+   LORD PANEL â€” modal overlay
    ============================================= */
 
 .lord-panel {
@@ -2461,7 +2461,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   CITY VIEW — left sidebar
+   CITY VIEW â€” left sidebar
    ============================================= */
 
 .cv-body {
@@ -2597,7 +2597,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   HUD — Coins
+   HUD â€” Coins
    ============================================= */
 
 .hud-coins {
@@ -2620,7 +2620,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   CITY VIEW — Queue banner boost button
+   CITY VIEW â€” Queue banner boost button
    ============================================= */
 
 .cv-queue-inner {
@@ -2654,7 +2654,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   OVERVIEW TAB — Cities & Lords sections
+   OVERVIEW TAB â€” Cities & Lords sections
    ============================================= */
 
 .ov-section {
@@ -2786,7 +2786,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   LORD SCREEN — Full screen view
+   LORD SCREEN â€” Full screen view
    ============================================= */
 
 /* Header */
@@ -2910,7 +2910,7 @@ body.nav-open #screen-root {
   overflow: hidden;
 }
 
-/* Left panel content — emoji fallback */
+/* Left panel content â€” emoji fallback */
 .lsl-portrait-area {
   padding: 1.5rem 0 0.75rem;
   display: flex;
@@ -2926,7 +2926,7 @@ body.nav-open #screen-root {
   filter: drop-shadow(0 0 16px rgba(200,147,58,0.5));
 }
 
-/* Left panel content — image portrait */
+/* Left panel content â€” image portrait */
 .lsl-portrait-area--image {
   padding: 0;
   height: 280px;
@@ -2962,7 +2962,7 @@ body.nav-open #screen-root {
   pointer-events: none;
 }
 
-/* Level badge — top-right corner of portrait */
+/* Level badge â€” top-right corner of portrait */
 .lsl-portrait-level {
   position: absolute;
   top: 0.5rem;
@@ -3155,7 +3155,7 @@ body.nav-open #screen-root {
   overflow-y: auto;
 }
 
-/* ── Actions list ────────────────────────── */
+/* â”€â”€ Actions list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .la-list {
   padding: 0.75rem;
   display: flex;
@@ -3243,7 +3243,7 @@ body.nav-open #screen-root {
 .la-boost-btn:hover { background: linear-gradient(180deg, #3a5a8a 0%, #2a3a6a 100%); color: #aad4ff; }
 .la-boost-btn--cant { opacity: 0.35; cursor: not-allowed; }
 
-/* Finish Now — credits button */
+/* Finish Now â€” credits button */
 .ls-finish-btn {
   display: inline-flex;
   align-items: center;
@@ -3305,7 +3305,7 @@ body.nav-open #screen-root {
 .la-placeholder-text { font-size: 0.88rem; letter-spacing: 0.06em; }
 .la-placeholder-sub  { font-size: 0.74rem; font-style: italic; }
 
-/* ── Lord Army tab ───────────────────────────── */
+/* â”€â”€ Lord Army tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .la-army-tab {
   padding: 1rem 1.2rem;
   display: flex;
@@ -3353,7 +3353,7 @@ body.nav-open #screen-root {
   border-color: rgba(200,160,60,0.6);
 }
 
-/* ── Unit Requirements overlay ───────────────── */
+/* â”€â”€ Unit Requirements overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .unit-req-overlay {
   position: fixed;
   inset: 0;
@@ -3556,7 +3556,7 @@ body.nav-open #screen-root {
 .ur-unit--unlocked .ur-unit-status-icon { color: #50b870; }
 .ur-unit--locked   .ur-unit-status-icon { color: #887799; filter: grayscale(0.3); }
 
-/* ── Total War–style unit cards (recruited army) ───────────── */
+/* â”€â”€ Total Warâ€“style unit cards (recruited army) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .la-unit-cards {
   display: flex;
   flex-wrap: wrap;
@@ -3579,7 +3579,7 @@ body.nav-open #screen-root {
   border-color: #3a3545;
 }
 
-/* Mercenary — worn brown */
+/* Mercenary â€” worn brown */
 .la-unit-card--merc {
   border-color: #4a3018;
 }
@@ -3587,7 +3587,7 @@ body.nav-open #screen-root {
   border-color: #8a5828;
 }
 
-/* Elite / Cavalry — steel blue */
+/* Elite / Cavalry â€” steel blue */
 .la-unit-card--elite {
   border-color: #2a4a6a;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.7), 0 0 5px rgba(60,120,200,0.3);
@@ -3597,7 +3597,7 @@ body.nav-open #screen-root {
   box-shadow: 0 0 0 1px rgba(0,0,0,0.7), 0 0 8px rgba(80,150,220,0.45);
 }
 
-/* Monster (Hydra) — deep purple */
+/* Monster (Hydra) â€” deep purple */
 .la-unit-card--monster {
   border-color: #6a2a9a;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.7);
@@ -3606,7 +3606,7 @@ body.nav-open #screen-root {
   border-color: #9a50d0;
 }
 
-/* Legendary (Black Dragon) — bright vivid purple */
+/* Legendary (Black Dragon) â€” bright vivid purple */
 .la-unit-card--legendary {
   border-color: #c040ff;
   box-shadow: 0 0 0 1px rgba(0,0,0,0.7);
@@ -3663,7 +3663,7 @@ body.nav-open #screen-root {
   background: rgba(80, 40, 120, 0.3);
 }
 
-/* Dismiss × button — top right, visible on hover */
+/* Dismiss Ã— button â€” top right, visible on hover */
 .la-uc-remove {
   position: absolute;
   top: 0.12rem;
@@ -3847,7 +3847,7 @@ body.nav-open #screen-root {
   margin-bottom: 0.4rem;
 }
 
-/* Discovery — negotiate/dismiss actions */
+/* Discovery â€” negotiate/dismiss actions */
 .disc-action-row {
   display: flex;
   flex-direction: column;
@@ -3893,7 +3893,7 @@ body.nav-open #screen-root {
 }
 .disc-dismiss-btn:hover { color: var(--text-primary); }
 
-/* ── Lord Overview tab ───────────────────────── */
+/* â”€â”€ Lord Overview tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .lov-tab {
   padding: 1.2rem 1.4rem;
   display: flex;
@@ -4120,7 +4120,7 @@ body.nav-open #screen-root {
   color: #a8e8c0;
 }
 
-/* Debug "spawn camp" button — muted amber to distinguish from real actions */
+/* Debug "spawn camp" button â€” muted amber to distinguish from real actions */
 .lov-debug-btn {
   align-self: flex-start;
   padding: 0.28rem 0.7rem;
@@ -4140,7 +4140,7 @@ body.nav-open #screen-root {
   color: #e8c860;
 }
 
-/* ── Unit card tooltip ────────────────────────── */
+/* â”€â”€ Unit card tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .la-uc-wrap {
   position: relative;
 }
@@ -4214,7 +4214,7 @@ body.nav-open #screen-root {
   color: var(--text-muted);
 }
 
-/* ── Stance picker (embedded in status section) ── */
+/* â”€â”€ Stance picker (embedded in status section) â”€â”€ */
 .lov-status--stanced {
   color: #b070e0;
   border-left: 2px solid #7a40b0;
@@ -4319,7 +4319,7 @@ body.nav-open #screen-root {
   color: #f0a0a0;
 }
 
-/* ── Overview / Empire Dashboard ─────────────── */
+/* â”€â”€ Overview / Empire Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-screen {
   display: flex;
   flex-direction: column;
@@ -4364,7 +4364,7 @@ body.nav-open #screen-root {
   margin-bottom: 0;
 }
 
-/* ── Overview top tab nav (Empire / Intelligence) */
+/* â”€â”€ Overview top tab nav (Empire / Intelligence) */
 .ov-top-tabs {
   display: flex;
   gap: 0;
@@ -4393,7 +4393,7 @@ body.nav-open #screen-root {
   border-bottom-color: var(--text-gold);
 }
 
-/* ── Intelligence tab ───────────────────────── */
+/* â”€â”€ Intelligence tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-intel-empty {
   display: flex;
   flex-direction: column;
@@ -4494,7 +4494,7 @@ body.nav-open #screen-root {
   gap: 0.75rem;
 }
 
-/* ── Add card (city + lord) ──────────────────── */
+/* â”€â”€ Add card (city + lord) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-add-card {
   position: relative;
   display: flex;
@@ -4567,7 +4567,7 @@ body.nav-open #screen-root {
   color: var(--text-muted);
 }
 
-/* ── City cards ─────────────────────────────── */
+/* â”€â”€ City cards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-cities-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -4719,7 +4719,7 @@ body.nav-open #screen-root {
   border-radius: 2px;
 }
 
-/* ── Lord cards (grid, mirrors city cards) ───── */
+/* â”€â”€ Lord cards (grid, mirrors city cards) â”€â”€â”€â”€â”€ */
 .ov-lords-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -4972,7 +4972,7 @@ body.nav-open #screen-root {
   white-space: nowrap;
 }
 
-/* ── Lord rows (legacy — kept for reference) ─── */
+/* â”€â”€ Lord rows (legacy â€” kept for reference) â”€â”€â”€ */
 .ov-lords-list {
   display: flex;
   flex-direction: column;
@@ -5111,7 +5111,7 @@ body.nav-open #screen-root {
 }
 .ov-lord-row:hover .ov-lr-manage { opacity: 1; }
 
-/* ── Floating World Map button ───────────────── */
+/* â”€â”€ Floating World Map button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-float-map-btn {
   position: fixed;
   bottom: 1.5rem;
@@ -5146,7 +5146,7 @@ body.nav-open #screen-root {
   padding: 0.5rem 0;
 }
 
-/* ── Lord screen — Statistics ─────────────────── */
+/* â”€â”€ Lord screen â€” Statistics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .lsl-stats-section {
   padding: 0 0.9rem 0.5rem;
 }
@@ -5185,7 +5185,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   CITY STATUS BADGE — used in city panel + overview cards
+   CITY STATUS BADGE â€” used in city panel + overview cards
    ============================================= */
 
 .cvl-status-badge {
@@ -5208,7 +5208,7 @@ body.nav-open #screen-root {
 .cvl-critical   { color: #e02020; border-color: #900000; background: rgba(120,0,0,0.2); }
 
 /* =============================================
-   CITY LEFT PANEL — redesigned header & stats
+   CITY LEFT PANEL â€” redesigned header & stats
    ============================================= */
 
 .cvl-city-header {
@@ -5385,7 +5385,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   BUILDING EFFECTS — shown in building cards
+   BUILDING EFFECTS â€” shown in building cards
    ============================================= */
 
 .bld-effects {
@@ -5425,7 +5425,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   OVERVIEW — city card status badge
+   OVERVIEW â€” city card status badge
    ============================================= */
 
 .ov-cc-status {
@@ -5442,7 +5442,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   CITY VIEW — cv-bld-area scrollable container
+   CITY VIEW â€” cv-bld-area scrollable container
    ============================================= */
 
 #cv-bld-area {
@@ -5452,7 +5452,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   CITY LEFT PANEL — Active landmark badge
+   CITY LEFT PANEL â€” Active landmark badge
    ============================================= */
 
 .cvl-landmark-badge-panel {
@@ -5477,7 +5477,7 @@ body.nav-open #screen-root {
   padding: 0.1rem 0.4rem;
 }
 
-/* ── Garrison section ─────────────────────────────────────────── */
+/* â”€â”€ Garrison section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .cvl-garrison { display: flex; flex-direction: column; gap: 0.2rem; }
 
 .cvl-garrison-row {
@@ -5504,7 +5504,7 @@ body.nav-open #screen-root {
   padding: 0.2rem 0;
 }
 
-/* ── Map intel garrison label ─────────────────────────────────── */
+/* â”€â”€ Map intel garrison label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .mip-intel-garrison-label {
   font-size: 0.68rem;
   text-transform: uppercase;
@@ -5514,10 +5514,10 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   BUILDING CARDS — bld2-* system
+   BUILDING CARDS â€” bld2-* system
    ============================================= */
 
-/* ── Category tabs ───────────────────────── */
+/* â”€â”€ Category tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-tabs {
   display: flex;
@@ -5547,7 +5547,7 @@ body.nav-open #screen-root {
 .bld2-tab:hover      { color: var(--text-secondary); }
 .bld2-tab--active    { color: var(--text-gold); border-bottom-color: var(--gold); }
 
-/* ── Landmark section notice ─────────────── */
+/* â”€â”€ Landmark section notice â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-lm-notice {
   margin: 0.75rem 1rem 0.25rem;
@@ -5587,7 +5587,7 @@ body.nav-open #screen-root {
   font-style: italic;
 }
 
-/* ── Building list container ─────────────── */
+/* â”€â”€ Building list container â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-list {
   display: flex;
@@ -5596,7 +5596,7 @@ body.nav-open #screen-root {
   padding: 0.75rem 1rem 2rem;
 }
 
-/* ── Building card ───────────────────────── */
+/* â”€â”€ Building card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-card {
   position: relative;
@@ -5637,7 +5637,7 @@ body.nav-open #screen-root {
   border-color: #3a5a8a;
 }
 
-/* ── Landmark banner ribbon ──────────────── */
+/* â”€â”€ Landmark banner ribbon â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-lm-banner {
   background: linear-gradient(90deg, rgba(200,147,58,0.25), rgba(200,147,58,0.08));
@@ -5651,7 +5651,7 @@ body.nav-open #screen-root {
   font-family: var(--font-display);
 }
 
-/* ── Main card row ───────────────────────── */
+/* â”€â”€ Main card row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-card-main {
   display: flex;
@@ -5660,7 +5660,7 @@ body.nav-open #screen-root {
   padding: 0.75rem 0.9rem;
 }
 
-/* ── Left column: icon + level ───────────── */
+/* â”€â”€ Left column: icon + level â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-icon-col {
   display: flex;
@@ -5711,7 +5711,7 @@ body.nav-open #screen-root {
 .bld2-level--max .bld2-level-label { color: var(--text-gold); }
 .bld2-level--max .bld2-level-num   { color: var(--text-gold-light); font-size: 1rem; }
 
-/* ── Center column: info ─────────────────── */
+/* â”€â”€ Center column: info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-center-col {
   flex: 1;
@@ -5794,7 +5794,7 @@ body.nav-open #screen-root {
   color: var(--text-muted);
 }
 
-/* ── Right column: action button ─────────── */
+/* â”€â”€ Right column: action button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-action-col {
   flex-shrink: 0;
@@ -5870,7 +5870,7 @@ body.nav-open #screen-root {
   letter-spacing: 0.04em;
 }
 
-/* ── Locked veil overlay ─────────────────── */
+/* â”€â”€ Locked veil overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-locked-veil {
   position: absolute;
@@ -5887,7 +5887,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   LORD SCREEN — position display in left panel
+   LORD SCREEN â€” position display in left panel
    ============================================= */
 
 .lsl-pos-row {
@@ -5938,7 +5938,7 @@ body.nav-open #screen-root {
 .la-row--search:hover { border-color: #2a5a8a; }
 
 /* =============================================
-   DISCOVERY LOG — discoveries tab
+   DISCOVERY LOG â€” discoveries tab
    ============================================= */
 
 .disc-log-header {
@@ -6040,7 +6040,7 @@ body.nav-open #screen-root {
   box-shadow: 0 0 10px rgba(200,147,58,0.3);
 }
 
-/* ── Claim popup rewards ────────────────── */
+/* â”€â”€ Claim popup rewards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .disc-claim-rewards {
   display: flex;
@@ -6065,7 +6065,7 @@ body.nav-open #screen-root {
   text-shadow: 0 0 14px rgba(220,60,30,0.4);
 }
 
-/* ── Category badges ─────────────────────── */
+/* â”€â”€ Category badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .disc-cat-badge {
   display: inline-flex;
@@ -6092,7 +6092,7 @@ body.nav-open #screen-root {
 .dc-intelligence { color: #70b8e0; border-color: #305a7a; background: rgba(40,90,130,0.14); }
 
 /* =============================================
-   DISCOVERY POPUP — result overlay
+   DISCOVERY POPUP â€” result overlay
    ============================================= */
 
 .disc-overlay {
@@ -6203,7 +6203,7 @@ body.nav-open #screen-root {
 .disc-popup-hint strong { color: var(--text-gold); }
 .disc-popup-hint em { font-style: normal; color: var(--text-muted); }
 
-/* ── Camp Preview (in pending discovery card) ───────────────────── */
+/* â”€â”€ Camp Preview (in pending discovery card) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .camp-preview {
   margin-top: 0.45rem;
@@ -6248,7 +6248,7 @@ body.nav-open #screen-root {
   white-space: nowrap;
 }
 
-/* ── Battle Result Screen ───────────────────────────────────────── */
+/* â”€â”€ Battle Result Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .br-screen {
   display: flex;
@@ -6416,7 +6416,7 @@ body.nav-open #screen-root {
 .br-log-retreated { color: #c8933a; }
 
 /* =============================================
-   CITY-VIEW OVERVIEW TAB — cvov-* system
+   CITY-VIEW OVERVIEW TAB â€” cvov-* system
    ============================================= */
 
 .cvov-container {
@@ -6442,7 +6442,7 @@ body.nav-open #screen-root {
   gap: 0.4rem;
 }
 
-/* ── City Summary ─────────────────────────── */
+/* â”€â”€ City Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-summary-grid {
   display: flex;
@@ -6489,7 +6489,7 @@ body.nav-open #screen-root {
   margin-left: auto;
 }
 
-/* ── Tier progress bar ────────────────────── */
+/* â”€â”€ Tier progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-tier-prog {
   padding: 0.7rem 1.2rem;
@@ -6560,7 +6560,7 @@ body.nav-open #screen-root {
   color: var(--text-muted);
 }
 
-/* ── Building Slots ───────────────────────── */
+/* â”€â”€ Building Slots â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-slots-header {
   display: flex;
@@ -6597,7 +6597,7 @@ body.nav-open #screen-root {
   font-style: italic;
 }
 
-/* ── Hero banner ──────────────────────────── */
+/* â”€â”€ Hero banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-hero {
   display: flex;
@@ -6669,7 +6669,7 @@ body.nav-open #screen-root {
   font-weight: 600;
 }
 
-/* ── Resource table ───────────────────────── */
+/* â”€â”€ Resource table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-res-table {
   display: flex;
@@ -6719,7 +6719,7 @@ body.nav-open #screen-root {
 .cvov-rate-neg  { color: #f44336; }
 .cvov-rate-zero { color: var(--text-muted); }
 
-/* ── Landmark ─────────────────────────────── */
+/* â”€â”€ Landmark â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-landmark-row {
   display: flex;
@@ -6731,7 +6731,7 @@ body.nav-open #screen-root {
 .cvov-lm-icon { font-size: 1rem; }
 .cvov-lm-name { flex: 1; color: var(--text-gold); font-weight: 600; }
 
-/* ── Stat filter (left panel) ─────────────── */
+/* â”€â”€ Stat filter (left panel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvl-stat-row2--selected {
   background: rgba(180, 140, 40, 0.1) !important;
@@ -6745,7 +6745,7 @@ body.nav-open #screen-root {
   opacity: 0.7;
 }
 
-/* ── Building card stat highlights ───────── */
+/* â”€â”€ Building card stat highlights â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .bld2-card--stat-pos {
   border-left: 3px solid #4caf50;
@@ -6804,7 +6804,7 @@ body.nav-open #screen-root {
 
 .disc-popup-close:hover { filter: brightness(1.1); }
 
-/* ── Discovery tab — log + pending ───────── */
+/* â”€â”€ Discovery tab â€” log + pending â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .disc-tab-body {
   display: flex;
   flex-direction: column;
@@ -6907,7 +6907,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   OVERVIEW — Lord row mini-stats
+   OVERVIEW â€” Lord row mini-stats
    ============================================= */
 
 .ov-lr-mini-stats {
@@ -6929,7 +6929,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   LORD SCREEN — Stat colour accents
+   LORD SCREEN â€” Stat colour accents
    ============================================= */
 
 .lsl-stat--atk { border-color: rgba(200,60,40,0.35); }
@@ -6939,7 +6939,7 @@ body.nav-open #screen-root {
 .lsl-stat--spd { border-color: rgba(60,200,200,0.35); }
 
 /* =============================================
-   LORD SCREEN — Troops tab
+   LORD SCREEN â€” Troops tab
    ============================================= */
 
 .lt-troops {
@@ -7108,7 +7108,7 @@ body.nav-open #screen-root {
 }
 
 /* =============================================
-   LORD CREATION — class selection (lord-view.js)
+   LORD CREATION â€” class selection (lord-view.js)
    ============================================= */
 
 .lord-card--wide      { max-width: 1020px; }
@@ -7220,7 +7220,7 @@ body.nav-open #screen-root {
 .lcp-passive strong { color: var(--text-primary); }
 
 /* =============================================
-   LORD SCREEN — hero sheet stat bars
+   LORD SCREEN â€” hero sheet stat bars
    ============================================= */
 
 .ls-fullscreen { display: flex; flex-direction: column; width: 100%; height: 100%; background: var(--bg-deep); overflow: hidden; }
@@ -7412,7 +7412,7 @@ body.nav-open #screen-root {
   flex-shrink: 0;
 }
 
-/* Action card — class bonus label */
+/* Action card â€” class bonus label */
 .la-class-bonus {
   font-size: 0.62rem;
   color: var(--text-gold);
@@ -7420,7 +7420,7 @@ body.nav-open #screen-root {
   margin-left: 0.25rem;
 }
 
-/* ── Battle History Tab (lord-screen) ──────────────────────────────── */
+/* â”€â”€ Battle History Tab (lord-screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .ls-tab-badge--neutral {
   background: #4a5568;
@@ -7564,7 +7564,7 @@ body.nav-open #screen-root {
 .bh-log-retreated { color: #ddaa44; }
 .bh-log-healed    { color: #66bb66; }
 
-/* ── Activity Feed (overview-screen) ──────────────────────────────── */
+/* â”€â”€ Activity Feed (overview-screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .ov-activity-feed {
   border-top: 1px solid rgba(255,255,255,0.06);
@@ -7627,9 +7627,9 @@ body.nav-open #screen-root {
 .af-lord { opacity: 0.85; }
 .af-time { opacity: 0.7; }
 
-/* ── City tier + terrain images (overview cards) ───────────────────── */
+/* â”€â”€ City tier + terrain images (overview cards) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
-/* Terrain badge — bottom-left corner of the art panel */
+/* Terrain badge â€” bottom-left corner of the art panel */
 .ov-cc-terrain-badge {
   position: absolute;
   bottom: 0.4rem;
@@ -7688,7 +7688,7 @@ body.nav-open #screen-root {
   height: auto;
 }
 
-/* ── City-view left panel artwork upgrade ──────────────────────────── */
+/* â”€â”€ City-view left panel artwork upgrade â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 /* Replace old emoji-based artwork */
 .cvl-artwork {
@@ -7704,7 +7704,7 @@ body.nav-open #screen-root {
   display: block;
 }
 
-/* Small terrain image — top-right corner */
+/* Small terrain image â€” top-right corner */
 .cvl-artwork-terrain {
   position: absolute;
   top: 0.5rem;
@@ -7732,7 +7732,7 @@ body.nav-open #screen-root {
   z-index: 2;
 }
 
-/* ── Recruit modal — locked (read-only) field ──────────────────────── */
+/* â”€â”€ Recruit modal â€” locked (read-only) field â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .form-input--locked {
   opacity: 0.6;
@@ -7741,7 +7741,7 @@ body.nav-open #screen-root {
   background: rgba(255,255,255,0.03);
 }
 
-/* ── Overview city card — name row with inline status ─────────────── */
+/* â”€â”€ Overview city card â€” name row with inline status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .ov-cc-name-row {
   display: flex;
@@ -7750,7 +7750,7 @@ body.nav-open #screen-root {
   flex-wrap: wrap;
 }
 
-/* ── City overview hero — terrain image ────────────────────────────── */
+/* â”€â”€ City overview hero â€” terrain image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-hero-art {
   width: 90px;
@@ -7769,7 +7769,7 @@ body.nav-open #screen-root {
   display: block;
 }
 
-/* ── City stat trend indicators ────────────────────────────────────── */
+/* â”€â”€ City stat trend indicators â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .cvov-stat-trend {
   font-size: 0.72rem;
@@ -7783,7 +7783,7 @@ body.nav-open #screen-root {
 .cvov-stat-trend--bad    { color: #f44336; }
 .cvov-stat-trend--stable { color: var(--text-muted); }
 
-/* ── HUD notification bell ─────────────────────────────────────────── */
+/* â”€â”€ HUD notification bell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .hud-notif-btn {
   position: relative;
@@ -7828,7 +7828,7 @@ body.nav-open #screen-root {
 }
 .hud-notif-badge.hidden { display: none; }
 
-/* ── Overview — section toggle button ─────────────────────────────── */
+/* â”€â”€ Overview â€” section toggle button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .ov-section-toggle {
   background: transparent;
@@ -7853,7 +7853,7 @@ body.nav-open #screen-root {
   gap: 0.4rem;
 }
 
-/* ── Overview — Active movements panel ────────────────────────────── */
+/* â”€â”€ Overview â€” Active movements panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .ov-mv-section {
   border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -7919,543 +7919,364 @@ body.nav-open #screen-root {
   white-space: nowrap;
 }
 
-/* =============================================
-   Battle Simulator — Mobile-first UI
-   ============================================= */
 
-/* ── Screen shell ──────────────────────────── */
+/* =====================================================
+   BATTLE SIMULATOR — bsim-* components
+   ===================================================== */
+
+/* ── Screen frame ────────────────────────────────────── */
 .bsim-screen {
   display: flex;
   flex-direction: column;
-  min-height: 100dvh;
-  background: var(--bg-deep);
-  color: var(--text-primary, #e8dfc0);
-  font-family: inherit;
+  height: 100dvh;
+  background: var(--bg-dark, #0e0e0e);
+  color: var(--text-base, #ccc);
+  overflow: hidden;
 }
 
+/* ── Header ──────────────────────────────────────────── */
 .bsim-header {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.85rem 1rem;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-gold, #3a2e1a);
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  padding: 0.55rem 1rem;
+  background: var(--bg-panel, #141414);
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .bsim-back {
   background: none;
-  border: 1px solid var(--border-muted, #1e2d4a);
+  border: 1px solid var(--border, #333);
+  color: var(--text-muted, #888);
   border-radius: 6px;
-  color: var(--text-secondary, #a09070);
-  font-size: 1.1rem;
-  padding: 0.3rem 0.65rem;
+  padding: 0.28rem 0.6rem;
+  font-size: 1rem;
   cursor: pointer;
-  line-height: 1;
+  flex-shrink: 0;
 }
+.bsim-back:hover { border-color: var(--text-gold, #c9973a); color: var(--text-gold, #c9973a); }
 
-.bsim-header-title {
-  font-family: 'Cinzel', serif;
+.bsim-title {
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-gold, #c9973a);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
+  flex: 1;
 }
 
-/* ── Scrollable body ───────────────────────── */
-.bsim-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.75rem;
+/* ── Progress bar ────────────────────────────────────── */
+.bsim-progress {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.bsim-step {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding-bottom: 6rem;
+  align-items: center;
+  gap: 0.08rem;
 }
 
-.bsim-body--result {
-  gap: 0.9rem;
+.bsim-step-dot {
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border: 2px solid var(--border, #333);
+  background: var(--bg-panel, #141414);
+  color: var(--text-muted, #888);
+}
+.bsim-step--active .bsim-step-dot { border-color: var(--text-gold, #c9973a); background: #2a1f00; color: var(--text-gold, #c9973a); }
+.bsim-step--done   .bsim-step-dot { border-color: #4a9c5d; background: #0d2015; color: #4a9c5d; }
+
+.bsim-step-lbl { font-size: 0.52rem; color: var(--text-muted, #888); white-space: nowrap; }
+.bsim-step--active .bsim-step-lbl { color: var(--text-gold, #c9973a); }
+.bsim-step--done   .bsim-step-lbl { color: #4a9c5d; }
+
+.bsim-step-line { width: 1.3rem; height: 2px; background: var(--border, #333); margin-bottom: 0.8rem; }
+.bsim-step-line--done { background: #4a9c5d; }
+
+/* ── Race bar ────────────────────────────────────────── */
+.bsim-race-bar {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  flex-shrink: 0;
+}
+.bsim-race-bar::-webkit-scrollbar { display: none; }
+
+/* ── Scrollable catalog body ─────────────────────────── */
+.bsim-body {
+  flex: 1;
+  min-height: 0;   /* critical: allows flex child to shrink and scroll */
+  overflow-y: auto;
+  padding: 0.6rem 0.6rem 0;
+}
+.bsim-body--battle { padding: 0; overflow-y: auto; }
+
+.bsim-pick-race {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted, #777);
+  font-style: italic;
+  font-size: 0.85rem;
 }
 
-/* ── Army panel ────────────────────────────── */
-.bsim-panel {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 10px;
-  overflow: hidden;
+.bsim-unit-grid { padding-bottom: 0.5rem; }
+
+/* Count badge on catalog portrait */
+.bsim-selectable { position: relative; transition: box-shadow 0.15s, border-color 0.15s; }
+.bsim-selectable--on {
+  border-color: var(--text-gold, #c9973a) !important;
+  box-shadow: 0 0 0 2px rgba(201,151,58,0.3);
+}
+.bsim-count-badge {
+  position: absolute;
+  top: 0.2rem; right: 0.2rem;
+  background: var(--text-gold, #c9973a);
+  color: #000;
+  font-size: 0.6rem; font-weight: 800;
+  min-width: 1rem; height: 1rem;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 0.15rem; line-height: 1;
 }
 
-.bsim-panel-hd {
+/* +/- controls on catalog cards */
+.bsim-card-ctrl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.2rem;
+  border-top: 1px solid var(--border, #2a2a2a);
+  margin-top: auto;
+}
+.bsim-ctrl-btn {
+  width: 1.5rem; height: 1.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--border, #444);
+  background: var(--bg-panel, #141414);
+  color: var(--text-base, #ccc);
+  font-size: 0.95rem; font-weight: 700;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, border-color 0.12s;
+}
+.bsim-ctrl-btn:hover:not(:disabled) { background: #2a1f00; border-color: var(--text-gold, #c9973a); color: var(--text-gold, #c9973a); }
+.bsim-ctrl-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.bsim-ctrl-cnt { min-width: 1.1rem; text-align: center; font-size: 0.78rem; color: var(--text-muted, #888); font-weight: 700; }
+.bsim-ctrl-cnt--on { color: var(--text-gold, #c9973a); }
+
+/* ── Army panel ──────────────────────────────────────── */
+.bsim-army-panel {
+  flex-shrink: 0;
+  border-top: 2px solid var(--border, #2a2a2a);
+  background: #0c0c0c;
+  padding: 0.45rem 0.75rem 0.5rem;
+  max-height: 10.5rem;
+  overflow-y: auto;
+}
+.bsim-army-panel--empty {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 3rem;
+  color: var(--text-muted, #666);
+  font-style: italic; font-size: 0.73rem;
+}
+.bsim-army-label {
+  font-size: 0.65rem; font-weight: 700;
+  color: var(--text-gold, #c9973a);
+  letter-spacing: 0.05em; text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+/* Let la-unit-cards scroll horizontally inside the panel */
+.bsim-army-cards {
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
+  padding-bottom: 0.3rem;
+}
+
+/* ── Footer ──────────────────────────────────────────── */
+.bsim-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.65rem 0.85rem 0.4rem;
-}
-
-.bsim-panel-title {
-  font-family: 'Cinzel', serif;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: var(--text-gold, #c9973a);
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.bsim-stack-badge {
-  font-size: 0.7rem;
-  color: var(--text-muted, #888);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-muted);
-  border-radius: 20px;
-  padding: 0.15rem 0.5rem;
-}
-
-.bsim-race-sel {
-  display: block;
-  width: calc(100% - 1.7rem);
-  margin: 0 0.85rem 0.5rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 6px;
-  color: var(--text-primary, #e8dfc0);
-  font-size: 0.85rem;
-  padding: 0.5rem 0.75rem;
-  font-family: inherit;
-  cursor: pointer;
-}
-
-.bsim-placeholder {
-  padding: 1rem 0.85rem;
-  font-size: 0.8rem;
-  color: var(--text-muted, #888);
-  font-style: italic;
-}
-
-/* ── Unit list ─────────────────────────────── */
-.bsim-unit-list {
-  max-height: 340px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-}
-
-.bsim-unit-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem 0.85rem;
-  border-top: 1px solid var(--border-muted, #1e2d4a);
-  transition: background 0.15s;
-}
-
-.bsim-unit-row--selected {
-  background: rgba(180, 140, 40, 0.07);
-}
-
-.bsim-unit-icon {
-  font-size: 1.4rem;
+  padding: 0.55rem 1rem;
+  background: var(--bg-panel, #141414);
+  border-top: 1px solid var(--border, #2a2a2a);
   flex-shrink: 0;
-  width: 2rem;
-  text-align: center;
+  gap: 0.5rem;
 }
-
-.bsim-unit-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.bsim-unit-name {
-  font-size: 0.83rem;
-  font-weight: 600;
-  color: var(--text-primary, #e8dfc0);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.bsim-unit-stats {
-  font-size: 0.68rem;
-  color: var(--text-muted, #888);
-  letter-spacing: 0.02em;
-}
-
-.bsim-traits {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem;
-  margin-top: 0.15rem;
-}
-
-.bsim-trait {
-  font-size: 0.58rem;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-secondary, #a09070);
-  background: var(--bg-deep);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 3px;
-  padding: 0.05rem 0.3rem;
-}
-
-/* ── Count control ─────────────────────────── */
-.bsim-unit-ctrl {
-  display: flex;
-  align-items: center;
-  gap: 0.3rem;
-  flex-shrink: 0;
-}
-
-.bsim-cnt-btn {
-  width: 2rem;
-  height: 2rem;
+.bsim-footer-info { font-size: 0.68rem; color: var(--text-muted, #777); }
+.bsim-next-btn {
+  padding: 0.5rem 1.4rem;
   border-radius: 6px;
-  border: 1px solid var(--border-muted, #1e2d4a);
-  background: var(--bg-raised);
-  color: var(--text-primary, #e8dfc0);
-  font-size: 1.1rem;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.12s, border-color 0.12s;
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-.bsim-cnt-btn:not([disabled]):active {
-  background: var(--bg-overlay);
-}
-
-.bsim-cnt-btn[disabled] {
-  opacity: 0.3;
-  cursor: default;
-}
-
-.bsim-cnt-val {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-muted, #888);
-  min-width: 1.2rem;
-  text-align: center;
-}
-
-.bsim-cnt-val--active {
-  color: var(--text-gold, #c9973a);
-}
-
-/* ── Roster chips ──────────────────────────── */
-.bsim-roster {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  padding: 0.55rem 0.85rem;
-  border-top: 1px solid var(--border-muted, #1e2d4a);
-  background: rgba(0,0,0,0.15);
-}
-
-.bsim-roster-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  flex: 1;
-}
-
-.bsim-chip {
-  font-size: 0.7rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 12px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-gold, #3a2e1a);
-  color: var(--text-secondary, #a09070);
-}
-
-.bsim-clear-btn {
-  background: none;
-  border: 1px solid #4a1a1a;
-  border-radius: 6px;
-  color: #c05050;
-  font-size: 0.7rem;
-  padding: 0.25rem 0.55rem;
-  cursor: pointer;
-  white-space: nowrap;
-  touch-action: manipulation;
-}
-
-/* ── Terrain selector ──────────────────────── */
-.bsim-terrain-section {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 10px;
-  padding: 0.65rem 0.85rem;
-}
-
-.bsim-section-label {
-  font-family: 'Cinzel', serif;
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-gold, #c9973a);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-bottom: 0.5rem;
-}
-
-.bsim-terrain-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
-}
-
-.bsim-terrain-btn {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 0.15rem;
-  padding: 0.5rem 0.25rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--text-secondary, #a09070);
-  font-size: 0.72rem;
-  transition: border-color 0.15s, background 0.15s;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.bsim-terrain-icon { font-size: 1.3rem; }
-.bsim-terrain-label { font-size: 0.65rem; }
-
-.bsim-terrain-btn--on {
-  border-color: var(--text-gold, #c9973a);
-  background: rgba(180, 140, 40, 0.12);
-  color: var(--text-gold, #c9973a);
-}
-
-/* ── Sticky footer ─────────────────────────── */
-.bsim-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 0.75rem 1rem;
-  background: var(--bg-surface);
-  border-top: 1px solid var(--border-gold, #3a2e1a);
-  z-index: 10;
-}
-
-.bsim-footer--result {
-  display: flex;
-  gap: 0.6rem;
-}
-
-.bsim-sim-btn {
-  display: block;
-  width: 100%;
-  padding: 0.85rem;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #4a2c10 0%, #2e1a08 100%);
   border: 1px solid var(--text-gold, #c9973a);
+  background: #2a1f00;
   color: var(--text-gold, #c9973a);
-  font-family: 'Cinzel', serif;
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  text-transform: uppercase;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
+  font-size: 0.85rem; font-weight: 700;
+  cursor: pointer; letter-spacing: 0.04em; white-space: nowrap;
+  transition: background 0.12s;
+}
+.bsim-next-btn:hover { background: #3a2c00; }
+.bsim-next-btn--off { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+/* ── Battle step ─────────────────────────────────────── */
+.bsim-lineup {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
 }
 
-.bsim-sim-btn--disabled {
-  opacity: 0.4;
-  cursor: default;
+.bsim-lineup-side { padding: 0.75rem; }
+.bsim-lineup-atk  { border-right: 1px solid var(--border, #2a2a2a); }
+
+.bsim-lineup-label {
+  display: flex; flex-direction: column; gap: 0.12rem;
+  font-size: 0.7rem; font-weight: 700;
+  color: var(--text-muted, #999);
+  letter-spacing: 0.05em; text-transform: uppercase;
+  margin-bottom: 0.5rem;
+}
+.bsim-lineup-def .bsim-lineup-label { align-items: flex-end; text-align: right; }
+.bsim-lineup-race { font-size: 0.65rem; color: var(--text-gold, #c9973a); }
+
+/* Cards in lineup: wrap and allow scroll */
+.bsim-lineup-cards {
+  flex-wrap: wrap !important;
+  gap: 0.35rem !important;
+}
+
+/* ── Centre column ───────────────────────────────────── */
+.bsim-lineup-centre {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 0.65rem;
+  padding: 0.85rem 0.6rem;
+  min-width: 6rem;
+}
+.bsim-vs { font-size: 1.25rem; font-weight: 900; color: var(--text-gold, #c9973a); letter-spacing: 0.1em; }
+.bsim-terrain-block { display: flex; flex-direction: column; align-items: center; gap: 0.25rem; width: 100%; }
+.bsim-terrain-label { font-size: 0.65rem; color: var(--text-muted, #888); white-space: nowrap; }
+.bsim-terrain-sel {
+  width: 100%;
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #444);
+  border-radius: 6px;
+  color: var(--text-base, #ccc);
+  padding: 0.3rem 0.4rem; font-size: 0.7rem;
+}
+.bsim-terrain-sel:focus { outline: none; border-color: var(--text-gold, #c9973a); }
+.bsim-sim-btn {
+  padding: 0.5rem 0.5rem;
+  background: #2a1f00;
+  border: 1px solid var(--text-gold, #c9973a);
+  border-radius: 8px; color: var(--text-gold, #c9973a);
+  font-size: 0.75rem; font-weight: 700; cursor: pointer;
+  text-align: center; white-space: nowrap; width: 100%;
+  transition: background 0.12s;
+}
+.bsim-sim-btn:hover { background: #3a2c00; }
+
+/* ── Battle report ───────────────────────────────────── */
+.bsim-report {
+  padding: 0.75rem;
+  border-top: 2px solid var(--border, #2a2a2a);
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+.bsim-report-banner { border-radius: 8px; padding: 0.65rem 1rem; text-align: center; }
+.bsim-win--atk  { background: #0d2015; border: 1px solid #4a9c5d; }
+.bsim-win--def  { background: #1a0808; border: 1px solid #9c4a4a; }
+.bsim-win--draw { background: #1a1500; border: 1px solid #8a7a20; }
+.bsim-report-winner { font-size: 1.05rem; font-weight: 800; letter-spacing: 0.06em; }
+.bsim-win--atk  .bsim-report-winner { color: #5ec47c; }
+.bsim-win--def  .bsim-report-winner { color: #c45e5e; }
+.bsim-win--draw .bsim-report-winner { color: #c4aa5e; }
+.bsim-report-reason { font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 0.12rem; }
+
+.bsim-report-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.5rem; align-items: start; }
+.bsim-report-divider { width: 1px; background: var(--border, #2a2a2a); align-self: stretch; }
+.bsim-rside { display: flex; flex-direction: column; gap: 0.22rem; }
+.bsim-rside-title { font-size: 0.73rem; font-weight: 700; color: var(--text-gold, #c9973a); }
+.bsim-rside-meta  { font-size: 0.6rem; color: var(--text-muted, #777); margin-bottom: 0.12rem; }
+.bsim-rrow { display: flex; align-items: center; gap: 0.25rem; font-size: 0.68rem; color: var(--text-base, #ccc); }
+.bsim-rrow-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bsim-rrow-cnt  { flex-shrink: 0; color: var(--text-muted, #888); font-size: 0.6rem; }
+.bsim-rbadge { font-size: 0.6rem; flex-shrink: 0; }
+.bsim-rbadge--ok   { color: #4a9c5d; }
+.bsim-rbadge--loss { color: #c4aa5e; }
+.bsim-rbadge--dead { color: #9c4a4a; }
+
+.bsim-log-btn {
+  background: none; border: 1px solid var(--border, #333);
+  color: var(--text-muted, #888); border-radius: 6px;
+  padding: 0.32rem 0.6rem; font-size: 0.68rem; cursor: pointer;
+  text-align: left; width: 100%;
+}
+.bsim-log-btn:hover { border-color: var(--text-gold, #c9973a); color: var(--text-gold, #c9973a); }
+.bsim-log {
+  max-height: 11rem; overflow-y: auto;
+  background: #090909; border: 1px solid var(--border, #222);
+  border-radius: 6px; padding: 0.45rem 0.55rem;
+  font-size: 0.61rem; font-family: monospace;
+  display: flex; flex-direction: column; gap: 0.1rem;
+}
+.bsim-lrow        { color: var(--text-base, #bbb); }
+.bsim-lrow em     { color: #e07050; font-style: normal; }
+.bsim-lrow--morale { color: #9c7aaa; }
+.bsim-lrow--heal   { color: #4a9c5d; }
+
+.bsim-resim-btn {
+  padding: 0.42rem 0.75rem; background: none;
+  border: 1px solid var(--border, #444); border-radius: 6px;
+  color: var(--text-muted, #888); font-size: 0.73rem;
+  cursor: pointer; width: 100%; text-align: center;
+}
+.bsim-resim-btn:hover { border-color: var(--text-gold, #c9973a); color: var(--text-gold, #c9973a); }
+
+/* ── Mobile ──────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .bsim-lineup { grid-template-columns: 1fr; }
+  .bsim-lineup-centre { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 0.5rem; }
+  .bsim-lineup-atk { border-right: none; border-bottom: 1px solid var(--border, #2a2a2a); }
+  .bsim-report-sides { grid-template-columns: 1fr 1fr; }
+  .bsim-report-divider { display: none; }
+}
+
+/* ── Post-battle card states ─────────────────────────────────────── */
+
+/* Dead unit: grayscale + dark overlay on the card */
+.la-unit-card.bsim-card--dead {
+  filter: grayscale(0.85) brightness(0.55);
+  border-color: #333 !important;
+  box-shadow: none !important;
+}
+
+/* Damage badge — bottom of card, dark pill */
+.bsim-dmg-badge {
+  position: absolute;
+  bottom: 0.18rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.82);
+  border: 1px solid #e07050;
+  border-radius: 4px;
+  color: #e07050;
+  font-size: 0.55rem;
+  font-weight: 700;
+  white-space: nowrap;
+  padding: 0.08rem 0.28rem;
   pointer-events: none;
-}
-
-.bsim-again-btn {
-  flex: 1;
-  padding: 0.85rem;
-  border-radius: 8px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  color: var(--text-secondary, #a09070);
-  font-family: 'Cinzel', serif;
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-
-.bsim-footer--result .bsim-sim-btn {
-  flex: 1;
-  width: auto;
-}
-
-/* ── Result ────────────────────────────────── */
-.bsim-result-banner {
-  border-radius: 10px;
-  padding: 1.1rem 1rem;
-  text-align: center;
-  border: 1px solid transparent;
-}
-
-.bsim-win--atk  { background: rgba(60, 120, 40, 0.18); border-color: #3a7a2a; }
-.bsim-win--def  { background: rgba(40, 60, 120, 0.18); border-color: #2a4a8a; }
-.bsim-win--draw { background: rgba(100, 80, 20, 0.18); border-color: #6a5a1a; }
-
-.bsim-result-winner {
-  font-family: 'Cinzel', serif;
-  font-size: 1.3rem;
-  font-weight: 700;
-  color: var(--text-gold, #c9973a);
-  margin-bottom: 0.3rem;
-}
-
-.bsim-result-reason {
-  font-size: 0.78rem;
-  color: var(--text-secondary, #a09070);
   letter-spacing: 0.03em;
 }
 
-.bsim-result-sides {
-  display: flex;
-  gap: 0;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.bsim-res-side {
-  flex: 1;
-  padding: 0.7rem 0.75rem;
-  min-width: 0;
-}
-
-.bsim-res-divider {
-  width: 1px;
-  background: var(--border-muted, #1e2d4a);
-  flex-shrink: 0;
-}
-
-.bsim-res-side-title {
-  font-family: 'Cinzel', serif;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-gold, #c9973a);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  margin-bottom: 0.2rem;
-}
-
-.bsim-res-meta {
-  font-size: 0.65rem;
-  color: var(--text-muted, #888);
-  margin-bottom: 0.5rem;
-}
-
-.bsim-res-row {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0;
-  border-top: 1px solid var(--border-muted, #1e2d4a);
-  flex-wrap: wrap;
-}
-
-.bsim-res-icon { font-size: 0.9rem; flex-shrink: 0; }
-
-.bsim-res-name {
-  font-size: 0.72rem;
-  color: var(--text-primary, #e8dfc0);
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.bsim-res-count {
-  font-size: 0.68rem;
-  color: var(--text-muted, #888);
-  flex-shrink: 0;
-}
-
-/* Status badges */
-.bsim-badge {
-  font-size: 0.6rem;
-  padding: 0.1rem 0.35rem;
-  border-radius: 10px;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-.bsim-badge--ok   { background: rgba(30,90,30,0.4);  color: #60d060; border: 1px solid #2a6a2a; }
-.bsim-badge--loss { background: rgba(80,60,0,0.4);   color: #d0a040; border: 1px solid #6a4a00; }
-.bsim-badge--dead { background: rgba(90,20,20,0.4);  color: #d04040; border: 1px solid #6a1a1a; }
-
-/* ── Battle log ────────────────────────────── */
-.bsim-log-toggle {
-  display: block;
-  width: 100%;
-  padding: 0.6rem 0.75rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 8px;
-  color: var(--text-secondary, #a09070);
-  font-size: 0.78rem;
-  cursor: pointer;
-  text-align: left;
-  font-family: inherit;
-  touch-action: manipulation;
-}
-
-.bsim-log {
-  background: var(--bg-deep);
-  border: 1px solid var(--border-muted, #1e2d4a);
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
-  max-height: 320px;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  font-size: 0.68rem;
-  font-family: monospace;
-  line-height: 1.6;
-  color: var(--text-secondary, #a09070);
-}
-
-.bsim-log-row { border-bottom: 1px solid rgba(255,255,255,0.04); padding: 0.1rem 0; }
-.bsim-log-row em { color: var(--text-primary, #e8dfc0); font-style: normal; }
-.bsim-log--heal   { color: #40b040; }
-.bsim-log--morale { color: #b08020; }
-
-/* ── Wide layout (tablet+) ─────────────────── */
-@media (min-width: 700px) {
-  .bsim-body {
-    max-width: 640px;
-    margin: 0 auto;
-    padding: 1rem 1rem 7rem;
-  }
-
-  .bsim-result-sides {
-    font-size: 1rem;
-  }
-
-  .bsim-terrain-row {
-    grid-template-columns: repeat(6, 1fr);
-  }
-
-  .bsim-footer {
-    max-width: 640px;
-    left: 50%;
-    transform: translateX(-50%);
-    border-radius: 0;
-  }
-}
+/* la-unit-card needs position:relative for the badge */
+.la-unit-card { position: relative; }
