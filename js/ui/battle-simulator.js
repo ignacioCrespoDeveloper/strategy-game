@@ -61,6 +61,14 @@ const BattleSimulator = (() => {
     return Object.values(counts).reduce((s, c) => s + c, 0);
   }
 
+  function _armyPoints(counts) {
+    return Object.entries(counts)
+      .filter(([, c]) => c > 0)
+      .reduce((sum, [uid, cnt]) => sum + (UNIT_DEFS[uid]?.goldCost ?? 0) * cnt, 0);
+  }
+
+  function _fmtPts(n) { return n.toLocaleString(); }
+
   function _tierClass(category) {
     if (category === 'mercenary') return 'la-unit-card--merc';
     if (category === 'elite' || category === 'cavalry') return 'la-unit-card--elite';
@@ -193,9 +201,13 @@ const BattleSimulator = (() => {
           No units selected — use the catalog above
         </div>`;
     }
+    const pts = _armyPoints(counts);
     return `
       <div class="bsim-army-panel">
-        <div class="bsim-army-label">Your Army — ${total} / ${MAX_UNITS} units</div>
+        <div class="bsim-army-label">
+          Your Army — ${total}/${MAX_UNITS} units
+          <span class="bsim-pts-badge">💰 ${_fmtPts(pts)} pts</span>
+        </div>
         <div class="la-unit-cards bsim-army-cards">${_armyCards(counts)}</div>
       </div>`;
   }
@@ -300,7 +312,7 @@ const BattleSimulator = (() => {
         <div class="bsim-body">${bodyHtml}</div>
         ${_armyPanel(counts)}
         <div class="bsim-footer">
-          <div class="bsim-footer-info">${total}/${MAX_UNITS} units · max ${MAX_PER_TYPE} per type</div>
+          <div class="bsim-footer-info">${total}/${MAX_UNITS} units · max ${MAX_PER_TYPE} per type · <span class="bsim-pts-inline">💰 ${_fmtPts(_armyPoints(counts))} pts</span></div>
           <button class="bsim-next-btn${total > 0 ? '' : ' bsim-next-btn--off'}" id="bsim-next">
             ${isAtk ? 'Next: Defender →' : 'Next: Battle →'}
           </button>
@@ -339,6 +351,7 @@ const BattleSimulator = (() => {
               <div class="bsim-lineup-label">
                 <span class="bsim-lineup-race">${atkRaceInfo.icon || ''} ${atkRaceInfo.name || ''}</span>
                 ⚔ Attacker
+                <span class="bsim-pts-badge">💰 ${_fmtPts(_armyPoints(_atkCounts))} pts</span>
               </div>
               <div class="la-unit-cards bsim-lineup-cards">${atkCardHtml}</div>
             </div>
@@ -358,6 +371,7 @@ const BattleSimulator = (() => {
               <div class="bsim-lineup-label">
                 🛡 Defender
                 <span class="bsim-lineup-race">${defRaceInfo.icon || ''} ${defRaceInfo.name || ''}</span>
+                <span class="bsim-pts-badge">💰 ${_fmtPts(_armyPoints(_defCounts))} pts</span>
               </div>
               <div class="la-unit-cards bsim-lineup-cards">${defCardHtml}</div>
             </div>

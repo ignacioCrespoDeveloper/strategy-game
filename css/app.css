@@ -8280,3 +8280,259 @@ body.nav-open #screen-root {
 
 /* la-unit-card needs position:relative for the badge */
 .la-unit-card { position: relative; }
+
+/* ── Army points display ─────────────────────────────────────────── */
+.bsim-pts-badge {
+  display: inline-block;
+  background: #1c1608;
+  border: 1px solid #3a2e10;
+  border-radius: 4px;
+  color: var(--text-gold, #c9973a);
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-transform: none;
+}
+
+.bsim-pts-inline {
+  color: var(--text-gold, #c9973a);
+  font-weight: 700;
+}
+
+/* =====================================================
+   RANKINGS SCREEN — rank-* components
+   ===================================================== */
+
+.rank-screen {
+  min-height: 100vh;
+  background: var(--bg-dark, #0e0e0e);
+  color: var(--text-base, #ccc);
+  padding-bottom: 3rem;
+}
+
+/* ── Header ──────────────────────────────────────────── */
+.rank-header {
+  padding: 1.25rem 1.25rem 0.5rem;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  background: var(--bg-panel, #141414);
+}
+
+.rank-title {
+  font-family: 'Cinzel', serif;
+  font-size: 1.3rem;
+  color: var(--text-gold, #c9973a);
+  letter-spacing: 0.08em;
+  margin: 0 0 0.2rem;
+}
+
+.rank-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+}
+
+.rank-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  color: var(--text-muted, #777);
+  font-style: italic;
+}
+
+/* ── Content ─────────────────────────────────────────── */
+.rank-content {
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 1rem 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.rank-section {}
+
+.rank-section-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-muted, #666);
+  text-transform: uppercase;
+  margin-bottom: 0.6rem;
+  padding-left: 0.1rem;
+}
+
+/* ── Own score card ──────────────────────────────────── */
+.rank-own-card {
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.rank-own-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, #1a1500 0%, #0e0e0e 100%);
+  border-bottom: 1px solid #2a2510;
+}
+
+.rank-own-name {
+  font-family: 'Cinzel', serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-gold, #c9973a);
+  letter-spacing: 0.06em;
+}
+
+.rank-own-total {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.rank-pts-unit {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  font-weight: 400;
+}
+
+/* ── Score breakdown rows ────────────────────────────── */
+.rank-breakdown {
+  display: flex;
+  flex-direction: column;
+}
+
+.rank-brow {
+  display: grid;
+  grid-template-columns: 1.4rem 1fr auto auto;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #1a1a1a;
+  transition: background 0.12s;
+}
+.rank-brow:last-child { border-bottom: none; }
+.rank-brow:hover { background: #1a1a1a; }
+
+.rank-brow-icon   { font-size: 0.95rem; }
+.rank-brow-label  { font-size: 0.8rem; font-weight: 600; color: var(--text-base, #ccc); }
+.rank-brow-detail { font-size: 0.68rem; color: var(--text-muted, #777); text-align: right; padding-right: 0.75rem; }
+.rank-brow-pts    {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-gold, #c9973a);
+  min-width: 4rem;
+  text-align: right;
+}
+
+/* ── Leaderboard ─────────────────────────────────────── */
+.rank-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.rank-empty {
+  text-align: center;
+  color: var(--text-muted, #666);
+  font-style: italic;
+  padding: 2rem 1rem;
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+}
+
+.rank-row {
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+  padding: 0.65rem 0.85rem;
+  display: grid;
+  grid-template-columns: 2.2rem 1fr;
+  gap: 0.5rem;
+  align-items: start;
+  transition: background 0.12s;
+}
+.rank-row:hover { background: #1a1a1a; }
+.rank-row--own  {
+  border-color: var(--text-gold, #c9973a);
+  background: #1a1600;
+  box-shadow: 0 0 0 1px rgba(201,151,58,0.15);
+}
+
+.rank-row-medal {
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--text-muted, #888);
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.rank-row-body { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.rank-row-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.rank-row-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-base, #ccc);
+}
+.rank-row--own .rank-row-name { color: var(--text-gold, #c9973a); }
+
+.rank-you {
+  display: inline-block;
+  background: #2a1f00;
+  border: 1px solid var(--text-gold, #c9973a);
+  border-radius: 3px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  color: var(--text-gold, #c9973a);
+  padding: 0.05rem 0.3rem;
+  letter-spacing: 0.05em;
+  vertical-align: middle;
+  margin-left: 0.3rem;
+}
+
+.rank-row-score {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+/* Progress bar showing relative score */
+.rank-row-bar {
+  height: 3px;
+  background: #1e1e1e;
+  border-radius: 2px;
+  overflow: hidden;
+}
+.rank-row-bar-fill {
+  height: 100%;
+  background: var(--text-gold, #c9973a);
+  border-radius: 2px;
+  opacity: 0.6;
+  transition: width 0.4s ease;
+}
+.rank-row--own .rank-row-bar-fill { opacity: 1; }
+
+/* Breakdown chips on each leaderboard row */
+.rank-row-breakdown {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.rank-row-breakdown span {
+  font-size: 0.62rem;
+  color: var(--text-muted, #666);
+}

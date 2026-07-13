@@ -116,6 +116,11 @@ const App = (() => {
         Nav.show(data.player, data.lord, 'battle-simulator');
         BattleSimulator.render(root, data);
         break;
+      case 'rankings':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'rankings');
+        RankingScreen.render(root, data);
+        break;
       default:
         Nav.hide();
         HUD.hide();

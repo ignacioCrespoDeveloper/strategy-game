@@ -155,7 +155,9 @@ const Nav = (() => {
     });
 
     document.querySelector('[data-nav-page="rankings"]')?.addEventListener('click', () => {
-      _toast('Rankings — coming soon!');
+      const player = PlayerService.getSession();
+      const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
+      App.navigate('rankings', { player, lord });
     });
 
     document.querySelector('[data-nav-page="account"]')?.addEventListener('click', () => {
