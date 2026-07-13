@@ -9,7 +9,7 @@
 //  All functions mutate these values in place.
 // =============================================
 
-const MoraleService = (() => {
+var MoraleService = (() => {
 
   function _getLordLeadership(side) {
     const lord = side.units.find(u => u.isLord && u.count > 0);

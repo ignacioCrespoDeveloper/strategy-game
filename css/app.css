@@ -8306,11 +8306,14 @@ body.nav-open #screen-root {
    ===================================================== */
 
 .rank-screen {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
   background: var(--bg-dark, #0e0e0e);
   color: var(--text-base, #ccc);
-  padding-bottom: 3rem;
 }
+
 
 /* ── Header ──────────────────────────────────────────── */
 .rank-header {
@@ -8343,12 +8346,16 @@ body.nav-open #screen-root {
 
 /* ── Content ─────────────────────────────────────────── */
 .rank-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   max-width: 700px;
   margin: 0 auto;
-  padding: 1rem 1rem 0;
+  padding: 1rem 1rem 3rem;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  width: 100%;
 }
 
 .rank-section {}

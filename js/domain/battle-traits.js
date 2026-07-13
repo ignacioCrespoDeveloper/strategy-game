@@ -10,7 +10,7 @@
 //  applyEndOfRound — called at the END of each round (regen, frenzy)
 // =============================================
 
-const TraitProcessor = (() => {
+var TraitProcessor = (() => {
 
   function applyPassive(ctx, round, events) {
     // Reserved for future passive effects that fire at round start.

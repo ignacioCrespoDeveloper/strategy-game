@@ -8,7 +8,7 @@
 //  Nothing else changes.
 // =============================================
 
-const LORD_BASE_STATS = {
+var LORD_BASE_STATS = {
   health:     100,
   attack:     5,
   defense:    5,
@@ -18,7 +18,7 @@ const LORD_BASE_STATS = {
 };
 
 // Soft display maximums for progress bars — not hard caps.
-const LORD_STAT_MAX = {
+var LORD_STAT_MAX = {
   health:     200,
   attack:     20,
   defense:    20,
@@ -28,7 +28,7 @@ const LORD_STAT_MAX = {
 };
 
 // Icon, colour and label for each stat — consumed by all UI components.
-const LORD_STAT_META = {
+var LORD_STAT_META = {
   health:     { label: 'Health',     icon: '❤',  color: '#4aaa4a' },
   attack:     { label: 'Attack',     icon: '⚔',  color: '#c05040' },
   defense:    { label: 'Defense',    icon: '🛡',  color: '#4070d0' },
@@ -37,7 +37,7 @@ const LORD_STAT_META = {
   speed:      { label: 'Speed',      icon: '💨',  color: '#30a0b0' },
 };
 
-const LORD_CLASSES = {
+var LORD_CLASSES = {
   warrior: {
     id:          'warrior',
     name:        'Warrior',

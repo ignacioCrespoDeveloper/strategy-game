@@ -34,7 +34,7 @@
 //    Tier 5 (legendary)               → 172800s (48h)   gate: dragon_lair → town_hall 9 + lord lv12
 // =============================================
 
-const UNIT_DEFS = {
+var UNIT_DEFS = {
 
   // ── Dark Elf ─────────────────────────────────────────────────────
 
@@ -1147,7 +1147,7 @@ const UNIT_DEFS = {
 //   Tier 4 (monster, weight 5)              → monster bldg       (town_hall 7 via bldg.requires)
 //   Tier 5 (legendary, weight 12)           → dragon_lair        (town_hall 9 + lord lv12 checked at recruit)
 
-const UNIT_ROSTER = {
+var UNIT_ROSTER = {
   dark_elf: {
     barracks:      { 1: ['dreadspears'], 3: ['bleakswords'], 4: ['witch_elves'] },
     archery_range: { 1: ['darkshards'] },

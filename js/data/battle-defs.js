@@ -11,7 +11,7 @@
 //    Nothing else changes.
 // =============================================
 
-const TERRAIN_BATTLE_MODS = {
+var TERRAIN_BATTLE_MODS = {
   plains:   { chargeMult: 1.2,  defenseMult: 1.0,  moraleMod:   0 },
   forest:   { chargeMult: 0.5,  defenseMult: 1.2,  moraleMod:   5 },
   hills:    { chargeMult: 0.8,  defenseMult: 1.15, moraleMod:   0 },
@@ -23,7 +23,7 @@ const TERRAIN_BATTLE_MODS = {
 
 // ── Base loot by level — scaled by each camp's rewardMultiplier ──────
 
-const CAMP_LEVEL_LOOT = {
+var CAMP_LEVEL_LOOT = {
   1: { goldMin: 20,   goldMax: 60,   xpWin: 20,  xpLoss: 5  },
   2: { goldMin: 60,   goldMax: 140,  xpWin: 45,  xpLoss: 12 },
   3: { goldMin: 140,  goldMax: 300,  xpWin: 85,  xpLoss: 25 },
@@ -49,7 +49,7 @@ const CAMP_LEVEL_LOOT = {
 //   Tier 4 [3,5]  — dark_elf_raiders, dwarf_expedition
 //   Tier 5 [4,5]  — beast_lair, dragon_cult
 
-const CAMP_DEFS = {
+var CAMP_DEFS = {
 
   // ── Tier 1 ───────────────────────────────────────────────────────
 
