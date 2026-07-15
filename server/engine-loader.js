@@ -33,15 +33,19 @@ const _ctx = vm.createContext({ Math, console, Date });
 load('js/data/lord-classes.js');     // LORD_BASE_STATS, LORD_CLASSES
 load('js/data/stances.js');          // STANCE_DEFS
 load('js/data/units.js');            // UNIT_DEFS
+load('js/data/buildings.js');        // BUILDING_DEFS
+load('js/data/races.js');            // RACES
 load('js/data/battle-defs.js');      // TERRAIN_BATTLE_MODS, CAMP_DEFS
 load('js/domain/battle-targeting.js');
 load('js/domain/battle-morale.js');  // needs TERRAIN_BATTLE_MODS
 load('js/domain/battle-traits.js');
 load('js/domain/battle-engine.js'); // needs all above; buildContext() not used server-side
 
-export const BattleEngine       = _ctx.BattleEngine;
-export const UNIT_DEFS          = _ctx.UNIT_DEFS;
+export const BattleEngine        = _ctx.BattleEngine;
+export const UNIT_DEFS           = _ctx.UNIT_DEFS;
+export const BUILDING_DEFS       = _ctx.BUILDING_DEFS;
+export const RACES               = _ctx.RACES;
 export const TERRAIN_BATTLE_MODS = _ctx.TERRAIN_BATTLE_MODS;
-export const LORD_BASE_STATS    = _ctx.LORD_BASE_STATS;
-export const LORD_CLASSES       = _ctx.LORD_CLASSES;
-export const STANCE_DEFS        = _ctx.STANCE_DEFS;
+export const LORD_BASE_STATS     = _ctx.LORD_BASE_STATS;
+export const LORD_CLASSES        = _ctx.LORD_CLASSES;
+export const STANCE_DEFS         = _ctx.STANCE_DEFS;

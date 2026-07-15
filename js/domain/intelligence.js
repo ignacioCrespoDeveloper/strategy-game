@@ -63,16 +63,24 @@ const IntelligenceService = (() => {
 
   const _DATA_BUILDERS = {
     enemy_lord(tier, raw) {
-      if (tier === 'vague')   return { summary: 'Actividad militar detectada.' };
-      if (tier === 'clear')   return { summary: 'Señor enemigo detectado.', armySize: raw?.armySize || 'Desconocido' };
-      /* precise */           return {
-        summary:      'Señor enemigo identificado.',
-        armyCapacity: raw?.armyCapacity || null,
-        lastActivity: raw?.lastActivity || null,
-        lordClass:    raw?.lordClass    || null,
-        stanceId:     raw?.stanceId     || null,
-        stanceName:   raw?.stanceName   || null,
+      // Identity fields are always included — the server has full access and
+      // writes them into rawData regardless of scanning lord's class.
+      const base = {
+        lordId:         raw?.lordId         || null,
+        lordName:       raw?.lordName       || null,
+        lordRace:       raw?.lordRace       || null,
+        lordLevel:      raw?.lordLevel      || null,
+        lordClass:      raw?.lordClass      || null,
+        playerUsername: raw?.playerUsername || null,
+        armyCapacity:   raw?.armyCapacity   ?? null,
+        units:          raw?.units          || [],
+        lastActivity:   raw?.lastActivity   || null,
       };
+      // Stance detail only with precise (rogue) scan
+      if (tier === 'precise') {
+        return { ...base, stanceId: raw?.stanceId || null, stanceName: raw?.stanceName || null };
+      }
+      return base;
     },
     enemy_city(tier, raw) {
       const name          = raw?.name || 'Desconocido';

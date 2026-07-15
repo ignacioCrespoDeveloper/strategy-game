@@ -10,10 +10,10 @@ const LordScreen = (() => {
 
   // ── Entry point ───────────────────────────────────────────────
 
-  function render(root, { lord, player }) {
+  function render(root, { lord, player, openTab }) {
     _player    = player;
     _lord      = LordService.getById(lord.id);
-    _activeTab = 'overview';
+    _activeTab = openTab || 'overview';
 
     _migrateLord();
     if (LordService.tickHp(_lord)) {
@@ -37,12 +37,16 @@ const LordScreen = (() => {
         if (c.actionId === 'search_area') {
           _resolveSearch();
         } else if (c.actionId === 'move_lord') {
-          _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
-          ActivityService.log(_player.id, {
-            type: 'lord_moved', icon: '📍',
-            title: `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
-            detail: '', lordName: _lord.name,
-          });
+          if (c.intent === 'attack') {
+            _resolvePvpAttack(c.destX, c.destY);
+          } else {
+            _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
+            ActivityService.log(_player.id, {
+              type: 'lord_moved', icon: '📍',
+              title: `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
+              detail: '', lordName: _lord.name,
+            });
+          }
         } else {
           _toast(`✓ ${c.name} completed!`);
         }
@@ -89,8 +93,9 @@ const LordScreen = (() => {
   // ── Shell ─────────────────────────────────────────────────────
 
   function _shell() {
-    const race = RACES[_lord?.race] || {};
-    const cls  = LORD_CLASSES[_lord?.classId];
+    const race       = RACES[_lord?.race] || {};
+    const cls        = LORD_CLASSES[_lord?.classId];
+    const lordIsDown = LordService.isDown(_lord);
     return `
       <div class="ls-fullscreen">
 
@@ -103,8 +108,8 @@ const LordScreen = (() => {
           <div class="ls-right">
             <nav class="ls-tabs">
               <button class="ls-tab ${_activeTab === 'overview'  ? 'ls-tab--active' : ''}" data-tab="overview">📍 Overview</button>
-              <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army">⚔ Army</button>
-              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery">🔍 Discovery${(() => { const n = DiscoveryService.getUnseenCount(_player.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
+              <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>⚔ Army</button>
+              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>🔍 Discovery${(() => { const n = DiscoveryService.getUnseenCount(_player.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
               <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">🗡 Batallas${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
             </nav>
             <div class="ls-content" id="ls-content"></div>
@@ -143,12 +148,25 @@ const LordScreen = (() => {
     const mods      = cls?.modifiers || {};
 
     // Portrait — class portrait takes priority over race portrait
+    const lordIsDown    = LordService.isDown(_lord);
+    const downReason    = _lord.downtimeReason || 'defeated';
+    const downRemSecs   = lordIsDown ? Math.ceil(LordService.getDowntimeRemaining(_lord) / 1000) : 0;
+    const downReviveCost = lordIsDown ? _creditCost(downRemSecs) : 0;
+    const downOverlay    = lordIsDown ? `
+      <div class="lsl-portrait-down-overlay">
+        <div class="lsl-portrait-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
+        <div class="lsl-portrait-down-label lsl-portrait-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
+        <div class="lsl-portrait-down-cd" id="ls-lord-down-cd">${TimeService.formatDuration(downRemSecs)}</div>
+        <button class="ls-finish-btn ls-revive-btn" id="ls-revive-now">⚡ ${downReviveCost}💎 Revive</button>
+      </div>` : '';
+
     const portraitSrc  = cls?.portrait || race.portrait;
     const portraitHtml = portraitSrc
-      ? `<div class="lsl-portrait-area lsl-portrait-area--image">
+      ? `<div class="lsl-portrait-area lsl-portrait-area--image${lordIsDown ? ' lsl-portrait-area--down' : ''}">
            <img class="lsl-portrait-img" src="${portraitSrc}" alt="${_lord.name}" />
            <div class="lsl-portrait-fade"></div>
            <div class="lsl-portrait-glow" style="background:radial-gradient(ellipse at 50% 80%, ${race.portraitGlow || 'rgba(200,147,58,0.25)'} 0%, transparent 70%)"></div>
+           ${downOverlay}
            <div class="lsl-portrait-level">Lv ${level}</div>
            <div class="lsl-portrait-nameplate">
              <span class="lsl-portrait-lord-name">${_lord.name}</span>
@@ -158,8 +176,9 @@ const LordScreen = (() => {
              </div>
            </div>
          </div>`
-      : `<div class="lsl-portrait-area">
+      : `<div class="lsl-portrait-area${lordIsDown ? ' lsl-portrait-area--down' : ''}">
            <div class="lsl-portrait">${race.icon || '👤'}</div>
+           ${downOverlay}
            <div class="lsl-portrait-level">Lv ${level}</div>
          </div>`;
 
@@ -273,14 +292,21 @@ const LordScreen = (() => {
     if (!content) return;
     const left = document.getElementById('ls-left');
     if (left) left.innerHTML = _leftPanelHtml();
+    document.getElementById('ls-revive-now')?.addEventListener('click', _reviveNow);
+
+    // Force back to overview while downed
+    if (LordService.isDown(_lord) && (_activeTab === 'army' || _activeTab === 'discovery')) {
+      _activeTab = 'overview';
+    }
 
     switch (_activeTab) {
       case 'overview':
         content.innerHTML = _overviewTabHtml();
         document.getElementById('lov-finish-lord')?.addEventListener('click', _finishLordActionNow);
-        document.getElementById('lov-search-btn')?.addEventListener('click', () => {
-          const result = LordService.enqueueAction(_lord, 'search_area');
-          if (!result.ok) { _toast(result.error); return; }
+        document.getElementById('lov-search-btn')?.addEventListener('click', async (e) => {
+          e.currentTarget.disabled = true;
+          const result = await ServerActions.lordSearch(_lord.id);
+          if (!result.ok) { e.currentTarget.disabled = false; _toast(result.error || 'Server error'); return; }
           _lord = LordService.getById(_lord.id);
           _renderTab();
           _startCountdown();
@@ -364,12 +390,17 @@ const LordScreen = (() => {
 
   // Scan for enemy lords & cities on the current tile and log intel results.
   // Called once per completed Search Area action, before the random discovery roll.
-  function _scanIntelligence(x, y, terrain) {
-    const terrainMod = _terrainDetectionMod(terrain.id);
-    const isRogue    = _lord.classId === 'rogue';
-    const classBonus = isRogue ? 1.8 : 1.0;
+  //
+  // Enemy lord detection is server-side: the client only has own-player data in
+  // localStorage (RLS prevents reading other players' rows). The /api/scan/tile
+  // endpoint uses the service role key to check all lords + army sizes server-side
+  // and returns only those that pass the visibility check.
+  async function _scanIntelligence(x, y, terrain) {
+    const isRogue = _lord.classId === 'rogue';
 
-    // Enemy cities on this tile — progressive scouting (vague → clear → precise)
+    // Enemy cities on this tile — progressive scouting (vague → clear → precise).
+    // NOTE: In multiplayer, CityService.getAll() only has the current player's cities
+    // (RLS isolation), so this block is effectively Phase 2. Kept as a seam.
     CityService.getAll()
       .filter(c => c.x === x && c.y === y && c.playerId !== _player.id)
       .forEach(city => {
@@ -392,7 +423,6 @@ const LordScreen = (() => {
         if (!alreadyKnown) {
           IntelligenceService.addRecord(_player.id, intelRec);
         } else if (existing.qualityTier !== 'precise') {
-          // Upgrade existing record to higher tier
           IntelligenceService.removeRecord(_player.id, existing.id);
           IntelligenceService.addRecord(_player.id, intelRec);
         }
@@ -404,32 +434,42 @@ const LordScreen = (() => {
         });
       });
 
-    // Enemy lords on this tile (probability-based)
-    LordService.getAll()
-      .filter(l => l.x === x && l.y === y && l.playerId !== _player.id)
-      .forEach(lord => {
-        const visScore = VisibilityService.getVisibilityScore(lord);
-        const chance   = Math.min(1, (visScore / 100) * terrainMod * classBonus);
-        if (Math.random() >= chance) return;
-        const stanceDef = STANCE_DEFS[lord.stance?.id] || STANCE_DEFS.idle;
-        const intelRec  = IntelligenceService.buildRecord(_lord, {
-          type: 'enemy_lord', tileX: x, tileY: y,
-          ttl: 30 * 60,
-          rawData: {
-            armyCapacity: ArmyService.totalUnits(lord.id),
-            lastActivity: lord.actionQueue.length > 0 ? lord.actionQueue[0].actionId : 'idle',
-            lordClass:    isRogue ? lord.classId : null,
-            stanceId:     isRogue ? (lord.stance?.id || 'idle') : null,
-            stanceName:   isRogue ? stanceDef.name : null,
-          },
+    // Enemy lords on this tile — server-side detection (service role key).
+    // Client-side LordService.getAll() only returns own lords; army sizes of enemies
+    // are never in localStorage. The server checks both visibility conditions and
+    // returns only lords that pass, with enough data to build the intel record.
+    try {
+      const { data: { session } } = await SupabaseService.client.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const resp = await fetch('/api/scan/tile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ tileX: x, tileY: y }),
+      });
+      if (!resp.ok) return;
+      const d = await resp.json();
+      if (!d.ok || !Array.isArray(d.discoveries)) return;
+
+      d.discoveries.forEach(disc => {
+        const intelRec = IntelligenceService.buildRecord(_lord, {
+          type:    disc.type,
+          tileX:   disc.tileX,
+          tileY:   disc.tileY,
+          ttl:     disc.ttl,
+          rawData: disc.rawData,
         });
         IntelligenceService.addRecord(_player.id, intelRec);
         DiscoveryService.addLog(_player.id, {
           definitionId: 'enemy_lord', tileX: x, tileY: y, terrain: terrain.id, rewards: [],
           intelQuality: intelRec.qualityTier,
-          detail: isRogue ? `${stanceDef.icon} ${stanceDef.name}` : null,
+          detail: (isRogue && disc.rawData?.stanceName) ? disc.rawData.stanceName : null,
         });
       });
+    } catch (e) {
+      console.warn('[scan] enemy lord server scan failed:', e.message);
+    }
   }
 
   function _refreshDiscoveryBadge() {
@@ -459,17 +499,28 @@ const LordScreen = (() => {
     if (!busy) {
       statusHtml = `<div class="lov-status lov-status--idle">⏳ Idle — no active task</div>`;
     } else if (queueItem.actionId === 'move_lord') {
+      const isAttacking = queueItem.intent === 'attack';
       const cost = _creditCost(secs);
       statusHtml = `
-        <div class="lov-status lov-status--traveling">🗺 Traveling to (${queueItem.destX}, ${queueItem.destY})</div>
+        <div class="lov-status ${isAttacking ? 'lov-status--attacking' : 'lov-status--traveling'}">
+          ${isAttacking ? '⚔ ATACANDO — llegando a ('+queueItem.destX+', '+queueItem.destY+')' : '🗺 Traveling to ('+queueItem.destX+', '+queueItem.destY+')'}
+        </div>
+        <div class="lov-progress-row">
+          <div class="lov-bar"><div class="lov-fill${isAttacking ? ' lov-fill--attack' : ''}" id="lov-fill" style="width:${pct}%"></div></div>
+          <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
+          <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>
+        </div>
+      `;
+    } else if (queueItem.actionId === 'search_area') {
+      const cost = _creditCost(secs);
+      statusHtml = `
+        <div class="lov-status lov-status--searching">🔍 Searching Area</div>
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill" id="lov-fill" style="width:${pct}%"></div></div>
           <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
           <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>
         </div>
       `;
-    } else if (queueItem.actionId === 'search_area') {
-      statusHtml = `<div class="lov-status lov-status--searching">🔍 Searching Area — see location below</div>`;
     }
 
     // ── Location card ─────────────────────────────────────────────
@@ -491,13 +542,7 @@ const LordScreen = (() => {
       // Search action
       let searchHtml;
       if (isSearching) {
-        const searchCost = _creditCost(secs);
-        searchHtml = `
-          <div class="lov-progress-row" style="margin-top:0.4rem">
-            <div class="lov-bar"><div class="lov-fill" id="lov-fill" style="width:${pct}%"></div></div>
-            <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
-            <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${searchCost}💎</button>
-          </div>`;
+        searchHtml = `<span class="lov-lc-busy">🔍 Searching this tile…</span>`;
       } else if (!busy) {
         searchHtml = `
           <div class="lov-lc-btns">
@@ -1011,11 +1056,12 @@ const LordScreen = (() => {
 
     // City recruitment
     document.querySelectorAll('.la-recruit-btn[data-unit-id]:not(.la-hire-btn):not([disabled])').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const city = _getLordCurrentCity();
         if (!city) { _toast('Must be at your city to recruit.'); return; }
-        const result = RecruitmentService.enqueue(_lord, city, btn.dataset.unitId, 1);
-        if (!result.ok) { _toast(result.error); return; }
+        btn.disabled = true;
+        const result = await ServerActions.recruit(_lord.id, city.id, btn.dataset.unitId, 1);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
         _player = PlayerService.getById(_player.id);
         HUD.refresh();
         _renderTab();
@@ -1025,14 +1071,13 @@ const LordScreen = (() => {
 
     // Mercenary instant hire
     document.querySelectorAll('.la-hire-btn[data-unit-id]:not([disabled])').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const unitId    = btn.dataset.unitId;
-        const def       = UNIT_DEFS[unitId];
+      btn.addEventListener('click', async () => {
+        const unitId = btn.dataset.unitId;
+        const def    = UNIT_DEFS[unitId];
         if (!def) return;
-        const p         = PlayerService.getById(_player.id);
-        if ((p.coins || 0) < def.goldCost) { _toast('Not enough gold.'); return; }
-        PlayerService.update(_lord.playerId, { coins: p.coins - def.goldCost });
-        ArmyService.addUnits(_lord.id, unitId, 1);
+        btn.disabled = true;
+        const result = await ServerActions.hireMerc(_lord.id, unitId);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
         _player = PlayerService.getById(_player.id);
         HUD.refresh();
         _toast(`${def.icon} ${def.name} hired!`);
@@ -1260,11 +1305,12 @@ const LordScreen = (() => {
         <div class="bh-unit-col">
           <div class="bh-unit-col-header">Enemigo</div>
           ${report.defender.unitsStart.map(s => {
-            const surv = report.defender.unitsSurviving.find(u => u.sourceId === s.sourceId);
-            const cnt  = surv?.count ?? 0;
-            const def  = UNIT_DEFS[s.sourceId];
-            const icon = def?.icon || '⚔';
-            const name = def?.name || s.sourceId;
+            const surv    = report.defender.unitsSurviving.find(u => u.sourceId === s.sourceId);
+            const cnt     = surv?.count ?? 0;
+            const rawId   = s.sourceId.replace(/^d\d+_/, ''); // strip PvP prefix (d0_unitId → unitId)
+            const def     = UNIT_DEFS[rawId];
+            const icon    = def?.icon || '⚔';
+            const name    = def?.name || rawId;
             const badge = cnt === 0 ? '☠' : cnt < s.count ? '🩹' : '✓';
             return `<div class="bh-unit-row"><span>${icon} ${name}</span><span class="bh-unit-cnt">${badge} ${cnt}/${s.count}</span></div>`;
           }).join('')}
@@ -1299,11 +1345,13 @@ const LordScreen = (() => {
 
   // ── Search resolution ─────────────────────────────────────────
 
-  function _resolveSearch() {
+  async function _resolveSearch() {
     // Scan for enemy lords / cities on this tile before the random roll.
+    // Awaited so that server-detected enemy lords are in the intel store
+    // before DiscoveryService.search() runs and before we call _renderTab().
     if (_lord.x != null) {
       const terrain = WorldService.getTerrain(_lord.x, _lord.y);
-      _scanIntelligence(_lord.x, _lord.y, terrain);
+      await _scanIntelligence(_lord.x, _lord.y, terrain);
     }
 
     const result = DiscoveryService.search(_lord, _player.id, _armyPower(_lord.id));
@@ -1463,8 +1511,116 @@ const LordScreen = (() => {
       combatOutcome: report.winner === 'attacker' ? 'victory' : 'defeat',
     });
 
+    const { leveled, freshLord } = BattleResultView.applyRewards(report, _lord, _player);
+    _lord   = freshLord;
+    _player = PlayerService.getById(_player.id);
+    if (leveled > 0) _toast(`⭐ ¡Subiste de nivel! Ahora nivel ${freshLord.level}.`);
+    const outcomeLabel = report.winner === 'attacker' ? '⚔ Victoria' : report.winner === 'draw' ? '🤝 Empate' : '☠ Derrota';
+    _toast(`${outcomeLabel} — informe en pestaña Batallas`);
+    _activeTab = 'battles';
     _stopCountdown();
-    App.navigate('battle-result', { report, lord: _lord, player: _player });
+    _renderTab();
+    _startCountdown();
+  }
+
+  // ── PvP attack resolution ─────────────────────────────────────
+  // Called when an attack-move order completes (intent:'attack' on move_lord).
+  // Fires POST /api/pvp/resolve, applies attacker losses to local cache from
+  // the returned report (avoids a page refresh), then saves to Batallas tab + shows toast.
+
+  async function _resolvePvpAttack(tX, tY) {
+    const { data: { session } } = await SupabaseService.client.auth.getSession();
+    const token = session?.access_token;
+    if (!token) { _toast('❌ Sin sesión — no se puede resolver la batalla.'); return; }
+
+    _toast('⚔ Resolviendo combate…');
+    let d;
+    try {
+      const resp = await fetch('/api/pvp/resolve', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body:    JSON.stringify({ attackerLordId: _lord.id, targetTileX: tX, targetTileY: tY }),
+      });
+      d = await resp.json();
+    } catch (e) {
+      _toast('❌ Error de red: ' + e.message);
+      return;
+    }
+
+    if (!d.ok) {
+      _toast('❌ ' + (d.error || 'Error en el combate'));
+      return;
+    }
+
+    // Apply attacker army losses to local cache so the UI is fresh without a reload.
+    // The server applied the same losses; both sides run the same BattleEngine with the
+    // same context so the result is deterministic.
+    const armiesAll = StorageService.get('armies') || {};
+    const myArmy    = armiesAll[_lord.id] || { lordId: _lord.id, units: [] };
+    (d.report.attacker.unitsStart || []).forEach(({ sourceId }) => {
+      if (sourceId === _lord.id) return; // lord unit — HP handled below
+      const surv  = (d.report.attacker.unitsSurviving || []).find(s => s.sourceId === sourceId);
+      const stack = myArmy.units.find(u => u.unitId === sourceId);
+      if (!stack) return;
+      stack.count = surv?.count ?? 0;
+      if (surv && stack.count > 0) stack.currentHp = Math.round(surv.avgHp);
+    });
+    myArmy.units        = myArmy.units.filter(u => u.count > 0);
+    armiesAll[_lord.id] = myArmy;
+    StorageService.set('armies', armiesAll);
+
+    // Apply lord HP from battle report.
+    const lordsAll  = StorageService.get('lords') || {};
+    const myLordRec = lordsAll[_lord.id];
+    if (myLordRec) {
+      const lordUnit = (d.report.attacker.unitsSurviving || []).find(s => s.sourceId === _lord.id);
+      if (lordUnit) myLordRec.currentHp = Math.max(1, Math.round(lordUnit.avgHp));
+      lordsAll[_lord.id] = myLordRec;
+      StorageService.set('lords', lordsAll);
+    }
+    _lord = LordService.getById(_lord.id);
+
+    // Apply XP from PvP battle (gold stays at 0 — no loot from PvP in v1)
+    const freshLord = LordService.getById(_lord.id);
+    if (d.report.xpEarned > 0) {
+      freshLord.xp = (freshLord.xp || 0) + d.report.xpEarned;
+      const leveled = LordService.checkLevelUp(freshLord);
+      LordService.save(freshLord);
+      _lord = freshLord;
+      if (leveled > 0) _toast(`⭐ ¡Subiste de nivel! Ahora nivel ${freshLord.level}.`);
+    }
+
+    // Save to battle history + activity feed so the report appears in the Batallas tab
+    const pvpOutcome = d.report.winner === 'attacker' ? 'victory' : d.report.winner === 'draw' ? 'draw' : 'defeat';
+    BattleHistoryService.save(_lord.id, {
+      outcome:    pvpOutcome,
+      campName:   'Lord enemigo',
+      campIcon:   '⚔',
+      campLevel:  null,
+      terrain:    d.terrain || null,
+      goldEarned: 0,
+      xpEarned:   d.report.xpEarned || 0,
+      modelsLost: d.report.attacker.modelsLost,
+      rounds:     d.report.rounds,
+      reason:     d.report.reason,
+      report:     d.report,
+    });
+    _player = PlayerService.getById(_player.id);
+    ActivityService.log(_player.id, {
+      type:     `battle_${pvpOutcome}`,
+      icon:     pvpOutcome === 'victory' ? '⚔' : pvpOutcome === 'draw' ? '🤝' : '☠',
+      title:    pvpOutcome === 'victory' ? 'Victoria PvP' : pvpOutcome === 'draw' ? 'Empate PvP' : 'Derrota PvP',
+      detail:   `${d.report.rounds} rondas · bajas: ${d.report.attacker.modelsLost} · +${d.report.xpEarned || 0}⭐`,
+      lordName: _lord.name,
+    });
+    HUD.refresh();
+
+    const pvpLabel = pvpOutcome === 'victory' ? '⚔ Victoria PvP' : pvpOutcome === 'draw' ? '🤝 Empate PvP' : '☠ Derrota PvP';
+    _toast(`${pvpLabel} — informe en pestaña Batallas`);
+    _activeTab = 'battles';
+    _stopCountdown();
+    _renderTab();
+    _startCountdown();
   }
 
   // ── Events ────────────────────────────────────────────────────
@@ -1488,7 +1644,9 @@ const LordScreen = (() => {
 
     document.querySelectorAll('.ls-tab').forEach(btn => {
       btn.addEventListener('click', () => {
-        _activeTab = btn.dataset.tab;
+        const tab = btn.dataset.tab;
+        if (LordService.isDown(_lord) && (tab === 'army' || tab === 'discovery')) return;
+        _activeTab = tab;
         document.querySelectorAll('.ls-tab').forEach(b => b.classList.remove('ls-tab--active'));
         btn.classList.add('ls-tab--active');
         _renderTab();
@@ -1501,6 +1659,27 @@ const LordScreen = (() => {
 
   function _creditCost(secs) {
     return Math.max(1, Math.ceil(secs / 60));
+  }
+
+  function _reviveNow() {
+    const remSecs = Math.ceil(LordService.getDowntimeRemaining(_lord) / 1000);
+    const cost    = _creditCost(remSecs);
+    const result  = PlayerService.spendCredits(_player.id, cost);
+    if (!result.ok) { _toast(result.error); return; }
+
+    const lord = LordService.getById(_lord.id);
+    if (!lord) return;
+    lord.downtimeUntil  = null;
+    lord.downtimeReason = null;
+    lord.currentHp      = 1;
+    lord.hpRegenAt      = TimeService.now();
+    LordService.save(lord);
+    _lord   = lord;
+    _player = PlayerService.getById(_player.id);
+    HUD.refresh();
+    _stopCountdown();
+    _renderTab();
+    _startCountdown();
   }
 
   function _finishLordActionNow() {
@@ -1559,7 +1738,8 @@ const LordScreen = (() => {
     const currentCity    = _getLordCurrentCity();
     const hasRecruitment = currentCity && (currentCity.recruitmentQueue || []).length > 0;
     const hasStance      = LordService.isStanced(_lord);
-    if (!hasAction && !hasRecruitment && !hasStance) return;
+    const hasDown        = LordService.isDown(_lord);
+    if (!hasAction && !hasRecruitment && !hasStance && !hasDown) return;
 
     _tickTimer = setInterval(() => {
       let needsRender = false;
@@ -1568,19 +1748,24 @@ const LordScreen = (() => {
       if (_lord.actionQueue.length > 0) {
         const completed = LordService.tickActions(_lord);
         if (completed.length > 0) {
+          ServerActions.syncNow(); // persist completion to Supabase via server
           _lord = LordService.getById(_lord.id);
           completed.forEach(c => {
             if (c.actionId === 'search_area') {
               _resolveSearch();
             } else if (c.actionId === 'move_lord') {
-              _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
-              ActivityService.log(_player.id, {
-                type:     'lord_moved',
-                icon:     '📍',
-                title:    `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
-                detail:   '',
-                lordName: _lord.name,
-              });
+              if (c.intent === 'attack') {
+                _resolvePvpAttack(c.destX, c.destY);
+              } else {
+                _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
+                ActivityService.log(_player.id, {
+                  type:     'lord_moved',
+                  icon:     '📍',
+                  title:    `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
+                  detail:   '',
+                  lordName: _lord.name,
+                });
+              }
             } else {
               _toast(`✓ ${c.name} completed!`);
               ActivityService.log(_player.id, {
@@ -1602,6 +1787,18 @@ const LordScreen = (() => {
           const fillEl    = document.getElementById(`la-fill-${currId}`)  || document.getElementById('lov-fill');
           if (timerEl) timerEl.textContent = TimeService.formatDuration(remaining);
           if (fillEl)  fillEl.style.width  = `${prog}%`;
+        }
+      }
+
+      // ─ Downtime tick ─
+      if (LordService.isDown(_lord)) {
+        if (LordService.tickDowntime(_lord)) {
+          _lord = LordService.getById(_lord.id);
+          _toast('Lord has recovered and is ready again.');
+          needsRender = true;
+        } else {
+          const cdEl = document.getElementById('ls-lord-down-cd');
+          if (cdEl) cdEl.textContent = TimeService.formatDuration(Math.ceil(LordService.getDowntimeRemaining(_lord) / 1000));
         }
       }
 
@@ -1631,6 +1828,7 @@ const LordScreen = (() => {
       if (city && (city.recruitmentQueue || []).length > 0) {
         const completed = RecruitmentService.tick(city);
         if (completed.length > 0) {
+          ServerActions.syncNow(); // persist completion + army update to Supabase
           completed.forEach(c => {
             const uDef = UNIT_DEFS[c.unitId];
             _toast(`${uDef?.icon || '⚔'} ${uDef?.name || c.unitId} ×${c.count} ready!`);

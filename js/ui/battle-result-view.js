@@ -239,5 +239,5 @@ const BattleResultView = (() => {
     });
   }
 
-  return { render };
+  return { render, applyRewards: _applyRewards };
 })();

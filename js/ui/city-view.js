@@ -659,9 +659,10 @@ const CityView = (() => {
 
     // Build / upgrade buttons
     document.querySelectorAll('.bld2-btn[data-building]:not([disabled])').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const result = ConstructionService.enqueue(_city, btn.dataset.building, _city.resources);
-        if (!result.ok) { _toast(result.error); return; }
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const result = await ServerActions.build(_city.id, btn.dataset.building);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
         _city = CityService.getById(_city.id);
         _renderContent();
         _startCountdown();
@@ -701,6 +702,7 @@ const CityView = (() => {
     _tickTimer = setInterval(() => {
       const completed = ConstructionService.tick(_city);
       if (completed.length > 0) {
+        ServerActions.syncNow(); // persist building completion to Supabase
         completed.forEach(n => _toast(`✓ ${n} completed!`));
         _city = CityService.getById(_city.id);
         const lp = document.getElementById('cv-left');

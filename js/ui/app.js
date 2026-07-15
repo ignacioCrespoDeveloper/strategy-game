@@ -32,6 +32,26 @@ const App = (() => {
       worldResult.data?.forEach(row => { serverData[row.key] = row.value; });
       StorageService.hydrate(serverData);
 
+      // Run server-side catch-up: completes any queues / HP regen that
+      // accumulated while the player was offline. The server writes the
+      // updated state to Supabase and returns it so we can overwrite the
+      // just-hydrated localStorage in one extra round-trip.
+      try {
+        const syncRes = await fetch('/api/sync', {
+          method:  'POST',
+          headers: { Authorization: 'Bearer ' + session.access_token },
+        });
+        if (syncRes.ok) {
+          const { state, events } = await syncRes.json();
+          if (state) StorageService.hydrate(state);
+          // Store any completion events (buildings, units, lords) so the
+          // first screen can pick them up and show toasts.
+          if (events?.length > 0) window._pendingSyncEvents = events;
+        }
+      } catch (_) {
+        // Non-fatal — server may be unreachable; cached state is used
+      }
+
       // Re-populate session keys from Supabase session
       const username = session.user.user_metadata?.username
         || session.user.email?.split('@')[0];
@@ -105,6 +125,11 @@ const App = (() => {
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'tech-tree');
         TechTreeScreen.render(root, data);
+        break;
+      case 'attack-confirm':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'map');
+        AttackConfirmView.render(root, data);
         break;
       case 'battle-result':
         Nav.hide();

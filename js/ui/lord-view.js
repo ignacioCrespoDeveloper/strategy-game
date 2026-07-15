@@ -171,13 +171,21 @@ const LordView = (() => {
     `;
   }
 
-  function _onSubmit() {
+  async function _onSubmit() {
     const name    = document.getElementById('lord-name').value;
     const errorEl = document.getElementById('lord-error');
+    const btn     = document.getElementById('lord-begin-btn');
     errorEl.textContent = '';
+    btn.disabled  = true;
+    btn.textContent = 'Creating…';
 
-    const result = LordService.create(_player.id, name, _selectedRace, _selectedClass);
-    if (!result.ok) { errorEl.textContent = result.error; return; }
+    const result = await ServerActions.createLord(name, _selectedRace, _selectedClass);
+    if (!result.ok) {
+      errorEl.textContent = result.error || 'Server error';
+      btn.disabled = false;
+      btn.textContent = 'Begin your Legacy';
+      return;
+    }
 
     const updatedPlayer = PlayerService.getById(_player.id);
     EventBus.emit('lord:created', { player: updatedPlayer, lord: result.lord });

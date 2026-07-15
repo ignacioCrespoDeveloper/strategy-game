@@ -19,6 +19,11 @@ const StorageService = (() => {
   // Keys managed by auth flow — never synced to DB
   const NO_SYNC = new Set(['session']);
 
+  // Keys whose authoritative copy lives on the server.
+  // Client writes these to localStorage for in-session reads,
+  // but never pushes them to Supabase — only server endpoints write them.
+  const SERVER_KEYS = new Set(['players', 'lords', 'cities', 'armies']);
+
   let _pending   = new Map(); // key → value awaiting flush
   let _syncTimer = null;
 
@@ -37,7 +42,7 @@ const StorageService = (() => {
   function set(key, value) {
     try {
       localStorage.setItem(_key(key), JSON.stringify(value));
-      if (!NO_SYNC.has(key)) _queueSync(key, value);
+      if (!NO_SYNC.has(key) && !SERVER_KEYS.has(key)) _queueSync(key, value);
       return true;
     } catch { return false; }
   }

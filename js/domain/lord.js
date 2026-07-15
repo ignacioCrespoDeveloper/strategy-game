@@ -102,18 +102,20 @@ const LordService = (() => {
     const lord = {
       id, playerId,
       name: n, race: raceId, classId,
-      createdAt:    TimeService.now(),
-      level:        1,
-      xp:           0,
-      xpToNext:     150,
-      talentPoints: 0,
-      actionQueue:  [],
-      stance:       { id: 'idle', startedAt: null, finishAt: null },
-      baseStats:    { ...LORD_BASE_STATS },
-      currentHp:    LORD_BASE_STATS.health,
-      hpRegenAt:    TimeService.now(),
-      x:            null,
-      y:            null,
+      createdAt:      TimeService.now(),
+      level:          1,
+      xp:             0,
+      xpToNext:       150,
+      talentPoints:   0,
+      actionQueue:    [],
+      stance:         { id: 'idle', startedAt: null, finishAt: null },
+      baseStats:      { ...LORD_BASE_STATS },
+      currentHp:      LORD_BASE_STATS.health,
+      hpRegenAt:      TimeService.now(),
+      downtimeUntil:  null,
+      downtimeReason: null,
+      x:              null,
+      y:              null,
     };
 
     lords[id] = lord;
@@ -146,7 +148,10 @@ const LordService = (() => {
 
   // Enqueue a move action. Travel time = 20s per tile, reduced by speed stat.
   // Uses Chebyshev distance (diagonal = 1 tile).
-  function enqueueMoveAction(lord, destX, destY) {
+  // opts.intent = 'attack' tags the move so tickActions can signal the UI to
+  // call POST /api/pvp/resolve on arrival instead of a plain arrival toast.
+  function enqueueMoveAction(lord, destX, destY, opts) {
+    if (isDown(lord)) return { ok: false, error: 'Lord is incapacitated and cannot move.' };
     if (lord.actionQueue.length > 0) return { ok: false, error: 'An action is already in progress.' };
     if (isStanced(lord)) {
       const def = STANCE_DEFS[lord.stance.id];
@@ -156,16 +161,22 @@ const LordService = (() => {
     const speed    = getEffectiveStats(lord).speed;
     const fromX    = lord.x ?? destX;
     const fromY    = lord.y ?? destY;
-    const distance = Math.max(1, Math.max(Math.abs(destX - fromX), Math.abs(destY - fromY)));
-    const secs     = Math.round(distance * 20 * (5 / speed));
+    const distance = Math.max(Math.abs(destX - fromX), Math.abs(destY - fromY));
+    // Attack moves always take at least 5 minutes (300s) — gives the defender a warning window
+    // and ensures the attacker sees the travel countdown on the homepage.
+    const minSecs  = opts?.intent === 'attack' ? 60 : 0;
+    const secs     = Math.max(minSecs, distance > 0 ? Math.round(distance * 20 * (5 / speed)) : 0);
 
-    const now = TimeService.now();
-    lord.actionQueue = [{ actionId: 'move_lord', startedAt: now, finishAt: now + secs * 1000, destX, destY }];
+    const now  = TimeService.now();
+    const item = { actionId: 'move_lord', startedAt: now, finishAt: now + secs * 1000, destX, destY };
+    if (opts && opts.intent) item.intent = opts.intent;
+    lord.actionQueue = [item];
     save(lord);
     return { ok: true, secs, distance };
   }
 
   function enqueueAction(lord, actionId) {
+    if (isDown(lord)) return { ok: false, error: 'Lord is incapacitated and cannot act.' };
     if (lord.actionQueue.length > 0) return { ok: false, error: 'An action is already in progress.' };
     const def = LORD_ACTIONS[actionId];
     if (!def) return { ok: false, error: 'Unknown action.' };
@@ -192,9 +203,36 @@ const LordService = (() => {
     return { ok: true };
   }
 
+  // ── Downtime (downed / captured state) ───────────────────────
+
+  // True while the lord is in post-battle recovery (downed or captured).
+  function isDown(lord) {
+    return !!(lord.downtimeUntil && TimeService.now() < lord.downtimeUntil);
+  }
+
+  // Milliseconds remaining in downtime (0 if not downed).
+  function getDowntimeRemaining(lord) {
+    if (!lord.downtimeUntil) return 0;
+    return Math.max(0, lord.downtimeUntil - TimeService.now());
+  }
+
+  // Call every tick. Clears expired downtime, sets HP=1, saves.
+  // Returns true when downtime just expired (caller should rerender).
+  function tickDowntime(lord) {
+    if (!lord.downtimeUntil) return false;
+    if (TimeService.now() < lord.downtimeUntil) return false;
+    lord.downtimeUntil  = null;
+    lord.downtimeReason = null;
+    lord.currentHp      = 1;
+    lord.hpRegenAt      = TimeService.now();
+    save(lord);
+    return true;
+  }
+
   // Lazy HP regen: call whenever displaying a lord. Mutates in place; returns true if changed.
   // Rate: 2% of maxHp per minute.
   function tickHp(lord) {
+    if (isDown(lord)) return false; // no regen during downtime
     const maxHp    = getEffectiveStats(lord).health;
     const curHp    = lord.currentHp ?? maxHp;
     if (curHp >= maxHp) { lord.currentHp = maxHp; return false; }
@@ -256,7 +294,7 @@ const LordService = (() => {
 
     const leveled = checkLevelUp(lord);
     save(lord);
-    return [{ name: def?.name || item.actionId, actionId: item.actionId, leveled, destX: item.destX, destY: item.destY }];
+    return [{ name: def?.name || item.actionId, actionId: item.actionId, leveled, destX: item.destX, destY: item.destY, intent: item.intent || null }];
   }
 
   function actionTimeRemaining(lord) {
@@ -342,5 +380,6 @@ const LordService = (() => {
     getEffectiveStats, getActionDuration,
     getStance, isStanced, enterStance, exitStance, tickStance,
     getArmyPowerCap,
+    isDown, getDowntimeRemaining, tickDowntime,
   };
 })();

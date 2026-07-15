@@ -15,7 +15,7 @@
 
 const _scale = (base, factor, level) => Math.floor(base * Math.pow(factor, level - 1));
 
-const BUILDING_DEFS = {
+var BUILDING_DEFS = {
 
   // ── INFRASTRUCTURE ──────────────────────────────────────────────
 
