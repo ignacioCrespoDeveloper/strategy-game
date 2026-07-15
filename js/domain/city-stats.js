@@ -11,11 +11,11 @@ const CityStatsService = (() => {
   // Base values before any modifiers
   const BASE = {
     corruption:   0,
-    happiness:    75,
-    hygiene:      75,
-    unemployment: 0,
-    religion:     75,
-    culture:      75,
+    happiness:    50,
+    hygiene:      50,
+    unemployment: 15,
+    religion:     50,
+    culture:      50,
     stability:    50,
     security:     20,
   };
@@ -66,8 +66,8 @@ const CityStatsService = (() => {
     // Population pressure — larger populations demand more services
     const pop = city.population || 1000;
     if (pop > 1000) {
-      stats.hygiene      -= Math.floor((pop - 1000) / 5000);
-      stats.unemployment += Math.floor((pop - 1000) / 10000);
+      stats.hygiene      -= Math.floor((pop - 1000) / 2000);
+      stats.unemployment += Math.floor((pop - 1000) / 5000);
     }
 
     _clamp(stats);
@@ -118,33 +118,35 @@ const CityStatsService = (() => {
     return                       { label: 'Critical',  cssClass: 'sh-critical'  };
   }
 
-  // ── Population growth rate (pop/hour) ─────────────────────────
+  // ── Population growth rate (pop/hour) — percentage of current pop ──
 
   function getPopulationGrowthRate(city, stats, productionRates) {
-    let rate = 0;
-    const food = productionRates.food || 0;
+    const pop = city.population || 1000;
+    let pct = 0; // percent per hour
 
-    if      (food > 0)                              rate += 200;
-    else if (food === 0 && (city.population || 1000) > 1000) rate -= 50;
+    if      (stats.happiness >= 70) pct += 0.30;
+    else if (stats.happiness >= 50) pct += 0.15;
+    else if (stats.happiness >= 35) pct += 0.05;
+    else if (stats.happiness <  20) pct -= 0.20;
+    else                             pct -= 0.08;
 
-    if      (stats.happiness >= 70) rate += 200;
-    else if (stats.happiness >= 50) rate += 100;
-    else if (stats.happiness < 20)  rate -= 300;
-    else if (stats.happiness < 35)  rate -= 100;
+    if      (stats.hygiene >= 60) pct += 0.15;
+    else if (stats.hygiene <  25) pct -= 0.10;
+    else if (stats.hygiene <  10) pct -= 0.25;
 
-    if      (stats.hygiene >= 60) rate += 100;
-    else if (stats.hygiene <  25) rate -= 100;
-    else if (stats.hygiene <  10) rate -= 300;
+    const food = (productionRates && productionRates.food) || 0;
+    if      (food > 0)   pct += 0.08;
+    else if (pop > 1000) pct -= 0.05;
 
-    // Too many bad statuses cause population decline
     const warningCount = Object.keys(stats).filter(k => {
       const h = getStatHealth(k, stats[k]);
       return h.label === 'Warning' || h.label === 'Critical';
     }).length;
-    if (warningCount >= 3) rate -= 200;
-    if (warningCount >= 5) rate -= 200;
+    if (warningCount >= 3) pct -= 0.10;
+    if (warningCount >= 5) pct -= 0.20;
 
-    return Math.max(-800, Math.min(800, rate));
+    pct = Math.max(-0.50, Math.min(0.55, pct));
+    return Math.round(pop * pct * 150 / 100);
   }
 
   // ── Stat trend indicators ─────────────────────────────────────
@@ -164,6 +166,30 @@ const CityStatsService = (() => {
     );
   }
 
+  // ── Building degradation when tier drops ─────────────────────
+  // If usedSlots > maxSlots (can only happen after population decline drops a tier),
+  // randomly degrade buildings until slots fit.
+
+  function degradeExcessBuildings(city) {
+    const { usedSlots, maxSlots } = getSlotInfo(city);
+    let excess = usedSlots - maxSlots;
+    if (excess <= 0) return false;
+
+    const entries = Object.entries(city.buildings || {}).filter(([, v]) => v > 0);
+    for (let i = entries.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [entries[i], entries[j]] = [entries[j], entries[i]];
+    }
+    for (const [id, lvl] of entries) {
+      if (excess <= 0) break;
+      const degrade = Math.min(lvl, excess);
+      city.buildings[id] = lvl - degrade;
+      if (city.buildings[id] <= 0) delete city.buildings[id];
+      excess -= degrade;
+    }
+    return true;
+  }
+
   // ── Population tick ───────────────────────────────────────────
   // Called from ProductionService.tick(). Mutates city.population. Does NOT save.
 
@@ -173,16 +199,17 @@ const CityStatsService = (() => {
     if (rate !== 0) {
       city.population = Math.max(1, Math.round((city.population || 1000) + rate * elapsed));
     }
+    degradeExcessBuildings(city);
     city.lastPopulationUpdate = TimeService.now();
   }
 
   // ── City level & building slots ───────────────────────────────
 
   const SLOT_TABLE = [
-    { minPop:     0, level: 1, maxSlots:  60 },
-    { minPop:  5000, level: 2, maxSlots: 100 },
-    { minPop: 15000, level: 3, maxSlots: 150 },
-    { minPop: 40000, level: 4, maxSlots: 220 },
+    { minPop:      0, level: 1, maxSlots:  60 },
+    { minPop:  10000, level: 2, maxSlots: 100 },
+    { minPop:  25000, level: 3, maxSlots: 150 },
+    { minPop:  50000, level: 4, maxSlots: 220 },
     { minPop: 100000, level: 5, maxSlots: 320 },
   ];
 
@@ -205,5 +232,5 @@ const CityStatsService = (() => {
     return { level: row.level, maxSlots: row.maxSlots, usedSlots };
   }
 
-  return { META, getModifiers, getStats, getCityStatus, getStatHealth, getPopulationGrowthRate, getStatTrends, tickPopulation, getCityLevel, getSlotInfo };
+  return { META, getModifiers, getStats, getCityStatus, getStatHealth, getPopulationGrowthRate, getStatTrends, tickPopulation, degradeExcessBuildings, getCityLevel, getSlotInfo };
 })();

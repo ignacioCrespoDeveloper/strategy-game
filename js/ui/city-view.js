@@ -33,12 +33,14 @@ const CityView = (() => {
     _city   = CityService.getById(city.id);
 
     ProductionService.tick(_city, _lord);
-    _city = CityService.getById(_city.id);
+    _city   = CityService.getById(_city.id);
+    _player = PlayerService.getById(_player.id);
 
     const completed = ConstructionService.tick(_city);
     if (completed.length > 0) {
       _city = CityService.getById(_city.id);
       completed.forEach(name => _toast(`✓ ${name} completed!`));
+      ServerActions.syncNow();
     }
 
     const eventMessages = EventService.tick(_city);
@@ -46,9 +48,12 @@ const CityView = (() => {
       _city = CityService.getById(_city.id);
     }
 
+    _bldTab = 'overview';
+
     root.innerHTML = _shell();
     _renderContent();
     _bindShellEvents();
+    _startCountdown();
 
     eventMessages.forEach(msg => _toast(msg));
   }
@@ -269,16 +274,24 @@ const CityView = (() => {
 
     const garrisonTotal = garrison.reduce((s, r) => s + r.count, 0);
 
-    const fmtRate = n => n === 0 ? '—' : (n > 0 ? '+' : '') + (Number.isInteger(n) ? n : n.toFixed(1));
+    const fmtRate    = n => n === 0 ? '—' : (n > 0 ? '+' : '') + (Number.isInteger(n) ? n : n.toFixed(1));
+    const fmtRateGold = n => { const r = Math.round(n); return (r > 0 ? '+' : '') + r + '/h'; };
 
-    // Tier progress
-    const TIER_THRESHOLDS = [0, 5000, 15000, 40000, 100000];
+    // Gold economy data
+    const player         = _player ? PlayerService.getById(_player.id) : null;
+    const cityGoldRate   = ProductionService.getGoldRate(_city);
+    const empireGoldRate = ProductionService.getNetGoldRate(_player?.id || _city.playerId);
+    const goldRateClass  = empireGoldRate >= 0 ? 'cvov-rate-pos' : 'cvov-rate-neg';
+
+    // Tier progress — T5 starts at 100k, peak goal is 150k
+    const TIER_THRESHOLDS = [0, 10000, 25000, 50000, 100000, 150000];
     const currentPop  = Math.floor(_city.population || 1000);
     const isMaxTier   = level >= 5;
     const tierStart   = TIER_THRESHOLDS[level - 1] || 0;
-    const tierEnd     = isMaxTier ? null : TIER_THRESHOLDS[level];
-    const popToNext   = isMaxTier ? 0 : Math.max(0, tierEnd - currentPop);
-    const tierPct     = isMaxTier ? 100 : Math.min(100, Math.round(
+    const tierEnd     = TIER_THRESHOLDS[level] || 150000;
+    const isPeakPop   = isMaxTier && currentPop >= 150000;
+    const popToNext   = isPeakPop ? 0 : Math.max(0, tierEnd - currentPop);
+    const tierPct     = isPeakPop ? 100 : Math.min(100, Math.round(
       ((currentPop - tierStart) / (tierEnd - tierStart)) * 100
     ));
 
@@ -294,7 +307,7 @@ const CityView = (() => {
     };
 
     let tierEta = '';
-    if (!isMaxTier) {
+    if (!isPeakPop) {
       if (growth <= 0) {
         tierEta = growth === 0 ? 'Population stagnant' : 'Population declining';
       } else {
@@ -323,23 +336,27 @@ const CityView = (() => {
           <div class="cvov-hero-pop">
             <div class="cvov-hero-pop-val">${currentPop.toLocaleString()}</div>
             <div class="cvov-hero-pop-label">Population</div>
-            <div class="cvov-hero-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</div>
+            <div class="cvov-hero-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr (${growthSign}${Math.abs(Math.round(growth * 24 / (currentPop || 1) * 100 * 10) / 10)}%/d)</div>
+          </div>
+          <div class="cvov-hero-gold">
+            <div class="cvov-hero-gold-rate">+${cityGoldRate}💰/h</div>
+            <div class="cvov-hero-gold-label">Gold / hr</div>
           </div>
         </div>
 
         <!-- Tier progress -->
-        ${isMaxTier ? `
+        ${isPeakPop ? `
         <div class="cvov-tier-prog cvov-tier-prog--max">
-          <span>⭐ Maximum Tier — City fully developed</span>
+          <span>⭐ Peak Population — City fully developed</span>
         </div>
         ` : `
         <div class="cvov-tier-prog">
           <div class="cvov-tp-row">
-            <span class="cvov-tp-tiers">Tier ${level} → Tier ${level + 1}</span>
+            <span class="cvov-tp-tiers">${isMaxTier ? `Tier 5 → Peak` : `Tier ${level} → Tier ${level + 1}`}</span>
             <span class="cvov-tp-count">${currentPop.toLocaleString()} / ${tierEnd.toLocaleString()}</span>
             <span class="cvov-tp-eta ${growth <= 0 ? 'cvov-tp-eta--warn' : ''}">${tierEta}</span>
           </div>
-          <div class="cvov-tp-need">${popToNext.toLocaleString()} more population needed to reach Tier ${level + 1}</div>
+          <div class="cvov-tp-need">${popToNext.toLocaleString()} more population needed to reach ${isMaxTier ? 'peak (150k)' : `Tier ${level + 1}`}</div>
         </div>
         `}
 
@@ -360,13 +377,11 @@ const CityView = (() => {
           <div class="cvov-res-table">
             <div class="cvov-res-thead">
               <span class="cvov-res-th-res">Resource</span>
-              <span class="cvov-res-th">Stock</span>
               <span class="cvov-res-th">/ hr</span>
               <span class="cvov-res-th">/ day</span>
               <span class="cvov-res-th">/ week</span>
             </div>
             ${Object.entries(RES).map(([key, meta]) => {
-              const stock  = Math.floor(_city.resources[key] || 0);
               const rate   = rates[key] || 0;
               const day    = rate * 24;
               const week   = rate * 24 * 7;
@@ -374,7 +389,6 @@ const CityView = (() => {
               return `
                 <div class="cvov-res-row">
                   <span class="cvov-res-name"><span class="cvov-res-icon">${meta.icon}</span>${meta.name}</span>
-                  <span class="cvov-res-stock">${stock.toLocaleString()}</span>
                   <span class="cvov-res-rate ${rClass}">${fmtRate(rate)}</span>
                   <span class="cvov-res-rate ${rClass}">${fmtRate(day)}</span>
                   <span class="cvov-res-rate ${rClass}">${fmtRate(week)}</span>
@@ -460,7 +474,8 @@ const CityView = (() => {
 
     const { locked, reasons } = BuildingUnlockService.check(_city, _lord, def);
 
-    const canAfford = !atMax && !locked && !busy && !inQueue && ConstructionService.canAfford(_city, def.id, _city.resources);
+    const playerRes = (_player && _player.resources) ? _player.resources : {};
+    const canAfford = !atMax && !locked && !busy && !inQueue && ConstructionService.canAfford(_city, def.id, playerRes);
     const cost      = !atMax ? def.cost(targetLvl) : {};
     const duration  = !atMax ? TimeService.formatDuration(def.buildTime(targetLvl)) : '';
 
@@ -607,7 +622,7 @@ const CityView = (() => {
     return Object.entries(cost)
       .filter(([, v]) => v > 0)
       .map(([res, v]) => {
-        const has = (_city.resources[res] || 0) >= v;
+        const has = Math.floor((_player?.resources || {})[res] || 0) >= v;
         return `<span class="${has ? 'bld2-res' : 'bld2-res bld2-res--short'}">${RES[res]?.icon || res} ${v}</span>`;
       })
       .join('');
@@ -659,9 +674,10 @@ const CityView = (() => {
 
     // Build / upgrade buttons
     document.querySelectorAll('.bld2-btn[data-building]:not([disabled])').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const result = ConstructionService.enqueue(_city, btn.dataset.building, _city.resources);
-        if (!result.ok) { _toast(result.error); return; }
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const result = await ServerActions.build(_city.id, btn.dataset.building);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
         _city = CityService.getById(_city.id);
         _renderContent();
         _startCountdown();
@@ -671,25 +687,28 @@ const CityView = (() => {
     });
   }
 
-  function _instantComplete() {
+  async function _instantComplete() {
     if (_city.constructionQueue.length === 0) return;
-    const secs   = ConstructionService.timeRemaining(_city);
-    const cost   = Math.max(1, Math.ceil(secs / 60));
-    const result = PlayerService.spendCredits(_player.id, cost);
-    if (!result.ok) { _toast(result.error); return; }
+    const btn = document.getElementById('cv-boost-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⏳ Completing…'; }
+
+    const result = await ServerActions.instantBuild(_city.id);
+
+    if (!result.ok) {
+      _toast(result.error || 'Failed to instant-complete');
+      if (btn) { btn.disabled = false; btn.textContent = '💎 Instant'; }
+      return;
+    }
+
+    _city   = CityService.getById(_city.id);
     _player = PlayerService.getById(_player.id);
-    _city.constructionQueue[0].finishAt = TimeService.now() - 1;
-    CityService.save(_city);
-    const completed = ConstructionService.tick(_city);
-    _city = CityService.getById(_city.id);
-    completed.forEach(n => _toast(`✓ ${n} completed!`));
     _stopCountdown();
     HUD.refresh();
-
     const refreshedLeft = document.getElementById('cv-left');
     if (refreshedLeft) refreshedLeft.innerHTML = _leftPanelHtml();
     _renderContent();
     _startCountdown();
+    _toast('✓ Building completed instantly!');
   }
 
   // ── Live countdown ────────────────────────────────────────────
@@ -701,6 +720,7 @@ const CityView = (() => {
     _tickTimer = setInterval(() => {
       const completed = ConstructionService.tick(_city);
       if (completed.length > 0) {
+        ServerActions.syncNow(); // persist building completion to Supabase
         completed.forEach(n => _toast(`✓ ${n} completed!`));
         _city = CityService.getById(_city.id);
         const lp = document.getElementById('cv-left');

@@ -7,6 +7,8 @@ const OverviewScreen = (() => {
   let _player          = null;
   let _root            = null;
   let _tickTimer       = null;
+  let _pollTimer       = null;
+  let _lastSeenFeedId  = null;
   let _movementsOpen   = true;
   let _citiesCollapsed = false;
   let _lordsCollapsed  = false;
@@ -15,6 +17,7 @@ const OverviewScreen = (() => {
 
   function render(root, { lord, player }) {
     _stopTicker();
+    _stopPolling();
     _root   = root;
     _player = PlayerService.getById(player.id);
     _lord   = lord ? LordService.getById(lord.id) : null;
@@ -24,34 +27,92 @@ const OverviewScreen = (() => {
     root.innerHTML = _shell();
     _bindEvents();
     _startTicker();
+    _startPolling();
+    _flushSyncEvents();
   }
 
-  function stop() { _stopTicker(); }
+  function stop() { _stopTicker(); _stopPolling(); }
+
+  // Show any offline-progression notifications queued by App.init's /api/sync call.
+  function _flushSyncEvents() {
+    const pending = window._pendingSyncEvents;
+    if (!pending?.length) return;
+    window._pendingSyncEvents = null;
+
+    const LABEL = {
+      building_completed:    e => `🏛 ${e.cityName}: ${e.buildingId.replace(/_/g, ' ')} completed`,
+      recruitment_completed: e => `⚔ ${e.cityName}: ${e.count}× ${e.unitId.replace(/_/g, ' ')} ready`,
+      lord_recovered:        e => `💚 ${e.lordName} has recovered`,
+      lord_action_done:      e => e.destX != null ? `🗺 ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
+    };
+
+    // Deduplicate and show at most 3 toasts so we don't flood the screen
+    const shown = new Set();
+    let count   = 0;
+    for (const ev of pending) {
+      if (count >= 3) break;
+      const fn  = LABEL[ev.type];
+      const msg = fn ? fn(ev) : null;
+      if (!msg || shown.has(msg)) continue;
+      shown.add(msg);
+      setTimeout(() => _toast(msg), count * 800);
+      count++;
+    }
+    if (pending.length > 3) {
+      setTimeout(() => _toast(`+${pending.length - 3} more updates while offline`), count * 800);
+    }
+  }
 
   function _stopTicker() {
     if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
   }
 
+  function _stopPolling() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  }
+
   function _startTicker() {
-    const cities    = CityService.getPlayerCities(_player.id);
-    const hasAction = _lord && _lord.actionQueue.length > 0;
-    const hasConstr = cities.some(c => c.constructionQueue.length > 0);
-    if (!hasAction && !hasConstr) return;
+    const cities     = CityService.getPlayerCities(_player.id);
+    const allLords   = LordService.getByPlayer(_player.id);
+    const hasAction  = allLords.some(l => l.actionQueue.length > 0);
+    const hasConstr  = cities.some(c => c.constructionQueue.length > 0);
+    const feed       = ActivityService.get(_player.id);
+    const hasThreats = feed.some(e => e.type === 'pvp_threat' && e.etaAt && e.etaAt > TimeService.now());
+    const hasDown    = allLords.some(l => LordService.isDown(l));
+    if (!hasAction && !hasConstr && !hasThreats && !hasDown) return;
 
     _tickTimer = setInterval(() => {
       let needsRerender = false;
 
-      // Lord action
-      if (_lord && _lord.actionQueue.length > 0) {
-        const completed = LordService.tickActions(_lord);
+      // Check ALL lords for completed actions (not just _lord)
+      const activeLords = LordService.getByPlayer(_player.id).filter(l => l.actionQueue.length > 0);
+      for (const lord of activeLords) {
+        const completed = LordService.tickActions(lord);
         if (completed.length > 0) {
-          _lord = LordService.getById(_lord.id);
+          ServerActions.syncNow(); // persist lord action completion to Supabase
+          if (_lord && lord.id === _lord.id) _lord = LordService.getById(lord.id);
+          const atk = completed.find(c => c.actionId === 'move_lord' && c.intent === 'attack');
+          if (atk) {
+            const lid = lord.id;
+            const dX  = atk.destX;
+            const dY  = atk.destY;
+            // Give syncNow() a moment to write before the PvP resolve reads
+            setTimeout(() => _resolveAttack(lid, dX, dY), 800);
+          }
           needsRerender = true;
         } else {
-          const fill  = document.getElementById('ov-lord-fill');
-          const timer = document.getElementById('ov-lord-timer');
-          if (fill)  fill.style.width  = `${Math.floor(LordService.actionProgress(_lord) * 100)}%`;
-          if (timer) timer.textContent = TimeService.formatDuration(LordService.actionTimeRemaining(_lord));
+          // Update movement panel row timer in-place (IDs added in _movementsPanel)
+          const fill = document.getElementById(`ov-mv-fill-${lord.id}`);
+          const time = document.getElementById(`ov-mv-time-${lord.id}`);
+          if (fill) fill.style.width = `${Math.floor(LordService.actionProgress(lord) * 100)}%`;
+          if (time) time.textContent = TimeService.formatDuration(LordService.actionTimeRemaining(lord));
+          // Also update lord card bars if this is _lord
+          if (_lord && lord.id === _lord.id) {
+            const cardFill  = document.getElementById('ov-lord-fill');
+            const cardTimer = document.getElementById('ov-lord-timer');
+            if (cardFill)  cardFill.style.width  = `${Math.floor(LordService.actionProgress(lord) * 100)}%`;
+            if (cardTimer) cardTimer.textContent = TimeService.formatDuration(LordService.actionTimeRemaining(lord));
+          }
         }
       }
 
@@ -60,6 +121,7 @@ const OverviewScreen = (() => {
         if (city.constructionQueue.length === 0) return;
         const completed = ConstructionService.tick(city);
         if (completed.length > 0) {
+          ServerActions.syncNow(); // persist building completion to Supabase
           needsRerender = true;
         } else {
           const fill  = document.getElementById(`ov-city-fill-${city.id}`);
@@ -69,19 +131,260 @@ const OverviewScreen = (() => {
         }
       });
 
+      // Tick downed lords — clear expired downtime or update countdown in-place
+      LordService.getByPlayer(_player.id).forEach(lord => {
+        if (LordService.tickDowntime(lord)) {
+          needsRerender = true;
+        } else if (LordService.isDown(lord)) {
+          const cdEl = document.getElementById(`ov-lord-down-cd-${lord.id}`);
+          if (cdEl) cdEl.textContent = TimeService.formatDuration(Math.ceil(LordService.getDowntimeRemaining(lord) / 1000));
+        }
+      });
+
+      // Update threat countdown timers in-place (banner + movements panel rows)
+      const threats = ActivityService.get(_player.id).filter(e => e.type === 'pvp_threat' && e.etaAt);
+      threats.forEach((t, i) => {
+        const now2      = TimeService.now();
+        const remaining = Math.max(0, Math.ceil((t.etaAt - now2) / 1000));
+        if (remaining === 0) { needsRerender = true; return; }
+        const pct       = t.at ? Math.min(100, Math.floor(((now2 - t.at) / (t.etaAt - t.at)) * 100)) : 0;
+        const formatted = TimeService.formatDuration(remaining);
+        const bannerEl  = document.getElementById(`ov-threat-eta-${i}`);
+        if (bannerEl) bannerEl.textContent = formatted;
+        const incTime = document.getElementById(`ov-inc-time-${i}`);
+        if (incTime) incTime.textContent = formatted;
+        const incFill = document.getElementById(`ov-inc-fill-${i}`);
+        if (incFill) incFill.style.width = `${pct}%`;
+      });
+
       if (needsRerender) {
         _stopTicker();
         if (_lord) _lord = LordService.getById(_lord.id);
-        if (_root) {
-          _root.innerHTML = _shell();
-          _bindEvents();
-          _startTicker();
-        }
+        if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
       }
     }, 1000);
   }
 
+  // ── PvP attack resolution (fires when attacker's travel timer ends) ──
+
+  async function _resolveAttack(attackingLordId, tX, tY) {
+    let token;
+    try {
+      const { data: { session } } = await SupabaseService.client.auth.getSession();
+      token = session?.access_token;
+    } catch (_) {}
+    if (!token) { _toast('❌ No active session to resolve battle.'); return; }
+
+    _toast('⚔ Resolving combat…');
+    let d;
+    try {
+      const resp = await fetch('/api/pvp/resolve', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body:    JSON.stringify({ attackerLordId: attackingLordId, targetTileX: tX, targetTileY: tY }),
+      });
+      d = await resp.json();
+    } catch (e) {
+      _toast('❌ Network error: ' + e.message);
+      return;
+    }
+
+    if (!d.ok) {
+      _toast('❌ ' + (d.error || 'Error en el combate'));
+      return;
+    }
+
+    // Apply army losses locally so the UI refreshes without a reload
+    const armiesAll = StorageService.get('armies') || {};
+    const myArmy    = armiesAll[attackingLordId] || { lordId: attackingLordId, units: [] };
+    (d.report.attacker.unitsStart || []).forEach(({ sourceId }) => {
+      if (sourceId === attackingLordId) return;
+      const surv  = (d.report.attacker.unitsSurviving || []).find(s => s.sourceId === sourceId);
+      const stack = myArmy.units.find(u => u.unitId === sourceId);
+      if (!stack) return;
+      stack.count = surv?.count ?? 0;
+      if (surv && stack.count > 0) stack.currentHp = Math.round(surv.avgHp);
+    });
+    myArmy.units             = myArmy.units.filter(u => u.count > 0);
+    armiesAll[attackingLordId] = myArmy;
+    StorageService.set('armies', armiesAll);
+
+    // Apply XP then battle HP in one save.
+    // checkLevelUp() heals to full on level-up, so HP must be applied AFTER to
+    // ensure the battle result always wins over any level-up heal.
+    const freshLord = LordService.getById(attackingLordId);
+    if (freshLord) {
+      if (d.report.xpEarned > 0) {
+        freshLord.xp = (freshLord.xp || 0) + d.report.xpEarned;
+        const leveled = LordService.checkLevelUp(freshLord);
+        if (leveled > 0) _toast(`⭐ Level up! Now level ${freshLord.level}.`);
+      }
+      // Always overwrite HP + downtime with battle result (level-up heal must not win)
+      const lordUnit = (d.report.attacker.unitsSurviving || []).find(s => s.sourceId === attackingLordId);
+      if (lordUnit) {
+        freshLord.currentHp      = Math.max(1, Math.round(lordUnit.avgHp));
+        freshLord.downtimeUntil  = null;
+        freshLord.downtimeReason = null;
+      } else {
+        freshLord.currentHp      = 0;
+        freshLord.downtimeUntil  = TimeService.now() + 3600000;
+        freshLord.downtimeReason = 'defeated';
+      }
+      LordService.save(freshLord);
+      if (_lord && _lord.id === attackingLordId) _lord = freshLord;
+    }
+
+    // Save to battle history + local activity feed
+    const pvpOutcome = d.report.winner === 'attacker' ? 'victory' : d.report.winner === 'draw' ? 'draw' : 'defeat';
+    BattleHistoryService.save(attackingLordId, {
+      outcome: pvpOutcome, campName: 'Enemy lord', campIcon: '⚔', campLevel: null,
+      terrain: d.terrain || null, goldEarned: 0, xpEarned: d.report.xpEarned || 0,
+      modelsLost: d.report.attacker.modelsLost, rounds: d.report.rounds,
+      reason: d.report.reason, report: d.report,
+    });
+    _player = PlayerService.getById(_player.id);
+    ActivityService.log(_player.id, {
+      type: `battle_${pvpOutcome}`,
+      icon: pvpOutcome === 'victory' ? '⚔' : pvpOutcome === 'draw' ? '🤝' : '☠',
+      title: pvpOutcome === 'victory' ? 'PvP Victory' : pvpOutcome === 'draw' ? 'PvP Draw' : 'PvP Defeat',
+      detail: `${d.report.rounds} rounds · casualties: ${d.report.attacker.modelsLost} · +${d.report.xpEarned || 0}⭐`,
+      lordName: freshLord?.name || '',
+      lordId: attackingLordId,
+    });
+    HUD.refresh();
+
+    const label = pvpOutcome === 'victory' ? '⚔ PvP Victory' : pvpOutcome === 'draw' ? '🤝 PvP Draw' : '☠ PvP Defeat';
+    _toast(`${label} — report in Battles tab`);
+
+    _stopTicker();
+    if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
+  }
+
+  // ── Supabase activity_feed polling (both attacker and defender) ──
+
+  function _startPolling() {
+    if (_pollTimer) return;
+    _pollTimer = setInterval(_pollActivityFeed, 10000);
+  }
+
+  async function _pollActivityFeed() {
+    try {
+      const { data: { session } } = await SupabaseService.client.auth.getSession();
+      if (!session?.user?.id) return;
+      const pid = session.user.id;
+
+      const { data } = await SupabaseService.client
+        .from('storage')
+        .select('value')
+        .eq('player_id', pid)
+        .eq('key', 'activity_feed')
+        .maybeSingle();
+
+      const remoteEntries = (data?.value?.[pid] || []);
+      if (remoteEntries.length === 0) return;
+
+      const latestId = remoteEntries[0]?.id;
+      if (latestId === _lastSeenFeedId) return;
+      _lastSeenFeedId = latestId;
+
+      // Merge new server entries into local storage
+      const localFeed    = StorageService.get('activity_feed') || {};
+      const localEntries = localFeed[pid] || [];
+      const localIds     = new Set(localEntries.map(e => e.id));
+      const newEntries   = remoteEntries.filter(e => !localIds.has(e.id));
+      if (newEntries.length === 0) return;
+
+      localFeed[pid] = [...newEntries, ...localEntries].slice(0, 50);
+      StorageService.set('activity_feed', localFeed);
+
+      // Show toasts for pvp notifications and re-render
+      const pvpNew = newEntries.filter(e => e.type === 'pvp_result' || e.type === 'pvp_threat');
+      pvpNew.forEach(e => _toast(`${e.icon} ${e.title}`));
+
+      // Save battle history + sync lord HP for defender (attacker handles both in _resolveAttack)
+      newEntries.filter(e => e.type === 'pvp_result' && e.lordId && e.report).forEach(e => {
+        const alreadySaved = BattleHistoryService.getForLord(e.lordId).some(b => b.at === e.at);
+        if (!alreadySaved) {
+          BattleHistoryService.save(e.lordId, {
+            outcome: e.outcome || 'defeat', campName: 'Enemy lord', campIcon: '⚔', campLevel: null,
+            terrain: e.terrain || null, goldEarned: 0, xpEarned: e.xpEarned || 0,
+            modelsLost: e.modelsLost || 0, rounds: e.rounds || 0,
+            reason: e.report?.reason || '', report: e.report,
+          });
+        }
+        // Update local lord HP from the battle report.
+        // Only apply when this lord was on the defender side — attacker HP is already
+        // handled synchronously in _resolveAttack. Detect defender side by checking
+        // report.defender.unitsStart (includes eliminated units, unlike unitsSurviving).
+        const defStart = e.report?.defender?.unitsStart || [];
+        if (defStart.some(u => u.sourceId === e.lordId)) {
+          const lordsStorage = StorageService.get('lords') || {};
+          const lordRec      = lordsStorage[e.lordId];
+          if (lordRec) {
+            const defLordUnit = (e.report.defender.unitsSurviving || []).find(s => s.sourceId === e.lordId);
+            if (defLordUnit) {
+              lordRec.currentHp      = Math.max(1, Math.round(defLordUnit.avgHp));
+              lordRec.downtimeUntil  = null;
+              lordRec.downtimeReason = null;
+            } else {
+              lordRec.currentHp      = 0;
+              lordRec.downtimeUntil  = TimeService.now() + 3600000;
+              lordRec.downtimeReason = e.report?.winner === 'attacker' ? 'captured' : 'defeated';
+            }
+            lordsStorage[e.lordId] = lordRec;
+            StorageService.set('lords', lordsStorage);
+          }
+        }
+      });
+
+      if (pvpNew.length > 0) {
+        _stopTicker();
+        _player = PlayerService.getById(_player.id);
+        if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
+      }
+    } catch (_) {
+      // Non-fatal — polling will retry next interval
+    }
+  }
+
   // ── Shell ─────────────────────────────────────────────────────
+
+  function _incomingAttackBanner() {
+    const feed = ActivityService.get(_player.id);
+    const now  = TimeService.now();
+    const threats = feed.filter(e => e.type === 'pvp_threat' && !e.dismissed);
+    if (threats.length === 0) return '';
+    return threats.map((t, i) => {
+      const remaining = t.etaAt ? Math.max(0, Math.ceil((t.etaAt - now) / 1000)) : null;
+      const etaHtml   = remaining !== null
+        ? `Arrives in: <span class="ov-iab-countdown" id="ov-threat-eta-${i}">${TimeService.formatDuration(remaining)}</span>`
+        : (t.detail || '');
+      return `
+        <div class="ov-incoming-attack-banner">
+          <span class="ov-iab-icon">⚔</span>
+          <div class="ov-iab-text">
+            <div class="ov-iab-title">${t.title}</div>
+            <div class="ov-iab-detail">${etaHtml}</div>
+          </div>
+          <button class="ov-iab-dismiss" data-threat-id="${t.id}" title="Descartar">✕</button>
+        </div>`;
+    }).join('');
+  }
+
+  function _dismissThreat(entryId) {
+    const pid       = _player.id;
+    const localFeed = StorageService.get('activity_feed') || {};
+    const entries   = localFeed[pid] || [];
+    const entry     = entries.find(e => e.id === entryId);
+    if (entry) {
+      entry.dismissed = true;
+      StorageService.set('activity_feed', localFeed);
+      // StorageService.set writes localStorage synchronously and debounces Supabase —
+      // no need for a separate Supabase upsert here. The poll only ever ADDS new entries
+      // (never updates existing ones), so the dismissed flag cannot be overwritten by polling.
+    }
+    _rerender();
+  }
 
   function _shell() {
     const cities = CityService.getPlayerCities(_player.id);
@@ -90,6 +393,7 @@ const OverviewScreen = (() => {
 
     return `
       <div class="ov-screen">
+        ${_incomingAttackBanner()}
         <div class="ov-body">
           ${showOnboarding
             ? `${_onboardingSection(cities, lords)}${_citiesSection()}${_lordsSection()}`
@@ -148,6 +452,11 @@ const OverviewScreen = (() => {
            ${Object.values(RACES).map(r => `<option value="${r.id}">${r.icon} ${r.name}</option>`).join('')}
          </select>`;
 
+    const playerCities = _player ? CityService.getPlayerCities(_player.id) : [];
+    const cityOptions  = playerCities.map(c =>
+      `<option value="${c.id}">${c.name} (${c.x}, ${c.y})</option>`
+    ).join('');
+
     return `
       <div class="modal-overlay hidden" id="recruit-modal">
         <div class="modal-card">
@@ -169,6 +478,13 @@ const OverviewScreen = (() => {
               </select>
             </div>
           </div>
+          <div class="form-group">
+            <label class="form-label">Starting City</label>
+            <select class="form-input" id="rl-city">
+              <option value="">— Choose City —</option>
+              ${cityOptions}
+            </select>
+          </div>
           <p class="form-error" id="rl-error"></p>
           <div class="modal-actions">
             <button class="btn-secondary" id="rl-cancel">Cancel</button>
@@ -182,9 +498,27 @@ const OverviewScreen = (() => {
   // ── Movements panel ───────────────────────────────────────────
 
   function _movementsPanel() {
-    const lords  = LordService.getByPlayer(_player.id);
-    const active = lords.filter(l => l.actionQueue.length > 0 || LordService.isStanced(l));
-    if (active.length === 0) return '';
+    const lords   = LordService.getByPlayer(_player.id);
+    const active  = lords.filter(l => l.actionQueue.length > 0 || LordService.isStanced(l));
+    const now     = TimeService.now();
+    const threats = ActivityService.get(_player.id).filter(e => e.type === 'pvp_threat' && (!e.etaAt || e.etaAt > now));
+    if (active.length === 0 && threats.length === 0) return '';
+
+    // Incoming attacks (defender view) — mirrored row for each pvp_threat
+    const incomingRows = threats.map((t, i) => {
+      const remaining = t.etaAt ? Math.max(0, Math.ceil((t.etaAt - now) / 1000)) : null;
+      const pct       = t.etaAt && t.at ? Math.min(100, Math.floor(((now - t.at) / (t.etaAt - t.at)) * 100)) : 0;
+      return `
+        <div class="ov-mv-row ov-mv-row--incoming">
+          <span class="ov-mv-lord">${t.lordName || '?'}</span>
+          <span class="ov-mv-status">⚔ INCOMING ATTACK</span>
+          ${remaining !== null ? `
+            <div class="ov-mv-bar-wrap">
+              <div class="ov-mv-bar"><div class="ov-mv-fill ov-mv-fill--incoming" id="ov-inc-fill-${i}" style="width:${pct}%"></div></div>
+              <span class="ov-mv-time" id="ov-inc-time-${i}">${TimeService.formatDuration(remaining)}</span>
+            </div>` : `<span class="ov-mv-time">${t.detail || ''}</span>`}
+        </div>`;
+    }).join('');
 
     const rows = active.map(lord => {
       const qItem    = lord.actionQueue[0];
@@ -193,14 +527,20 @@ const OverviewScreen = (() => {
       const secs     = qItem ? LordService.actionTimeRemaining(lord) : 0;
       const stanceDef = STANCE_DEFS[LordService.getStance(lord)?.id] || STANCE_DEFS.idle;
 
+      const isAttacking = qItem?.intent === 'attack';
       let icon  = '⏸';
       let label = 'Idle';
       if (qItem && actionDef) {
         icon  = actionDef.icon || '⏳';
         label = actionDef.name;
         if (qItem.actionId === 'move_lord' && qItem.destX != null) {
-          icon  = '🚶';
-          label = `Moviéndose → (${qItem.destX}, ${qItem.destY})`;
+          if (isAttacking) {
+            icon  = '⚔';
+            label = `ATTACKING → (${qItem.destX}, ${qItem.destY})`;
+          } else {
+            icon  = '🚶';
+            label = `Moving → (${qItem.destX}, ${qItem.destY})`;
+          }
         }
       } else if (LordService.isStanced(lord)) {
         icon  = stanceDef.icon || '🛡';
@@ -208,13 +548,13 @@ const OverviewScreen = (() => {
       }
 
       return `
-        <div class="ov-mv-row">
+        <div class="ov-mv-row${isAttacking ? ' ov-mv-row--attack' : ''}">
           <span class="ov-mv-lord">${lord.name}</span>
           <span class="ov-mv-status">${icon} ${label}</span>
           ${qItem ? `
             <div class="ov-mv-bar-wrap">
-              <div class="ov-mv-bar"><div class="ov-mv-fill" style="width:${pct}%"></div></div>
-              <span class="ov-mv-time">${TimeService.formatDuration(secs)}</span>
+              <div class="ov-mv-bar"><div class="ov-mv-fill${isAttacking ? ' ov-mv-fill--attack' : ''}" id="ov-mv-fill-${lord.id}" style="width:${pct}%"></div></div>
+              <span class="ov-mv-time" id="ov-mv-time-${lord.id}">${TimeService.formatDuration(secs)}</span>
             </div>` : ''}
         </div>`;
     }).join('');
@@ -222,19 +562,20 @@ const OverviewScreen = (() => {
     return `
       <section class="ov-section ov-mv-section">
         <div class="ov-section-row">
-          <div class="ov-section-title">🗺 Movimientos Activos</div>
+          <div class="ov-section-title">🗺 Active Movements</div>
           <button class="ov-section-toggle" id="ov-toggle-movements">${_movementsOpen ? '▲' : '▼'}</button>
         </div>
-        ${_movementsOpen ? `<div class="ov-mv-list">${rows}</div>` : ''}
+        ${_movementsOpen ? `<div class="ov-mv-list">${incomingRows}${rows}</div>` : ''}
       </section>`;
   }
 
   // ── City tier image helper ────────────────────────────────────
 
-  function _cityTierImg(thLevel) {
-    if (thLevel >= 16) return 'assets/city/tier4.jpg';
-    if (thLevel >= 11) return 'assets/city/tier3.jpg';
-    if (thLevel >= 6)  return 'assets/city/tier2.jpg';
+  function _cityTierImg(level) {
+    if (level >= 5) return 'assets/city/tier4.jpg';
+    if (level >= 4) return 'assets/city/tier4.jpg';
+    if (level >= 3) return 'assets/city/tier3.jpg';
+    if (level >= 2) return 'assets/city/tier2.jpg';
     return 'assets/city/tier1.webp';
   }
 
@@ -278,7 +619,6 @@ const OverviewScreen = (() => {
     const terrain    = WorldService.getTerrain(city.x, city.y);
     const stats      = CityStatsService.getStats(city);
     const status     = CityStatsService.getCityStatus(stats);
-    const thLevel    = city.buildings.town_hall || 0;
     const slotInfo   = CityStatsService.getSlotInfo(city);
     const prodRates  = ProductionService.getRates(city, _lord);
     const growth     = CityStatsService.getPopulationGrowthRate(city, stats, prodRates);
@@ -286,12 +626,10 @@ const OverviewScreen = (() => {
     const buildDef   = buildItem ? BUILDING_DEFS[buildItem.buildingId] : null;
     const buildPct   = buildItem ? Math.floor(ConstructionService.progress(city) * 100) : 0;
     const buildSecs  = buildItem ? ConstructionService.timeRemaining(city) : 0;
-    const tierImg    = _cityTierImg(thLevel);
+    const tierImg    = _cityTierImg(slotInfo.level);
+    const goldRate   = ProductionService.getGoldRate(city);
 
-    let tierName = 'Tier I';
-    if      (thLevel >= 16) tierName = 'Tier IV';
-    else if (thLevel >= 11) tierName = 'Tier III';
-    else if (thLevel >= 6)  tierName = 'Tier II';
+    const tierName = `Tier ${slotInfo.level}`;
 
     const growthSymbol = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
     const growthClass  = growth > 0 ? 'ov-cc-grow--up' : growth < 0 ? 'ov-cc-grow--down' : 'ov-cc-grow--stable';
@@ -329,6 +667,10 @@ const OverviewScreen = (() => {
             <div class="ov-cc-stat">
               <span class="ov-cc-stat-label">Slots</span>
               <span class="ov-cc-stat-value">${slotInfo.usedSlots}/${slotInfo.maxSlots}</span>
+            </div>
+            <div class="ov-cc-stat">
+              <span class="ov-cc-stat-label">Gold/hr</span>
+              <span class="ov-cc-stat-value ov-cc-gold-rate">+${goldRate}💰</span>
             </div>
           </div>
           ${buildItem ? `<div class="ov-cc-construction">
@@ -391,11 +733,14 @@ const OverviewScreen = (() => {
   }
 
   function _lordCard(lord) {
-    const race    = RACES[lord.race] || {};
-    const cls     = LORD_CLASSES[lord.classId];
-    const stats   = LordService.getEffectiveStats(lord);
-    const maxHp   = stats.health;
-    const curHp   = Math.min(lord.currentHp ?? maxHp, maxHp);
+    const race        = RACES[lord.race] || {};
+    const cls         = LORD_CLASSES[lord.classId];
+    const stats       = LordService.getEffectiveStats(lord);
+    const maxHp       = stats.health;
+    const lordIsDown  = LordService.isDown(lord);
+    const downReason  = lord.downtimeReason || 'defeated';
+    const downRemSecs = lordIsDown ? Math.ceil(LordService.getDowntimeRemaining(lord) / 1000) : 0;
+    const curHp       = lordIsDown ? 0 : Math.min(lord.currentHp ?? maxHp, maxHp);
     const hpPct   = Math.min(100, Math.floor((curHp / maxHp) * 100));
     const xp      = lord.xp || 0;
     const xpNext  = lord.xpToNext || 100;
@@ -412,6 +757,7 @@ const OverviewScreen = (() => {
     const activeAction = queueItem ? LORD_ACTIONS[queueItem.actionId] : null;
     const actionPct    = queueItem ? Math.floor(LordService.actionProgress(lord) * 100) : 0;
     const actionSecs   = queueItem ? LordService.actionTimeRemaining(lord) : 0;
+    const isAttacking  = queueItem?.intent === 'attack';
 
     // Stance
     const stanceObj = LordService.getStance(lord);
@@ -434,7 +780,14 @@ const OverviewScreen = (() => {
          </div>`;
 
     return `
-      <div class="ov-lord-card" data-lord-id="${lord.id}">
+      <div class="ov-lord-card${lordIsDown ? ' ov-lord-card--down' : ''}" data-lord-id="${lord.id}">
+        ${lordIsDown ? `
+          <div class="ov-lord-down-overlay">
+            <div class="ov-lord-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
+            <div class="ov-lord-down-label ov-lord-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
+            <div class="ov-lord-down-cd" id="ov-lord-down-cd-${lord.id}">${TimeService.formatDuration(downRemSecs)}</div>
+            <button class="ov-lord-revive-btn" data-lord-id="${lord.id}">⚡ ${Math.max(1, Math.ceil(downRemSecs / 60))}💎 Revive</button>
+          </div>` : ''}
         ${portraitHtml}
         <div class="ov-lc-body">
           <div class="ov-lc-top">
@@ -446,11 +799,11 @@ const OverviewScreen = (() => {
             ${cls ? `<span class="ov-lc-class-badge" style="color:${cls.color}">${cls.icon} ${cls.name}</span>` : ''}
             ${stanceBadge}
           </div>
-          <div class="ov-lc-meta">
-            📍 ${location} · ${activeAction ? `${activeAction.icon} ${activeAction.name}` : 'Idle'}
+          <div class="ov-lc-meta${isAttacking ? ' ov-lc-meta--attack' : ''}">
+            📍 ${location} · ${isAttacking ? `⚔ ATTACKING (${queueItem.destX},${queueItem.destY})` : activeAction ? `${activeAction.icon} ${activeAction.name}` : 'Idle'}
           </div>
           ${queueItem ? `<div class="ov-lc-action-row">
-            <div class="ov-lc-action-bar"><div class="ov-lc-action-fill" id="ov-lord-fill" style="width:${actionPct}%"></div></div>
+            <div class="ov-lc-action-bar"><div class="ov-lc-action-fill${isAttacking ? ' ov-lc-action-fill--attack' : ''}" id="ov-lord-fill" style="width:${actionPct}%"></div></div>
             <span class="ov-lc-action-time" id="ov-lord-timer">${TimeService.formatDuration(actionSecs)}</span>
           </div>` : ''}
           <div class="ov-lc-bars">
@@ -532,15 +885,24 @@ const OverviewScreen = (() => {
       action_complete:'af-action',
     };
 
+    const isBattleEntry = e => e.type === 'pvp_result' || e.type?.startsWith('battle_');
+
     const items = feed.slice(0, 30).map(e => {
       const css  = _TYPE_CSS[e.type] || '';
       const date = _timeAgo(TimeService.now() - e.at);
+      const reportLordId = e.lordId
+        || LordService.getByPlayer(_player.id).find(l => l.name === e.lordName)?.id
+        || null;
+      const reportBtn = isBattleEntry(e) && reportLordId
+        ? `<button class="af-report-btn" data-lord-id="${reportLordId}" title="View battle report">📋 Report</button>`
+        : '';
       return `
         <div class="af-entry ${css}">
           <span class="af-icon">${e.icon}</span>
           <div class="af-body">
             <span class="af-title">${e.title}</span>
             ${e.detail ? `<span class="af-detail">${e.detail}</span>` : ''}
+            ${reportBtn}
           </div>
           <div class="af-meta">
             ${e.lordName ? `<span class="af-lord">${e.lordName}</span>` : ''}
@@ -551,7 +913,7 @@ const OverviewScreen = (() => {
 
     return `
       <section class="ov-section ov-activity-feed">
-        <h2 class="ov-section-title">📋 Actividad Reciente</h2>
+        <h2 class="ov-section-title">📋 Recent Activity</h2>
         <div class="af-list">${items}</div>
       </section>`;
   }
@@ -601,6 +963,11 @@ const OverviewScreen = (() => {
   }
 
   function _bindEvents() {
+    // Threat dismiss buttons
+    document.querySelectorAll('.ov-iab-dismiss[data-threat-id]').forEach(btn => {
+      btn.addEventListener('click', () => _dismissThreat(btn.dataset.threatId));
+    });
+
     // Section collapse toggles
     document.getElementById('ov-toggle-movements')?.addEventListener('click', () => {
       _movementsOpen = !_movementsOpen;
@@ -620,6 +987,28 @@ const OverviewScreen = (() => {
         _stopTicker();
         const city = CityService.getById(card.dataset.cityId);
         if (city) App.navigate('city', { city, lord: _lord, player: _player });
+      });
+    });
+
+    document.querySelectorAll('.ov-lord-revive-btn[data-lord-id]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        e.preventDefault();
+        const lord = LordService.getById(btn.dataset.lordId);
+        if (!lord || !LordService.isDown(lord)) return;
+        const remSecs = Math.ceil(LordService.getDowntimeRemaining(lord) / 1000);
+        const cost    = Math.max(1, Math.ceil(remSecs / 60));
+        const result  = PlayerService.spendCredits(_player.id, cost);
+        if (!result.ok) { _toast(result.error); return; }
+        lord.downtimeUntil  = null;
+        lord.downtimeReason = null;
+        lord.currentHp      = 1;
+        lord.hpRegenAt      = TimeService.now();
+        LordService.save(lord);
+        _player = PlayerService.getById(_player.id);
+        HUD.refresh();
+        _stopTicker();
+        if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
       });
     });
 
@@ -676,6 +1065,14 @@ const OverviewScreen = (() => {
       if (e.key === 'Enter') _onRecruitConfirm();
     });
 
+    document.querySelectorAll('.af-report-btn[data-lord-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _stopTicker();
+        const lord = LordService.getById(btn.dataset.lordId);
+        if (lord) App.navigate('lord-screen', { lord, player: _player, openTab: 'battles' });
+      });
+    });
+
     document.querySelectorAll('.ov-intel-dismiss[data-record-id]').forEach(btn => {
       btn.addEventListener('click', () => {
         IntelligenceService.removeRecord(_player.id, btn.dataset.recordId);
@@ -689,28 +1086,38 @@ const OverviewScreen = (() => {
     document.getElementById('rl-class').value = '';
     const raceEl = document.getElementById('rl-race');
     if (raceEl) raceEl.value = '';
+    const cityEl = document.getElementById('rl-city');
+    if (cityEl) cityEl.value = '';
     document.getElementById('rl-error').textContent = '';
     document.getElementById('recruit-modal').classList.remove('hidden');
     setTimeout(() => document.getElementById('rl-name').focus(), 50);
   }
 
-  function _onRecruitConfirm() {
+  async function _onRecruitConfirm() {
     const name    = document.getElementById('rl-name').value;
     const raceEl  = document.getElementById('rl-race');
     const raceId  = raceEl ? raceEl.value : (_lord?.race || '');
     const classId = document.getElementById('rl-class').value;
+    const cityId  = document.getElementById('rl-city')?.value || null;
     const errorEl = document.getElementById('rl-error');
+    const btn     = document.getElementById('rl-confirm');
     errorEl.textContent = '';
+    if (!cityId) { errorEl.textContent = 'Please choose a starting city.'; return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Recruiting…'; }
 
-    const result = LordService.create(_player.id, name, raceId, classId);
-    if (!result.ok) { errorEl.textContent = result.error; return; }
+    const result = await ServerActions.createLord(name, raceId, classId, cityId);
+    if (!result.ok) {
+      errorEl.textContent = result.error || 'Server error';
+      if (btn) { btn.disabled = false; btn.textContent = 'Create Lord'; }
+      return;
+    }
 
-    // Keep local state up to date — first lord sets player.lordId
     const freshPlayer = PlayerService.getById(_player.id);
     if (freshPlayer) _player = freshPlayer;
     if (!_lord && result.lord) _lord = result.lord;
 
     document.getElementById('recruit-modal').classList.add('hidden');
+    if (btn) { btn.disabled = false; btn.textContent = 'Create Lord'; }
     HUD.show(_player, _lord);
     Nav.show(_player, _lord, 'home');
     _rerender();

@@ -13,7 +13,7 @@
 //    to gate actions — no duplicate checks scattered in UI.
 // =============================================
 
-const STANCE_DEFS = {
+var STANCE_DEFS = {
   idle: {
     id:              'idle',
     name:            'Idle',

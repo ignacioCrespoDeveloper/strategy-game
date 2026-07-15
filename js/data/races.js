@@ -8,7 +8,7 @@
 //  To add a new race: append an entry here. Nothing else changes.
 // =============================================
 
-const RACES = {
+var RACES = {
   human: {
     id:          'human',
     name:        'Human',

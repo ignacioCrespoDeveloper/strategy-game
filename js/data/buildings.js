@@ -15,7 +15,7 @@
 
 const _scale = (base, factor, level) => Math.floor(base * Math.pow(factor, level - 1));
 
-const BUILDING_DEFS = {
+var BUILDING_DEFS = {
 
   // ── INFRASTRUCTURE ──────────────────────────────────────────────
 
@@ -28,10 +28,10 @@ const BUILDING_DEFS = {
     maxLevel:    20,
     requires:    {},
     cost:        level => ({
-      wood:  _scale(200, 1.5, level),
-      stone: _scale(150, 1.5, level),
-      iron:  _scale(50,  1.5, level),
-      food:  0,
+      food:  _scale(1000, 1.5, level),
+      wood:  _scale(600, 1.5, level),
+      stone: _scale(450, 1.5, level),
+      iron:  _scale(150, 1.5, level),
     }),
     buildTime:   level => _scale(120, 1.6, level),
     production:  () => ({}),
@@ -50,39 +50,18 @@ const BUILDING_DEFS = {
     category:    'infrastructure',
     description: 'Channels fresh water into the city, dramatically improving hygiene and enabling population growth.',
     maxLevel:    10,
-    requires:    { town_hall: 2 },
+    requires:    { town_hall: 1 },
     cost:        level => ({
-      wood:  _scale(60,  1.4, level),
-      stone: _scale(180, 1.4, level),
-      iron:  _scale(40,  1.4, level),
-      food:  0,
+      food:  _scale(100, 1.4, level),
+      iron:  _scale(20,  1.4, level),
+      wood:  0,
+      stone: 0,
     }),
-    buildTime:   level => _scale(150, 1.5, level),
+    buildTime:   level => _scale(25, 1.5, level),
     production:  () => ({}),
     effects:     level => [
       { stat: 'hygiene',    value: 8 * level },
       { stat: 'happiness',  value: 2 * level },
-    ],
-  },
-
-  sewers: {
-    id:          'sewers',
-    name:        'Sewers',
-    icon:        '🔩',
-    category:    'infrastructure',
-    description: 'An underground waste disposal network. Expensive to construct but dramatically reduces disease risk.',
-    maxLevel:    5,
-    requires:    { aqueduct: 2 },
-    cost:        level => ({
-      wood:  _scale(120, 1.6, level),
-      stone: _scale(300, 1.6, level),
-      iron:  _scale(120, 1.6, level),
-      food:  0,
-    }),
-    buildTime:   level => _scale(600, 1.6, level),
-    production:  () => ({}),
-    effects:     level => [
-      { stat: 'hygiene', value: 14 * level },
     ],
   },
 
@@ -137,7 +116,7 @@ const BUILDING_DEFS = {
     category:    'infrastructure',
     description: 'A place of worship that strengthens faith, reduces corruption, and lifts the spirits of the people.',
     maxLevel:    10,
-    requires:    { town_hall: 2 },
+    requires:    { town_hall: 3 },
     cost:        level => ({
       wood:  _scale(150, 1.45, level),
       stone: _scale(120, 1.45, level),
@@ -162,7 +141,7 @@ const BUILDING_DEFS = {
     icon:        '🌾',
     category:    'economy',
     description: 'Produces food to sustain your population and army. Food security is the foundation of a prosperous city.',
-    maxLevel:    20,
+    maxLevel:    99,
     requires:    { town_hall: 1 },
     cost:        level => ({
       wood:  _scale(80,  1.4, level),
@@ -170,33 +149,11 @@ const BUILDING_DEFS = {
       iron:  0,
       food:  0,
     }),
-    buildTime:   level => _scale(60, 1.5, level),
+    buildTime:   level => _scale(10, 1.7, level),
     production:  level => ({ food: _scale(30, 1.3, level) }),
     effects:     level => [
       { stat: 'happiness',    value:  4 * level },
       { stat: 'unemployment', value: -5 * level },
-    ],
-  },
-
-  granary: {
-    id:          'granary',
-    name:        'Granary',
-    icon:        '🏺',
-    category:    'economy',
-    description: 'Stores and processes food reserves. Improves food security, population happiness, and city stability.',
-    maxLevel:    10,
-    requires:    { farm: 1 },
-    cost:        level => ({
-      wood:  _scale(120, 1.4, level),
-      stone: _scale(80,  1.4, level),
-      iron:  _scale(20,  1.4, level),
-      food:  0,
-    }),
-    buildTime:   level => _scale(90, 1.5, level),
-    production:  level => ({ food: _scale(15, 1.25, level) }),
-    effects:     level => [
-      { stat: 'happiness',  value: 3 * level },
-      { stat: 'stability',  value: 4 * level },
     ],
   },
 
@@ -206,15 +163,15 @@ const BUILDING_DEFS = {
     icon:        '🪵',
     category:    'economy',
     description: 'Cuts and processes timber from the surrounding forest. Necessary for all major construction projects.',
-    maxLevel:    20,
+    maxLevel:    99,
     requires:    { town_hall: 1 },
     cost:        level => ({
-      wood:  _scale(60,  1.4, level),
-      stone: _scale(50,  1.4, level),
-      iron:  _scale(20,  1.4, level),
-      food:  0,
+      food:  _scale(50,  1.4, level),
+      stone: _scale(60,  1.4, level),
+      wood:  0,
+      iron:  0,
     }),
-    buildTime:   level => _scale(60, 1.5, level),
+    buildTime:   level => _scale(10, 1.7, level),
     production:  level => ({ wood: _scale(25, 1.3, level) }),
     effects:     level => [
       { stat: 'unemployment', value: -4 * level },
@@ -228,15 +185,15 @@ const BUILDING_DEFS = {
     icon:        '⛏',
     category:    'economy',
     description: 'Extracts stone from nearby rock formations. Essential for upgrading city infrastructure.',
-    maxLevel:    20,
+    maxLevel:    99,
     requires:    { town_hall: 1 },
     cost:        level => ({
       wood:  _scale(100, 1.4, level),
-      stone: _scale(30,  1.4, level),
-      iron:  _scale(15,  1.4, level),
+      iron:  _scale(30,  1.4, level),
+      stone: 0,
       food:  0,
     }),
-    buildTime:   level => _scale(60, 1.5, level),
+    buildTime:   level => _scale(10, 1.7, level),
     production:  level => ({ stone: _scale(20, 1.3, level) }),
     effects:     level => [
       { stat: 'unemployment', value: -4 * level },
@@ -250,42 +207,20 @@ const BUILDING_DEFS = {
     icon:        '⚒',
     category:    'economy',
     description: 'Digs deep to extract iron ore for tools and weapons. Dangerous and polluting, but indispensable.',
-    maxLevel:    20,
-    requires:    { town_hall: 2 },
+    maxLevel:    99,
+    requires:    { town_hall: 1 },
     cost:        level => ({
+      food:  _scale(60,  1.4, level),
       wood:  _scale(120, 1.4, level),
       stone: _scale(80,  1.4, level),
-      iron:  _scale(10,  1.4, level),
-      food:  0,
+      iron:  0,
     }),
-    buildTime:   level => _scale(90, 1.5, level),
+    buildTime:   level => _scale(10, 1.7, level),
     production:  level => ({ iron: _scale(15, 1.3, level) }),
     effects:     level => [
       { stat: 'unemployment', value: -4 * level },
       { stat: 'hygiene',      value: -5 * level },
       { stat: 'happiness',    value: -2 * level },
-    ],
-  },
-
-  warehouse: {
-    id:          'warehouse',
-    name:        'Warehouse',
-    icon:        '🏚',
-    category:    'economy',
-    description: 'Increases the maximum amount of resources your city can store.',
-    maxLevel:    20,
-    requires:    { town_hall: 2 },
-    cost:        level => ({
-      wood:  _scale(150, 1.4, level),
-      stone: _scale(100, 1.4, level),
-      iron:  _scale(30,  1.4, level),
-      food:  0,
-    }),
-    buildTime:   level => _scale(90, 1.5, level),
-    production:  () => ({}),
-    storageBonus: level => level * 2000,
-    effects:     level => [
-      { stat: 'unemployment', value: -2 * level },
     ],
   },
 
@@ -296,7 +231,7 @@ const BUILDING_DEFS = {
     category:    'economy',
     description: 'Smelts and works iron into refined materials. Supplements mine output and employs skilled craftsmen.',
     maxLevel:    10,
-    requires:    { iron_mine: 1 },
+    requires:    { iron_mine: 5 },
     cost:        level => ({
       wood:  _scale(100, 1.4, level),
       stone: _scale(120, 1.4, level),
@@ -341,7 +276,7 @@ const BUILDING_DEFS = {
     category:    'economy',
     description: 'Enables trade between cities and boosts overall prosperity. Corruption follows commerce.',
     maxLevel:    20,
-    requires:    { town_hall: 3, warehouse: 2 },
+    requires:    { town_hall: 3 },
     cost:        level => ({
       wood:  _scale(250, 1.4, level),
       stone: _scale(200, 1.4, level),
@@ -367,7 +302,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Trains soldiers to defend and expand your realm. Military culture reduces civil harmony.',
     maxLevel:    20,
-    requires:    { town_hall: 3, iron_mine: 1 },
+    requires:    { town_hall: 3, blacksmith: 5 },
     cost:        level => ({
       wood:  _scale(200, 1.4, level),
       stone: _scale(150, 1.4, level),
@@ -391,7 +326,7 @@ const BUILDING_DEFS = {
     category:    'military',
     description: 'Surveys surrounding territory and deters threats. Guards the city from raids and provides strategic vision.',
     maxLevel:    10,
-    requires:    { town_hall: 2 },
+    requires:    { town_hall: 5 },
     cost:        level => ({
       wood:  _scale(100, 1.4, level),
       stone: _scale(150, 1.4, level),

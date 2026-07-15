@@ -111,7 +111,7 @@ const ConstructionService = (() => {
     const targetLevel = (city.buildings[buildingId] || 0) + 1;
     if (targetLevel > def.maxLevel) return false;
     const cost = def.cost(targetLevel);
-    return Object.entries(cost).every(([res, amt]) => amt <= 0 || (resources[res] || 0) >= amt);
+    return Object.entries(cost).every(([res, amt]) => amt <= 0 || Math.floor(resources[res] || 0) >= amt);
   }
 
   return { enqueue, tick, timeRemaining, progress, canAfford };

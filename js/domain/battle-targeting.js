@@ -7,7 +7,7 @@
 //  weakest candidates, bodyguard/guardian intercept.
 // =============================================
 
-const TargetingService = (() => {
+var TargetingService = (() => {
 
   function _alive(unit) { return unit.count > 0 && !unit.isRouting; }
 

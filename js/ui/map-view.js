@@ -7,17 +7,20 @@ const MapView = (() => {
   const GAP  = 1;
   const STEP = TILE + GAP;
 
-  let _canvas       = null;
-  let _ctx          = null;
-  let _lord         = null;   // context lord (opened from)
-  let _player       = null;
-  let _size         = 0;
-  let _offset       = { x: 0, y: 0 };
-  let _drag         = null;
-  let _pendingTile  = null;
-  let _selectedTile = null;
-  let _movingLord   = null;   // lord currently being relocated
-  let _moveTarget   = null;   // { x, y } — selected destination
+  let _canvas        = null;
+  let _ctx           = null;
+  let _lord          = null;
+  let _player        = null;
+  let _size          = 0;
+  let _offset        = { x: 0, y: 0 };
+  let _pendingTile   = null;
+  let _selectedTile  = null;
+  let _movingLord    = null;
+  let _moveTarget    = null;
+  let _tileEnemies   = [];
+  let _scanningTile  = null;
+  let _scanDone      = false;
+  let _scanError     = null;
 
   // ── Entry point ───────────────────────────────────────────────
 
@@ -114,6 +117,10 @@ const MapView = (() => {
       ? new Set(IntelligenceService.getByType(_player.id, 'enemy_city').map(r => `${r.tileX},${r.tileY}`))
       : new Set();
 
+    const enemyLordTiles = _player
+      ? new Set(IntelligenceService.getByType(_player.id, 'enemy_lord').map(r => `${r.tileX},${r.tileY}`))
+      : new Set();
+
     const banditTiles = _player
       ? new Set(DiscoveryService.getActive(_player.id)
           .filter(r => { const d = DISCOVERY_DEFS[r.definitionId]; return d?.category === 'combat'; })
@@ -158,6 +165,25 @@ const MapView = (() => {
       _ctx.fillText('⚔', px + TILE / 2, py + TILE / 2);
     });
 
+    // ── Enemy lords from intel records ───────────────────────
+    // Only rendered where an enemy_lord IntelRecord exists.
+    // Intel expires after 30 min (set in _scanIntelligence TTL).
+    enemyLordTiles.forEach(key => {
+      if (cityMap[key]) return; // city tiles handled by city rendering
+      const [ex, ey] = key.split(',').map(Number);
+      const px = _offset.x + ex * STEP;
+      const py = _offset.y + ey * STEP;
+      if (px + TILE < 0 || px > W || py + TILE < 0 || py > H) return;
+      _ctx.strokeStyle = 'rgba(200,40,40,0.85)';
+      _ctx.lineWidth   = 1.5;
+      _roundRect(px + 1, py + 1, TILE - 2, TILE - 2, 2);
+      _ctx.stroke();
+      _ctx.font         = `${Math.floor(TILE * 0.4)}px serif`;
+      _ctx.textAlign    = 'center';
+      _ctx.textBaseline = 'middle';
+      _ctx.fillText('👁', px + TILE / 2, py + TILE / 2);
+    });
+
     // ── Lords — draw on ALL tiles, including city tiles ───────
     myLords.forEach(lord => {
       const px     = _offset.x + lord.x * STEP;
@@ -169,37 +195,42 @@ const MapView = (() => {
       const onCity  = !!cityMap[`${lord.x},${lord.y}`];
 
       if (onCity) {
-        // Dot badge in top-right corner of the city tile
-        const bx = px + TILE - 7;
-        const by = py + 7;
+        // Badge in top-right corner of the city tile
+        const bx = px + TILE - 10;
+        const by = py + 10;
+        const br = isCurr ? 10 : 8;
         _ctx.beginPath();
-        _ctx.arc(bx, by, 6, 0, Math.PI * 2);
+        _ctx.arc(bx, by, br, 0, Math.PI * 2);
         _ctx.fillStyle = isCurr
           ? (isMovingThis ? '#ddb830' : '#c8933a')
-          : '#50a050';
+          : '#2a7a2a';
         _ctx.fill();
-        _ctx.strokeStyle = '#0a0e18';
-        _ctx.lineWidth   = 1.5;
+        _ctx.strokeStyle = isCurr ? '#fff8e0' : '#88dd88';
+        _ctx.lineWidth   = isCurr ? 2 : 1.5;
         _ctx.stroke();
         if (race) {
-          _ctx.font         = '7px serif';
+          _ctx.font         = `${isCurr ? 10 : 8}px serif`;
           _ctx.textAlign    = 'center';
           _ctx.textBaseline = 'middle';
           _ctx.fillText(race.icon, bx, by);
         }
       } else {
+        // Filled tile with bright border for lords on open terrain
+        const fillColor   = isCurr ? 'rgba(40,30,8,0.92)' : 'rgba(8,28,8,0.88)';
         const borderColor = isCurr
-          ? (isMovingThis ? 'rgba(220,184,48,0.95)' : 'rgba(200,147,58,0.85)')
-          : 'rgba(120,180,120,0.8)';
+          ? (isMovingThis ? 'rgba(255,220,60,1)' : 'rgba(220,160,50,1)')
+          : 'rgba(80,200,80,0.9)';
+        _roundRect(px, py, TILE, TILE, 3);
+        _ctx.fillStyle = fillColor;
+        _ctx.fill();
         _ctx.strokeStyle = borderColor;
-        _ctx.lineWidth   = isCurr ? (isMovingThis ? 2.5 : 1.5) : 1;
-        _roundRect(px + 1, py + 1, TILE - 2, TILE - 2, 2);
+        _ctx.lineWidth   = isCurr ? 2.5 : 2;
         _ctx.stroke();
         if (race) {
-          _ctx.font         = `${Math.floor(TILE * 0.42)}px serif`;
+          _ctx.font         = `${Math.floor(TILE * 0.52)}px serif`;
           _ctx.textAlign    = 'center';
           _ctx.textBaseline = 'middle';
-          _ctx.fillText(race.icon, px + TILE / 2, py + TILE / 2);
+          _ctx.fillText(race.icon, px + TILE / 2, py + TILE / 2 - 1);
         }
       }
     });
@@ -215,45 +246,46 @@ const MapView = (() => {
         const tox = _offset.x + qItem.destX * STEP + TILE / 2;
         const toy = _offset.y + qItem.destY * STEP + TILE / 2;
 
+        const isAttack  = qItem.intent === 'attack';
+        const lineColor = isAttack ? 'rgba(220, 60, 60, 0.9)'  : 'rgba(100, 200, 255, 0.85)';
+        const dotColor  = isAttack ? 'rgba(220, 60, 60, 1.0)'  : 'rgba(100, 200, 255, 0.9)';
+        const borColor  = isAttack ? 'rgba(200, 40, 40, 0.85)' : 'rgba(100, 200, 255, 0.8)';
+
         if (lord.x != null) {
           const fx = _offset.x + lord.x * STEP + TILE / 2;
           const fy = _offset.y + lord.y * STEP + TILE / 2;
 
-          // Dashed travel line
           _ctx.beginPath();
           _ctx.moveTo(fx, fy);
           _ctx.lineTo(tox, toy);
-          _ctx.strokeStyle = 'rgba(100, 200, 255, 0.85)';
-          _ctx.lineWidth   = 2.5;
+          _ctx.strokeStyle = lineColor;
+          _ctx.lineWidth   = isAttack ? 2 : 2.5;
           _ctx.setLineDash([5, 4]);
           _ctx.stroke();
           _ctx.setLineDash([]);
 
-          // Arrowhead at destination
           const angle = Math.atan2(toy - fy, tox - fx);
           _ctx.beginPath();
           _ctx.moveTo(tox, toy);
           _ctx.lineTo(tox - 10 * Math.cos(angle - 0.4), toy - 10 * Math.sin(angle - 0.4));
           _ctx.lineTo(tox - 10 * Math.cos(angle + 0.4), toy - 10 * Math.sin(angle + 0.4));
           _ctx.closePath();
-          _ctx.fillStyle = 'rgba(100, 200, 255, 0.95)';
+          _ctx.fillStyle = dotColor;
           _ctx.fill();
         }
 
-        // Destination tile border (always shown, even for lords with null x)
         const dtx = _offset.x + qItem.destX * STEP;
         const dty = _offset.y + qItem.destY * STEP;
-        _ctx.strokeStyle = 'rgba(100, 200, 255, 0.8)';
+        _ctx.strokeStyle = borColor;
         _ctx.lineWidth   = 2;
         _ctx.setLineDash([3, 3]);
         _roundRect(dtx + 1, dty + 1, TILE - 2, TILE - 2, 2);
         _ctx.stroke();
         _ctx.setLineDash([]);
 
-        // Destination marker dot
         _ctx.beginPath();
         _ctx.arc(tox, toy, 4, 0, Math.PI * 2);
-        _ctx.fillStyle = 'rgba(100, 200, 255, 0.9)';
+        _ctx.fillStyle = dotColor;
         _ctx.fill();
       });
     }
@@ -474,6 +506,12 @@ const MapView = (() => {
         })
       : [];
 
+    // Enemy lords come from the auto-scan result (updated asynchronously after tile click).
+    // _tileEnemies holds rawData objects directly — no intel record wrapper needed.
+    const myLordsIdle = _player
+      ? LordService.getByPlayer(_player.id).filter(l => l.actionQueue.length === 0 && l.x != null)
+      : [];
+
     // 1 — Terrain
     const terrainSection = `
       <div class="mip-section">
@@ -634,7 +672,84 @@ const MapView = (() => {
       </div>
     ` : '';
 
-    return `${terrainSection}${citySection}${lordsSection}${banditsSection}`;
+    // 5 — Enemy lords (from auto-scan; state reflects _scanDone / _tileEnemies)
+    let enemyLordSection = '';
+    if (!_scanDone) {
+      enemyLordSection = `
+        <div class="mip-divider"></div>
+        <div class="mip-section mip-scan-pending">🔍 Scanning tile…</div>`;
+    } else if (_scanError) {
+      enemyLordSection = `
+        <div class="mip-divider"></div>
+        <div class="mip-section mip-scan-error">⚠ Error: ${_scanError}</div>`;
+    } else if (_tileEnemies.length === 0) {
+      enemyLordSection = `
+        <div class="mip-divider"></div>
+        <div class="mip-section mip-scan-empty">No enemy lords on this tile</div>`;
+    } else {
+      const enemyCards = _tileEnemies.map((data, idx) => {
+        const race  = RACES[data.lordRace] || {};
+        const cls   = LORD_CLASSES[data.lordClass] || null;
+        const portraitSrc  = cls?.portrait || race.portrait;
+        const portraitHtml = portraitSrc
+          ? `<img src="${portraitSrc}" class="mip-enemy-portrait-img" alt="">`
+          : `<div class="mip-enemy-portrait-icon">${race.icon || '👤'}</div>`;
+
+        const units = data.units || [];
+        const unitCardsHtml = units.length > 0
+          ? `<div class="mip-enemy-unit-cards">${
+              units.flatMap(u => {
+                const def = UNIT_DEFS[u.unitId] || {};
+                const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
+                  : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
+                  : def.category === 'monster' ? ' la-unit-card--monster'
+                  : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+                const portrait = def.image
+                  ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || u.unitId}" loading="lazy">`
+                  : `<div class="la-uc-img la-uc-img--fallback">${def.icon || '⚔'}</div>`;
+                return Array.from({ length: u.count }, () => `
+                  <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || u.unitId}">
+                    <div class="la-uc-top">
+                      <div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div>
+                    </div>
+                    ${portrait}
+                  </div>`);
+              }).join('')
+            }</div>`
+          : '';
+
+        const attackBtn = myLordsIdle.length > 0
+          ? `<button class="mip-attack-btn" data-enemy-idx="${idx}">⚔ Attack</button>`
+          : `<p class="mip-note mip-note--warn">No lord available to attack</p>`;
+
+        return `
+          <div class="mip-enemy-lord-card">
+            <div class="mip-enemy-top">
+              <div class="mip-enemy-portrait">${portraitHtml}</div>
+              <div class="mip-enemy-info">
+                <div class="mip-enemy-name">${data.lordName || 'Lord Desconocido'}</div>
+                ${data.playerUsername ? `<div class="mip-enemy-username">👤 ${data.playerUsername}</div>` : ''}
+                <div class="mip-enemy-meta">
+                  ${race.name ? `${race.icon} ${race.name}` : ''}
+                  ${data.lordLevel ? ` · Lv ${data.lordLevel}` : ''}
+                  ${cls ? ` · ${cls.icon} ${cls.name}` : ''}
+                </div>
+              </div>
+            </div>
+            ${unitCardsHtml}
+            ${attackBtn}
+          </div>`;
+      }).join('');
+
+      enemyLordSection = `
+        <div class="mip-divider"></div>
+        <div class="mip-section">
+          <div class="mip-section-label">⚔ Enemy Lord${_tileEnemies.length > 1 ? 's' : ''}</div>
+          ${enemyCards}
+        </div>`;
+    }
+
+    return `${terrainSection}${citySection}${lordsSection}${banditsSection}${enemyLordSection}`;
   }
 
   function _updatePanel(x, y) {
@@ -673,20 +788,32 @@ const MapView = (() => {
 
     // Search Area from map — start action then open lord-screen to show countdown
     document.querySelectorAll('.mip-lord-search-btn[data-lord-id]').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const lord = LordService.getById(btn.dataset.lordId);
         if (!lord) return;
-        const result = LordService.enqueueAction(lord, 'search_area');
+        btn.disabled = true;
+        const result = await ServerActions.lordSearch(lord.id);
         if (!result.ok) {
-          // Show inline error
+          btn.disabled = false;
           const err = document.createElement('div');
           err.className = 'mip-err-msg';
-          err.textContent = result.error;
-          btn.closest('.mip-lord-actions').appendChild(err);
+          err.textContent = result.error || 'Server error';
+          btn.closest('.mip-lord-actions')?.appendChild(err);
           return;
         }
         const updated = LordService.getById(lord.id);
         EventBus.emit('lord:open', { lord: updated, player: _player });
+      });
+    });
+
+    // Attack: per-lord attack buttons target the specific enemy
+    document.querySelectorAll('.mip-attack-btn[data-enemy-idx]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const idx = parseInt(btn.dataset.enemyIdx, 10);
+        App.navigate('attack-confirm', {
+          player: _player, targetX: x, targetY: y,
+          enemyData: _tileEnemies[idx] || null,
+        });
       });
     });
 
@@ -708,13 +835,26 @@ const MapView = (() => {
   }
 
   function _bindMoveConfirmEvents() {
-    document.getElementById('mip-confirm-move-btn')?.addEventListener('click', () => {
+    document.getElementById('mip-confirm-move-btn')?.addEventListener('click', async () => {
       if (!_movingLord || !_moveTarget) return;
-      const lord   = LordService.getById(_movingLord.id);
-      const result = LordService.enqueueMoveAction(lord, _moveTarget.x, _moveTarget.y);
+      const lord = LordService.getById(_movingLord.id);
+      const confirmBtn = document.getElementById('mip-confirm-move-btn');
+      if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Moving…'; }
+      const result = await ServerActions.lordMove(lord.id, _moveTarget.x, _moveTarget.y);
       if (!result.ok) {
-        const btn = document.getElementById('mip-confirm-move-btn');
-        if (btn) { btn.textContent = result.error; btn.disabled = true; }
+        if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm Move'; }
+        // If the server says the lord is busy but our local state shows idle,
+        // resync from Supabase and navigate to lord-screen so the player can see what's happening.
+        if ((result.error || '').includes('already in progress')) {
+          _movingLord = null;
+          _moveTarget = null;
+          _updateMoveBanner();
+          await ServerActions.syncNow();
+          const refreshed = LordService.getById(lord.id);
+          EventBus.emit('lord:open', { lord: refreshed, player: _player });
+          return;
+        }
+        if (confirmBtn) { confirmBtn.textContent = result.error || 'Server error'; setTimeout(() => { if (confirmBtn) confirmBtn.textContent = 'Confirm Move'; }, 3000); }
         return;
       }
       const updated = LordService.getById(lord.id);
@@ -785,45 +925,74 @@ const MapView = (() => {
     };
   }
 
+  // ── Auto tile scan ────────────────────────────────────────────
+  // Fires on every tile click. Hits /api/scan/tile to get all enemy lords
+  // on that tile without requiring a Search Area action.
+
+  async function _autoScanTile(x, y) {
+    _scanningTile = { x, y };
+
+    let token = null;
+    try {
+      const { data: { session } } = await SupabaseService.client.auth.getSession();
+      token = session?.access_token || null;
+    } catch (e) {
+      console.error('[scan] getSession error:', e);
+    }
+
+    if (!token) {
+      console.warn('[scan] no token');
+      _scanDone = true;
+      _tileEnemies = [];
+      if (_selectedTile?.x === x && _selectedTile?.y === y) _updatePanel(x, y);
+      return;
+    }
+
+    let scanError = null;
+    try {
+      const resp = await fetch('/api/scan/tile', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body:    JSON.stringify({ tileX: x, tileY: y }),
+      });
+      const d = await resp.json();
+      console.log('[scan] tile', x, y, '→', d);
+
+      if (!_scanningTile || _scanningTile.x !== x || _scanningTile.y !== y) return;
+      if (d.ok) {
+        _tileEnemies = (d.discoveries || []).filter(r => r.type === 'enemy_lord').map(r => r.rawData);
+      } else {
+        scanError = d.error || 'error';
+        _tileEnemies = [];
+      }
+    } catch (e) {
+      console.error('[scan] fetch error:', e);
+      scanError = e.message;
+      _tileEnemies = [];
+    }
+
+    _scanDone = true;
+    // Store error so panel can show it
+    _scanError = scanError;
+
+    if (_selectedTile?.x === x && _selectedTile?.y === y && !_movingLord) {
+      _updatePanel(x, y);
+    }
+  }
+
   // ── Events ────────────────────────────────────────────────────
 
   function _bindEvents() {
-    _canvas.addEventListener('mousedown', e => {
-      _drag = { startX: e.clientX, startY: e.clientY, ox: _offset.x, oy: _offset.y, moved: false };
-    });
-    window.addEventListener('mousemove', e => {
-      if (!_drag) return;
-      const dx = e.clientX - _drag.startX, dy = e.clientY - _drag.startY;
-      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) _drag.moved = true;
-      if (_drag.moved) { _offset.x = _drag.ox + dx; _offset.y = _drag.oy + dy; _draw(); }
-    });
-    window.addEventListener('mouseup', e => {
-      if (!_drag) return;
-      if (!_drag.moved) {
-        const { cx, cy } = _canvasXY(e);
-        const tile = _canvasToTile(cx, cy);
-        if (tile) _onTileClick(tile.x, tile.y);
-      }
-      _drag = null;
+    _canvas.addEventListener('click', e => {
+      const { cx, cy } = _canvasXY(e);
+      const tile = _canvasToTile(cx, cy);
+      if (tile) _onTileClick(tile.x, tile.y);
     });
 
-    _canvas.addEventListener('touchstart', e => {
-      const t = e.touches[0];
-      _drag = { startX: t.clientX, startY: t.clientY, ox: _offset.x, oy: _offset.y, moved: false };
-    }, { passive: true });
-    _canvas.addEventListener('touchmove', e => {
-      if (!_drag) return;
-      const t = e.touches[0], dx = t.clientX - _drag.startX, dy = t.clientY - _drag.startY;
-      if (Math.abs(dx) > 5 || Math.abs(dy) > 5) _drag.moved = true;
-      if (_drag.moved) { _offset.x = _drag.ox + dx; _offset.y = _drag.oy + dy; _draw(); }
-    }, { passive: true });
     _canvas.addEventListener('touchend', e => {
-      if (_drag && !_drag.moved) {
-        const t = e.changedTouches[0], rect = _canvas.getBoundingClientRect();
-        const tile = _canvasToTile(t.clientX - rect.left, t.clientY - rect.top);
-        if (tile) _onTileClick(tile.x, tile.y);
-      }
-      _drag = null;
+      const t = e.changedTouches[0], rect = _canvas.getBoundingClientRect();
+      const tile = _canvasToTile(t.clientX - rect.left, t.clientY - rect.top);
+      if (tile) _onTileClick(tile.x, tile.y);
     });
 
     // Banner cancel button (also re-bound dynamically in _updateMoveBanner)
@@ -842,22 +1011,22 @@ const MapView = (() => {
 
   function _onTileClick(x, y) {
     if (_movingLord) {
-      // Clicking the moving lord's own tile cancels
-      if (_movingLord.x === x && _movingLord.y === y) {
-        _cancelMove();
-        return;
-      }
-      // Select destination — show preview
+      if (_movingLord.x === x && _movingLord.y === y) { _cancelMove(); return; }
       _moveTarget   = { x, y };
       _selectedTile = { x, y };
       _draw();
-      _updatePanel(x, y); // will render _movePanelHtml because _moveTarget is set
+      _updatePanel(x, y);
       return;
     }
 
+    _tileEnemies  = [];
+    _scanDone     = false;
+    _scanError    = null;
+    _scanningTile = null;
     _selectedTile = { x, y };
     _draw();
     _updatePanel(x, y);
+    _autoScanTile(x, y);
   }
 
   function _openFoundModal(x, y) {
@@ -874,22 +1043,29 @@ const MapView = (() => {
     document.getElementById('found-modal').classList.add('hidden');
   }
 
-  function _onFoundConfirm() {
+  async function _onFoundConfirm() {
     if (!_pendingTile) return;
     const name    = document.getElementById('city-name-input').value;
     const errorEl = document.getElementById('found-error');
+    const btn     = document.getElementById('found-confirm-btn');
     errorEl.textContent = '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Founding…'; }
 
-    const result = CityService.found(_player.id, name, _pendingTile.x, _pendingTile.y);
-    if (!result.ok) { errorEl.textContent = result.error; return; }
+    const { x, y } = _pendingTile;
+    const result = await ServerActions.foundCity(name, x, y);
+    if (!result.ok) {
+      errorEl.textContent = result.error || 'Server error';
+      if (btn) { btn.disabled = false; btn.textContent = 'Found City'; }
+      return;
+    }
 
     _closeModal();
     if (_lord) _lord = LordService.getById(_lord.id);
-    const updatedPlayer = PlayerService.getById(_player.id);
+    _player = PlayerService.getById(_player.id) || _player;
     _draw();
     _updatePrompt();
-    _updatePanel(_pendingTile.x, _pendingTile.y);
-    EventBus.emit('city:founded', { player: updatedPlayer, lord: _lord, city: result.city });
+    _updatePanel(x, y);
+    EventBus.emit('city:founded', { player: _player, lord: _lord, city: result.city });
   }
 
   return { render };

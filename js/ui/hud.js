@@ -36,12 +36,43 @@ const HUD = (() => {
   function refresh() {
     const player = _player ? PlayerService.getById(_player.id) : null;
     if (!player) return;
-    const res = _sumResources(player);
-    Object.keys(RES).forEach(key => {
-      const el = document.getElementById(`hud-r-${key}`);
-      if (!el) return;
-      el.textContent = key === 'coins' ? _fmt(player?.coins || 0) : _fmt(res[key] || 0);
+
+    const cities = CityService.getPlayerCities(player.id);
+
+    // Empire-wide resource pool lives on player.resources
+    const playerRes = player.resources || {};
+    const totals = {
+      food:  Math.floor(playerRes.food  || 0),
+      wood:  Math.floor(playerRes.wood  || 0),
+      stone: Math.floor(playerRes.stone || 0),
+      iron:  Math.floor(playerRes.iron  || 0),
+    };
+
+    // Production rates: sum across all cities
+    const rates  = { food: 0, wood: 0, stone: 0, iron: 0 };
+    cities.forEach(city => {
+      const cityRates = ProductionService.getRates(city, null);
+      ['food', 'wood', 'stone', 'iron'].forEach(k => {
+        rates[k] += cityRates[k] || 0;
+      });
     });
+
+    // Gold: player treasury + net rate across empire
+    const goldNet = ProductionService.getNetGoldRate(player.id);
+
+    const _set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+    _set('hud-r-coins',       _fmt(player.coins || 0));
+    _set('hud-r-coins-rate',  _fmtRate(goldNet));
+    document.getElementById('hud-r-coins-rate')?.classList.toggle('hud-res-rate--neg', goldNet < 0);
+    document.getElementById('hud-r-coins-rate')?.classList.toggle('hud-res-rate--pos', goldNet > 0);
+
+    ['food', 'wood', 'stone', 'iron'].forEach(k => {
+      _set(`hud-r-${k}`,       _fmt(totals[k]));
+      _set(`hud-r-${k}-rate`,  _fmtRate(rates[k]));
+      document.getElementById(`hud-r-${k}-rate`)?.classList.toggle('hud-res-rate--pos', rates[k] > 0);
+    });
+
     const credEl = document.getElementById('hud-credits-amount');
     if (credEl) credEl.textContent = _fmt(player?.credits || 0);
   }
@@ -58,8 +89,8 @@ const HUD = (() => {
           <div class="hud-res-item">
             <span class="hud-res-icon">${r.icon}</span>
             <div class="hud-res-values">
-              <span class="hud-res-label">${r.label}</span>
               <span class="hud-res-amount" id="hud-r-${key}">0</span>
+              <span class="hud-res-rate" id="hud-r-${key}-rate">—</span>
             </div>
           </div>
         `).join('')}
@@ -99,18 +130,16 @@ const HUD = (() => {
     EventBus.on('resources:changed', refresh);
   }
 
-  function _sumResources(player) {
-    const totals = { food: 0, wood: 0, stone: 0, iron: 0 };
-    CityService.getPlayerCities(player.id).forEach(c => {
-      Object.keys(totals).forEach(k => { totals[k] += c.resources[k] || 0; });
-    });
-    return totals;
-  }
-
   function _fmt(n) {
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
     if (n >= 1_000)     return (n / 1_000).toFixed(1) + 'k';
     return Math.floor(n).toString();
+  }
+
+  function _fmtRate(n) {
+    const r = Math.round(n);
+    if (r === 0) return '—';
+    return (r > 0 ? '+' : '') + _fmt(Math.abs(r)) + '/h';
   }
 
   return { show, hide, refresh, setLord };

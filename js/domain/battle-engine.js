@@ -15,7 +15,7 @@
 //  Engine never persists anything — caller owns storage and navigation.
 // =============================================
 
-const BattleEngine = (() => {
+var BattleEngine = (() => {
 
   // ── Helpers ─────────────────────────────────────────────────────
 

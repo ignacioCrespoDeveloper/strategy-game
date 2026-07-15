@@ -7,7 +7,7 @@
 //
 //  Gold income per city:  pop × 0.10 × (happiness/100), +8%/marketplace level
 //  Upkeep (global):       deducted once per player per tick via lastUpkeepAt stamp
-//                         = Σ lord upkeep (5+level/h) + Σ unit upkeep (1%goldCost/h)
+//                         = Σ lord upkeep (5+level/h) + Σ unit upkeep (def.upkeep/h)
 //  freePopulation growth: +5/day per city (≈0.2083/h), capped at 20
 // =============================================
 
@@ -24,7 +24,7 @@ const ProductionService = (() => {
       if (!def) return;
       const prod = def.production(lvl);
       Object.entries(prod).forEach(([res, amt]) => {
-        totals[res] = (totals[res] || 0) + amt;
+        if (totals[res] !== undefined) totals[res] = (totals[res] || 0) + amt;
       });
     });
 
@@ -40,7 +40,8 @@ const ProductionService = (() => {
   }
 
   // Gold income per hour from a single city.
-  // formula: pop × 0.10 × (happiness/100), marketplace +8%/level
+  // Base: pop × 0.10 × (happiness/100)  — population tax
+  // Marketplace multiplier: +8% per level
   function getGoldRate(city) {
     const stats     = CityStatsService.getStats(city);
     const happiness = Math.max(0, stats.happiness || 0);
@@ -51,8 +52,8 @@ const ProductionService = (() => {
     return Math.floor(rate);
   }
 
-  // Total upkeep per hour for all lords and armies of a player.
-  function _calcUpkeepPerHour(playerId) {
+  // Total army+lord upkeep per hour for a player.
+  function getUpkeepPerHour(playerId) {
     let total = 0;
     LordService.getByPlayer(playerId).forEach(lord => {
       total += LordService.getUpkeepPerHour(lord);
@@ -65,7 +66,15 @@ const ProductionService = (() => {
     return total;
   }
 
+  // Net gold rate for a player across all cities (income - upkeep).
+  function getNetGoldRate(playerId) {
+    const income = CityService.getPlayerCities(playerId)
+      .reduce((s, city) => s + getGoldRate(city), 0);
+    return income - getUpkeepPerHour(playerId);
+  }
+
   // Apply accumulated production since lastResourceUpdate.
+  // Resources accumulate into player.resources (empire-wide pool).
   // Also handles gold income and (once per player per tick) upkeep + freePopulation.
   function tick(city, lord) {
     const now     = TimeService.now();
@@ -73,36 +82,46 @@ const ProductionService = (() => {
 
     if (elapsed <= 0) return;
 
-    // ── Resource production ──────────────────────────────────────
-    const rates = getRates(city, lord);
-    Object.entries(rates).forEach(([res, perHour]) => {
-      if (perHour <= 0) return;
-      city.resources[res] = (city.resources[res] || 0) + perHour * elapsed;
-    });
+    const playerId = city.playerId;
+    const player   = PlayerService.getById(playerId);
 
-    // ── Population tick ──────────────────────────────────────────
-    CityStatsService.tickPopulation(city, lord, rates, elapsed);
-
-    // ── freePopulation growth: +5/day ≈ 0.2083/h, cap 20 ────────
-    const popGrowthPerHour = 5 / 24;
-    const currentFree      = city.freePopulation ?? 3;
-    city.freePopulation    = Math.min(20, currentFree + popGrowthPerHour * elapsed);
-
-    // ── Gold income + upkeep (deduct upkeep once per player) ─────
-    const playerId  = city.playerId;
-    const player    = PlayerService.getById(playerId);
     if (player) {
-      const goldIncome   = getGoldRate(city) * elapsed;
+      // One-time migration: seed player.resources from existing city stockpiles
+      if (!player.resources) {
+        player.resources = { food: 0, wood: 0, stone: 0, iron: 0 };
+        CityService.getPlayerCities(playerId).forEach(c => {
+          ['food','wood','stone','iron'].forEach(k => {
+            player.resources[k] = (player.resources[k] || 0) + Math.floor(c.resources?.[k] || 0);
+          });
+        });
+      }
 
-      // Only deduct upkeep once per player tick cycle (use lastUpkeepAt flag).
+      // ── Resource production → empire pool ─────────────────────
+      const rates = getRates(city, lord);
+      Object.entries(rates).forEach(([res, perHour]) => {
+        if (perHour <= 0) return;
+        player.resources[res] = (player.resources[res] || 0) + perHour * elapsed;
+      });
+
+      // ── Population tick ───────────────────────────────────────
+      CityStatsService.tickPopulation(city, lord, rates, elapsed);
+
+      // ── freePopulation growth: +5/day ≈ 0.2083/h, cap 20 ─────
+      const popGrowthPerHour = 5 / 24;
+      city.freePopulation    = Math.min(20, (city.freePopulation ?? 3) + popGrowthPerHour * elapsed);
+
+      // ── Gold income + upkeep (deducted once per player) ───────
+      const goldIncome = getGoldRate(city) * elapsed;
+
       const lastUpkeep    = player.lastUpkeepAt || (now - elapsed * 3600000);
       const upkeepElapsed = TimeService.hoursElapsed(lastUpkeep);
       const upkeepCost    = upkeepElapsed > 0
-        ? _calcUpkeepPerHour(playerId) * upkeepElapsed
+        ? getUpkeepPerHour(playerId) * upkeepElapsed
         : 0;
 
       const newCoins = Math.max(0, (player.coins || 0) + goldIncome - upkeepCost);
       PlayerService.update(playerId, {
+        resources:    player.resources,
         coins:        Math.floor(newCoins),
         lastUpkeepAt: upkeepElapsed > 0 ? now : player.lastUpkeepAt,
       });
@@ -112,5 +131,5 @@ const ProductionService = (() => {
     CityService.save(city);
   }
 
-  return { getRates, getGoldRate, tick };
+  return { getRates, getGoldRate, getUpkeepPerHour, getNetGoldRate, tick };
 })();
