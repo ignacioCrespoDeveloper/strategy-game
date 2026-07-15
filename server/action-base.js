@@ -55,10 +55,23 @@ export async function loadAndCatchUp(req, res, extraKeys = []) {
   (rows || []).forEach(r => { raw[r.key] = r.value; });
 
   const rawPlayers = raw.players || {};
-  const player     = rawPlayers[playerId];
+  let player = rawPlayers[playerId];
   if (!player) {
-    res.status(404).json({ ok: false, error: 'Player not found' });
-    return null;
+    // Brand-new account: bootstrap a player record server-side so
+    // subsequent actions (city founding, lord creation) can proceed.
+    const username = user.user_metadata?.username
+      || user.email?.split('@')[0]
+      || 'Player';
+    player = {
+      id:           playerId,
+      username,
+      coins:        5000,
+      credits:      9999,
+      lordId:       null,
+      createdAt:    Date.now(),
+      passwordHash: '__supabase__',
+    };
+    rawPlayers[playerId] = player;
   }
 
   const result = catchUp(

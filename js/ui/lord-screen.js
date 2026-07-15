@@ -508,7 +508,7 @@ const LordScreen = (() => {
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill${isAttacking ? ' lov-fill--attack' : ''}" id="lov-fill" style="width:${pct}%"></div></div>
           <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
-          <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>
+          ${isAttacking ? '' : `<button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>`}
         </div>
       `;
     } else if (queueItem.actionId === 'search_area') {
@@ -620,13 +620,14 @@ const LordScreen = (() => {
     const totalUpkeep = army.units.reduce((s, u) => s + (UNIT_DEFS[u.unitId]?.upkeep || 0) * u.count, 0);
     const totalPower  = _armyPower(_lord.id);
     const maxPower    = LordService.getArmyPowerCap(_lord);
+    const overviewCmdCap = LordService.getCommandCapacity(_lord);
     const overCap     = totalPower > maxPower;
     const armyHtml    = army.units.length === 0
       ? `<p class="lov-pos-none">No troops mustered — recruit from the Army tab.</p>`
       : `
         <div class="la-unit-cards">${_armyCardsHtml(army, { removable: false })}</div>
         <div class="la-army-total">
-          ${totalUnits} / 10 units
+          ${totalUnits} / ${overviewCmdCap} units
           <span class="la-army-upkeep">💸 ${totalUpkeep}/24h upkeep</span>
         </div>
       `;
@@ -710,7 +711,7 @@ const LordScreen = (() => {
     return '';
   }
 
-  function _buildUnitCard(def, { removable = false, currentHp, maxHp } = {}) {
+  function _buildUnitCard(def, { removable = false, currentHp, maxHp, modelIdx = 0 } = {}) {
     const tierClass = _cardTierClass(def.category);
     const hpMax  = maxHp     ?? def.combatStats.hp;
     const hpCur  = currentHp ?? hpMax;
@@ -736,7 +737,7 @@ const LordScreen = (() => {
     }).join('');
 
     const removeBtn = removable
-      ? `<button class="la-uc-remove" data-unit-id="${def.id}" title="Dismiss 1">×</button>`
+      ? `<button class="la-uc-remove" data-unit-id="${def.id}" data-model-idx="${modelIdx}" title="Dismiss 1">×</button>`
       : '';
 
     return `
@@ -773,7 +774,7 @@ const LordScreen = (() => {
       return Array.from({ length: stack.count }, (_, idx) => {
         // Front model (idx 0) may be damaged; models behind it are fresh
         const currentHp = idx === 0 ? (stack.currentHp ?? maxHp) : maxHp;
-        return _buildUnitCard(def, { ...opts, currentHp, maxHp });
+        return _buildUnitCard(def, { ...opts, currentHp, maxHp, modelIdx: idx });
       });
     }).join('');
   }
@@ -877,7 +878,8 @@ const LordScreen = (() => {
     const player      = PlayerService.getById(_player.id);
     const isTraveling = _lord.actionQueue.length > 0 && _lord.actionQueue[0].actionId === 'move_lord';
     const totalUnits  = army.units.reduce((s, u) => s + u.count, 0);
-    const atLimit     = totalUnits >= ARMY_LIMIT;
+    const cmdCap      = LordService.getCommandCapacity(_lord);
+    const atLimit     = totalUnits >= cmdCap;
     const currentCP   = _armyPower(_lord.id);
     const maxCP       = LordService.getArmyPowerCap(_lord);
     const overCap     = currentCP > maxCP;
@@ -898,7 +900,7 @@ const LordScreen = (() => {
       armyListHtml = `
         <div class="la-unit-cards">${_armyCardsHtml(army, { removable: true })}</div>
         <div class="la-army-total">
-          ${total} / 10 units
+          ${total} / ${cmdCap} units
           <span class="la-army-upkeep">💸 ${totalUpkeep}/24h upkeep</span>
         </div>
       `;
@@ -1046,9 +1048,13 @@ const LordScreen = (() => {
 
     // Dismiss unit from army
     document.querySelectorAll('.la-uc-remove').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const def = UNIT_DEFS[btn.dataset.unitId];
-        ArmyService.removeUnits(_lord.id, btn.dataset.unitId, 1);
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const unitId   = btn.dataset.unitId;
+        const modelIdx = parseInt(btn.dataset.modelIdx || '0', 10);
+        const result   = await ServerActions.disbandUnit(_lord.id, unitId, modelIdx);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
+        const def = UNIT_DEFS[unitId];
         if (def) _toast(`${def.icon} ${def.name} dismissed.`);
         _renderTab();
       });
@@ -1661,20 +1667,10 @@ const LordScreen = (() => {
     return Math.max(1, Math.ceil(secs / 60));
   }
 
-  function _reviveNow() {
-    const remSecs = Math.ceil(LordService.getDowntimeRemaining(_lord) / 1000);
-    const cost    = _creditCost(remSecs);
-    const result  = PlayerService.spendCredits(_player.id, cost);
-    if (!result.ok) { _toast(result.error); return; }
-
-    const lord = LordService.getById(_lord.id);
-    if (!lord) return;
-    lord.downtimeUntil  = null;
-    lord.downtimeReason = null;
-    lord.currentHp      = 1;
-    lord.hpRegenAt      = TimeService.now();
-    LordService.save(lord);
-    _lord   = lord;
+  async function _reviveNow() {
+    const result = await ServerActions.reviveLord(_lord.id);
+    if (!result.ok) { _toast(result.error || 'Server error'); return; }
+    _lord   = LordService.getById(_lord.id);
     _player = PlayerService.getById(_player.id);
     HUD.refresh();
     _stopCountdown();
@@ -1683,13 +1679,17 @@ const LordScreen = (() => {
   }
 
   function _finishLordActionNow() {
+    const lord = LordService.getById(_lord.id);
+    if (!lord || lord.actionQueue.length === 0) return;
+    if (lord.actionQueue[0].intent === 'attack') {
+      _toast('Cannot skip an attack in progress.');
+      return;
+    }
+
     const secs = LordService.actionTimeRemaining(_lord);
     const cost = _creditCost(secs);
     const result = PlayerService.spendCredits(_player.id, cost);
     if (!result.ok) { _toast(result.error); return; }
-
-    const lord = LordService.getById(_lord.id);
-    if (!lord || lord.actionQueue.length === 0) return;
     lord.actionQueue[0].finishAt = TimeService.now() - 1;
     LordService.save(lord);
 

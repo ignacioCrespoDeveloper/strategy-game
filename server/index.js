@@ -23,6 +23,9 @@ import { handleLordAction }        from './actions/lord-action.js';
 import { handleLordCreate }        from './actions/lord-create.js';
 import { handleCityFound }         from './actions/city-found.js';
 import { handleHireMerc }          from './actions/hire-merc.js';
+import { handleLordRevive }        from './actions/lord-revive.js';
+import { handleArmyDisband }       from './actions/army-disband.js';
+import { handleInstantBuild }      from './actions/instant-build.js';
 
 const app       = express();
 const PORT      = process.env.PORT || 3000;
@@ -74,6 +77,9 @@ app.post('/api/city/found',    handleCityFound);
 app.post('/api/lord/action',   handleLordAction);
 app.post('/api/lord/create',   handleLordCreate);
 app.post('/api/lord/hire-merc', handleHireMerc);
+app.post('/api/lord/revive',   handleLordRevive);
+app.post('/api/army/disband',    handleArmyDisband);
+app.post('/api/city/instant-build', handleInstantBuild);
 
 // ── Lords debug ───────────────────────────────────────────────
 // GET /api/debug/lords — dumps all lords from Supabase so we can verify positions are synced

@@ -52,10 +52,15 @@ const EventService = (() => {
       cooldown: 72 * 3600,
       condition: (city, stats) => stats.corruption >= 60 && (city.buildings.marketplace || 0) >= 1,
       trigger: (city) => {
-        const woodLoss  = Math.floor((city.resources.wood  || 0) * 0.12);
-        const stoneLoss = Math.floor((city.resources.stone || 0) * 0.12);
-        city.resources.wood  = Math.max(0, (city.resources.wood  || 0) - woodLoss);
-        city.resources.stone = Math.max(0, (city.resources.stone || 0) - stoneLoss);
+        const player    = PlayerService.getById(city.playerId);
+        const pool      = player?.resources || {};
+        const woodLoss  = Math.floor((pool.wood  || 0) * 0.12);
+        const stoneLoss = Math.floor((pool.stone || 0) * 0.12);
+        if (player) {
+          player.resources.wood  = Math.max(0, (pool.wood  || 0) - woodLoss);
+          player.resources.stone = Math.max(0, (pool.stone || 0) - stoneLoss);
+          PlayerService.update(player.id, { resources: player.resources });
+        }
         _addModifier(city, 'happiness', -18, 'event:corruption_scandal', 4 * 3600);
         return `💸 Corruption scandal in ${city.name}! Officials embezzled resources.`;
       },

@@ -16,7 +16,7 @@ const MAP_HEIGHT  = 100;
 
 function _foundCost(existingCount) {
   if (existingCount === 0) return 0;
-  return 800 * Math.pow(2, existingCount - 1);
+  return 5000 * Math.pow(2, existingCount - 1);
 }
 
 function _generateId() {
@@ -63,6 +63,16 @@ export async function handleCityFound(req, res) {
   const id      = _generateId();
   const isFirst = playerCities.length === 0;
 
+
+  // Seed starting resources on first city — always grant the starter kit
+  // (catch-up may have already initialized resources to all-zero for new players,
+  //  so we can't rely on !player.resources to detect a brand-new account)
+  if (isFirst) {
+    player.resources = { food: 5000, wood: 5000, stone: 4000, iron: 1000 };
+  } else {
+    player.resources = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
+  }
+
   const city = {
     id,
     playerId,
@@ -73,12 +83,8 @@ export async function handleCityFound(req, res) {
     freePopulation: 3,
     happiness: 75,
     buildings: {},
-    buildQueue: [],
     constructionQueue: [],
     recruitmentQueue: [],
-    resources: isFirst
-      ? { food: 500, wood: 300, stone: 200, iron: 100 }
-      : { food: 100, wood: 50,  stone: 30,  iron: 10  },
     lastResourceUpdate:   now,
     lastPopulationUpdate: now,
   };
@@ -95,6 +101,20 @@ export async function handleCityFound(req, res) {
   }
 
   await saveState(admin, playerId, rawPlayers, { player, lords, cities, armies });
+
+  // Update shared world_state so all players see this city on the map
+  try {
+    const { data: worldRows } = await admin
+      .from('world_state').select('key, value').eq('key', 'world');
+    const worldState = worldRows?.[0]?.value || { size: 20, tiles: {} };
+    worldState.tiles[`${x},${y}`] = id;
+    await admin.from('world_state').upsert(
+      { key: 'world', value: worldState, updated_at: new Date().toISOString() },
+      { onConflict: 'key' }
+    );
+  } catch (e) {
+    console.warn('[city-found] world_state update failed:', e.message);
+  }
 
   return res.json({ ok: true, city, player });
 }

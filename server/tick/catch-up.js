@@ -133,8 +133,8 @@ const _UNIT_UPKEEP = {
 // ── Phase 1b helpers ──────────────────────────────────────────
 
 const _STAT_BASE = {
-  corruption: 0, happiness: 75, hygiene: 75,
-  unemployment: 0, religion: 75, culture: 75,
+  corruption: 0, happiness: 50, hygiene: 50,
+  unemployment: 15, religion: 50, culture: 50,
   stability: 50, security: 20,
 };
 
@@ -151,8 +151,8 @@ function _getStats(buildings, population) {
   }
   const pop = population || 1000;
   if (pop > 1000) {
-    s.hygiene      -= Math.floor((pop - 1000) / 5000);
-    s.unemployment += Math.floor((pop - 1000) / 10000);
+    s.hygiene      -= Math.floor((pop - 1000) / 2000);
+    s.unemployment += Math.floor((pop - 1000) / 5000);
   }
   for (const k of Object.keys(s)) s[k] = _clampStat(s[k]);
   if (s.corruption   > 20) s.happiness  -= Math.floor((s.corruption   - 20) * 0.4);
@@ -193,18 +193,62 @@ function _getGoldRate(city) {
 
 // Mirrors CityStatsService.getPopulationGrowthRate().
 function _getPopGrowthRate(city, stats, rates) {
-  let rate = 0;
+  const pop  = city.population || 1000;
+  let   pct  = 0;
+
+  if      (stats.happiness >= 70) pct += 0.30;
+  else if (stats.happiness >= 50) pct += 0.15;
+  else if (stats.happiness >= 35) pct += 0.05;
+  else if (stats.happiness <  20) pct -= 0.20;
+  else                             pct -= 0.08;
+
+  if      (stats.hygiene >= 60) pct += 0.15;
+  else if (stats.hygiene <  25) pct -= 0.10;
+  else if (stats.hygiene <  10) pct -= 0.25;
+
   const food = rates.food || 0;
-  if      (food > 0)                                        rate += 200;
-  else if (food === 0 && (city.population || 1000) > 1000)  rate -= 50;
-  if      (stats.happiness >= 70)  rate += 200;
-  else if (stats.happiness >= 50)  rate += 100;
-  else if (stats.happiness <  20)  rate -= 300;
-  else if (stats.happiness <  35)  rate -= 100;
-  if      (stats.hygiene   >= 60)  rate += 100;
-  else if (stats.hygiene   <  25)  rate -= 100;
-  else if (stats.hygiene   <  10)  rate -= 300;
-  return Math.max(-800, Math.min(800, rate));
+  if      (food > 0)   pct += 0.08;
+  else if (pop > 1000) pct -= 0.05;
+
+  // Count stats in Warning or Critical
+  const warnings = Object.keys(stats).filter(k => {
+    const goodHigh = ['happiness','hygiene','religion','culture','stability','security'].includes(k);
+    const val = goodHigh ? stats[k] : (100 - stats[k]);
+    return val < 45;
+  }).length;
+  if (warnings >= 3) pct -= 0.10;
+  if (warnings >= 5) pct -= 0.20;
+
+  pct = Math.max(-0.50, Math.min(0.55, pct));
+  return Math.round(pop * pct * 150 / 100);
+}
+
+// Degrades buildings randomly when usedSlots > maxSlots (after a tier-downgrade).
+function _degradeExcessBuildings(city) {
+  const usedSlots = Object.values(city.buildings || {}).reduce((s, v) => s + v, 0);
+  const pop = city.population || 1000;
+  const maxSlots =
+    pop >= 100000 ? 320 :
+    pop >= 50000  ? 220 :
+    pop >= 25000  ? 150 :
+    pop >= 10000  ? 100 : 60;
+
+  let excess = usedSlots - maxSlots;
+  if (excess <= 0) return false;
+
+  const entries = Object.entries(city.buildings || {}).filter(([, v]) => v > 0);
+  for (let i = entries.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [entries[i], entries[j]] = [entries[j], entries[i]];
+  }
+  for (const [id, lvl] of entries) {
+    if (excess <= 0) break;
+    const degrade = Math.min(lvl, excess);
+    city.buildings[id] = lvl - degrade;
+    if (city.buildings[id] <= 0) delete city.buildings[id];
+    excess -= degrade;
+  }
+  return true;
 }
 
 // ── Lord helper ───────────────────────────────────────────────
@@ -327,6 +371,17 @@ export function catchUp(state, nowMs) {
 
   // ── 3. Resource production, population & economy ─────────────
 
+  // One-time migration: seed player.resources from existing city stockpiles
+  if (!player.resources) {
+    player.resources = { food: 0, wood: 0, stone: 0, iron: 0 };
+    for (const c of Object.values(cities)) {
+      if (!c?.id) continue;
+      for (const k of ['food','wood','stone','iron']) {
+        player.resources[k] = (player.resources[k] || 0) + Math.floor(c.resources?.[k] || 0);
+      }
+    }
+  }
+
   const mainLord = lords[player.lordId];
   const raceId   = mainLord?.race || null;
   let   totalGoldEarned = 0;
@@ -342,11 +397,10 @@ export function catchUp(state, nowMs) {
     const elapsedH = Math.min((nowMs - lastUpdate) / 3_600_000, MAX_ELAPSED_H);
     if (elapsedH <= 0) continue;
 
-    // Resource production
+    // Resource production → empire-wide player.resources pool
     const rates = _getRates(city.buildings || {}, raceId);
-    city.resources = city.resources || {};
     for (const [res, perHour] of Object.entries(rates)) {
-      if (perHour > 0) city.resources[res] = (city.resources[res] || 0) + perHour * elapsedH;
+      if (perHour > 0) player.resources[res] = (player.resources[res] || 0) + perHour * elapsedH;
     }
 
     // Gold income (accumulated, applied to player after all cities)
@@ -358,6 +412,7 @@ export function catchUp(state, nowMs) {
     if (popRate !== 0) {
       city.population = Math.max(1, Math.round((city.population || 1000) + popRate * elapsedH));
     }
+    _degradeExcessBuildings(city);
 
     // freePopulation: +5/day ≈ 0.2083/h, cap 20
     city.freePopulation = Math.min(20, (city.freePopulation ?? 3) + (5 / 24) * elapsedH);

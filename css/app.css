@@ -1869,6 +1869,13 @@ body.nav-open #screen-root {
   color: var(--text-primary);
 }
 
+.hud-res-rate {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.hud-res-rate--pos { color: #4caf50; }
+.hud-res-rate--neg { color: #f44336; }
+
 /* Lord â€” center */
 .hud-lord-center {
   display: flex;
@@ -4724,6 +4731,7 @@ body.nav-open #screen-root {
 .ov-cc-grow--up    { color: #5cdd5c; }
 .ov-cc-grow--down  { color: #e05050; }
 .ov-cc-grow--stable{ color: var(--text-muted); }
+.ov-cc-gold-rate { color: #f0c040; font-weight: 700; }
 
 .ov-cc-enter {
   margin-top: 0.35rem;
@@ -6548,7 +6556,42 @@ body.nav-open #screen-root {
   gap: 0.4rem;
 }
 
-/* â”€â”€ City Summary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* ── Gold Economy section ──────────────────────────────── */
+
+.cvov-gold-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.cvov-gold-total {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.cvov-gold-amount {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #f5c842;
+}
+
+.cvov-gold-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.cvov-gold-splits {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* ── City Summary ──────────────────────────────────────── */
 
 .cvov-summary-grid {
   display: flex;
@@ -6773,6 +6816,29 @@ body.nav-open #screen-root {
 .cvov-hero-pop-growth {
   font-size: 0.75rem;
   font-weight: 600;
+}
+
+.cvov-hero-gold {
+  text-align: right;
+  flex-shrink: 0;
+  margin-left: 0.75rem;
+  border-left: 1px solid var(--border-color, #333);
+  padding-left: 0.75rem;
+}
+
+.cvov-hero-gold-rate {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #f0c040;
+  line-height: 1;
+}
+
+.cvov-hero-gold-label {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 0.15rem;
 }
 
 /* â”€â”€ Resource table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */

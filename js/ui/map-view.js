@@ -195,37 +195,42 @@ const MapView = (() => {
       const onCity  = !!cityMap[`${lord.x},${lord.y}`];
 
       if (onCity) {
-        // Dot badge in top-right corner of the city tile
-        const bx = px + TILE - 7;
-        const by = py + 7;
+        // Badge in top-right corner of the city tile
+        const bx = px + TILE - 10;
+        const by = py + 10;
+        const br = isCurr ? 10 : 8;
         _ctx.beginPath();
-        _ctx.arc(bx, by, 6, 0, Math.PI * 2);
+        _ctx.arc(bx, by, br, 0, Math.PI * 2);
         _ctx.fillStyle = isCurr
           ? (isMovingThis ? '#ddb830' : '#c8933a')
-          : '#50a050';
+          : '#2a7a2a';
         _ctx.fill();
-        _ctx.strokeStyle = '#0a0e18';
-        _ctx.lineWidth   = 1.5;
+        _ctx.strokeStyle = isCurr ? '#fff8e0' : '#88dd88';
+        _ctx.lineWidth   = isCurr ? 2 : 1.5;
         _ctx.stroke();
         if (race) {
-          _ctx.font         = '7px serif';
+          _ctx.font         = `${isCurr ? 10 : 8}px serif`;
           _ctx.textAlign    = 'center';
           _ctx.textBaseline = 'middle';
           _ctx.fillText(race.icon, bx, by);
         }
       } else {
+        // Filled tile with bright border for lords on open terrain
+        const fillColor   = isCurr ? 'rgba(40,30,8,0.92)' : 'rgba(8,28,8,0.88)';
         const borderColor = isCurr
-          ? (isMovingThis ? 'rgba(220,184,48,0.95)' : 'rgba(200,147,58,0.85)')
-          : 'rgba(120,180,120,0.8)';
+          ? (isMovingThis ? 'rgba(255,220,60,1)' : 'rgba(220,160,50,1)')
+          : 'rgba(80,200,80,0.9)';
+        _roundRect(px, py, TILE, TILE, 3);
+        _ctx.fillStyle = fillColor;
+        _ctx.fill();
         _ctx.strokeStyle = borderColor;
-        _ctx.lineWidth   = isCurr ? (isMovingThis ? 2.5 : 1.5) : 1;
-        _roundRect(px + 1, py + 1, TILE - 2, TILE - 2, 2);
+        _ctx.lineWidth   = isCurr ? 2.5 : 2;
         _ctx.stroke();
         if (race) {
-          _ctx.font         = `${Math.floor(TILE * 0.42)}px serif`;
+          _ctx.font         = `${Math.floor(TILE * 0.52)}px serif`;
           _ctx.textAlign    = 'center';
           _ctx.textBaseline = 'middle';
-          _ctx.fillText(race.icon, px + TILE / 2, py + TILE / 2);
+          _ctx.fillText(race.icon, px + TILE / 2, py + TILE / 2 - 1);
         }
       }
     });
@@ -1046,7 +1051,8 @@ const MapView = (() => {
     errorEl.textContent = '';
     if (btn) { btn.disabled = true; btn.textContent = 'Founding…'; }
 
-    const result = await ServerActions.foundCity(name, _pendingTile.x, _pendingTile.y);
+    const { x, y } = _pendingTile;
+    const result = await ServerActions.foundCity(name, x, y);
     if (!result.ok) {
       errorEl.textContent = result.error || 'Server error';
       if (btn) { btn.disabled = false; btn.textContent = 'Found City'; }
@@ -1055,11 +1061,11 @@ const MapView = (() => {
 
     _closeModal();
     if (_lord) _lord = LordService.getById(_lord.id);
-    const updatedPlayer = PlayerService.getById(_player.id);
+    _player = PlayerService.getById(_player.id) || _player;
     _draw();
     _updatePrompt();
-    _updatePanel(_pendingTile.x, _pendingTile.y);
-    EventBus.emit('city:founded', { player: updatedPlayer, lord: _lord, city: result.city });
+    _updatePanel(x, y);
+    EventBus.emit('city:founded', { player: _player, lord: _lord, city: result.city });
   }
 
   return { render };

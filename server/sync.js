@@ -53,11 +53,36 @@ export async function syncPlayerState(req, res) {
     const raw = {};
     (rows || []).forEach(row => { raw[row.key] = row.value; });
 
-    // New player or empty state — nothing to tick yet
+    // New player: bootstrap a player record and persist it so subsequent
+    // action endpoints (city/found, lord/create, etc.) can find it.
     const players = raw.players || {};
-    const player  = players[playerId];
+    let player    = players[playerId];
     if (!player) {
-      return res.json({ ok: true, state: raw, events: [] });
+      const username = user.user_metadata?.username
+        || user.email?.split('@')[0]
+        || 'Player';
+      player = {
+        id:           playerId,
+        username,
+        coins:        5000,
+        credits:      9999,
+        lordId:       null,
+        createdAt:    Date.now(),
+        passwordHash: '__supabase__',
+      };
+      players[playerId] = player;
+
+      // Persist immediately so action endpoints find it
+      await admin.from('storage').upsert(
+        { player_id: playerId, key: 'players', value: players },
+        { onConflict: 'player_id,key' }
+      );
+
+      return res.json({
+        ok: true,
+        state: { players, lords: {}, cities: {}, armies: {} },
+        events: [],
+      });
     }
 
     // ── 3. Run catch-up ──────────────────────────────────────────
@@ -93,7 +118,36 @@ export async function syncPlayerState(req, res) {
       }
     }
 
-    // ── 5. Return fresh state to client ──────────────────────────
+    // ── 5. Backfill world_state with this player's city positions ──
+    //  This ensures all cities show on the shared world map for every player.
+    try {
+      const playerCities = Object.values(result.cities || {});
+      if (playerCities.length > 0) {
+        const { data: worldRows } = await admin
+          .from('world_state').select('key, value').eq('key', 'world');
+        const worldState = worldRows?.[0]?.value || { size: 20, tiles: {} };
+        let changed = false;
+        for (const city of playerCities) {
+          if (city.x != null && city.y != null) {
+            const key = `${city.x},${city.y}`;
+            if (worldState.tiles[key] !== city.id) {
+              worldState.tiles[key] = city.id;
+              changed = true;
+            }
+          }
+        }
+        if (changed) {
+          await admin.from('world_state').upsert(
+            { key: 'world', value: worldState, updated_at: new Date().toISOString() },
+            { onConflict: 'key' }
+          );
+        }
+      }
+    } catch (e) {
+      console.warn('[sync] world_state backfill failed:', e.message);
+    }
+
+    // ── 6. Return fresh state to client ──────────────────────────
     //  Client calls StorageService.hydrate(state) to overwrite localStorage.
     const responseState = {
       lords:   result.lords,

@@ -452,6 +452,11 @@ const OverviewScreen = (() => {
            ${Object.values(RACES).map(r => `<option value="${r.id}">${r.icon} ${r.name}</option>`).join('')}
          </select>`;
 
+    const playerCities = _player ? CityService.getPlayerCities(_player.id) : [];
+    const cityOptions  = playerCities.map(c =>
+      `<option value="${c.id}">${c.name} (${c.x}, ${c.y})</option>`
+    ).join('');
+
     return `
       <div class="modal-overlay hidden" id="recruit-modal">
         <div class="modal-card">
@@ -472,6 +477,13 @@ const OverviewScreen = (() => {
                 ${Object.values(LORD_CLASSES).map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
               </select>
             </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Starting City</label>
+            <select class="form-input" id="rl-city">
+              <option value="">— Choose City —</option>
+              ${cityOptions}
+            </select>
           </div>
           <p class="form-error" id="rl-error"></p>
           <div class="modal-actions">
@@ -559,10 +571,11 @@ const OverviewScreen = (() => {
 
   // ── City tier image helper ────────────────────────────────────
 
-  function _cityTierImg(thLevel) {
-    if (thLevel >= 16) return 'assets/city/tier4.jpg';
-    if (thLevel >= 11) return 'assets/city/tier3.jpg';
-    if (thLevel >= 6)  return 'assets/city/tier2.jpg';
+  function _cityTierImg(level) {
+    if (level >= 5) return 'assets/city/tier4.jpg';
+    if (level >= 4) return 'assets/city/tier4.jpg';
+    if (level >= 3) return 'assets/city/tier3.jpg';
+    if (level >= 2) return 'assets/city/tier2.jpg';
     return 'assets/city/tier1.webp';
   }
 
@@ -606,7 +619,6 @@ const OverviewScreen = (() => {
     const terrain    = WorldService.getTerrain(city.x, city.y);
     const stats      = CityStatsService.getStats(city);
     const status     = CityStatsService.getCityStatus(stats);
-    const thLevel    = city.buildings.town_hall || 0;
     const slotInfo   = CityStatsService.getSlotInfo(city);
     const prodRates  = ProductionService.getRates(city, _lord);
     const growth     = CityStatsService.getPopulationGrowthRate(city, stats, prodRates);
@@ -614,12 +626,10 @@ const OverviewScreen = (() => {
     const buildDef   = buildItem ? BUILDING_DEFS[buildItem.buildingId] : null;
     const buildPct   = buildItem ? Math.floor(ConstructionService.progress(city) * 100) : 0;
     const buildSecs  = buildItem ? ConstructionService.timeRemaining(city) : 0;
-    const tierImg    = _cityTierImg(thLevel);
+    const tierImg    = _cityTierImg(slotInfo.level);
+    const goldRate   = ProductionService.getGoldRate(city);
 
-    let tierName = 'Tier I';
-    if      (thLevel >= 16) tierName = 'Tier IV';
-    else if (thLevel >= 11) tierName = 'Tier III';
-    else if (thLevel >= 6)  tierName = 'Tier II';
+    const tierName = `Tier ${slotInfo.level}`;
 
     const growthSymbol = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
     const growthClass  = growth > 0 ? 'ov-cc-grow--up' : growth < 0 ? 'ov-cc-grow--down' : 'ov-cc-grow--stable';
@@ -657,6 +667,10 @@ const OverviewScreen = (() => {
             <div class="ov-cc-stat">
               <span class="ov-cc-stat-label">Slots</span>
               <span class="ov-cc-stat-value">${slotInfo.usedSlots}/${slotInfo.maxSlots}</span>
+            </div>
+            <div class="ov-cc-stat">
+              <span class="ov-cc-stat-label">Gold/hr</span>
+              <span class="ov-cc-stat-value ov-cc-gold-rate">+${goldRate}💰</span>
             </div>
           </div>
           ${buildItem ? `<div class="ov-cc-construction">
@@ -1072,6 +1086,8 @@ const OverviewScreen = (() => {
     document.getElementById('rl-class').value = '';
     const raceEl = document.getElementById('rl-race');
     if (raceEl) raceEl.value = '';
+    const cityEl = document.getElementById('rl-city');
+    if (cityEl) cityEl.value = '';
     document.getElementById('rl-error').textContent = '';
     document.getElementById('recruit-modal').classList.remove('hidden');
     setTimeout(() => document.getElementById('rl-name').focus(), 50);
@@ -1082,12 +1098,14 @@ const OverviewScreen = (() => {
     const raceEl  = document.getElementById('rl-race');
     const raceId  = raceEl ? raceEl.value : (_lord?.race || '');
     const classId = document.getElementById('rl-class').value;
+    const cityId  = document.getElementById('rl-city')?.value || null;
     const errorEl = document.getElementById('rl-error');
     const btn     = document.getElementById('rl-confirm');
     errorEl.textContent = '';
+    if (!cityId) { errorEl.textContent = 'Please choose a starting city.'; return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Recruiting…'; }
 
-    const result = await ServerActions.createLord(name, raceId, classId);
+    const result = await ServerActions.createLord(name, raceId, classId, cityId);
     if (!result.ok) {
       errorEl.textContent = result.error || 'Server error';
       if (btn) { btn.disabled = false; btn.textContent = 'Create Lord'; }

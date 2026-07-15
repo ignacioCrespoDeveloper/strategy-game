@@ -66,7 +66,7 @@ const BuildingUnlockService = (() => {
         }
 
         case 'city_tier': {
-          const TIER_POPS = [0, 0, 5000, 15000, 40000, 100000];
+          const TIER_POPS = [0, 0, 10000, 25000, 50000, 100000];
           const level = CityStatsService.getCityLevel(city);
           if (level < req.minTier) {
             const needPop = (TIER_POPS[req.minTier] || 0).toLocaleString();

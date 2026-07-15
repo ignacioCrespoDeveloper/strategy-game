@@ -65,9 +65,10 @@ const LordService = (() => {
 
   const MAX_LORDS = 5;
 
-  // Cost to recruit lord N (1-indexed): 400 × 1.5^(N-1), rounded.
+  // First lord is free; subsequent lords cost 10k, 20k, 40k, 80k.
   function getRecruitCost(existingLordCount) {
-    return Math.round(400 * Math.pow(1.5, existingLordCount));
+    if (existingLordCount === 0) return 0;
+    return 10000 * Math.pow(2, existingLordCount - 1);
   }
 
   // Gold/hour upkeep for a lord: 5 base + 1 per level.

@@ -89,11 +89,12 @@ export async function handleRecruit(req, res) {
   }
 
   const rc = def.resourceCost || {};
+  player.resources = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
   const resShortages = [];
-  for (const [res, perUnit] of Object.entries(rc)) {
+  for (const [rKey, perUnit] of Object.entries(rc)) {
     const needed = perUnit * count;
-    const have   = Math.floor(city.resources?.[res] || 0);
-    if (have < needed) resShortages.push(`${needed} ${res} (have ${have})`);
+    const have   = Math.floor(player.resources[rKey] || 0);
+    if (have < needed) resShortages.push(`${needed} ${rKey} (have ${have})`);
   }
   if (resShortages.length > 0) {
     return res.status(400).json({ ok: false, error: `Not enough resources: ${resShortages.join(', ')}.` });
@@ -112,8 +113,8 @@ export async function handleRecruit(req, res) {
 
   // Apply
   player.coins = (player.coins || 0) - totalGold;
-  for (const [res, perUnit] of Object.entries(rc)) {
-    city.resources[res] = (city.resources[res] || 0) - perUnit * count;
+  for (const [rKey, perUnit] of Object.entries(rc)) {
+    player.resources[rKey] = (player.resources[rKey] || 0) - perUnit * count;
   }
   if (popCost > 0 && def.race !== null) {
     city.freePopulation = Math.max(0, (city.freePopulation ?? 0) - popCost);

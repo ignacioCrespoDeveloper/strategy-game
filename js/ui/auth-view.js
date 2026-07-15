@@ -170,9 +170,10 @@ const AuthView = (() => {
     const existingData = players[user.id];
 
     const player = {
+      ...(existingData || {}),
       id:           user.id,
       username,
-      coins:        existingData?.coins    ?? 9999,
+      coins:        existingData?.coins    ?? 5000,
       credits:      existingData?.credits  ?? 9999,
       lordId:       existingData?.lordId   ?? null,
       createdAt:    existingData?.createdAt ?? Date.now(),

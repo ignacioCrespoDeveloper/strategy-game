@@ -39,10 +39,19 @@ const ServerActions = (() => {
   // On success, hydrates city from server response.
   async function build(cityId, buildingId) {
     const result = await _post('/api/city/build', { cityId, buildingId });
-    if (result.ok && result.city) {
-      const cities = StorageService.get('cities') || {};
-      cities[cityId] = result.city;
-      StorageService.hydrate({ cities });
+    if (result.ok) {
+      const patch = {};
+      if (result.city) {
+        const cities   = StorageService.get('cities') || {};
+        cities[cityId] = result.city;
+        patch.cities   = cities;
+      }
+      if (result.player) {
+        const players            = StorageService.get('players') || {};
+        players[result.player.id] = result.player;
+        patch.players            = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
     }
     return result;
   }
@@ -104,8 +113,8 @@ const ServerActions = (() => {
   // POST /api/lord/create
   // Creates a new lord server-side (validates globally unique name, deducts cost).
   // On success, hydrates lords + player from server response.
-  async function createLord(name, raceId, classId) {
-    const result = await _post('/api/lord/create', { name, raceId, classId });
+  async function createLord(name, raceId, classId, cityId) {
+    const result = await _post('/api/lord/create', { name, raceId, classId, cityId });
     if (result.ok) {
       const patch = {};
       if (result.lord) {
@@ -167,6 +176,62 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/lord/revive
+  // Spends credits and clears lord downtime server-side.
+  async function reviveLord(lordId) {
+    const result = await _post('/api/lord/revive', { lordId });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord) {
+        const lords = StorageService.get('lords') || {};
+        lords[result.lord.id] = result.lord;
+        patch.lords = lords;
+      }
+      if (result.player) {
+        const players = StorageService.get('players') || {};
+        players[result.player.id] = result.player;
+        patch.players = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/city/instant-build
+  // Spends credits to instantly complete the first queue item server-side.
+  // On success, hydrates city + player from server response.
+  async function instantBuild(cityId) {
+    const result = await _post('/api/city/instant-build', { cityId });
+    if (result.ok) {
+      const patch = {};
+      if (result.city) {
+        const cities   = StorageService.get('cities') || {};
+        cities[cityId] = result.city;
+        patch.cities   = cities;
+      }
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = result.player;
+        patch.players             = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/army/disband
+  // Removes 1 model from the stack server-side.
+  // modelIdx: 0 = front (possibly damaged) model, 1+ = healthy models.
+  async function disbandUnit(lordId, unitId, modelIdx = 0) {
+    const result = await _post('/api/army/disband', { lordId, unitId, modelIdx });
+    if (result.ok && result.army) {
+      const armies = StorageService.get('armies') || {};
+      armies[result.army.lordId] = result.army;
+      StorageService.hydrate({ armies });
+    }
+    return result;
+  }
+
   // Calls /api/sync and hydrates localStorage with the fresh server state.
   // Used by countdown timers when a queue item completes, so the server
   // writes the completion to Supabase immediately (instead of waiting for next login).
@@ -187,5 +252,5 @@ const ServerActions = (() => {
     }
   }
 
-  return { build, recruit, lordMove, lordSearch, createLord, foundCity, hireMerc, syncNow };
+  return { build, recruit, lordMove, lordSearch, createLord, foundCity, hireMerc, reviveLord, disbandUnit, syncNow, instantBuild };
 })();

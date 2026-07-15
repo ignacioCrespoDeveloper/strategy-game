@@ -14,7 +14,8 @@ import { LORD_BASE_STATS, LORD_CLASSES, RACES } from '../engine-loader.js';
 const MAX_LORDS = 5;
 
 function _recruitCost(existingLordCount) {
-  return Math.round(400 * Math.pow(1.5, existingLordCount));
+  if (existingLordCount === 0) return 0;
+  return 10000 * Math.pow(2, existingLordCount - 1);
 }
 
 function _generateId() {
@@ -22,7 +23,7 @@ function _generateId() {
 }
 
 export async function handleLordCreate(req, res) {
-  const { name, raceId, classId } = req.body || {};
+  const { name, raceId, classId, cityId } = req.body || {};
   if (!name || !raceId || !classId) {
     return res.status(400).json({ ok: false, error: 'Missing name, raceId, or classId' });
   }
@@ -75,6 +76,12 @@ export async function handleLordCreate(req, res) {
     x:              null,
     y:              null,
   };
+
+  // Place the lord at the chosen city
+  if (cityId && cities[cityId] && cities[cityId].playerId === playerId) {
+    lord.x = cities[cityId].x;
+    lord.y = cities[cityId].y;
+  }
 
   lords[id] = lord;
 

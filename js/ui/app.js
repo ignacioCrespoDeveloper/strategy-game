@@ -60,9 +60,10 @@ const App = (() => {
       const existingData = players[session.user.id];
 
       players[session.user.id] = {
+        ...(existingData || {}),
         id:           session.user.id,
         username:     username || 'Unknown',
-        coins:        existingData?.coins   ?? 100000,
+        coins:        existingData?.coins   ?? 5000,
         credits:      existingData?.credits ?? 9999,
         lordId:       existingData?.lordId  ?? null,
         createdAt:    existingData?.createdAt ?? Date.now(),

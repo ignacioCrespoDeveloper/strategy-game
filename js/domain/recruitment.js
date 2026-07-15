@@ -116,12 +116,13 @@ const RecruitmentService = (() => {
       return { ok: false, error: `Need ${totalGold}💰, have ${player.coins || 0}💰.` };
     }
 
-    // ── Resource cost ─────────────────────────────────────────────
+    // ── Resource cost (empire-wide pool) ─────────────────────────
     const rc = def.resourceCost || {};
+    const empireRes = player.resources || {};
     const resShortages = [];
     Object.entries(rc).forEach(([res, perUnit]) => {
       const needed  = perUnit * count;
-      const have    = Math.floor(city.resources[res] || 0);
+      const have    = Math.floor(empireRes[res] || 0);
       if (have < needed) resShortages.push(`${needed} ${res} (have ${have})`);
     });
     if (resShortages.length > 0) {
@@ -143,10 +144,11 @@ const RecruitmentService = (() => {
     // ── Deduct gold ───────────────────────────────────────────────
     PlayerService.update(lord.playerId, { coins: player.coins - totalGold });
 
-    // ── Deduct resources ──────────────────────────────────────────
+    // ── Deduct resources from empire pool ────────────────────────
     Object.entries(rc).forEach(([res, perUnit]) => {
-      city.resources[res] = (city.resources[res] || 0) - perUnit * count;
+      player.resources[res] = (player.resources[res] || 0) - perUnit * count;
     });
+    PlayerService.update(player.id, { resources: player.resources });
 
     // ── Deduct population ─────────────────────────────────────────
     if (popCost > 0 && def.race !== null) {

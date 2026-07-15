@@ -41,7 +41,12 @@ const WorldService = (() => {
   function getSize() { return SIZE; }
 
   function getTile(x, y) {
-    return _getWorld().tiles[_key(x, y)] || null; // null = empty
+    // Player's own cities are always authoritative (updated after every action)
+    const cities = StorageService.get('cities') || {};
+    const own = Object.values(cities).find(c => c.x === x && c.y === y);
+    if (own) return own.id;
+    // Fall back to shared world_state (contains other players' cities)
+    return _getWorld().tiles[_key(x, y)] || null;
   }
 
   function isOccupied(x, y) {
@@ -63,12 +68,21 @@ const WorldService = (() => {
   }
 
   // Returns all occupied tiles as an array of { x, y, cityId }.
+  // Merges player's own cities (authoritative) with shared world_state (other players).
   function getOccupiedTiles() {
-    const world = _getWorld();
-    return Object.entries(world.tiles).map(([key, cityId]) => {
-      const [x, y] = key.split(',').map(Number);
-      return { x, y, cityId };
-    });
+    const cities  = StorageService.get('cities') || {};
+    const ownList = Object.values(cities).map(c => ({ x: c.x, y: c.y, cityId: c.id }));
+    const ownSet  = new Set(ownList.map(t => `${t.x},${t.y}`));
+
+    const worldTiles = _getWorld().tiles;
+    const otherList  = Object.entries(worldTiles)
+      .filter(([key]) => !ownSet.has(key))
+      .map(([key, cityId]) => {
+        const [wx, wy] = key.split(',').map(Number);
+        return { x: wx, y: wy, cityId };
+      });
+
+    return [...ownList, ...otherList];
   }
 
   // Deterministic terrain from tile coordinates — no storage needed.

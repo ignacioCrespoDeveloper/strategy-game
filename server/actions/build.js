@@ -31,7 +31,7 @@ export async function handleBuild(req, res) {
 
   const currentLevel = city.buildings?.[buildingId] || 0;
 
-  if ((city.buildQueue || []).length > 0) {
+  if ((city.constructionQueue || []).length > 0) {
     return res.status(400).json({ ok: false, error: 'Construction queue is full' });
   }
 
@@ -57,20 +57,27 @@ export async function handleBuild(req, res) {
   }
 
   const cost = def.cost(currentLevel + 1);
-  for (const [res, amt] of Object.entries(cost)) {
-    if ((city.resources?.[res] || 0) < amt) {
-      return res.status(400).json({ ok: false, error: `Not enough ${res}` });
+  player.resources = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
+  for (const [rKey, amt] of Object.entries(cost)) {
+    if (amt > 0 && Math.floor(player.resources[rKey] || 0) < amt) {
+      return res.status(400).json({ ok: false, error: `Not enough ${rKey} (need ${amt}, have ${Math.floor(player.resources[rKey] || 0)})` });
     }
   }
 
-  // Apply
-  for (const [res, amt] of Object.entries(cost)) {
-    city.resources[res] = (city.resources[res] || 0) - amt;
+  // Apply — deduct from empire-wide pool
+  for (const [rKey, amt] of Object.entries(cost)) {
+    if (amt > 0) player.resources[rKey] = (player.resources[rKey] || 0) - amt;
   }
   const buildTime = def.buildTime(currentLevel + 1);
-  city.buildQueue = [{ buildingId, finishAt: Date.now() + buildTime * 1000 }];
+  const now = Date.now();
+  city.constructionQueue = [{
+    buildingId,
+    targetLevel: currentLevel + 1,
+    startedAt:   now,
+    finishAt:    now + buildTime * 1000,
+  }];
 
   await saveState(admin, playerId, rawPlayers, { player, lords, cities, armies });
 
-  return res.json({ ok: true, city });
+  return res.json({ ok: true, city, player });
 }
