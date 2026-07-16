@@ -31,6 +31,13 @@ const LordService = (() => {
 
   // ── Stats & class helpers ─────────────────────────────────────
 
+  // Returns the effects object for the lord's chosen talent, or {} if none.
+  function getTalentEffects(lord) {
+    return (typeof TALENT_POOL !== 'undefined' && lord.talentId)
+      ? (TALENT_POOL[lord.talentId]?.effects || {})
+      : {};
+  }
+
   // Returns the lord's effective stats: base + class permanent modifiers.
   function getEffectiveStats(lord) {
     const base = lord.baseStats || { ...LORD_BASE_STATS };
@@ -43,20 +50,21 @@ const LordService = (() => {
     return result;
   }
 
-  // Returns the real action duration (seconds), applying fatigue tier and class passive.
+  // Returns the real action duration (seconds), applying fatigue tier, class passive, and talent.
   // Fatigue tiers: 0-7 searches → 5m, 8-14 → 15m, 15+ → 30m.
-  // Rogue Explorer passive (searchDurationMult) applied on top.
+  // Takes the lowest searchDurationMult if both class passive and talent apply.
   function getActionDuration(lord, actionId) {
     const def = LORD_ACTIONS[actionId];
     if (!def) return 0;
     if (actionId === 'search_area') {
-      const base    = DiscoveryService.getSearchDuration(lord.id);
-      const cls     = LORD_CLASSES[lord.classId];
-      const effects = cls?.passive?.effects || {};
-      if (effects.searchDurationMult != null) {
-        return Math.round(base * effects.searchDurationMult);
-      }
-      return base;
+      const base          = DiscoveryService.getSearchDuration(lord.id);
+      const cls           = LORD_CLASSES[lord.classId];
+      const clsMult       = cls?.passive?.effects?.searchDurationMult;
+      const talentMult    = getTalentEffects(lord).searchDurationMult;
+      const mult = (clsMult != null && talentMult != null)
+        ? Math.min(clsMult, talentMult)
+        : (clsMult ?? talentMult ?? 1);
+      return Math.round(base * mult);
     }
     return def.duration;
   }
@@ -78,7 +86,7 @@ const LordService = (() => {
 
   // Command capacity: max army points this lord can field.
   function getCommandCapacity(lord) {
-    return 6 + 2 * (lord.level || 1);
+    return 6 + 2 * (lord.level || 1) + (getTalentEffects(lord).commandCapacityBonus || 0);
   }
 
   function create(playerId, name, raceId, classId) {
@@ -108,6 +116,7 @@ const LordService = (() => {
       xp:             0,
       xpToNext:       150,
       talentPoints:   0,
+      talentId:       null,
       actionQueue:    [],
       stance:         { id: 'idle', startedAt: null, finishAt: null },
       baseStats:      { ...LORD_BASE_STATS },
@@ -149,8 +158,8 @@ const LordService = (() => {
 
   // Enqueue a move action. Travel time = 20s per tile, reduced by speed stat.
   // Uses Chebyshev distance (diagonal = 1 tile).
-  // opts.intent = 'attack' tags the move so tickActions can signal the UI to
-  // call POST /api/pvp/resolve on arrival instead of a plain arrival toast.
+  // opts.intent = 'attack' tags the move so the server dispatcher resolves
+  // the PvP battle server-side when the lord arrives at the target tile.
   function enqueueMoveAction(lord, destX, destY, opts) {
     if (isDown(lord)) return { ok: false, error: 'Lord is incapacitated and cannot move.' };
     if (lord.actionQueue.length > 0) return { ok: false, error: 'An action is already in progress.' };
@@ -274,8 +283,10 @@ const LordService = (() => {
     return leveled;
   }
 
-  // Checks if the queued action completed, applies rewards + auto level-up.
-  // Returns [{ name, actionId, leveled }].
+  // Checks if the queued action completed and clears it.
+  // XP + discovery for search_area are now handled server-side in catchUp —
+  // the UI calls ServerActions.questResolve() to get the result.
+  // Returns [{ name, actionId, leveled, destX, destY, intent }].
   function tickActions(lord) {
     if (lord.actionQueue.length === 0) return [];
     const item = lord.actionQueue[0];
@@ -284,16 +295,20 @@ const LordService = (() => {
     const def = LORD_ACTIONS[item.actionId];
     lord.actionQueue = [];
 
-    if (def && def.xpReward) {
-      lord.xp = (lord.xp || 0) + def.xpReward;
-    }
-
     if (item.actionId === 'move_lord' && item.destX != null) {
       lord.x = item.destX;
       lord.y = item.destY;
     }
 
-    const leveled = checkLevelUp(lord);
+    // For search_area: server applies XP + rolls discovery via catchUp / quest-resolve.
+    // For all other actions (none currently have xpReward, but keep the guard future-proof).
+    let leveled = 0;
+    if (item.actionId !== 'search_area' && def && def.xpReward) {
+      const xpMult = getTalentEffects(lord).xpMultiplier || 1;
+      lord.xp = (lord.xp || 0) + Math.round(def.xpReward * xpMult);
+      leveled = checkLevelUp(lord);
+    }
+
     save(lord);
     return [{ name: def?.name || item.actionId, actionId: item.actionId, leveled, destX: item.destX, destY: item.destY, intent: item.intent || null }];
   }
@@ -370,7 +385,7 @@ const LordService = (() => {
 
   // CP cap by lord level: Lv1=280, +80 per level.
   function getArmyPowerCap(lord) {
-    return 200 + (lord.level || 1) * 80;
+    return 200 + (lord.level || 1) * 80 + (getTalentEffects(lord).armyPowerCapBonus || 0);
   }
 
   return {
@@ -378,7 +393,7 @@ const LordService = (() => {
     getRecruitCost, getUpkeepPerHour, getCommandCapacity,
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
-    getEffectiveStats, getActionDuration,
+    getEffectiveStats, getActionDuration, getTalentEffects,
     getStance, isStanced, enterStance, exitStance, tickStance,
     getArmyPowerCap,
     isDown, getDowntimeRemaining, tickDowntime,

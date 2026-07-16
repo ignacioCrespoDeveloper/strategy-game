@@ -24,18 +24,6 @@
   <!-- Toast notifications (always present) -->
   <div id="toast-container"></div>
 
-  <!-- Dev reset button (remove before shipping) -->
-  <button id="dev-reset-btn" title="Wipe all saved data and restart"
-    style="position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;
-           padding:0.4rem 0.8rem;font-size:0.72rem;font-weight:700;
-           background:#3a1010;border:1px solid #8a2020;border-radius:6px;
-           color:#e05050;cursor:pointer;opacity:0.7;letter-spacing:0.05em;"
-    onmouseenter="this.style.opacity='1'"
-    onmouseleave="this.style.opacity='0.7'"
-    onclick="if(confirm('Wipe all saved data and restart?')){StorageService.clearAll();location.reload();}">
-    ⚠ Reset Data
-  </button>
-
   <!-- ── Supabase (must load before config and core) ── -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="js/core/config.js"></script>
@@ -48,9 +36,12 @@
 
   <!-- ── Data definitions ── -->
   <script src="js/data/races.js"></script>
+  <script src="js/data/names.js"></script>
   <script src="js/data/buildings.js"></script>
   <script src="js/data/discoveries.js"></script>
   <script src="js/data/lord-classes.js"></script>
+  <script src="js/data/lord-portraits.js"></script>
+  <script src="js/data/quest-narratives.js"></script>
   <script src="js/data/stances.js"></script>
   <script src="js/data/tags.js"></script>
   <script src="js/data/traits.js"></script>

@@ -3,8 +3,28 @@
 // =============================================
 
 const AuthView = (() => {
+  let _root         = null;
+  let _selectedRace = null;
+
+  // Pending credentials held between step 1 and step 2
+  let _pendingUsername = '';
+  let _pendingEmail    = '';
+  let _pendingPassword = '';
+
+  const RACE_THEMES = {
+    human:    { bg: 'linear-gradient(160deg, #2a1c0a 0%, #1a1206 100%)', accent: '#c8933a' },
+    dwarf:    { bg: 'linear-gradient(160deg, #1e1510 0%, #110d08 100%)', accent: '#a07858' },
+    orc:      { bg: 'linear-gradient(160deg, #0c1f0a 0%, #071208 100%)', accent: '#4a9020' },
+    high_elf: { bg: 'linear-gradient(160deg, #0a1830 0%, #060f20 100%)', accent: '#60a8e8' },
+    dark_elf: { bg: 'linear-gradient(160deg, #1a0828 0%, #0e0418 100%)', accent: '#9040d0' },
+  };
+
+  // ── Step 1: Auth form ─────────────────────────────────────────
 
   function render(root) {
+    _root         = root;
+    _selectedRace = null;
+
     root.innerHTML = `
       <div class="auth-screen">
         <div class="auth-bg"></div>
@@ -43,7 +63,7 @@ const AuthView = (() => {
             <input class="auth-input" type="email"    id="reg-email"    placeholder="Email" autocomplete="email" />
             <input class="auth-input" type="password" id="reg-password" placeholder="Password (min 6 chars)" autocomplete="new-password" />
             <p class="auth-error" id="reg-error"></p>
-            <button class="auth-btn" id="reg-btn">Found your Dynasty</button>
+            <button class="auth-btn" id="reg-btn">Choose your Race →</button>
 
             <div class="auth-divider"><span>or</span></div>
             <button class="auth-btn auth-btn--google" id="google-btn-reg">
@@ -78,8 +98,8 @@ const AuthView = (() => {
 
     document.getElementById('login-btn').addEventListener('click', _onLogin);
     document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') _onLogin(); });
-    document.getElementById('reg-btn').addEventListener('click', _onRegister);
-    document.getElementById('reg-password').addEventListener('keydown', e => { if (e.key === 'Enter') _onRegister(); });
+    document.getElementById('reg-btn').addEventListener('click', _onRegisterStep1);
+    document.getElementById('reg-password').addEventListener('keydown', e => { if (e.key === 'Enter') _onRegisterStep1(); });
     document.getElementById('google-btn').addEventListener('click', _onGoogle);
     document.getElementById('google-btn-reg').addEventListener('click', _onGoogle);
   }
@@ -105,14 +125,13 @@ const AuthView = (() => {
     await _hydrateSession(data.session, data.user);
   }
 
-  // ── Register ──────────────────────────────────────────────────
+  // ── Register step 1: validate credentials, go to race panel ──
 
-  async function _onRegister() {
+  function _onRegisterStep1() {
     const username = document.getElementById('reg-username').value.trim();
     const email    = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value;
     const errorEl  = document.getElementById('reg-error');
-    const btn      = document.getElementById('reg-btn');
     errorEl.textContent = '';
 
     if (!username || !email || !password) { errorEl.textContent = 'Please fill in all fields.'; return; }
@@ -120,22 +139,106 @@ const AuthView = (() => {
     if (!/^[a-zA-Z0-9_]+$/.test(username)) { errorEl.textContent = 'Username: only letters, numbers and underscores.'; return; }
     if (password.length < 6)              { errorEl.textContent = 'Password must be at least 6 characters.'; return; }
 
+    _pendingUsername = username;
+    _pendingEmail    = email;
+    _pendingPassword = password;
+    _selectedRace    = null;
+
+    _showRacePanel();
+  }
+
+  // ── Step 2: Race selection panel ──────────────────────────────
+
+  function _showRacePanel() {
+    _root.innerHTML = `
+      <div class="rsp-screen">
+
+        <div class="rsp-header">
+          <h1 class="rsp-title">Choose Your Race</h1>
+          <p class="rsp-subtitle">Your race shapes your lords, your cities, and your dynasty — forever.</p>
+        </div>
+
+        <div class="rsp-track" id="rsp-track">
+          ${Object.values(RACES).map(race => _raceCardHtml(race)).join('')}
+        </div>
+
+        <div class="rsp-footer">
+          <p class="form-error" id="rsp-error"></p>
+          <button class="auth-btn rsp-confirm-btn" id="rsp-confirm" disabled>Select a race to continue</button>
+          <button class="rsp-back-btn" id="rsp-back">← Back to sign up</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('rsp-track').addEventListener('click', e => {
+      const card = e.target.closest('.rsp-card');
+      if (!card) return;
+      _selectedRace = card.dataset.race;
+      document.querySelectorAll('.rsp-card').forEach(c =>
+        c.classList.toggle('rsp-card--selected', c.dataset.race === _selectedRace)
+      );
+      const race = RACES[_selectedRace];
+      const btn  = document.getElementById('rsp-confirm');
+      btn.disabled    = false;
+      btn.textContent = `Play as ${race.name} →`;
+    });
+
+    document.getElementById('rsp-confirm').addEventListener('click', _onRegisterConfirm);
+    document.getElementById('rsp-back').addEventListener('click', () => render(_root));
+  }
+
+  function _raceCardHtml(race) {
+    const theme   = RACE_THEMES[race.id] || RACE_THEMES.human;
+    const hasArt  = !!race.portrait;
+    const artStyle = hasArt
+      ? `background-image: url('${race.portrait}'); background-size: cover; background-position: center top;`
+      : `background: ${theme.bg};`;
+
+    return `
+      <div class="rsp-card" data-race="${race.id}">
+        <div class="rsp-card-art" style="${artStyle}">
+          ${!hasArt ? `<span class="rsp-card-icon" style="color:${theme.accent}">${race.icon}</span>` : ''}
+          <div class="rsp-card-art-fade"></div>
+        </div>
+        <div class="rsp-card-body">
+          <div class="rsp-card-name" style="--race-accent:${theme.accent}">${race.icon} ${race.name}</div>
+          <div class="rsp-card-desc">${race.description}</div>
+          <div class="rsp-card-bonus">${race.bonusLabel}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // ── Register step 2: sign up with stored credentials + race ──
+
+  async function _onRegisterConfirm() {
+    const errorEl = document.getElementById('rsp-error');
+    const btn     = document.getElementById('rsp-confirm');
+    errorEl.textContent = '';
+
+    if (!_selectedRace) {
+      errorEl.textContent = 'Choose a race to continue.';
+      return;
+    }
+
     btn.disabled = true; btn.textContent = 'Creating dynasty…';
 
     const { data, error } = await SupabaseService.client.auth.signUp({
-      email,
-      password,
-      options: { data: { username } },
+      email:    _pendingEmail,
+      password: _pendingPassword,
+      options:  { data: { username: _pendingUsername, race: _selectedRace } },
     });
 
-    btn.disabled = false; btn.textContent = 'Found your Dynasty';
-
-    if (error) { errorEl.textContent = _friendlyError(error.message); return; }
+    if (error) {
+      errorEl.textContent = _friendlyError(error.message);
+      btn.disabled = false; btn.textContent = 'Found your Dynasty';
+      return;
+    }
 
     if (!data.session) {
-      // Email confirmation is enabled — ask user to confirm
-      document.getElementById('reg-error').style.color = '#4caf50';
+      errorEl.style.color = '#4caf50';
       errorEl.textContent = '✓ Account created! Check your email to confirm, then sign in.';
+      btn.disabled = false;
       return;
     }
 
@@ -176,6 +279,7 @@ const AuthView = (() => {
       coins:        existingData?.coins    ?? 5000,
       credits:      existingData?.credits  ?? 9999,
       lordId:       existingData?.lordId   ?? null,
+      race:         existingData?.race     ?? user.user_metadata?.race ?? null,
       createdAt:    existingData?.createdAt ?? Date.now(),
       passwordHash: '__supabase__',
     };

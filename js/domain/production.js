@@ -36,6 +36,13 @@ const ProductionService = (() => {
       totals.iron  = Math.floor(totals.iron  * (1 + (b.iron_production  || 0)));
     }
 
+    // Terrain multipliers (applied after race bonuses so both stack multiplicatively)
+    const terrain     = WorldService.getTerrain(city.x, city.y);
+    const terrainMods = TERRAIN_RESOURCE_MODS[terrain?.id] || {};
+    Object.entries(terrainMods).forEach(([res, mult]) => {
+      if (totals[res] !== undefined) totals[res] = Math.floor(totals[res] * mult);
+    });
+
     return totals;
   }
 
@@ -46,7 +53,7 @@ const ProductionService = (() => {
     const stats     = CityStatsService.getStats(city);
     const happiness = Math.max(0, stats.happiness || 0);
     const pop       = city.population || 1000;
-    let rate        = pop * 0.10 * (happiness / 100);
+    let rate        = pop * 0.013 * (happiness / 100);
     const mkLevel   = city.buildings.marketplace || 0;
     if (mkLevel > 0) rate *= (1 + 0.08 * mkLevel);
     return Math.floor(rate);

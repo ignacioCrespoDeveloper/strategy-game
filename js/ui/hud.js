@@ -3,8 +3,10 @@
 // =============================================
 
 const HUD = (() => {
-  let _lord    = null;
-  let _player  = null;
+  let _lord        = null;
+  let _player      = null;
+  let _rank        = null;
+  let _clockTimer  = null;
 
   const RES = {
     coins: { icon: '💰', label: 'Gold'  },
@@ -13,6 +15,16 @@ const HUD = (() => {
     stone: { icon: '⛏',  label: 'Stone' },
     iron:  { icon: '⚒',  label: 'Iron'  },
   };
+
+  function _updateClock() {
+    const el = document.getElementById('hud-clock');
+    if (!el) return;
+    const d = new Date(TimeService.serverNow());
+    const h = String(d.getUTCHours()).padStart(2, '0');
+    const m = String(d.getUTCMinutes()).padStart(2, '0');
+    const s = String(d.getUTCSeconds()).padStart(2, '0');
+    el.textContent = `${h}:${m}:${s}`;
+  }
 
   function show(player, lord) {
     _player = player;
@@ -23,9 +35,28 @@ const HUD = (() => {
     document.body.classList.add('hud-active');
     _bindEvents();
     refresh();
+    _refreshRank();
+    _updateClock();
+    if (_clockTimer) clearInterval(_clockTimer);
+    _clockTimer = setInterval(_updateClock, 1000);
+  }
+
+  async function _refreshRank() {
+    if (!_player) return;
+    try {
+      const score = RankingService.computeScore(_player);
+      await RankingService.saveScore(_player, score);
+      const board = await RankingService.fetchLeaderboard();
+      _rank = RankingService.getPlayerRank(_player.id, board);
+      const el = document.getElementById('hud-rank-badge');
+      if (el) el.textContent = _rank ? `(#${_rank})` : '';
+    } catch (e) {
+      console.warn('[HUD] rank refresh failed', e);
+    }
   }
 
   function hide() {
+    if (_clockTimer) { clearInterval(_clockTimer); _clockTimer = null; }
     const bar = document.getElementById('hud-bar');
     bar.classList.add('hidden');
     bar.innerHTML = '';
@@ -80,7 +111,7 @@ const HUD = (() => {
   function setLord(lord) { _lord = lord; refresh(); }
 
   function _html() {
-    const race = RACES[_lord?.race] || {};
+    const race = RACES[_player?.race] || {};
     return `
       <button class="hud-hamburger" id="hud-hamburger" title="Toggle sidebar">☰</button>
 
@@ -99,12 +130,19 @@ const HUD = (() => {
       <div class="hud-lord-center hud-lord-btn" id="hud-lord-btn" title="Empire Overview">
         <div class="hud-lord-portrait">${race.icon || '👤'}</div>
         <div class="hud-lord-text">
-          <div class="hud-lord-name">${_player?.username || ''}</div>
-          <div class="hud-lord-race">${_lord ? `${race.name || ''} · Lv ${_lord.level || 1}` : 'New Player'}</div>
+          <div class="hud-lord-name">
+            ${_player?.username || ''}
+            <span id="hud-rank-badge" class="hud-rank-badge">${_rank ? `(#${_rank})` : ''}</span>
+          </div>
+          <div class="hud-lord-race">${race.name || 'New Player'}</div>
         </div>
       </div>
 
       <div class="hud-right">
+        <div class="hud-server-clock" title="Server time (UTC)">
+          <span class="hud-clock-label">UTC</span>
+          <span class="hud-clock-time" id="hud-clock">--:--:--</span>
+        </div>
         <div class="hud-credits" title="Premium Credits — spend to finish actions instantly">
           <span class="hud-credits-icon">💎</span>
           <div class="hud-credits-text">

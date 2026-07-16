@@ -93,9 +93,9 @@ const CityView = (() => {
     const race    = RACES[_lord?.race] || {};
     const terrain = WorldService.getTerrain(_city.x, _city.y);
     const stats   = CityStatsService.getStats(_city);
-    const status  = CityStatsService.getCityStatus(stats);
     const rates   = ProductionService.getRates(_city, _lord);
     const growth  = CityStatsService.getPopulationGrowthRate(_city, stats, rates);
+    const status  = CityStatsService.getCityStatus(stats, growth);
 
     const growthSign  = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
     const growthClass = growth > 0 ? 'pop-growing' : growth < 0 ? 'pop-declining' : 'pop-stable';
@@ -246,9 +246,9 @@ const CityView = (() => {
 
   function _overviewTabHtml() {
     const stats    = CityStatsService.getStats(_city);
-    const status   = CityStatsService.getCityStatus(stats);
     const rates    = ProductionService.getRates(_city, _lord);
     const growth   = CityStatsService.getPopulationGrowthRate(_city, stats, rates);
+    const status   = CityStatsService.getCityStatus(stats, growth);
     const { level, usedSlots, maxSlots } = CityStatsService.getSlotInfo(_city);
     const garrison = CityService.getGarrison(_city);
     const terrain  = WorldService.getTerrain(_city.x, _city.y);
@@ -336,7 +336,7 @@ const CityView = (() => {
           <div class="cvov-hero-pop">
             <div class="cvov-hero-pop-val">${currentPop.toLocaleString()}</div>
             <div class="cvov-hero-pop-label">Population</div>
-            <div class="cvov-hero-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr (${growthSign}${Math.abs(Math.round(growth * 24 / (currentPop || 1) * 100 * 10) / 10)}%/d)</div>
+            <div class="cvov-hero-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</div>
           </div>
           <div class="cvov-hero-gold">
             <div class="cvov-hero-gold-rate">+${cityGoldRate}💰/h</div>
@@ -377,18 +377,24 @@ const CityView = (() => {
           <div class="cvov-res-table">
             <div class="cvov-res-thead">
               <span class="cvov-res-th-res">Resource</span>
+              <span class="cvov-res-th cvov-res-th-terrain">${terrain.icon} Terrain</span>
               <span class="cvov-res-th">/ hr</span>
               <span class="cvov-res-th">/ day</span>
               <span class="cvov-res-th">/ week</span>
             </div>
             ${Object.entries(RES).map(([key, meta]) => {
-              const rate   = rates[key] || 0;
-              const day    = rate * 24;
-              const week   = rate * 24 * 7;
-              const rClass = rate > 0 ? 'cvov-rate-pos' : rate < 0 ? 'cvov-rate-neg' : 'cvov-rate-zero';
+              const rate     = rates[key] || 0;
+              const day      = rate * 24;
+              const week     = rate * 24 * 7;
+              const rClass   = rate > 0 ? 'cvov-rate-pos' : rate < 0 ? 'cvov-rate-neg' : 'cvov-rate-zero';
+              const terrMult = (TERRAIN_RESOURCE_MODS[terrain?.id] || {})[key];
+              const terrPct  = terrMult ? Math.round((terrMult - 1) * 100) : null;
+              const terrCls  = terrMult ? (terrMult >= 1 ? 'cvov-terr-pos' : 'cvov-terr-neg') : 'cvov-terr-none';
+              const terrVal  = terrPct !== null ? `${terrPct >= 0 ? '+' : ''}${terrPct}%` : '—';
               return `
                 <div class="cvov-res-row">
                   <span class="cvov-res-name"><span class="cvov-res-icon">${meta.icon}</span>${meta.name}</span>
+                  <span class="cvov-res-terr ${terrCls}">${terrVal}</span>
                   <span class="cvov-res-rate ${rClass}">${fmtRate(rate)}</span>
                   <span class="cvov-res-rate ${rClass}">${fmtRate(day)}</span>
                   <span class="cvov-res-rate ${rClass}">${fmtRate(week)}</span>

@@ -16,7 +16,7 @@ const MAP_HEIGHT  = 100;
 
 function _foundCost(existingCount) {
   if (existingCount === 0) return 0;
-  return 5000 * Math.pow(2, existingCount - 1);
+  return 8000 * Math.pow(2, existingCount - 1);
 }
 
 function _generateId() {

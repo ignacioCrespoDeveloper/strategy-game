@@ -115,9 +115,20 @@ const BattleResultView = (() => {
     freshLord.xp    = (freshLord.xp || 0) + report.xpEarned;
     const leveled   = LordService.checkLevelUp(freshLord);
 
-    // Lord HP — use surviving lord unit's currentHp; minimum 1 (no permadeath)
+    // Lord HP + fallen state
     const lordSurv = report.attacker.unitsSurviving.find(u => u.sourceId === lord.id);
-    freshLord.currentHp = lordSurv ? Math.max(1, Math.round(lordSurv.avgHp)) : 1;
+    if (lordSurv) {
+      // Lord survived the battle
+      freshLord.currentHp      = Math.max(1, Math.round(lordSurv.avgHp));
+      freshLord.downtimeUntil  = null;
+      freshLord.downtimeReason = null;
+    } else {
+      // Lord was eliminated — enter Fallen state (1 hour recovery, matching PvP)
+      freshLord.currentHp      = 0;
+      freshLord.downtimeUntil  = TimeService.now() + 60 * 60 * 1000;
+      freshLord.downtimeReason = 'defeated';
+      freshLord.actionQueue    = [];
+    }
 
     LordService.save(freshLord);
 

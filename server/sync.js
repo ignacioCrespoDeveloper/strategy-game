@@ -11,8 +11,12 @@
 //  go through the client-side StorageService debounce.
 // =============================================
 
-import { createClient } from '@supabase/supabase-js';
-import { catchUp }      from './tick/catch-up.js';
+import { createClient }     from '@supabase/supabase-js';
+import { catchUp }           from './tick/catch-up.js';
+import { resolvePvpBattle }  from './combat-resolver.js';
+import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS } from './engine-loader.js';
+
+const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS };
 
 // Keys we load for catch-up (armies + cities + lords + player record)
 const SYNC_KEYS = ['players', 'lords', 'cities', 'armies'];
@@ -94,7 +98,27 @@ export async function syncPlayerState(req, res) {
         armies: raw.armies || {},
       },
       Date.now(),
+      _ENGINE,
     );
+
+    // Drain pendingDiscoveries from lords into events so the client can
+    // display the quest results that resolved while the browser was closed.
+    for (const lord of Object.values(result.lords)) {
+      if (!lord?.pendingDiscoveries?.length) continue;
+      for (const pending of lord.pendingDiscoveries) {
+        result.events.push({
+          type:     'quest_result',
+          lordId:   lord.id,
+          lordName: lord.name || '',
+          defId:    pending.defId,
+          category: pending.category,
+          record:   pending.record  || null,
+          rewards:  pending.rewards || [],
+        });
+      }
+      lord.pendingDiscoveries = [];
+      result.changed = true;
+    }
 
     // ── 4. Write changed state back to Supabase ──────────────────
     //  Only write if something actually changed — avoids unnecessary
@@ -116,6 +140,36 @@ export async function syncPlayerState(req, res) {
         // Non-fatal: log and continue; client still gets the computed state
         console.warn('[sync] save warning:', saveErr.message);
       }
+    }
+
+    // ── 4b. Drain pending PvP attacks ───────────────────────────────
+    //  catchUp sets lord.pendingPvpAttack when an attack-intent move
+    //  completed while the browser was closed. We resolve those battles
+    //  NOW — after the save above — so Supabase holds the updated lord
+    //  position when _resolveCore reads it.
+    try {
+      for (const lord of Object.values(result.lords)) {
+        if (!lord?.pendingPvpAttack) continue;
+        const { tileX, tileY } = lord.pendingPvpAttack;
+        lord.pendingPvpAttack = null; // clear in response state immediately
+        const pvpResult = await resolvePvpBattle(admin, playerId, lord.id, tileX, tileY);
+        if (pvpResult.ok) {
+          if (pvpResult.atkLords)  Object.assign(result.lords,   pvpResult.atkLords);
+          if (pvpResult.atkArmies) Object.assign(result.armies,  pvpResult.atkArmies);
+          if (pvpResult.atkPlayer) result.player = pvpResult.atkPlayer;
+          if (pvpResult.report) {
+            result.events.push({
+              type:     'pvp_resolved',
+              lordId:   lord.id,
+              lordName: lord.name || '',
+              report:   pvpResult.report,
+              terrain:  pvpResult.terrain,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[sync] pending PvP drain failed:', e.message);
     }
 
     // ── 5. Backfill world_state with this player's city positions ──
@@ -156,7 +210,7 @@ export async function syncPlayerState(req, res) {
       players: { ...players, [playerId]: result.player },
     };
 
-    return res.json({ ok: true, state: responseState, events: result.events });
+    return res.json({ ok: true, state: responseState, events: result.events, serverTime: Date.now() });
 
   } catch (err) {
     console.error('[sync] unexpected error:', err);

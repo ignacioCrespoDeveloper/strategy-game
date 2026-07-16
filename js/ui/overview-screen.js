@@ -1,4 +1,4 @@
-// =============================================
+﻿// =============================================
 //  overview-screen.js — Empire dashboard (default landing)
 // =============================================
 
@@ -12,6 +12,7 @@ const OverviewScreen = (() => {
   let _movementsOpen   = true;
   let _citiesCollapsed = false;
   let _lordsCollapsed  = false;
+  let _selectedClass   = null;
 
   // ── Entry point ───────────────────────────────────────────────
 
@@ -44,6 +45,11 @@ const OverviewScreen = (() => {
       recruitment_completed: e => `⚔ ${e.cityName}: ${e.count}× ${e.unitId.replace(/_/g, ' ')} ready`,
       lord_recovered:        e => `💚 ${e.lordName} has recovered`,
       lord_action_done:      e => e.destX != null ? `🗺 ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
+      pvp_resolved:          e => {
+        const icon = e.report?.winner === 'attacker' ? '⚔' : e.report?.winner === 'draw' ? '🤝' : '☠';
+        const lbl  = e.report?.winner === 'attacker' ? 'PvP Victory' : e.report?.winner === 'draw' ? 'PvP Draw' : 'PvP Defeat';
+        return `${icon} ${lbl} while offline — see Activity`;
+      },
     };
 
     // Deduplicate and show at most 3 toasts so we don't flood the screen
@@ -89,16 +95,9 @@ const OverviewScreen = (() => {
       for (const lord of activeLords) {
         const completed = LordService.tickActions(lord);
         if (completed.length > 0) {
-          ServerActions.syncNow(); // persist lord action completion to Supabase
+          // Server dispatcher resolves outcomes (PvP, position, XP).
+          // Client picks up results on the next /api/sync poll.
           if (_lord && lord.id === _lord.id) _lord = LordService.getById(lord.id);
-          const atk = completed.find(c => c.actionId === 'move_lord' && c.intent === 'attack');
-          if (atk) {
-            const lid = lord.id;
-            const dX  = atk.destX;
-            const dY  = atk.destY;
-            // Give syncNow() a moment to write before the PvP resolve reads
-            setTimeout(() => _resolveAttack(lid, dX, dY), 800);
-          }
           needsRerender = true;
         } else {
           // Update movement panel row timer in-place (IDs added in _movementsPanel)
@@ -106,6 +105,9 @@ const OverviewScreen = (() => {
           const time = document.getElementById(`ov-mv-time-${lord.id}`);
           if (fill) fill.style.width = `${Math.floor(LordService.actionProgress(lord) * 100)}%`;
           if (time) time.textContent = TimeService.formatDuration(LordService.actionTimeRemaining(lord));
+          // Update portrait activity overlay timer for this lord
+          const actCd = document.getElementById(`ov-lord-act-cd-${lord.id}`);
+          if (actCd) actCd.textContent = TimeService.formatDuration(LordService.actionTimeRemaining(lord));
           // Also update lord card bars if this is _lord
           if (_lord && lord.id === _lord.id) {
             const cardFill  = document.getElementById('ov-lord-fill');
@@ -116,12 +118,17 @@ const OverviewScreen = (() => {
         }
       }
 
+      // City production (gold + population) — tick all cities so income
+      // accumulates even when individual city screens aren't opened.
+      CityService.getPlayerCities(_player.id).forEach(city => {
+        ProductionService.tick(city, _lord);
+      });
+
       // City construction
       CityService.getPlayerCities(_player.id).forEach(city => {
         if (city.constructionQueue.length === 0) return;
         const completed = ConstructionService.tick(city);
         if (completed.length > 0) {
-          ServerActions.syncNow(); // persist building completion to Supabase
           needsRerender = true;
         } else {
           const fill  = document.getElementById(`ov-city-fill-${city.id}`);
@@ -165,106 +172,30 @@ const OverviewScreen = (() => {
     }, 1000);
   }
 
-  // ── PvP attack resolution (fires when attacker's travel timer ends) ──
-
-  async function _resolveAttack(attackingLordId, tX, tY) {
-    let token;
-    try {
-      const { data: { session } } = await SupabaseService.client.auth.getSession();
-      token = session?.access_token;
-    } catch (_) {}
-    if (!token) { _toast('❌ No active session to resolve battle.'); return; }
-
-    _toast('⚔ Resolving combat…');
-    let d;
-    try {
-      const resp = await fetch('/api/pvp/resolve', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body:    JSON.stringify({ attackerLordId: attackingLordId, targetTileX: tX, targetTileY: tY }),
-      });
-      d = await resp.json();
-    } catch (e) {
-      _toast('❌ Network error: ' + e.message);
-      return;
-    }
-
-    if (!d.ok) {
-      _toast('❌ ' + (d.error || 'Error en el combate'));
-      return;
-    }
-
-    // Apply army losses locally so the UI refreshes without a reload
-    const armiesAll = StorageService.get('armies') || {};
-    const myArmy    = armiesAll[attackingLordId] || { lordId: attackingLordId, units: [] };
-    (d.report.attacker.unitsStart || []).forEach(({ sourceId }) => {
-      if (sourceId === attackingLordId) return;
-      const surv  = (d.report.attacker.unitsSurviving || []).find(s => s.sourceId === sourceId);
-      const stack = myArmy.units.find(u => u.unitId === sourceId);
-      if (!stack) return;
-      stack.count = surv?.count ?? 0;
-      if (surv && stack.count > 0) stack.currentHp = Math.round(surv.avgHp);
-    });
-    myArmy.units             = myArmy.units.filter(u => u.count > 0);
-    armiesAll[attackingLordId] = myArmy;
-    StorageService.set('armies', armiesAll);
-
-    // Apply XP then battle HP in one save.
-    // checkLevelUp() heals to full on level-up, so HP must be applied AFTER to
-    // ensure the battle result always wins over any level-up heal.
-    const freshLord = LordService.getById(attackingLordId);
-    if (freshLord) {
-      if (d.report.xpEarned > 0) {
-        freshLord.xp = (freshLord.xp || 0) + d.report.xpEarned;
-        const leveled = LordService.checkLevelUp(freshLord);
-        if (leveled > 0) _toast(`⭐ Level up! Now level ${freshLord.level}.`);
-      }
-      // Always overwrite HP + downtime with battle result (level-up heal must not win)
-      const lordUnit = (d.report.attacker.unitsSurviving || []).find(s => s.sourceId === attackingLordId);
-      if (lordUnit) {
-        freshLord.currentHp      = Math.max(1, Math.round(lordUnit.avgHp));
-        freshLord.downtimeUntil  = null;
-        freshLord.downtimeReason = null;
-      } else {
-        freshLord.currentHp      = 0;
-        freshLord.downtimeUntil  = TimeService.now() + 3600000;
-        freshLord.downtimeReason = 'defeated';
-      }
-      LordService.save(freshLord);
-      if (_lord && _lord.id === attackingLordId) _lord = freshLord;
-    }
-
-    // Save to battle history + local activity feed
-    const pvpOutcome = d.report.winner === 'attacker' ? 'victory' : d.report.winner === 'draw' ? 'draw' : 'defeat';
-    BattleHistoryService.save(attackingLordId, {
-      outcome: pvpOutcome, campName: 'Enemy lord', campIcon: '⚔', campLevel: null,
-      terrain: d.terrain || null, goldEarned: 0, xpEarned: d.report.xpEarned || 0,
-      modelsLost: d.report.attacker.modelsLost, rounds: d.report.rounds,
-      reason: d.report.reason, report: d.report,
-    });
-    _player = PlayerService.getById(_player.id);
-    ActivityService.log(_player.id, {
-      type: `battle_${pvpOutcome}`,
-      icon: pvpOutcome === 'victory' ? '⚔' : pvpOutcome === 'draw' ? '🤝' : '☠',
-      title: pvpOutcome === 'victory' ? 'PvP Victory' : pvpOutcome === 'draw' ? 'PvP Draw' : 'PvP Defeat',
-      detail: `${d.report.rounds} rounds · casualties: ${d.report.attacker.modelsLost} · +${d.report.xpEarned || 0}⭐`,
-      lordName: freshLord?.name || '',
-      lordId: attackingLordId,
-    });
-    HUD.refresh();
-
-    const label = pvpOutcome === 'victory' ? '⚔ PvP Victory' : pvpOutcome === 'draw' ? '🤝 PvP Draw' : '☠ PvP Defeat';
-    _toast(`${label} — report in Battles tab`);
-
-    _stopTicker();
-    if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
-  }
-
   // ── Supabase activity_feed polling (both attacker and defender) ──
+
+  let _pollTick = 0;
 
   function _startPolling() {
     if (_pollTimer) return;
-    _pollTimer = setInterval(_pollActivityFeed, 10000);
+    _pollTick = 0;
+    _pollTimer = setInterval(async () => {
+      _pollTick++;
+      _pollActivityFeed();
+      // Full state sync every 30 s — picks up server-resolved outcomes:
+      // PvP battle results, building completions, recruitment, lord moves.
+      // The event dispatcher writes these to Supabase; we read them here.
+      if (_pollTick % 3 === 0) {
+        try {
+          await ServerActions.syncNow();
+          // Update in-memory refs from hydrated localStorage — no re-render.
+          // The ticker re-renders naturally when it detects completed actions.
+          if (_lord)   _lord   = LordService.getById(_lord.id);
+          if (_player) _player = PlayerService.getById(_player.id);
+          HUD.refresh();
+        } catch (_) {}
+      }
+    }, 10000);
   }
 
   async function _pollActivityFeed() {
@@ -301,7 +232,8 @@ const OverviewScreen = (() => {
       const pvpNew = newEntries.filter(e => e.type === 'pvp_result' || e.type === 'pvp_threat');
       pvpNew.forEach(e => _toast(`${e.icon} ${e.title}`));
 
-      // Save battle history + sync lord HP for defender (attacker handles both in _resolveAttack)
+      // Save battle history + sync lord HP for both sides from activity_feed entries.
+      // The server dispatcher writes the authoritative result; this just hydrates local cache.
       newEntries.filter(e => e.type === 'pvp_result' && e.lordId && e.report).forEach(e => {
         const alreadySaved = BattleHistoryService.getForLord(e.lordId).some(b => b.at === e.at);
         if (!alreadySaved) {
@@ -312,10 +244,7 @@ const OverviewScreen = (() => {
             reason: e.report?.reason || '', report: e.report,
           });
         }
-        // Update local lord HP from the battle report.
-        // Only apply when this lord was on the defender side — attacker HP is already
-        // handled synchronously in _resolveAttack. Detect defender side by checking
-        // report.defender.unitsStart (includes eliminated units, unlike unitsSurviving).
+        // Update local lord HP from the battle report for whichever side this player was on.
         const defStart = e.report?.defender?.unitsStart || [];
         if (defStart.some(u => u.sourceId === e.lordId)) {
           const lordsStorage = StorageService.get('lords') || {};
@@ -442,41 +371,53 @@ const OverviewScreen = (() => {
 
   // ── Recruit modal ─────────────────────────────────────────────
 
+  function _classCardHtml(cls) {
+    const mods = Object.entries(cls.modifiers).map(([stat, val]) => {
+      const meta = LORD_STAT_META[stat] || {};
+      return `<span class="lc-mod">${meta.icon || stat} +${val}</span>`;
+    }).join('');
+    const isSelected = _selectedClass === cls.id;
+    return `
+      <div class="lc-class-card${isSelected ? ' lc-class-card--selected' : ''}"
+           data-class-id="${cls.id}" style="--cls-color:${cls.color}">
+        <div class="lc-class-icon">${cls.icon}</div>
+        <div class="lc-class-name">${cls.name}</div>
+        <div class="lc-class-mods">${mods}</div>
+        <div class="lc-class-passive">${cls.passive.icon} ${cls.passive.name}</div>
+      </div>`;
+  }
+
   function _recruitModal() {
-    const raceField = _lord
-      ? `<div class="form-input form-input--locked">
-           ${(() => { const r = RACES[_lord.race] || {}; return `${r.icon || ''} ${r.name || '—'}`; })()}
-         </div>`
-      : `<select class="form-input" id="rl-race">
-           <option value="">— Choose Race —</option>
-           ${Object.values(RACES).map(r => `<option value="${r.id}">${r.icon} ${r.name}</option>`).join('')}
-         </select>`;
+    const playerRace = RACES[_player?.race] || {};
+    const raceField  = `<div class="form-input form-input--locked">
+      ${playerRace.icon || ''} ${playerRace.name || '—'}
+    </div>`;
 
     const playerCities = _player ? CityService.getPlayerCities(_player.id) : [];
     const cityOptions  = playerCities.map(c =>
       `<option value="${c.id}">${c.name} (${c.x}, ${c.y})</option>`
     ).join('');
 
+    const classCards = Object.values(LORD_CLASSES).map(_classCardHtml).join('');
+
     return `
       <div class="modal-overlay hidden" id="recruit-modal">
-        <div class="modal-card">
+        <div class="modal-card modal-card--wide">
           <h2 class="modal-title">Recruit a Lord</h2>
           <div class="form-group">
             <label class="form-label">Name</label>
-            <input class="form-input" type="text" id="rl-name" placeholder="Lord's name" maxlength="30" autocomplete="off" />
+            <div class="lc-name-row">
+              <input class="form-input" type="text" id="rl-name" placeholder="Lord's name" maxlength="30" autocomplete="off" />
+              <button class="btn-dice" id="rl-name-dice" type="button" title="Random name">🎲</button>
+            </div>
           </div>
-          <div class="rl-selects">
-            <div class="form-group">
-              <label class="form-label">Race</label>
-              ${raceField}
-            </div>
-            <div class="form-group">
-              <label class="form-label">Class</label>
-              <select class="form-input" id="rl-class">
-                <option value="">— Choose Class —</option>
-                ${Object.values(LORD_CLASSES).map(c => `<option value="${c.id}">${c.icon} ${c.name}</option>`).join('')}
-              </select>
-            </div>
+          <div class="form-group">
+            <label class="form-label">Race</label>
+            ${raceField}
+          </div>
+          <div class="form-group">
+            <label class="form-label">Class</label>
+            <div class="lc-class-grid" id="lc-class-grid">${classCards}</div>
           </div>
           <div class="form-group">
             <label class="form-label">Starting City</label>
@@ -572,7 +513,6 @@ const OverviewScreen = (() => {
   // ── City tier image helper ────────────────────────────────────
 
   function _cityTierImg(level) {
-    if (level >= 5) return 'assets/city/tier4.jpg';
     if (level >= 4) return 'assets/city/tier4.jpg';
     if (level >= 3) return 'assets/city/tier3.jpg';
     if (level >= 2) return 'assets/city/tier2.jpg';
@@ -618,10 +558,10 @@ const OverviewScreen = (() => {
   function _cityCard(city) {
     const terrain    = WorldService.getTerrain(city.x, city.y);
     const stats      = CityStatsService.getStats(city);
-    const status     = CityStatsService.getCityStatus(stats);
     const slotInfo   = CityStatsService.getSlotInfo(city);
     const prodRates  = ProductionService.getRates(city, _lord);
     const growth     = CityStatsService.getPopulationGrowthRate(city, stats, prodRates);
+    const status     = CityStatsService.getCityStatus(stats, growth);
     const buildItem  = city.constructionQueue.length > 0 ? city.constructionQueue[0] : null;
     const buildDef   = buildItem ? BUILDING_DEFS[buildItem.buildingId] : null;
     const buildPct   = buildItem ? Math.floor(ConstructionService.progress(city) * 100) : 0;
@@ -767,7 +707,37 @@ const OverviewScreen = (() => {
       ? `<span class="ov-lc-stance-badge">${stanceDef.icon} ${stanceDef.name}</span>`
       : '';
 
-    const portraitSrc  = cls?.portrait || race.portrait;
+    const isQuesting = !lordIsDown && queueItem?.actionId === 'search_area';
+    const isMoving   = !lordIsDown && queueItem?.actionId === 'move_lord' && !isAttacking;
+
+    const activityOverlay = isAttacking ? `
+        <div class="ov-lord-activity-overlay ov-lord-activity-overlay--attack">
+          <div class="ov-lord-activity-icon">&#9876;</div>
+          <div class="ov-lord-activity-label">Atacando</div>
+          <div class="ov-lord-activity-dest">(${queueItem.destX}, ${queueItem.destY})</div>
+          <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(actionSecs)}</div>
+        </div>` :
+      isQuesting ? `
+        <div class="ov-lord-activity-overlay ov-lord-activity-overlay--quest">
+          <div class="ov-lord-activity-icon">&#128506;</div>
+          <div class="ov-lord-activity-label">En Quest</div>
+          <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(actionSecs)}</div>
+        </div>` :
+      isMoving ? `
+        <div class="ov-lord-activity-overlay ov-lord-activity-overlay--move">
+          <div class="ov-lord-activity-icon">&#128694;</div>
+          <div class="ov-lord-activity-label">Marchando</div>
+          <div class="ov-lord-activity-dest">(${queueItem.destX}, ${queueItem.destY})</div>
+          <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(actionSecs)}</div>
+        </div>` : '';
+
+    const cardModifier = lordIsDown   ? ' ov-lord-card--down'
+      : isAttacking ? ' ov-lord-card--attacking'
+      : isQuesting  ? ' ov-lord-card--questing'
+      : isMoving    ? ' ov-lord-card--marching'
+      : '';
+
+    const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || lord.portrait || race.portrait;
     const portraitHtml = portraitSrc
       ? `<div class="ov-lc-portrait">
            <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" />
@@ -780,7 +750,7 @@ const OverviewScreen = (() => {
          </div>`;
 
     return `
-      <div class="ov-lord-card${lordIsDown ? ' ov-lord-card--down' : ''}" data-lord-id="${lord.id}">
+      <div class="ov-lord-card${cardModifier}" data-lord-id="${lord.id}">
         ${lordIsDown ? `
           <div class="ov-lord-down-overlay">
             <div class="ov-lord-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
@@ -788,6 +758,7 @@ const OverviewScreen = (() => {
             <div class="ov-lord-down-cd" id="ov-lord-down-cd-${lord.id}">${TimeService.formatDuration(downRemSecs)}</div>
             <button class="ov-lord-revive-btn" data-lord-id="${lord.id}">⚡ ${Math.max(1, Math.ceil(downRemSecs / 60))}💎 Revive</button>
           </div>` : ''}
+        ${activityOverlay}
         ${portraitHtml}
         <div class="ov-lc-body">
           <div class="ov-lc-top">
@@ -991,20 +962,14 @@ const OverviewScreen = (() => {
     });
 
     document.querySelectorAll('.ov-lord-revive-btn[data-lord-id]').forEach(btn => {
-      btn.addEventListener('click', e => {
+      btn.addEventListener('click', async e => {
         e.stopPropagation();
         e.preventDefault();
         const lord = LordService.getById(btn.dataset.lordId);
         if (!lord || !LordService.isDown(lord)) return;
-        const remSecs = Math.ceil(LordService.getDowntimeRemaining(lord) / 1000);
-        const cost    = Math.max(1, Math.ceil(remSecs / 60));
-        const result  = PlayerService.spendCredits(_player.id, cost);
-        if (!result.ok) { _toast(result.error); return; }
-        lord.downtimeUntil  = null;
-        lord.downtimeReason = null;
-        lord.currentHp      = 1;
-        lord.hpRegenAt      = TimeService.now();
-        LordService.save(lord);
+        btn.disabled = true;
+        const result = await ServerActions.reviveLord(lord.id);
+        if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
         _player = PlayerService.getById(_player.id);
         HUD.refresh();
         _stopTicker();
@@ -1056,6 +1021,14 @@ const OverviewScreen = (() => {
       document.getElementById('recruit-modal').classList.add('hidden');
     });
 
+    document.querySelectorAll('.lc-class-card[data-class-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        _selectedClass = card.dataset.classId;
+        document.querySelectorAll('.lc-class-card').forEach(c => c.classList.remove('lc-class-card--selected'));
+        card.classList.add('lc-class-card--selected');
+      });
+    });
+
     document.getElementById('recruit-modal')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) document.getElementById('recruit-modal').classList.add('hidden');
     });
@@ -1063,6 +1036,12 @@ const OverviewScreen = (() => {
     document.getElementById('rl-confirm')?.addEventListener('click', _onRecruitConfirm);
     document.getElementById('rl-name')?.addEventListener('keydown', e => {
       if (e.key === 'Enter') _onRecruitConfirm();
+    });
+    // Dice button: randomize lord name from player race.
+    document.getElementById('rl-name-dice')?.addEventListener('click', () => {
+      const raceId = _player?.race || _lord?.race || 'human';
+      const nameEl = document.getElementById('rl-name');
+      if (nameEl) nameEl.value = randomRaceName(raceId, 'lords');
     });
 
     document.querySelectorAll('.af-report-btn[data-lord-id]').forEach(btn => {
@@ -1082,10 +1061,10 @@ const OverviewScreen = (() => {
   }
 
   function _openRecruitModal() {
-    document.getElementById('rl-name').value  = '';
-    document.getElementById('rl-class').value = '';
-    const raceEl = document.getElementById('rl-race');
-    if (raceEl) raceEl.value = '';
+    _selectedClass = null;
+    const raceId = _player?.race || _lord?.race || '';
+    document.getElementById('rl-name').value = raceId ? randomRaceName(raceId, 'lords') : '';
+    document.querySelectorAll('.lc-class-card').forEach(c => c.classList.remove('lc-class-card--selected'));
     const cityEl = document.getElementById('rl-city');
     if (cityEl) cityEl.value = '';
     document.getElementById('rl-error').textContent = '';
@@ -1095,17 +1074,17 @@ const OverviewScreen = (() => {
 
   async function _onRecruitConfirm() {
     const name    = document.getElementById('rl-name').value;
-    const raceEl  = document.getElementById('rl-race');
-    const raceId  = raceEl ? raceEl.value : (_lord?.race || '');
-    const classId = document.getElementById('rl-class').value;
+    const classId = _selectedClass;
     const cityId  = document.getElementById('rl-city')?.value || null;
     const errorEl = document.getElementById('rl-error');
     const btn     = document.getElementById('rl-confirm');
     errorEl.textContent = '';
+    if (!classId) { errorEl.textContent = 'Please choose a class.'; return; }
     if (!cityId) { errorEl.textContent = 'Please choose a starting city.'; return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Recruiting…'; }
 
-    const result = await ServerActions.createLord(name, raceId, classId, cityId);
+    const portrait = pickLordPortrait(_player?.race, classId);
+    const result = await ServerActions.createLord(name, classId, cityId, portrait);
     if (!result.ok) {
       errorEl.textContent = result.error || 'Server error';
       if (btn) { btn.disabled = false; btn.textContent = 'Create Lord'; }

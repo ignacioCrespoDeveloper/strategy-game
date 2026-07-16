@@ -185,7 +185,7 @@ function _getGoldRate(city) {
   const stats     = _getStats(city.buildings || {}, city.population || 1000);
   const happiness = Math.max(0, stats.happiness);
   const pop       = city.population || 1000;
-  let   rate      = pop * 0.10 * (happiness / 100);
+  let   rate      = pop * 0.013 * (happiness / 100);
   const mkLevel   = (city.buildings || {}).marketplace || 0;
   if (mkLevel > 0) rate *= (1 + 0.08 * mkLevel);
   return Math.floor(rate);
@@ -193,8 +193,7 @@ function _getGoldRate(city) {
 
 // Mirrors CityStatsService.getPopulationGrowthRate().
 function _getPopGrowthRate(city, stats, rates) {
-  const pop  = city.population || 1000;
-  let   pct  = 0;
+  let pct = 0;
 
   if      (stats.happiness >= 70) pct += 0.30;
   else if (stats.happiness >= 50) pct += 0.15;
@@ -207,8 +206,8 @@ function _getPopGrowthRate(city, stats, rates) {
   else if (stats.hygiene <  10) pct -= 0.25;
 
   const food = rates.food || 0;
-  if      (food > 0)   pct += 0.08;
-  else if (pop > 1000) pct -= 0.05;
+  if (food > 0)  pct += 0.08;
+  else           pct -= 0.05;
 
   // Count stats in Warning or Critical
   const warnings = Object.keys(stats).filter(k => {
@@ -220,7 +219,7 @@ function _getPopGrowthRate(city, stats, rates) {
   if (warnings >= 5) pct -= 0.20;
 
   pct = Math.max(-0.50, Math.min(0.55, pct));
-  return Math.round(pop * pct * 150 / 100);
+  return Math.round(pct * 1130);
 }
 
 // Degrades buildings randomly when usedSlots > maxSlots (after a tier-downgrade).
@@ -259,6 +258,157 @@ function _maxHp(lord) {
   return baseHp + classMod;
 }
 
+// ── Server-side quest resolution helpers ──────────────────────
+// Used when engine data is passed into catchUp().
+// Mirrors client-side logic in discovery.js / lord.js — kept here
+// so search_area rewards are applied even when the browser is closed.
+
+// Deterministic terrain — mirrors WorldService.getTerrain(). No storage needed.
+function _getTerrain(x, y) {
+  const h = (((x * 1664525 + 1013904223) ^ (y * 214013 + 2531011)) >>> 0);
+  const keys = ['forest','forest','plains','plains','plains','hills','hills','marsh','mountain','desert'];
+  return keys[h % keys.length];
+}
+
+// XP threshold for the next level. Mirrors lord.js xpToNext formula.
+function _xpToNextLevel(level) { return 50 * (2 * level + 1); }
+
+// Apply pending level-ups after an XP gain. Mirrors lord.js checkLevelUp().
+function _checkLevelUp(lord, engine) {
+  const cls     = engine?.LORD_CLASSES?.[lord.classId];
+  const clsKeys = new Set(Object.keys(cls?.modifiers || {}));
+  while ((lord.xp || 0) >= (lord.xpToNext || _xpToNextLevel(lord.level || 1))) {
+    lord.xp           = Math.max(0, (lord.xp || 0) - (lord.xpToNext || _xpToNextLevel(lord.level || 1)));
+    lord.level        = (lord.level || 1) + 1;
+    lord.xpToNext     = _xpToNextLevel(lord.level);
+    lord.talentPoints = (lord.talentPoints || 0) + 1;
+    const baseStats   = engine?.LORD_BASE_STATS;
+    if (baseStats && lord.baseStats) {
+      for (const key of Object.keys(baseStats)) {
+        lord.baseStats[key] = (lord.baseStats[key] ?? baseStats[key]) + (clsKeys.has(key) ? 2 : 1);
+      }
+    }
+  }
+}
+
+// Army combat power from the armies map — mirrors _armyPower() in lord-screen.js.
+function _armyPower(armies, lordId, UNIT_DEFS) {
+  const army = armies?.[lordId];
+  if (!army?.units || !UNIT_DEFS) return 0;
+  return army.units.reduce((sum, u) => {
+    const d = UNIT_DEFS[u.unitId];
+    if (!d) return sum;
+    const s = d.combatStats || {};
+    return sum + ((s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0)) * (u.count || 0);
+  }, 0);
+}
+
+// Weighted random roll over DISCOVERY_DEFS. Mirrors DiscoveryService._roll().
+const _GOLD_DISC_IDS = new Set(['coin_cache','lost_treasure','buried_vault','merchant_caravan','traveling_merchant','ancient_relic','bog_crystal']);
+function _rollDef(DISCOVERY_DEFS, terrainId, goldBonus) {
+  const entries = Object.values(DISCOVERY_DEFS).map(def => {
+    const mults  = def.terrainMultipliers || {};
+    const mult   = (terrainId in mults) ? mults[terrainId] : 1.0;
+    let   weight = def.baseWeight * mult;
+    if (goldBonus && _GOLD_DISC_IDS.has(def.id)) weight *= (1 + goldBonus);
+    return { def, weight };
+  }).filter(e => e.weight > 0);
+  let total = 0;
+  entries.forEach(e => total += e.weight);
+  let rand = Math.random() * total;
+  for (const e of entries) { rand -= e.weight; if (rand <= 0) return e.def; }
+  return entries[entries.length - 1].def;
+}
+
+// Camp difficulty roll. Mirrors DiscoveryService._rollCampLevel/_rollCampDetails().
+function _rollCampDetails(CAMP_DEFS, defId, armyPower) {
+  const campDef = CAMP_DEFS?.[defId];
+  if (!campDef) return null;
+  const [minL, maxL] = campDef.levelRange;
+  const base  = armyPower < 100 ? 1 : armyPower < 300 ? 2 : armyPower < 700 ? 3 : armyPower < 1400 ? 4 : 5;
+  const level = Math.max(minL, Math.min(maxL, base + Math.floor(Math.random() * 3) - 1));
+  const defenders = campDef.defenderRosterByLevel?.[level] || campDef.defenderRosterByLevel?.[minL] || [{ unitId: 'bandits', count: 2 }];
+  return { level, type: defId, defenders };
+}
+
+// Loot roll for non-combat discoveries. Mirrors DiscoveryService._rollRewards().
+const _DISC_BASE_REWARDS = {
+  iron_vein: { iron: 1, xp: 15 }, cliff_face: { stone: 1, xp: 15 },
+  fertile_fields: { food: 1, xp: 15 }, river_crossing: { food: 1, xp: 15 },
+  coin_cache: { gold: 1, xp: 15 }, timber_cache: { wood: 1, xp: 30 },
+  abandoned_mine: { iron: 1, xp: 40 }, stone_deposit: { stone: 1, xp: 30 },
+  wild_game: { food: 1, xp: 20 }, lost_treasure: { gold: 1, xp: 60 },
+  ancient_forest: { wood: 1, xp: 70 }, deep_ore_shaft: { iron: 1, xp: 80 },
+  marble_quarry: { stone: 1, xp: 80 }, bountiful_hunt: { food: 1, xp: 60 },
+  buried_vault: { gold: 1, xp: 100 }, ancient_ruins: { xp: 80 },
+  abandoned_keep: { gold: 1, xp: 50 }, wandering_sage: { xp: 100 },
+  merchant_caravan: { gold: 1, xp: 20 }, traveling_merchant: { gold: 1, xp: 20 },
+  ancient_relic: { gold: 1, xp: 160 }, bog_crystal: { gold: 1, xp: 120 },
+};
+const _DISC_TIER_RANGES = {
+  1: { res: [20, 60],   gold: [30, 80]   },
+  2: { res: [40, 120],  gold: [50, 150]  },
+  3: { res: [100, 250], gold: [150, 400] },
+};
+function _rollDiscRewards(def, lordLevel) {
+  if (def.category === 'combat') return [];
+  const level  = Math.max(1, lordLevel || 1);
+  const scalar = 1 + 0.12 * (level - 1);
+  const tier   = def.tier || 2;
+  const ranges = _DISC_TIER_RANGES[tier] || _DISC_TIER_RANGES[2];
+  const base   = _DISC_BASE_REWARDS[def.id];
+  const rewards = [];
+  if (base) {
+    ['gold','food','wood','stone','iron'].forEach(t => {
+      if (!base[t]) return;
+      const [min, max] = t === 'gold'
+        ? (def.id === 'lost_treasure' ? [80, 200] : ranges.gold)
+        : ranges.res;
+      rewards.push({ type: t, amount: Math.floor((min + Math.random() * (max - min + 1)) * scalar) });
+    });
+    if (base.xp > 0) rewards.push({ type: 'xp', amount: base.xp });
+  } else {
+    rewards.push({ type: 'xp', amount: 20 });
+  }
+  return rewards;
+}
+
+// Full search_area resolution. Returns a pending discovery object to be stored on the lord
+// and drained by the client (online) or the sync endpoint (offline).
+const _SEARCH_AREA_XP = 8; // mirrors LORD_ACTIONS.search_area.xpReward in lord.js
+function _resolveSearchArea(lord, armies, nowMs, engine) {
+  if (lord.x == null || lord.y == null) return null;
+  const { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, UNIT_DEFS } = engine;
+
+  const terrainId     = _getTerrain(lord.x, lord.y);
+  const talentEffects = (TALENT_POOL && lord.talentId) ? (TALENT_POOL[lord.talentId]?.effects || {}) : {};
+  const def           = _rollDef(DISCOVERY_DEFS, terrainId, talentEffects.goldDiscoveryBonus || 0);
+
+  if (def.category === 'nothing') {
+    return { defId: def.id, category: 'nothing', record: null, rewards: [] };
+  }
+
+  const record = {
+    id:           'disc_' + nowMs + '_' + Math.floor(Math.random() * 100000),
+    definitionId: def.id,
+    tileX:        lord.x,
+    tileY:        lord.y,
+    terrain:      terrainId,
+    lordId:       lord.id,
+    discoveredAt: nowMs,
+    expiresAt:    def.baseDuration > 0 ? nowMs + def.baseDuration * 1000 : null,
+  };
+
+  if (def.category === 'combat') {
+    const ap = _armyPower(armies, lord.id, UNIT_DEFS);
+    record.campDetails = _rollCampDetails(CAMP_DEFS, def.id, ap);
+    return { defId: def.id, category: def.category, record, rewards: [] };
+  }
+
+  const rewards = _rollDiscRewards(def, lord.level);
+  return { defId: def.id, category: def.category, record, rewards };
+}
+
 // ── Main entry point ──────────────────────────────────────────
 
 /**
@@ -266,10 +416,14 @@ function _maxHp(lord) {
  * since each entity's last-updated timestamp.
  *
  * @param {{ lords, cities, armies, player }} state
- * @param {number} nowMs  Server timestamp in milliseconds
+ * @param {number} nowMs    Server timestamp in milliseconds
+ * @param {object} [engine] Optional engine data for server-side quest resolution.
+ *   When provided, completed search_area actions apply XP + roll a discovery and
+ *   store the result in lord.pendingDiscoveries[] for the client to drain.
+ *   Shape: { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS }
  * @returns {{ lords, cities, armies, player, events, changed }}
  */
-export function catchUp(state, nowMs) {
+export function catchUp(state, nowMs, engine = null) {
   // Deep-copy — never mutate the caller's objects
   const lords  = JSON.parse(JSON.stringify(state.lords  || {}));
   const cities = JSON.parse(JSON.stringify(state.cities || {}));
@@ -315,6 +469,38 @@ export function catchUp(state, nowMs) {
       const done = queue.shift();
       queueChanged = changed = true;
       if (done.destX != null) { lord.x = done.destX; lord.y = done.destY; }
+
+      // search_area: resolve XP + discovery server-side when engine data is available.
+      // This ensures rewards are applied even when the browser was closed during the quest.
+      if (done.actionId === 'search_area' && engine) {
+        const talentEffects = (engine.TALENT_POOL && lord.talentId)
+          ? (engine.TALENT_POOL[lord.talentId]?.effects || {}) : {};
+        const xpMult = talentEffects.xpMultiplier || 1;
+        lord.xp = (lord.xp || 0) + Math.round(_SEARCH_AREA_XP * xpMult);
+
+        const pending = _resolveSearchArea(lord, armies, nowMs, engine);
+        if (pending) {
+          // Apply gold / resource rewards to player immediately.
+          for (const r of (pending.rewards || [])) {
+            if      (r.type === 'gold') player.coins = Math.floor((player.coins || 0) + r.amount);
+            else if (r.type === 'xp')  lord.xp = (lord.xp || 0) + r.amount;
+            else if (['food','wood','stone','iron'].includes(r.type)) {
+              player.resources = player.resources || {};
+              player.resources[r.type] = Math.floor((player.resources[r.type] || 0) + r.amount);
+            }
+          }
+          _checkLevelUp(lord, engine);
+          lord.pendingDiscoveries = lord.pendingDiscoveries || [];
+          lord.pendingDiscoveries.push(pending);
+        }
+      }
+
+      // attack-intent move: flag for deferred PvP resolution.
+      // The battle fires once the updated position is saved to Supabase (sync or check-incoming).
+      if (done.intent === 'attack' && done.destX != null) {
+        lord.pendingPvpAttack = { tileX: done.destX, tileY: done.destY };
+      }
+
       events.push({
         type: 'lord_action_done', lordId: lord.id, lordName: lord.name || '',
         actionId: done.actionId || 'move_lord',
@@ -370,6 +556,12 @@ export function catchUp(state, nowMs) {
   }
 
   // ── 3. Resource production, population & economy ─────────────
+
+  // One-time migration: seed rankingStats for existing players
+  if (!player.rankingStats) {
+    player.rankingStats = { pvpWins: 0, conquests: 0 };
+    changed = true;
+  }
 
   // One-time migration: seed player.resources from existing city stockpiles
   if (!player.resources) {

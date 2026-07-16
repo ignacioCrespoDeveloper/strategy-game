@@ -57,8 +57,11 @@ const MapView = (() => {
             <p class="modal-sub" id="found-coords"></p>
             <div class="form-group">
               <label class="form-label" for="city-name-input">City Name</label>
-              <input class="form-input" type="text" id="city-name-input"
-                     placeholder="Name your city" maxlength="30" autocomplete="off" />
+              <div class="lc-name-row">
+                <input class="form-input" type="text" id="city-name-input"
+                       placeholder="Name your city" maxlength="30" autocomplete="off" />
+                <button class="btn-dice" id="city-name-modal-dice" type="button" title="Random city name">🎲</button>
+              </div>
             </div>
             <p class="form-error" id="found-error"></p>
             <div class="modal-actions">
@@ -515,160 +518,358 @@ const MapView = (() => {
     // 1 — Terrain
     const terrainSection = `
       <div class="mip-section">
-        <div class="mip-section-label">Terrain</div>
-        <div class="mip-tile-header">
-          <div class="mip-tile-icon">${terrain.icon}</div>
-          <div>
-            <div class="mip-tile-name">${terrain.name}</div>
-            <div class="mip-tile-coords">(${x}, ${y})</div>
+        <div class="mip-terrain-card">
+          ${terrain.image
+            ? `<img class="mip-tc-img" src="${terrain.image}" alt="${terrain.name}" />`
+            : `<div class="mip-tc-icon-fallback"><span>${terrain.icon}</span></div>`}
+          <div class="mip-tc-overlay"></div>
+          <div class="mip-tc-body">
+            <div class="mip-tc-name">${terrain.name}</div>
+            <div class="mip-tc-coords">(${x}, ${y})</div>
+            <div class="mip-tc-desc">${terrain.desc}</div>
           </div>
         </div>
-        <div class="mip-tile-desc">${terrain.desc}</div>
       </div>
     `;
 
     // 2 — City
     let citySection = '';
-    if (!rawCity) {
-      // No city on this tile at all
+    if (!cityId) {
+      const isBandit     = banditsHere.length > 0;
+      let foundBtnHtml   = '';
+      if (_player && !isBandit) {
+        const freshPlayer  = PlayerService.getById(_player.id);
+        const playerCities = CityService.getPlayerCities(_player.id);
+        const MAX_CITIES   = 5;
+        if (playerCities.length < MAX_CITIES) {
+          const cost      = playerCities.length === 0 ? 0 : 5000 * Math.pow(2, playerCities.length - 1);
+          const coins     = freshPlayer?.coins ?? 0;
+          const canAfford = cost === 0 || coins >= cost;
+          const costLabel = cost === 0 ? 'Free' : `💰 ${cost.toLocaleString()}`;
+          foundBtnHtml = `
+            <button class="btn-primary mip-found-city-btn"
+                    id="mip-found-btn"
+                    style="width:100%;margin-top:0.75rem"
+                    ${canAfford ? '' : 'disabled title="Not enough gold"'}>
+              🏙 Found City Here${cost > 0 ? ` — ${costLabel}` : ''}
+            </button>`;
+        }
+      }
       citySection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
           <div class="mip-stat-row">
             <span class="mip-label">Status</span>
-            <span class="mip-value mip-value--muted">${banditsHere.length > 0 ? '⚔ Bandit Camp' : 'Unoccupied'}</span>
+            <span class="mip-value mip-value--muted">${isBandit ? '⚔ Bandit Camp' : 'Unoccupied'}</span>
           </div>
-          ${banditsHere.length === 0 ? `<button class="btn-primary mip-action-btn" id="mip-found-btn">⚑ Found City Here</button>` : ''}
+          ${foundBtnHtml}
         </div>
       `;
     } else if (isOwnCity) {
-      // Own city — full info
+      // Own city — exact same card as homepage
+      const _level     = CityStatsService.getCityLevel(rawCity);
+      const _tierImgs  = ['assets/city/tier1.webp','assets/city/tier1.webp','assets/city/tier2.jpg','assets/city/tier3.jpg','assets/city/tier4.jpg','assets/city/tier4.jpg'];
+      const _tierImg   = _tierImgs[Math.min(_level, _tierImgs.length - 1)];
+      const _stats     = CityStatsService.getStats(rawCity);
+      const _status    = CityStatsService.getCityStatus(_stats);
+      const _slots     = CityStatsService.getSlotInfo(rawCity);
+      const _goldRate  = ProductionService.getGoldRate(rawCity);
+      const _rates     = ProductionService.getRates(rawCity, null);
+      const _growth    = CityStatsService.getPopulationGrowthRate(rawCity, _stats, _rates);
+      const _buildItem = rawCity.constructionQueue.length > 0 ? rawCity.constructionQueue[0] : null;
+      const _buildDef  = _buildItem ? BUILDING_DEFS[_buildItem.buildingId] : null;
+      const _buildPct  = _buildItem ? Math.floor(ConstructionService.progress(rawCity) * 100) : 0;
+      const _buildSecs = _buildItem ? ConstructionService.timeRemaining(rawCity) : 0;
+      const _growSym   = _growth > 0 ? '▲' : _growth < 0 ? '▼' : '─';
+      const _growCls   = _growth > 0 ? 'ov-cc-grow--up' : _growth < 0 ? 'ov-cc-grow--down' : 'ov-cc-grow--stable';
+      const _growLbl   = _growth !== 0 ? ` ${_growth > 0 ? '+' : ''}${_growth}/hr` : '';
       citySection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
-          <div class="mip-section-label">City</div>
-          <div class="mip-tile-header">
-            <div class="mip-tile-icon">🏰</div>
-            <div>
-              <div class="mip-tile-name">${rawCity.name}</div>
-              <div class="mip-tile-coords">Your city</div>
-            </div>
+        <div class="ov-city-card mip-card-wide" id="mip-open-city-btn" data-city-id="${rawCity.id}" style="cursor:pointer">
+          <div class="ov-cc-art">
+            <img class="ov-cc-art-img" src="${_tierImg}" alt="${rawCity.name}" />
+            <div class="ov-cc-art-fade"></div>
           </div>
-          <div class="mip-stat-row"><span class="mip-label">Population</span><span class="mip-value">${Math.floor(rawCity.population)}</span></div>
-          <div class="mip-stat-row"><span class="mip-label">Town Hall</span><span class="mip-value">Lv ${rawCity.buildings.town_hall || 0}</span></div>
-          <button class="btn-primary mip-action-btn" id="mip-open-city-btn">Enter City →</button>
+          <div class="ov-cc-inner">
+            <div class="ov-cc-terrain">
+              <span class="ov-cc-terrain-icon">${terrain.icon}</span>
+              <span class="ov-cc-terrain-name">${terrain.name}</span>
+            </div>
+            <div class="ov-cc-name-row">
+              <span class="ov-cc-name">${rawCity.name}</span>
+              <span class="cvl-status-badge cvl-${_status.id}">${_status.label}</span>
+            </div>
+            <div class="ov-cc-coords">(${rawCity.x}, ${rawCity.y})</div>
+            <div class="ov-cc-divider"></div>
+            <div class="ov-cc-stats">
+              <div class="ov-cc-stat">
+                <span class="ov-cc-stat-label">Population</span>
+                <span class="ov-cc-stat-value">${Math.floor(rawCity.population).toLocaleString()} <span class="ov-cc-grow ${_growCls}">${_growSym}${_growLbl}</span></span>
+              </div>
+              <div class="ov-cc-stat">
+                <span class="ov-cc-stat-label">Tier</span>
+                <span class="ov-cc-stat-value">Tier ${_level}</span>
+              </div>
+              <div class="ov-cc-stat">
+                <span class="ov-cc-stat-label">Slots</span>
+                <span class="ov-cc-stat-value">${_slots.usedSlots}/${_slots.maxSlots}</span>
+              </div>
+              <div class="ov-cc-stat">
+                <span class="ov-cc-stat-label">Gold/hr</span>
+                <span class="ov-cc-stat-value ov-cc-gold-rate">+${_goldRate}💰</span>
+              </div>
+            </div>
+            ${_buildItem ? `<div class="ov-cc-construction">
+              <div class="ov-cc-constr-label">
+                <span>🔨 ${_buildDef?.name || _buildItem.buildingId} → Lv ${_buildItem.targetLevel}</span>
+                <span class="ov-cc-constr-time">${TimeService.formatDuration(_buildSecs)}</span>
+              </div>
+              <div class="ov-cc-constr-bar"><div class="ov-cc-constr-fill" style="width:${_buildPct}%"></div></div>
+            </div>` : ''}
+            <div class="ov-cc-enter">Enter City →</div>
+          </div>
+        </div>
         </div>
       `;
     } else if (isDiscoveredEnemy) {
-      // Scouted enemy city — show info based on intel tier
-      const idata = intelRec.data;
-      const tier  = intelRec.qualityTier;
-      const TIER_LABELS = { vague: 'Vaga', clear: 'Clara', precise: 'Precisa' };
+      // Scouted enemy city — card matching own city format
+      const idata      = intelRec.data;
+      const intelTier  = intelRec.qualityTier;
       const TIER_COLORS = { vague: '#888899', clear: '#c8b040', precise: '#40c0ff' };
+      const TIER_LABELS = { vague: 'Vague', clear: 'Clear', precise: 'Precise' };
+      const knownPop   = intelTier === 'precise' && idata.population ? idata.population : null;
+      const cityLevel  = knownPop ? (() => {
+        if (knownPop >= 100000) return 5;
+        if (knownPop >= 50000)  return 4;
+        if (knownPop >= 25000)  return 3;
+        if (knownPop >= 10000)  return 2;
+        return 1;
+      })() : null;
+      const _tierImgs  = ['assets/city/tier1.webp','assets/city/tier1.webp','assets/city/tier2.jpg','assets/city/tier3.jpg','assets/city/tier4.jpg','assets/city/tier4.jpg'];
+      const _tierImg   = _tierImgs[Math.min(cityLevel || 1, _tierImgs.length - 1)];
+      const ownerLabel = idata.playerUsername ? `👤 ${idata.playerUsername}` : 'Enemy';
       let garrisonHtml = '';
-      if (tier === 'vague' && idata.garrisonCount != null) {
-        garrisonHtml = `<div class="mip-stat-row"><span class="mip-label">Guarnición</span><span class="mip-value">~${idata.garrisonCount} unidades</span></div>`;
+      if (intelTier === 'vague' && idata.garrisonCount != null) {
+        garrisonHtml = `<div class="ov-cc-stat"><span class="ov-cc-stat-label">Garrison</span><span class="ov-cc-stat-value">~${idata.garrisonCount} units</span></div>`;
       } else if (idata.garrisonUnits?.length > 0) {
-        garrisonHtml = `<div class="mip-intel-garrison-label">Guarnición</div>` +
-          idata.garrisonUnits.map(r => {
-            const def = UNIT_DEFS[r.unitId];
-            return `<div class="mip-stat-row"><span class="mip-label">${def?.icon || '⚔'} ${def?.name || r.unitId}</span><span class="mip-value">×${r.count}</span></div>`;
-          }).join('');
+        garrisonHtml = idata.garrisonUnits.map(r => {
+          const def = UNIT_DEFS[r.unitId];
+          return `<div class="ov-cc-stat"><span class="ov-cc-stat-label">${def?.icon || '⚔'} ${def?.name || r.unitId}</span><span class="ov-cc-stat-value">×${r.count}</span></div>`;
+        }).join('');
       }
       citySection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
-          <div class="mip-section-label">Ciudad Enemiga</div>
-          <div class="mip-tile-header">
-            <div class="mip-tile-icon">🏯</div>
-            <div>
-              <div class="mip-tile-name">${idata.name || 'Ciudad Enemiga'}</div>
-              <div class="mip-tile-coords" style="color:${TIER_COLORS[tier]}">👁 Intel ${TIER_LABELS[tier] || tier}</div>
+        <div class="ov-city-card mip-card-wide mip-enemy-city-card">
+          <div class="ov-cc-art">
+            <img class="ov-cc-art-img" src="${_tierImg}" alt="${idata.name || 'Enemy City'}" />
+            <div class="ov-cc-art-fade"></div>
+          </div>
+          <div class="ov-cc-inner">
+            <div class="ov-cc-name-row">
+              <span class="ov-cc-name mip-enemy-city-name">${idata.name || 'Enemy City'}</span>
+              <span class="mip-intel-badge" style="color:${TIER_COLORS[intelTier]}">👁 ${TIER_LABELS[intelTier]}</span>
+            </div>
+            <div class="ov-cc-coords">${ownerLabel}</div>
+            <div class="ov-cc-divider"></div>
+            <div class="ov-cc-stats">
+              <div class="ov-cc-stat">
+                <span class="ov-cc-stat-label">Tier</span>
+                <span class="ov-cc-stat-value">${cityLevel ? `Tier ${cityLevel}` : '?'}</span>
+              </div>
+              <div class="ov-cc-stat">
+                <span class="ov-cc-stat-label">Population</span>
+                <span class="ov-cc-stat-value">${knownPop ? Math.floor(knownPop).toLocaleString() : '?'}</span>
+              </div>
+              ${garrisonHtml}
             </div>
           </div>
-          ${tier === 'precise' && idata.population ? `<div class="mip-stat-row"><span class="mip-label">Población</span><span class="mip-value">${idata.population}</span></div>` : ''}
-          ${garrisonHtml}
+        </div>
         </div>
       `;
     } else {
-      // City exists but has never been scouted — unknown
+      // City exists but never scouted — unknown card
       citySection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
-          <div class="mip-section-label">City</div>
-          <div class="mip-tile-header">
-            <div class="mip-tile-icon">🏚</div>
-            <div>
-              <div class="mip-tile-name">Ciudad Desconocida</div>
-              <div class="mip-tile-coords mip-value--muted">Explora esta zona para obtener información</div>
+        <div class="ov-city-card mip-card-wide mip-enemy-city-card">
+          <div class="ov-cc-art" style="display:flex;align-items:center;justify-content:center">
+            <span style="font-size:2.2rem;opacity:0.4">🏚</span>
+          </div>
+          <div class="ov-cc-inner">
+            <div class="ov-cc-name-row">
+              <span class="ov-cc-name mip-enemy-city-name">Unknown City</span>
+            </div>
+            <div class="ov-cc-coords mip-value--muted">Scout this area for intelligence</div>
+            <div class="ov-cc-divider"></div>
+            <div class="ov-cc-stats">
+              <div class="ov-cc-stat"><span class="ov-cc-stat-label">Tier</span><span class="ov-cc-stat-value">?</span></div>
+              <div class="ov-cc-stat"><span class="ov-cc-stat-label">Owner</span><span class="ov-cc-stat-value">?</span></div>
             </div>
           </div>
+        </div>
         </div>
       `;
     }
 
-    // 3 — Lords at this tile
+    // 3 — Lords at this tile (own lords — exact homepage card)
     const lordsSection = lordsHere.length > 0 ? `
       <div class="mip-divider"></div>
       <div class="mip-section">
         <div class="mip-section-label">Lord${lordsHere.length > 1 ? 's' : ''} aquí</div>
         ${lordsHere.map(lord => {
-          const race      = RACES[lord.race] || {};
-          const cls       = LORD_CLASSES[lord.classId];
-          const busy      = lord.actionQueue.length > 0;
-          const stanceDef = STANCE_DEFS[lord.stance?.id] || STANCE_DEFS.idle;
-          const isStanced = LordService.isStanced(lord);
+          const race        = RACES[lord.race] || {};
+          const cls         = LORD_CLASSES[lord.classId];
+          const stats       = LordService.getEffectiveStats(lord);
+          const maxHp       = stats.health;
+          const lordIsDown  = LordService.isDown(lord);
+          const downReason  = lord.downtimeReason || 'defeated';
+          const downRemSecs = lordIsDown ? Math.ceil(LordService.getDowntimeRemaining(lord) / 1000) : 0;
+          const curHp       = lordIsDown ? 0 : Math.min(lord.currentHp ?? maxHp, maxHp);
+          const hpPct       = Math.min(100, Math.floor((curHp / maxHp) * 100));
+          const xp          = lord.xp || 0;
+          const xpNext      = lord.xpToNext || 100;
+          const xpPct       = Math.min(100, Math.floor((xp / xpNext) * 100));
 
-          let statusLine = '';
-          if (busy) {
-            const action = lord.actionQueue[0];
-            const secs   = LordService.actionTimeRemaining(lord);
-            const icon   = action.actionId === 'search_area' ? '🔍' : '🗺';
-            statusLine = `<div class="mip-lord-status">${icon} ${action.actionId === 'search_area' ? 'Buscando' : 'Viajando'} · ${TimeService.formatDuration(secs)}</div>`;
-          } else if (isStanced) {
-            statusLine = `<div class="mip-lord-status">${stanceDef.icon} ${stanceDef.name}</div>`;
-          }
+          const queueItem    = lord.actionQueue && lord.actionQueue.length > 0 ? lord.actionQueue[0] : null;
+          const activeAction = queueItem ? LORD_ACTIONS[queueItem.actionId] : null;
+          const actionPct    = queueItem ? Math.floor(LordService.actionProgress(lord) * 100) : 0;
+          const actionSecs   = queueItem ? LordService.actionTimeRemaining(lord) : 0;
+          const isAttacking  = queueItem?.intent === 'attack';
+          const busy         = !!queueItem;
+
+          const stanceObj   = LordService.getStance(lord);
+          const stanceDef   = STANCE_DEFS[stanceObj.id] || STANCE_DEFS.idle;
+          const isStanced   = LordService.isStanced(lord);
+          const stanceBadge = isStanced
+            ? `<span class="ov-lc-stance-badge">${stanceDef.icon} ${stanceDef.name}</span>`
+            : '';
+
+          const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || lord.portrait || race.portrait;
+          const portraitHtml = portraitSrc
+            ? `<div class="ov-lc-portrait">
+                 <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" />
+                 <div class="ov-lc-portrait-fade"></div>
+                 <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+               </div>`
+            : `<div class="ov-lc-portrait ov-lc-portrait--icon">
+                 <span>${race.icon || '👤'}</span>
+                 <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+               </div>`;
+
+          let locationLabel = 'Wandering';
+          const allCities = StorageService.get('cities') || {};
+          const cityHere  = Object.values(allCities).find(c => c.playerId === _player?.id && c.x === lord.x && c.y === lord.y);
+          locationLabel   = cityHere ? cityHere.name : lord.x != null ? `(${lord.x}, ${lord.y})` : 'Wandering';
+
+          // CP + army units
+          const army      = ArmyService.get(lord.id);
+          const ownUnits  = army?.units || [];
+          const cp        = ownUnits.reduce((sum, u) => {
+            const def = UNIT_DEFS[u.unitId];
+            if (!def) return sum;
+            const s = def.combatStats || {};
+            return sum + ((s.attack||0)*3 + (s.defense||0)*2 + Math.floor((s.hp||0)/10) + (s.speed||0)) * u.count;
+          }, 0);
+          const armyUnitCards = ownUnits.length > 0
+            ? ownUnits.flatMap(u => {
+                const def = UNIT_DEFS[u.unitId] || {};
+                const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
+                  : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
+                  : def.category === 'monster' ? ' la-unit-card--monster'
+                  : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+                const portrait = def.image
+                  ? `<img src="${def.image}" class="la-uc-img" alt="${def.name||u.unitId}" loading="lazy">`
+                  : `<div class="la-uc-img la-uc-img--fallback">${def.icon||'⚔'}</div>`;
+                return Array.from({ length: u.count }, () => `
+                  <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name||u.unitId}">
+                    <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
+                    ${portrait}
+                  </div>`);
+              }).join('')
+            : '<span class="mip-note">No units</span>';
+          const armyToggleId = `mip-army-own-${lord.id}`;
 
           const actionsHtml = !busy ? `
-            <div class="mip-lord-actions">
+            <div class="mip-lord-actions" style="margin-top:6px;display:flex;gap:6px">
               <button class="mip-lord-search-btn mip-action-btn-sm" data-lord-id="${lord.id}">🔍 Search</button>
               <button class="mip-lord-move-btn mip-action-btn-sm" data-lord-id="${lord.id}">🗺 Mover</button>
             </div>
           ` : '';
 
           return `
-            <div class="mip-lord-card">
-              <div class="mip-lord-top">
-                <div class="mip-lord-portrait">${race.icon || '👤'}</div>
-                <div class="mip-lord-info-text">
-                  <div class="mip-lord-name">${lord.name}</div>
-                  <div class="mip-lord-race">${race.name || ''} · Lv ${lord.level || 1}${cls ? ` · ${cls.icon} ${cls.name}` : ''}</div>
+            <div class="ov-lord-card mip-card-wide${lordIsDown ? ' ov-lord-card--down' : ''}" data-lord-id="${lord.id}" style="cursor:pointer">
+              ${lordIsDown ? `
+                <div class="ov-lord-down-overlay">
+                  <div class="ov-lord-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
+                  <div class="ov-lord-down-label ov-lord-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
+                  <div class="ov-lord-down-cd">${TimeService.formatDuration(downRemSecs)}</div>
+                </div>` : ''}
+              ${portraitHtml}
+              <div class="ov-lc-body">
+                <div class="ov-lc-top">
+                  <span class="ov-lc-name">${lord.name}</span>
+                  ${cp > 0 ? `<span class="mip-lc-cp">⚔ ${cp}</span>` : ''}
                 </div>
-                <button class="mip-lord-open-btn" data-lord-id="${lord.id}" title="Abrir Lord">›</button>
+                <div class="ov-lc-badges">
+                  <span class="ov-lc-race">${race.name || ''}</span>
+                  ${cls ? `<span class="ov-lc-class-badge" style="color:${cls.color}">${cls.icon} ${cls.name}</span>` : ''}
+                  ${stanceBadge}
+                </div>
+                <div class="ov-lc-meta${isAttacking ? ' ov-lc-meta--attack' : ''}">
+                  📍 ${locationLabel} · ${isAttacking ? `⚔ ATTACKING (${queueItem.destX},${queueItem.destY})` : activeAction ? `${activeAction.icon} ${activeAction.name}` : 'Idle'}
+                </div>
+                ${queueItem ? `<div class="ov-lc-action-row">
+                  <div class="ov-lc-action-bar"><div class="ov-lc-action-fill${isAttacking ? ' ov-lc-action-fill--attack' : ''}" style="width:${actionPct}%"></div></div>
+                  <span class="ov-lc-action-time">${TimeService.formatDuration(actionSecs)}</span>
+                </div>` : ''}
+                <div class="ov-lc-bars">
+                  <div class="ov-lc-bar-row">
+                    <span class="ov-lc-bar-label">HP</span>
+                    <div class="ov-lc-bar"><div class="ov-lc-fill ov-lc-fill-hp" style="width:${hpPct}%"></div></div>
+                    <span class="ov-lc-bar-val">${curHp}/${maxHp}</span>
+                  </div>
+                  <div class="ov-lc-bar-row">
+                    <span class="ov-lc-bar-label">XP</span>
+                    <div class="ov-lc-bar"><div class="ov-lc-fill ov-lc-fill-xp" style="width:${xpPct}%"></div></div>
+                    <span class="ov-lc-bar-val">${xp}/${xpNext}</span>
+                  </div>
+                </div>
+                <button class="mip-army-toggle" data-target="${armyToggleId}">▶ Army (${ownUnits.length > 0 ? ownUnits.reduce((s,u)=>s+u.count,0) : 0})</button>
+                <div class="mip-army-units mip-army-hidden" id="${armyToggleId}">
+                  <div class="mip-enemy-unit-cards">${armyUnitCards}</div>
+                </div>
+                <div class="ov-lc-enter">Manage →</div>
               </div>
-              ${statusLine}
-              ${actionsHtml}
             </div>
+            ${actionsHtml}
           `;
         }).join('')}
       </div>
     ` : '';
 
     // 4 — Bandit camps
+    const lordForAttack = lordsHere.find(l => l.actionQueue.length === 0);
     const banditsSection = banditsHere.length > 0 ? `
       <div class="mip-divider"></div>
       <div class="mip-section">
-        <div class="mip-section-label">⚔ Bandit Camp</div>
+        <div class="mip-section-label">⚔ Enemy Camp</div>
         ${banditsHere.map(r => {
           const def   = DISCOVERY_DEFS[r.definitionId];
           const mercs = (r.mercenaryUnits || []).map(id => UNIT_DEFS[id]?.name || id).join(', ');
+          const expiry = DiscoveryService.formatExpiry(r);
+          const attackBtn = lordForAttack
+            ? `<button class="mip-bandit-attack-btn btn-danger" data-record-id="${r.id}" data-lord-id="${lordForAttack.id}" style="width:100%;margin-top:0.5rem">⚔ Attack</button>`
+            : `<p class="mip-note mip-note--warn">Move a lord here to attack</p>`;
           return `
             <div class="mip-bandit-row">
-              <div class="mip-stat-row"><span class="mip-label">Camp</span><span class="mip-value">${def?.name || 'Bandit Camp'}</span></div>
+              <div class="mip-stat-row"><span class="mip-label">${def?.icon || '⚔'} Camp</span><span class="mip-value">${def?.name || 'Enemy Camp'}</span></div>
+              <div class="mip-stat-row"><span class="mip-label">Expires</span><span class="mip-value mip-value--muted">⏱ ${expiry}</span></div>
               ${mercs ? `<div class="mip-stat-row"><span class="mip-label">Mercs</span><span class="mip-value mip-value--gold">${mercs}</span></div>` : ''}
+              ${attackBtn}
             </div>`;
         }).join('')}
-        <div class="mip-note">Ver pestaña Discovery para atacar</div>
       </div>
     ` : '';
 
@@ -688,55 +889,67 @@ const MapView = (() => {
         <div class="mip-section mip-scan-empty">No enemy lords on this tile</div>`;
     } else {
       const enemyCards = _tileEnemies.map((data, idx) => {
-        const race  = RACES[data.lordRace] || {};
-        const cls   = LORD_CLASSES[data.lordClass] || null;
-        const portraitSrc  = cls?.portrait || race.portrait;
-        const portraitHtml = portraitSrc
-          ? `<img src="${portraitSrc}" class="mip-enemy-portrait-img" alt="">`
-          : `<div class="mip-enemy-portrait-icon">${race.icon || '👤'}</div>`;
+        const race       = RACES[data.lordRace] || {};
+        const cls        = LORD_CLASSES[data.lordClass] || null;
+        const portraitSrc = cls?.portrait || race.portrait;
+        const portraitInner = portraitSrc
+          ? `<img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${data.lordName || ''}" />`
+          : `<span style="font-size:2rem">${race.icon || '👤'}</span>`;
 
         const units = data.units || [];
-        const unitCardsHtml = units.length > 0
-          ? `<div class="mip-enemy-unit-cards">${
-              units.flatMap(u => {
-                const def = UNIT_DEFS[u.unitId] || {};
-                const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
-                  : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
-                  : def.category === 'monster' ? ' la-unit-card--monster'
-                  : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
-                const portrait = def.image
-                  ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || u.unitId}" loading="lazy">`
-                  : `<div class="la-uc-img la-uc-img--fallback">${def.icon || '⚔'}</div>`;
-                return Array.from({ length: u.count }, () => `
-                  <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || u.unitId}">
-                    <div class="la-uc-top">
-                      <div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div>
-                    </div>
-                    ${portrait}
-                  </div>`);
-              }).join('')
-            }</div>`
-          : '';
+        const cp    = units.reduce((sum, u) => {
+          const def = UNIT_DEFS[u.unitId];
+          if (!def) return sum;
+          const s = def.combatStats || {};
+          return sum + ((s.attack||0)*3 + (s.defense||0)*2 + Math.floor((s.hp||0)/10) + (s.speed||0)) * u.count;
+        }, 0);
+
+        const unitCardsInner = units.length > 0
+          ? units.flatMap(u => {
+              const def = UNIT_DEFS[u.unitId] || {};
+              const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
+                : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
+                : def.category === 'monster' ? ' la-unit-card--monster'
+                : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+              const portrait = def.image
+                ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || u.unitId}" loading="lazy">`
+                : `<div class="la-uc-img la-uc-img--fallback">${def.icon || '⚔'}</div>`;
+              return Array.from({ length: u.count }, () => `
+                <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || u.unitId}">
+                  <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
+                  ${portrait}
+                </div>`);
+            }).join('')
+          : '<span class="mip-note">No units</span>';
+        const armyToggleId  = `mip-army-enemy-${idx}`;
+        const totalUnits    = units.reduce((s, u) => s + u.count, 0);
 
         const attackBtn = myLordsIdle.length > 0
-          ? `<button class="mip-attack-btn" data-enemy-idx="${idx}">⚔ Attack</button>`
+          ? `<button class="mip-attack-btn mip-card-wide" data-enemy-idx="${idx}">⚔ Attack</button>`
           : `<p class="mip-note mip-note--warn">No lord available to attack</p>`;
 
         return `
-          <div class="mip-enemy-lord-card">
-            <div class="mip-enemy-top">
-              <div class="mip-enemy-portrait">${portraitHtml}</div>
-              <div class="mip-enemy-info">
-                <div class="mip-enemy-name">${data.lordName || 'Lord Desconocido'}</div>
-                ${data.playerUsername ? `<div class="mip-enemy-username">👤 ${data.playerUsername}</div>` : ''}
-                <div class="mip-enemy-meta">
-                  ${race.name ? `${race.icon} ${race.name}` : ''}
-                  ${data.lordLevel ? ` · Lv ${data.lordLevel}` : ''}
-                  ${cls ? ` · ${cls.icon} ${cls.name}` : ''}
-                </div>
+          <div class="mip-enemy-lord-card mip-card-wide">
+            <div class="ov-lc-portrait${portraitSrc ? '' : ' ov-lc-portrait--icon'}">
+              ${portraitInner}
+              <div class="ov-lc-portrait-fade"></div>
+              <div class="ov-lc-portrait-level">Lv ${data.lordLevel || 1}</div>
+            </div>
+            <div class="ov-lc-body">
+              <div class="ov-lc-top">
+                <span class="ov-lc-name">${data.lordName || 'Unknown Lord'}</span>
+                ${cp > 0 ? `<span class="mip-lc-cp mip-lc-cp--enemy">⚔ ${cp}</span>` : ''}
+              </div>
+              <div class="ov-lc-badges">
+                <span class="ov-lc-race">${race.name || ''}</span>
+                ${cls ? `<span class="ov-lc-class-badge" style="color:${cls.color}">${cls.icon} ${cls.name}</span>` : ''}
+              </div>
+              ${data.playerUsername ? `<div class="mip-enemy-username">👤 ${data.playerUsername}</div>` : ''}
+              <button class="mip-army-toggle mip-army-toggle--enemy" data-target="${armyToggleId}">▶ Army (${totalUnits})</button>
+              <div class="mip-army-units mip-army-hidden" id="${armyToggleId}">
+                <div class="mip-enemy-unit-cards">${unitCardsInner}</div>
               </div>
             </div>
-            ${unitCardsHtml}
             ${attackBtn}
           </div>`;
       }).join('');
@@ -778,11 +991,22 @@ const MapView = (() => {
       _openFoundModal(x, y);
     });
 
-    // Open a lord's full screen
-    document.querySelectorAll('.mip-lord-open-btn[data-lord-id]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const lord = LordService.getById(btn.dataset.lordId);
+    // Open a lord's full screen (own lord card click)
+    document.querySelectorAll('.ov-lord-card[data-lord-id]').forEach(card => {
+      card.addEventListener('click', () => {
+        const lord = LordService.getById(card.dataset.lordId);
         if (lord) EventBus.emit('lord:open', { lord, player: _player });
+      });
+    });
+
+    // Army toggle (own + enemy lords)
+    document.querySelectorAll('.mip-army-toggle').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const target = document.getElementById(btn.dataset.target);
+        if (!target) return;
+        const nowHidden = target.classList.toggle('mip-army-hidden');
+        btn.textContent = (nowHidden ? '▶' : '▼') + btn.textContent.slice(1);
       });
     });
 
@@ -803,6 +1027,19 @@ const MapView = (() => {
         }
         const updated = LordService.getById(lord.id);
         EventBus.emit('lord:open', { lord: updated, player: _player });
+      });
+    });
+
+    // Attack bandit camp from map tile panel
+    document.querySelectorAll('.mip-bandit-attack-btn[data-record-id]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const lord = LordService.getById(btn.dataset.lordId);
+        if (!lord) return;
+        App.navigate('lord-screen', {
+          lord, player: _player,
+          openTab: 'quests',
+          autoAttackRecordId: btn.dataset.recordId,
+        });
       });
     });
 
@@ -1004,6 +1241,10 @@ const MapView = (() => {
       if (e.key === 'Enter') _onFoundConfirm();
       if (e.key === 'Escape') _closeModal();
     });
+    document.getElementById('city-name-modal-dice').addEventListener('click', () => {
+      const raceId = _lord?.race || _player?.race || 'human';
+      document.getElementById('city-name-input').value = randomRaceName(raceId, 'cities');
+    });
     document.getElementById('found-modal').addEventListener('click', e => {
       if (e.target === e.currentTarget) _closeModal();
     });
@@ -1029,10 +1270,17 @@ const MapView = (() => {
     _autoScanTile(x, y);
   }
 
+  const _PENDING_CITY_KEY = 'hexfront_pending_city_name';
+
   function _openFoundModal(x, y) {
     _pendingTile = { x, y };
     document.getElementById('found-coords').textContent = `Tile (${x}, ${y})`;
-    document.getElementById('city-name-input').value   = '';
+    // First city: use the name entered during lord creation if available.
+    const isFirst    = !_hasCity();
+    const pending    = isFirst ? localStorage.getItem(_PENDING_CITY_KEY) : null;
+    const raceId     = _lord?.race || _player?.race || 'human';
+    const autoName   = pending || randomRaceName(raceId, 'cities');
+    document.getElementById('city-name-input').value   = autoName;
     document.getElementById('found-error').textContent = '';
     document.getElementById('found-modal').classList.remove('hidden');
     setTimeout(() => document.getElementById('city-name-input').focus(), 50);
@@ -1059,6 +1307,7 @@ const MapView = (() => {
       return;
     }
 
+    localStorage.removeItem(_PENDING_CITY_KEY);
     _closeModal();
     if (_lord) _lord = LordService.getById(_lord.id);
     _player = PlayerService.getById(_player.id) || _player;

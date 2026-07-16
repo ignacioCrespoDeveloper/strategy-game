@@ -63,6 +63,13 @@ const CityStatsService = (() => {
       if (stats[stat] !== undefined) stats[stat] += value;
     });
 
+    // Terrain stat effects (permanent, structural — not shown as temporary events)
+    const terrain     = WorldService.getTerrain(city.x, city.y);
+    const terrainStat = TERRAIN_STAT_MODS[terrain?.id] || [];
+    terrainStat.forEach(({ stat, value }) => {
+      if (stats[stat] !== undefined) stats[stat] += value;
+    });
+
     // Population pressure — larger populations demand more services
     const pop = city.population || 1000;
     if (pop > 1000) {
@@ -90,13 +97,18 @@ const CityStatsService = (() => {
 
   // ── City status ───────────────────────────────────────────────
 
-  function getCityStatus(stats) {
-    const score =
-      (stats.happiness    - 50) * 0.35 +
-      (50 - stats.corruption)   * 0.25 +
-      (50 - stats.unemployment) * 0.15 +
-      (stats.hygiene      - 50) * 0.10 +
-      (stats.stability    - 50) * 0.15;
+  function getCityStatus(stats, growth = 0) {
+    let score =
+      (stats.happiness - 50) * 0.55 +
+      (stats.hygiene   - 50) * 0.25 +
+      (stats.stability - 50) * 0.20;
+
+    // Growth rate nudges status: a booming city trends toward Prosperous,
+    // a declining one toward Critical — even before stats fully respond.
+    if      (growth >  200) score += 8;
+    else if (growth >    0) score += 3;
+    else if (growth < -200) score -= 8;
+    else if (growth <    0) score -= 3;
 
     if (score >= 25)  return { id: 'prosperous', label: 'Prosperous' };
     if (score >= 12)  return { id: 'growing',    label: 'Growing'    };
@@ -121,8 +133,7 @@ const CityStatsService = (() => {
   // ── Population growth rate (pop/hour) — percentage of current pop ──
 
   function getPopulationGrowthRate(city, stats, productionRates) {
-    const pop = city.population || 1000;
-    let pct = 0; // percent per hour
+    let pct = 0;
 
     if      (stats.happiness >= 70) pct += 0.30;
     else if (stats.happiness >= 50) pct += 0.15;
@@ -135,8 +146,8 @@ const CityStatsService = (() => {
     else if (stats.hygiene <  10) pct -= 0.25;
 
     const food = (productionRates && productionRates.food) || 0;
-    if      (food > 0)   pct += 0.08;
-    else if (pop > 1000) pct -= 0.05;
+    if (food > 0)  pct += 0.08;
+    else           pct -= 0.05;
 
     const warningCount = Object.keys(stats).filter(k => {
       const h = getStatHealth(k, stats[k]);
@@ -146,7 +157,7 @@ const CityStatsService = (() => {
     if (warningCount >= 5) pct -= 0.20;
 
     pct = Math.max(-0.50, Math.min(0.55, pct));
-    return Math.round(pop * pct * 150 / 100);
+    return Math.round(pct * 1130);
   }
 
   // ── Stat trend indicators ─────────────────────────────────────

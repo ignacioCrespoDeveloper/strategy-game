@@ -37,7 +37,7 @@ const CityService = (() => {
   // 2nd: 25k, 3rd: 50k, 4th: 100k, 5th: 200k (×2 each time).
   function getFoundCost(existingCount) {
     if (existingCount === 0) return 0;
-    return 5000 * Math.pow(2, existingCount - 1);
+    return 8000 * Math.pow(2, existingCount - 1);
   }
 
   // Found a new city on a tile.

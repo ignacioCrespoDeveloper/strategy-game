@@ -43,7 +43,6 @@ var LORD_CLASSES = {
     name:        'Warrior',
     icon:        '⚔',
     color:       '#c05040',
-    portrait:    'assets/lord/warrior.jpg',
     description: 'Masters of direct combat. Warriors lead from the front and inspire allies through sheer force of arms.',
     modifiers:   { attack: 2, defense: 2 },
     passive: {
@@ -59,7 +58,6 @@ var LORD_CLASSES = {
     name:        'Rogue',
     icon:        '🗡',
     color:       '#20b060',
-    portrait:    'assets/lord/rogue',
     description: 'Swift and elusive. Rogues excel at exploration and strike before the enemy knows they are there.',
     modifiers:   { speed: 3, attack: 1 },
     passive: {
@@ -116,6 +114,192 @@ var LORD_CLASSES = {
       name:        'Dark Presence',
       icon:        '🔥',
       description: 'Spreads corruption and terror. Future: dark magic bonuses, enhanced rewards from aggressive actions.',
+    },
+  },
+};
+
+// =============================================
+//  TALENT_POOL — Cross-class talents unlocked at level 5.
+//
+//  Lords choose exactly one talent, permanently.
+//  Combat talents add traits/stats to the lord's BattleUnit.
+//  Strategic talents apply passive effects via getTalentEffects().
+//
+//  effects keys used by the engine:
+//    searchDurationMult    — multiplier on search action duration (lord.js)
+//    goldDiscoveryBonus    — extra weight on gold-type discoveries (discovery.js)
+//    commandCapacityBonus  — extra unit model slots (lord.js)
+//    armyPowerCapBonus     — extra CP cap (lord.js)
+//    attackerMoraleBonus   — own-side morale boost at battle start (battle-engine.js)
+//    defenderMoraleMalus   — enemy morale penalty at battle start (battle-engine.js)
+//    xpMultiplier          — multiplier on all XP earned (lord.js, lord-screen.js, battle-result-view.js)
+//    recruitTimeMult       — multiplier on unit training duration (server/actions/recruit.js)
+//    battleUnitTraits      — array of traits injected into the lord BattleUnit (battle-engine.js)
+//    battleUnitAttackBonus — flat attack added to lord BattleUnit (battle-engine.js)
+//    battleUnitDefenseBonus— flat defense added to lord BattleUnit (battle-engine.js)
+// =============================================
+
+var TALENT_POOL = {
+
+  // ── Combat talents ────────────────────────────────────────────
+
+  blademaster: {
+    id:          'blademaster',
+    name:        'Blademaster',
+    icon:        '⚔',
+    color:       '#c05040',
+    category:    'combat',
+    description: 'Your lord fights with deadly precision in battle. +4 Attack and armor-piercing strikes — enemy armor provides minimal protection.',
+    hint:        'Best for Warriors',
+    effects: {
+      battleUnitAttackBonus: 4,
+      battleUnitTraits:      ['armor_piercing'],
+    },
+  },
+
+  double_strike: {
+    id:          'double_strike',
+    name:        'Double Strike',
+    icon:        '🗡',
+    color:       '#20b060',
+    category:    'combat',
+    description: 'Your lord strikes with blinding speed. 30% chance to attack twice per melee round.',
+    hint:        'Best for Rogues & Dark Lords',
+    effects: {
+      battleUnitTraits: ['double_strike'],
+    },
+  },
+
+  pyroblast: {
+    id:          'pyroblast',
+    name:        'Pyroblast',
+    icon:        '🔥',
+    color:       '#9040c0',
+    category:    'combat',
+    description: 'In the opening round your lord unleashes a torrent of arcane fire, scorching all enemies simultaneously and suppressing their regeneration.',
+    hint:        'Best for Mages',
+    effects: {
+      battleUnitTraits: ['pyroblast'],
+    },
+  },
+
+  iron_wall: {
+    id:          'iron_wall',
+    name:        'Iron Wall',
+    icon:        '🛡',
+    color:       '#4070d0',
+    category:    'combat',
+    description: 'Your lord becomes an immovable bastion. +4 Defense and the Shield Wall ability — incoming melee damage reduced while frontline units stand.',
+    hint:        'Best for Warriors & Priests',
+    effects: {
+      battleUnitDefenseBonus: 4,
+      battleUnitTraits:       ['shield_wall'],
+    },
+  },
+
+  // ── Strategic talents ─────────────────────────────────────────
+
+  pathfinder: {
+    id:          'pathfinder',
+    name:        'Pathfinder',
+    icon:        '🔍',
+    color:       '#30a0b0',
+    category:    'strategic',
+    description: 'Your lord navigates the wilderness with unmatched instinct. Quest duration reduced by 25%.',
+    hint:        'Best for Rogues & explorers',
+    effects: {
+      searchDurationMult: 0.75,
+    },
+  },
+
+  treasure_hunter: {
+    id:          'treasure_hunter',
+    name:        'Treasure Hunter',
+    icon:        '💰',
+    color:       '#c8933a',
+    category:    'strategic',
+    description: 'Your lord has a nose for coin. Gold-type discoveries (coin caches, lost treasures, buried vaults) appear 40% more frequently.',
+    hint:        'Best for any gold-focused build',
+    effects: {
+      goldDiscoveryBonus: 0.4,
+    },
+  },
+
+  commander: {
+    id:          'commander',
+    name:        'Commander',
+    icon:        '👑',
+    color:       '#c8933a',
+    category:    'strategic',
+    description: 'Your lord inspires loyalty and discipline. Army capacity increased by +2 unit slots.',
+    hint:        'Best for large-army builds',
+    effects: {
+      commandCapacityBonus: 2,
+    },
+  },
+
+  strategist: {
+    id:          'strategist',
+    name:        'Strategist',
+    icon:        '🗺',
+    color:       '#4070d0',
+    category:    'strategic',
+    description: 'Your lord commands with iron authority. Army Combat Power cap increased by +100 CP.',
+    hint:        'Best for elite heavy armies',
+    effects: {
+      armyPowerCapBonus: 100,
+    },
+  },
+
+  inspiring: {
+    id:          'inspiring',
+    name:        'Inspiring',
+    icon:        '☀',
+    color:       '#d0b040',
+    category:    'strategic',
+    description: 'Your lord\'s presence lifts the spirits of every soldier. Allied morale starts 10 points higher at the start of every battle.',
+    hint:        'Best for Priests & support lords',
+    effects: {
+      attackerMoraleBonus: 10,
+    },
+  },
+
+  fearsome: {
+    id:          'fearsome',
+    name:        'Fearsome',
+    icon:        '💀',
+    color:       '#8030a0',
+    category:    'strategic',
+    description: 'Your lord\'s reputation precedes them. Enemy forces enter battle with 10 less morale.',
+    hint:        'Best for Dark Lords & aggressors',
+    effects: {
+      defenderMoraleMalus: 10,
+    },
+  },
+
+  scholar: {
+    id:          'scholar',
+    name:        'Scholar',
+    icon:        '📚',
+    color:       '#9040c0',
+    category:    'strategic',
+    description: 'Your lord reflects deeply on every experience. All XP earned from quests, battles, and actions increased by 20%.',
+    hint:        'Best for fast leveling',
+    effects: {
+      xpMultiplier: 1.2,
+    },
+  },
+
+  drillmaster: {
+    id:          'drillmaster',
+    name:        'Drillmaster',
+    icon:        '⚒',
+    color:       '#c05040',
+    category:    'strategic',
+    description: 'Your lord runs relentless training regimens. Unit recruitment time reduced by 30%.',
+    hint:        'Best for rapid army expansion',
+    effects: {
+      recruitTimeMult: 0.7,
     },
   },
 };

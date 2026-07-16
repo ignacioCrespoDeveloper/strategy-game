@@ -89,6 +89,19 @@ The game state in `game.js` is a single plain object — easy to serialise and s
 
 ---
 
+## 🐛 Known Bugs
+
+| # | Area | Description | Status |
+|---|---|---|---|
+| 1 | Quests | Sending a lord on a quest and finishing with credits **on the same tile** does nothing. Moving the lord to a different tile first, then sending + finishing works correctly. Root cause unknown — likely a timing issue between the action-complete tick and the credit-finish flow when the lord hasn't moved since the last quest. | **Pinned — needs investigation** |
+| 2 | Economy | Gold generation from multiple cities is not being summed correctly — the HUD/overview appears to show only one city's gold rate instead of the total across all player cities. | **Fixed** — overview tick now runs `ProductionService.tick()` for all cities |
+| 3 | Cities | City population status (Stable, Prosperous, Declining, etc.) does not update dynamically as population changes — the label appears static and does not reflect the current growth state. | **Fixed** — `getCityStatus()` now incorporates growth rate as a score modifier |
+| 4 | Map / Bandits | Bandit camp unit cards in the map tile panel are empty — unit images or icons not rendering inside the camp preview cards. | **Pinned — needs investigation** |
+| 5 | Map / Bandits | Attack button on the bandit camp card in the map right panel has very low contrast / nearly invisible styling. | **Fixed** — added `.btn-danger` CSS class (red, high contrast) |
+| 6 | Rankings / HUD | Ranking position not shown next to username in the top bar. Rankings data may also be stale. Goal: display as `Username (#3)` in the HUD. | **Fixed** — HUD now saves score + fetches leaderboard async on show, displays `Username (#N)` |
+
+---
+
 ## 🗺️ Roadmap ideas
 
 - [ ] Fog of war (unit sight radius)
