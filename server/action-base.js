@@ -12,6 +12,9 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { catchUp }      from './tick/catch-up.js';
+import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS } from './engine-loader.js';
+
+const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS };
 
 const STATE_KEYS = ['players', 'lords', 'cities', 'armies'];
 
@@ -56,6 +59,8 @@ export async function loadAndCatchUp(req, res, extraKeys = []) {
 
   const rawPlayers = raw.players || {};
   let player = rawPlayers[playerId];
+  // Backfill race for players saved before the race-at-registration change.
+  if (player && !player.race) player.race = user.user_metadata?.race ?? null;
   if (!player) {
     // Brand-new account: bootstrap a player record server-side so
     // subsequent actions (city founding, lord creation) can proceed.
@@ -65,9 +70,11 @@ export async function loadAndCatchUp(req, res, extraKeys = []) {
     player = {
       id:           playerId,
       username,
+      race:         user.user_metadata?.race ?? null,
       coins:        5000,
       credits:      9999,
       lordId:       null,
+      rankingStats: { pvpWins: 0, conquests: 0 },
       createdAt:    Date.now(),
       passwordHash: '__supabase__',
     };
@@ -82,6 +89,7 @@ export async function loadAndCatchUp(req, res, extraKeys = []) {
       armies: raw.armies || {},
     },
     Date.now(),
+    _ENGINE,
   );
 
   const extras = {};
@@ -112,5 +120,9 @@ export async function saveState(admin, playerId, rawPlayers, { player, lords, ci
     .from('storage')
     .upsert(writes, { onConflict: 'player_id,key' });
 
-  if (error) console.warn('[action] save warning:', error.message);
+  if (error) {
+    console.warn('[action] save warning:', error.message);
+    return error;
+  }
+  return null;
 }

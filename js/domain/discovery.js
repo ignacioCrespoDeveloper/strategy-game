@@ -66,12 +66,20 @@ const DiscoveryService = (() => {
 
   // ── Weighted random roll ──────────────────────────────────────
 
-  function _roll(terrainId) {
+  // Discovery IDs that count as "gold-type" for the treasure_hunter talent.
+  const _GOLD_DISC_IDS = new Set([
+    'coin_cache', 'lost_treasure', 'buried_vault',
+    'merchant_caravan', 'traveling_merchant', 'ancient_relic', 'bog_crystal',
+  ]);
+
+  function _roll(terrainId, goldBonus) {
     const entries = Object.values(DISCOVERY_DEFS)
       .map(def => {
         const mults = def.terrainMultipliers || {};
         const mult  = (terrainId in mults) ? mults[terrainId] : 1.0;
-        return { def, weight: def.baseWeight * mult };
+        let weight  = def.baseWeight * mult;
+        if (goldBonus && _GOLD_DISC_IDS.has(def.id)) weight *= (1 + goldBonus);
+        return { def, weight };
       })
       .filter(e => e.weight > 0);
 
@@ -128,8 +136,11 @@ const DiscoveryService = (() => {
     // Every search attempt counts toward fatigue (even nothing found).
     incrementFatigue(lord.id);
 
-    const terrain = WorldService.getTerrain(lord.x, lord.y);
-    const def     = _roll(terrain.id);
+    const terrain       = WorldService.getTerrain(lord.x, lord.y);
+    const talentEffects = (typeof TALENT_POOL !== 'undefined' && lord.talentId)
+      ? (TALENT_POOL[lord.talentId]?.effects || {})
+      : {};
+    const def = _roll(terrain.id, talentEffects.goldDiscoveryBonus || 0);
 
     if (def.category === 'nothing') {
       return { def, record: null };
@@ -200,10 +211,13 @@ const DiscoveryService = (() => {
     bountiful_hunt:   { food: 1,  xp: 60  },
     buried_vault:     { gold: 1,  xp: 100 },
     // Event / trade / legendary
-    ancient_ruins:    {           xp: 80  },
-    merchant_caravan: { gold: 1,  xp: 20  },
-    ancient_relic:    { gold: 1,  xp: 160 },
-    bog_crystal:      { gold: 1,  xp: 120 },
+    ancient_ruins:       {           xp: 80  },
+    abandoned_keep:      { gold: 1,  xp: 50  },
+    wandering_sage:      {           xp: 100 },
+    merchant_caravan:    { gold: 1,  xp: 20  },
+    traveling_merchant:  { gold: 1,  xp: 20  },
+    ancient_relic:       { gold: 1,  xp: 160 },
+    bog_crystal:         { gold: 1,  xp: 120 },
   };
 
   // Loot ranges by tier: [min, max] for resources and gold respectively.

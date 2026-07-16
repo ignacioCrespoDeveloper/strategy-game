@@ -2,10 +2,11 @@
 //  ranking.js — RankingService
 //
 //  Computes a player's total score from:
-//    🏰 City score  — cumulative build cost of all buildings + city tier
-//    👑 Lord score  — level × 500 + XP
-//    ⚔  Army score  — gold cost of all recruited units
-//    🔍 Discovery score — log entries × 75
+//    🏰 Building pts  — 1 point per building level across all cities
+//    👑 Lord pts      — 1 point per level gained across all lords
+//    🔍 Quest pts     — tier 1 = 1pt, tier 2+ = 2pts per discovery
+//    ⚔  PvP pts       — pvpWins × 5
+//    🏰 Conquest pts  — conquests × 25
 //
 //  Leaderboard is stored in Supabase under key 'rank_score'
 //  so other players' scores are visible to everyone.
@@ -15,73 +16,48 @@ const RankingService = (() => {
 
   const RANK_KEY = 'rank_score';
 
-  // ── Score helpers ──────────────────────────────────────────────
-
-  // Cumulative resource investment in a city's buildings.
-  // Sums cost(1..level) for every built building; 1 resource = 2 pts.
-  function _buildingScore(city) {
-    let score = 0;
-    Object.entries(city.buildings || {}).forEach(([bid, level]) => {
-      const def = BUILDING_DEFS[bid];
-      if (!def || level <= 0) return;
-      for (let l = 1; l <= level; l++) {
-        const c = def.cost(l);
-        score += ((c.wood || 0) + (c.stone || 0) + (c.iron || 0) + (c.food || 0)) * 2;
-      }
-    });
-    return Math.round(score);
-  }
-
-  function _cityScore(cities) {
-    return cities.reduce((sum, city) => {
-      const tierPts = (city.tier || 1) * 800;
-      return sum + tierPts + _buildingScore(city);
-    }, 0);
-  }
-
-  function _lordScore(lord) {
-    if (!lord) return 0;
-    return (lord.level || 1) * 500 + (lord.xp || 0);
-  }
-
-  function _armyScore(lordId) {
-    if (!lordId) return 0;
-    const army = ArmyService.get(lordId);
-    return (army?.units || []).reduce((s, u) => {
-      return s + (UNIT_DEFS[u.unitId]?.goldCost || 0) * u.count;
-    }, 0);
-  }
-
-  function _discoveryScore(playerId) {
-    return DiscoveryService.getLog(playerId).length * 75;
-  }
-
   // ── Public: compute a score object for the given player ────────
 
   function computeScore(player) {
-    const cities    = CityService.getPlayerCities(player.id);
-    const lord      = player.lordId ? LordService.getById(player.lordId) : null;
-    const cityPts   = _cityScore(cities);
-    const lordPts   = _lordScore(lord);
-    const armyPts   = _armyScore(player.lordId);
-    const discPts   = _discoveryScore(player.id);
-    const total     = cityPts + lordPts + armyPts + discPts;
+    // City buildings — 1 point per building level across all cities
+    const buildingPts = CityService.getPlayerCities(player.id)
+      .reduce((sum, city) => {
+        return sum + Object.values(city.buildings || {}).reduce((s, lvl) => s + (lvl || 0), 0);
+      }, 0);
+
+    // Lord levels — 1 point per level gained (level 1 = 0 pts)
+    const lordPts = LordService.getAll()
+      .filter(l => l.playerId === player.id)
+      .reduce((sum, l) => sum + Math.max(0, (l.level || 1) - 1), 0);
+
+    // Quest discoveries — tier 1 = 1pt, tier 2+ = 2pts
+    const questPts = DiscoveryService.getLog(player.id)
+      .filter(e => {
+        const def = DISCOVERY_DEFS[e.definitionId];
+        return def && def.category !== 'nothing' && def.category !== 'intelligence' && def.category !== 'combat';
+      })
+      .reduce((sum, e) => {
+        const tier = DISCOVERY_DEFS[e.definitionId]?.tier || 1;
+        return sum + (tier >= 2 ? 2 : 1);
+      }, 0);
+
+    // PvP wins + conquests
+    const pvpPts      = (player.rankingStats?.pvpWins   || 0) * 5;
+    const conquestPts = (player.rankingStats?.conquests || 0) * 25;
+
+    const total = buildingPts + lordPts + questPts + pvpPts + conquestPts;
+
+    // Primary lord — highest-level lord for display
+    const allLords  = LordService.getAll().filter(l => l.playerId === player.id);
+    const topLord   = allLords.sort((a, b) => (b.level || 1) - (a.level || 1))[0] || null;
+    const lordMeta  = topLord
+      ? { name: topLord.name, classId: topLord.classId, level: topLord.level || 1 }
+      : null;
 
     return {
       total,
-      breakdown: {
-        cities:      cityPts,
-        lord:        lordPts,
-        army:        armyPts,
-        discoveries: discPts,
-      },
-      meta: {
-        cityCount:   cities.length,
-        lordLevel:   lord?.level || 0,
-        lordXp:      lord?.xp    || 0,
-        armyUnits:   (ArmyService.get(player.lordId)?.units || []).reduce((s, u) => s + u.count, 0),
-        discCount:   DiscoveryService.getLog(player.id).length,
-      },
+      breakdown: { buildingPts, lordPts, questPts, pvpPts, conquestPts },
+      lordMeta,
     };
   }
 
@@ -96,7 +72,7 @@ const RankingService = (() => {
           username:  player.username,
           score:     scoreObj.total,
           breakdown: scoreObj.breakdown,
-          meta:      scoreObj.meta,
+          lordMeta:  scoreObj.lordMeta,
           updatedAt: Date.now(),
         },
       }, { onConflict: 'player_id,key' });
@@ -121,5 +97,10 @@ const RankingService = (() => {
     }
   }
 
-  return { computeScore, saveScore, fetchLeaderboard };
+  function getPlayerRank(playerId, leaderboard) {
+    const idx = leaderboard.findIndex(e => e.playerId === playerId);
+    return idx === -1 ? null : idx + 1;
+  }
+
+  return { computeScore, saveScore, fetchLeaderboard, getPlayerRank };
 })();

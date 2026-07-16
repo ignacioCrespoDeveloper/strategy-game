@@ -124,5 +124,16 @@ export async function handleLordAction(req, res) {
     );
   }
 
+  // Register a server-side dispatch event so the outcome resolves
+  // even if both players go offline before finishAt.
+  const queueItem = lord.actionQueue[0];
+  const { error: evtErr } = await admin.from('pending_events').insert({
+    player_id: playerId,
+    type:      intent === 'attack' ? 'pvp_attack' : action === 'search_area' ? 'search_area' : 'move',
+    fire_at:   queueItem.finishAt,
+    payload:   { lordId, ...(destX != null ? { destX, destY } : {}) },
+  });
+  if (evtErr) console.warn('[lord-action] pending_events insert failed:', evtErr.message);
+
   return res.json({ ok: true, lord });
 }

@@ -15,6 +15,7 @@ import express              from 'express';
 import { fileURLToPath }    from 'url';
 import { dirname, join }    from 'path';
 import { resolvePvpAttack, scanTile, declareAttack } from './combat-resolver.js';
+import { runDispatch } from './tick/event-dispatcher.js';
 import { BattleEngine, UNIT_DEFS } from './engine-loader.js';
 import { syncPlayerState }         from './sync.js';
 import { handleBuild }             from './actions/build.js';
@@ -26,6 +27,12 @@ import { handleHireMerc }          from './actions/hire-merc.js';
 import { handleLordRevive }        from './actions/lord-revive.js';
 import { handleArmyDisband }       from './actions/army-disband.js';
 import { handleInstantBuild }      from './actions/instant-build.js';
+import { handlePveResult }         from './actions/pve-result.js';
+import { handleInstantAction }     from './actions/instant-action.js';
+import { handleSetRace }           from './actions/set-race.js';
+import { handleLordTalents }       from './actions/lord-talents.js';
+import { handleLordSaveXp }        from './actions/lord-save-xp.js';
+import { handleQuestResolve }      from './actions/quest-resolve.js';
 
 const app       = express();
 const PORT      = process.env.PORT || 3000;
@@ -46,7 +53,7 @@ app.use(express.static(join(__dirname, '..')));
 // POST /api/sync — offline catch-up on login
 app.post('/api/sync', syncPlayerState);
 
-app.post('/api/pvp/resolve', resolvePvpAttack);
+app.post('/api/pvp/resolve',         resolvePvpAttack);
 
 // ── Tile scan API ─────────────────────────────────────────────
 //
@@ -78,8 +85,14 @@ app.post('/api/lord/action',   handleLordAction);
 app.post('/api/lord/create',   handleLordCreate);
 app.post('/api/lord/hire-merc', handleHireMerc);
 app.post('/api/lord/revive',   handleLordRevive);
-app.post('/api/army/disband',    handleArmyDisband);
-app.post('/api/city/instant-build', handleInstantBuild);
+app.post('/api/army/disband',        handleArmyDisband);
+app.post('/api/city/instant-build',  handleInstantBuild);
+app.post('/api/lord/pve-result',     handlePveResult);
+app.post('/api/lord/instant-action', handleInstantAction);
+app.post('/api/player/set-race',     handleSetRace);
+app.post('/api/lord/talents',        handleLordTalents);
+app.post('/api/lord/save-xp',        handleLordSaveXp);
+app.post('/api/lord/quest-resolve',  handleQuestResolve);
 
 // ── Lords debug ───────────────────────────────────────────────
 // GET /api/debug/lords — dumps all lords from Supabase so we can verify positions are synced
@@ -97,55 +110,6 @@ app.get('/api/debug/lords', async (req, res) => {
   res.json(summary);
 });
 
-// ── Auth debug (remove before shipping) ──────────────────────
-app.post('/api/debug-auth', async (req, res) => {
-  const { createClient } = await import('@supabase/supabase-js');
-  const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-  if (!token) return res.json({ error: 'no token in header' });
-
-  // Try 1: service role client
-  const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-  });
-  const r1 = await admin.auth.getUser(token);
-
-  // Try 2: anon key client (uses SUPABASE_URL from env; anon key is public anyway)
-  const ANON_KEY = 'sb_publishable_AxppcJg1z-yJ6hfOLLhRkA_dOd_8BLx';
-  const anonClient = createClient(process.env.SUPABASE_URL, ANON_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  const r2 = await anonClient.auth.getUser(token);
-
-  // JWT payload (no sig check — just for debugging)
-  let jwtPayload = null;
-  try {
-    const parts = token.split('.');
-    jwtPayload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
-  } catch (e) { jwtPayload = { parseError: e.message }; }
-
-  // Try 3: service role DB query (tests that service key works for PostgREST)
-  const userId = r2.data?.user?.id ?? r1.data?.user?.id;
-  let dbResult = null;
-  if (userId) {
-    const { data: dbData, error: dbErr } = await admin
-      .from('storage')
-      .select('key')
-      .eq('player_id', userId)
-      .limit(5);
-    dbResult = dbErr
-      ? { error: dbErr.message, code: dbErr.code, hint: dbErr.hint }
-      : { ok: true, keys: dbData?.map(r => r.key) };
-  }
-
-  res.json({
-    tokenLength: token.length,
-    tokenPrefix: token.substring(0, 20) + '...',
-    jwtPayload,
-    serviceRoleResult: { user: r1.data?.user?.id ?? null, error: r1.error?.message, status: r1.error?.status },
-    anonKeyResult:     { user: r2.data?.user?.id ?? null, error: r2.error?.message, status: r2.error?.status },
-    dbQueryResult: dbResult,
-  });
-});
 
 // ── Health check ──────────────────────────────────────────────
 // GET /api/health — confirms server is up, engine is loaded,
@@ -202,6 +166,18 @@ app.get('/api/health', (req, res) => {
     unitCount:    Object.keys(UNIT_DEFS).length,
   });
 });
+
+// ── Server-side event dispatcher ─────────────────────────────
+//
+// Polls pending_events every 5 s. For each due row (fire_at <= now):
+//   1. Claims it atomically (status pending → processing)
+//   2. Runs catchUp for that player — applies all completed queue items
+//   3. Resolves any pending PvP attacks
+//   4. Saves state to Supabase; marks event done
+//
+// This makes all game outcomes server-authoritative and independent
+// of whether either player is online at the time the event fires.
+setInterval(() => runDispatch().catch(e => console.error('[dispatcher] loop error:', e.message)), 5000);
 
 // ── Boot ──────────────────────────────────────────────────────
 app.listen(PORT, () => {

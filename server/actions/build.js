@@ -79,5 +79,14 @@ export async function handleBuild(req, res) {
 
   await saveState(admin, playerId, rawPlayers, { player, lords, cities, armies });
 
+  const queueItem = city.constructionQueue[0];
+  const { error: evtErr } = await admin.from('pending_events').insert({
+    player_id: playerId,
+    type:      'build',
+    fire_at:   queueItem.finishAt,
+    payload:   { cityId, buildingId, targetLevel: queueItem.targetLevel },
+  });
+  if (evtErr) console.warn('[build] pending_events insert failed:', evtErr.message);
+
   return res.json({ ok: true, city, player });
 }

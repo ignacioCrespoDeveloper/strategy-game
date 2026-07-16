@@ -36,6 +36,7 @@ load('js/data/units.js');            // UNIT_DEFS
 load('js/data/buildings.js');        // BUILDING_DEFS
 load('js/data/races.js');            // RACES
 load('js/data/battle-defs.js');      // TERRAIN_BATTLE_MODS, CAMP_DEFS
+load('js/data/discoveries.js');      // DISCOVERY_DEFS
 load('js/domain/battle-targeting.js');
 load('js/domain/battle-morale.js');  // needs TERRAIN_BATTLE_MODS
 load('js/domain/battle-traits.js');
@@ -49,3 +50,6 @@ export const TERRAIN_BATTLE_MODS = _ctx.TERRAIN_BATTLE_MODS;
 export const LORD_BASE_STATS     = _ctx.LORD_BASE_STATS;
 export const LORD_CLASSES        = _ctx.LORD_CLASSES;
 export const STANCE_DEFS         = _ctx.STANCE_DEFS;
+export const TALENT_POOL         = _ctx.TALENT_POOL;
+export const DISCOVERY_DEFS      = _ctx.DISCOVERY_DEFS;
+export const CAMP_DEFS           = _ctx.CAMP_DEFS;

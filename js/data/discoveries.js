@@ -21,7 +21,7 @@
 //  Do NOT add game logic here.
 // =============================================
 
-const DISCOVERY_DEFS = {
+var DISCOVERY_DEFS = {
 
   // ── Nothing ───────────────────────────────────────────────────
 
@@ -278,7 +278,7 @@ const DISCOVERY_DEFS = {
     description: 'A gang of outlaws has made camp here. Dangerous — but they carry loot worth fighting for.',
     icon:        '🏕',
     category:    'combat',
-    baseWeight:  10,
+    baseWeight:  7,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
       forest: 2.5, hills: 1.8, plains: 1.2, marsh: 0.6, mountain: 0.5, desert: 0.8,
@@ -292,7 +292,7 @@ const DISCOVERY_DEFS = {
     description: 'A chaotic sprawl of tents, bones and noise. The greenskins inside are cowardly but numerous.',
     icon:        '👺',
     category:    'combat',
-    baseWeight:  8,
+    baseWeight:  6,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
       forest: 3.0, marsh: 2.0, hills: 1.5, plains: 1.0, mountain: 0.5, desert: 0.2,
@@ -306,7 +306,7 @@ const DISCOVERY_DEFS = {
     description: 'A professional warband between contracts. They fight hard and demand good coin — but can be hired.',
     icon:        '⚔',
     category:    'combat',
-    baseWeight:  6,
+    baseWeight:  4,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
       plains: 2.5, hills: 1.5, forest: 0.8, mountain: 0.5, marsh: 0.4, desert: 0.6,
@@ -427,6 +427,36 @@ const DISCOVERY_DEFS = {
     },
   },
 
+  abandoned_keep: {
+    id:          'abandoned_keep',
+    name:        'Abandoned Keep',
+    intelType:   'ruins',
+    description: 'A crumbling fortress ruin, long since stripped of defenders. Treasures may still lie within its vaults.',
+    icon:        '🏚',
+    category:    'event',
+    tier:        2,
+    baseWeight:  8,
+    baseDuration: 14 * 24 * 3600,
+    terrainMultipliers: {
+      mountain: 2.0, hills: 2.0, plains: 1.2, forest: 1.0, marsh: 0.6, desert: 0.8,
+    },
+  },
+
+  wandering_sage: {
+    id:          'wandering_sage',
+    name:        'Wandering Sage',
+    intelType:   'ruins',
+    description: 'A travelling scholar bearing ancient knowledge. Time spent with them grants rare insight.',
+    icon:        '📖',
+    category:    'event',
+    tier:        2,
+    baseWeight:  8,
+    baseDuration: 6 * 3600,
+    terrainMultipliers: {
+      plains: 2.0, forest: 1.8, hills: 1.2, marsh: 0.6, mountain: 0.5, desert: 0.4,
+    },
+  },
+
   // ── Trade ─────────────────────────────────────────────────────
 
   merchant_caravan: {
@@ -440,6 +470,21 @@ const DISCOVERY_DEFS = {
     baseDuration: 12 * 3600,
     terrainMultipliers: {
       plains: 2.5, hills: 1.0, forest: 0.5, mountain: 0.2, marsh: 0.2, desert: 0.4,
+    },
+  },
+
+  traveling_merchant: {
+    id:          'traveling_merchant',
+    name:        'Traveling Merchant',
+    intelType:   'mercenary_camp',
+    description: 'A wealthy trader with exotic goods far beyond the usual stock. A lucrative encounter.',
+    icon:        '💰',
+    category:    'trade',
+    tier:        2,
+    baseWeight:  6,
+    baseDuration: 10 * 3600,
+    terrainMultipliers: {
+      plains: 2.5, hills: 1.2, forest: 0.8, mountain: 0.3, marsh: 0.2, desert: 0.6,
     },
   },
 

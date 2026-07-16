@@ -46,7 +46,33 @@ const App = (() => {
           if (state) StorageService.hydrate(state);
           // Store any completion events (buildings, units, lords) so the
           // first screen can pick them up and show toasts.
-          if (events?.length > 0) window._pendingSyncEvents = events;
+          if (events?.length > 0) {
+            window._pendingSyncEvents = events;
+            // Process quest_result events immediately: add discoveries to local
+            // storage so the quest log is populated when the player opens their lord.
+            const playerId = session.user.id;
+            for (const evt of events) {
+              if (evt.type !== 'quest_result') continue;
+              const def = (typeof DISCOVERY_DEFS !== 'undefined') ? DISCOVERY_DEFS[evt.defId] : null;
+              if (!def) continue;
+              if (evt.category === 'combat' && evt.record) {
+                const all = StorageService.get('discoveries') || {};
+                if (!all[playerId]) all[playerId] = [];
+                all[playerId].push(evt.record);
+                StorageService.set('discoveries', all);
+              }
+              if (typeof DiscoveryService !== 'undefined') {
+                DiscoveryService.addLog(playerId, {
+                  definitionId: evt.defId,
+                  tileX:   evt.record?.tileX  ?? null,
+                  tileY:   evt.record?.tileY  ?? null,
+                  terrain: evt.record?.terrain ?? 'plains',
+                  rewards: evt.rewards || [],
+                  recordId: (evt.category === 'combat' && evt.record) ? evt.record.id : undefined,
+                });
+              }
+            }
+          }
         }
       } catch (_) {
         // Non-fatal — server may be unreachable; cached state is used
@@ -66,6 +92,7 @@ const App = (() => {
         coins:        existingData?.coins   ?? 5000,
         credits:      existingData?.credits ?? 9999,
         lordId:       existingData?.lordId  ?? null,
+        race:         existingData?.race    ?? session.user.user_metadata?.race ?? null,
         createdAt:    existingData?.createdAt ?? Date.now(),
         passwordHash: '__supabase__',
       };
@@ -156,6 +183,10 @@ const App = (() => {
 
   // ── State logic ───────────────────────────────────────────────
   function _afterAuth(player) {
+    if (!player.race) {
+      _goto('create-lord', { player });
+      return;
+    }
     const lord = player.lordId ? LordService.getById(player.lordId) : null;
     _goto('overview', { player, lord });
   }
@@ -163,6 +194,7 @@ const App = (() => {
   // ── Event bus wiring ──────────────────────────────────────────
   function _registerEvents() {
     EventBus.on('auth:success',  ({ player })             => _afterAuth(player));
+    EventBus.on('race:selected', ({ player })             => _afterAuth(player));
     EventBus.on('lord:created',  ({ player })             => _afterAuth(player));
     EventBus.on('city:founded',  ({ player, lord })       => _goto('map', { player, lord }));
     EventBus.on('city:open',     ({ city, lord, player }) => _goto('city', { city, lord, player }));

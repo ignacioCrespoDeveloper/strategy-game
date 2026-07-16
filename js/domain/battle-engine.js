@@ -47,6 +47,7 @@ var BattleEngine = (() => {
       defense:    def.combatStats?.defense ?? def.defense ?? 5,
       speed:      def.combatStats?.speed  ?? def.speed    ?? 5,
       leadership: extras?.leadership ?? 0,
+      magic:      extras?.magic      ?? 0,
       count,
       startCount: count,
       isLord:     extras?.isLord ?? false,
@@ -76,6 +77,7 @@ var BattleEngine = (() => {
       role:       'lord',
       isLord:     true,
       leadership: stats.leadership,
+      magic:      stats.magic || 0,
       currentHp:  lord.currentHp ?? stats.health,
     });
 
@@ -87,8 +89,21 @@ var BattleEngine = (() => {
       })
       .filter(Boolean);
 
+    // Apply combat talent traits/bonuses to the lord's battle unit
+    const talentEffects = (typeof LordService !== 'undefined')
+      ? LordService.getTalentEffects(lord)
+      : ((typeof TALENT_POOL !== 'undefined' && lord.talentId) ? (TALENT_POOL[lord.talentId]?.effects || {}) : {});
+
+    if (talentEffects.battleUnitAttackBonus)  lordUnit.attack  += talentEffects.battleUnitAttackBonus;
+    if (talentEffects.battleUnitDefenseBonus) lordUnit.defense += talentEffects.battleUnitDefenseBonus;
+    if (talentEffects.battleUnitTraits) {
+      for (const t of talentEffects.battleUnitTraits) {
+        if (!lordUnit.traits.includes(t)) lordUnit.traits.push(t);
+      }
+    }
+
     const leaderMoraleBonus = stats.leadership * 1.5;
-    const attackerMorale    = Math.min(100, 75 + leaderMoraleBonus);
+    const attackerMorale    = Math.min(100, 75 + leaderMoraleBonus + (talentEffects.attackerMoraleBonus || 0));
 
     const defenderUnits = encounter.defenders
       .map((d, i) => {
@@ -98,11 +113,13 @@ var BattleEngine = (() => {
       })
       .filter(Boolean);
 
+    const defenderMorale = Math.max(0, (encounter.startingMorale || 50) - (talentEffects.defenderMoraleMalus || 0));
+
     return {
       terrain,
       encounter,
       attacker: { id: 'player',          units: [lordUnit, ...armyUnits], morale: attackerMorale },
-      defender: { id: encounter.name,    units: defenderUnits,            morale: encounter.startingMorale },
+      defender: { id: encounter.name,    units: defenderUnits,            morale: defenderMorale },
     };
   }
 
@@ -259,6 +276,33 @@ var BattleEngine = (() => {
       const atkRanged = _bySpeed(ctx.attacker.units.filter(u => _alive(u) && u.traits.includes('ranged')));
       const defRanged = _bySpeed(ctx.defender.units.filter(u => _alive(u) && u.traits.includes('ranged')));
 
+      // Pyroblast: round 1 only — lord with pyroblast trait fires a splash hitting ALL defenders
+      if (round === 1) {
+        const pyroblaster = ctx.attacker.units.find(u => _alive(u) && u.isLord && u.traits.includes('pyroblast'));
+        if (pyroblaster) {
+          ctx.defender.units.filter(_alive).forEach(target => {
+            const splash = Math.max(1, Math.ceil((pyroblaster.magic || pyroblaster.attack) * 0.7));
+            const hpBefore = target.currentHp;
+            target.currentHp = Math.max(0, target.currentHp - splash);
+            target._burning  = true;
+            if (target.currentHp <= 0 && target.count > 0) { target.count--; target.currentHp = target.maxHp; }
+            events.push({
+              round, phase: 'ranged',
+              actorId: pyroblaster.id, actorName: pyroblaster.name,
+              targetId: target.id, targetName: target.name,
+              trait: 'pyroblast', ability: null,
+              damage: splash, hpBefore, hpAfter: target.currentHp,
+              result: 'hit',
+            });
+            if (target.count > 0) defLosses += 0; // models may die from HP drain
+          });
+          // Count models wiped out by pyroblast splash
+          ctx.defender.units.forEach(u => {
+            if (u._burning && u.count === 0) defLosses++;
+          });
+        }
+      }
+
       for (const unit of atkRanged) {
         if (!_sideAlive(ctx.defender)) break;
         const r = _executeAttack(unit, ctx.defender, 'ranged', terrainMods, round, events);
@@ -303,11 +347,20 @@ var BattleEngine = (() => {
         if (!_sideAlive(ctx.defender)) break;
         const r = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events);
         defLosses += r.modelsKilled;
+        // double_strike: 30% chance to attack a second time in melee
+        if (unit.traits.includes('double_strike') && Math.random() < 0.30 && _sideAlive(ctx.defender)) {
+          const r2 = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events);
+          defLosses += r2.modelsKilled;
+        }
       }
       for (const unit of defMelee) {
         if (!_sideAlive(ctx.attacker)) break;
         const r = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events);
         atkLosses += r.modelsKilled;
+        if (unit.traits.includes('double_strike') && Math.random() < 0.30 && _sideAlive(ctx.attacker)) {
+          const r2 = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events);
+          atkLosses += r2.modelsKilled;
+        }
       }
 
       if (!_sideAlive(ctx.defender)) { winner = 'attacker'; reason = 'eliminated'; break; }

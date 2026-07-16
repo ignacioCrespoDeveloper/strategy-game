@@ -35,6 +35,7 @@
 // =============================================
 
 import { createClient } from '@supabase/supabase-js';
+import { catchUp }       from './tick/catch-up.js';
 import {
   BattleEngine,
   UNIT_DEFS,
@@ -446,7 +447,221 @@ export async function declareAttack(req, res) {
   return res.json({ ok: true, notified: defPlayerIds.size });
 }
 
-// ── Main handler ──────────────────────────────────────────────
+// ── Core resolution logic (no HTTP dependency) ───────────────
+//
+// Called from the HTTP handler (online) and programmatically
+// from sync.js / check-incoming (offline battles).
+//
+// Returns one of:
+//   { ok: true, report, terrain, defPlayerIds, atkLords, atkArmies, atkPlayer }
+//   { ok: true, noDefenders: true, atkLords, atkArmies, atkPlayer }
+//   { ok: false, error, hidden?: true }
+async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tileY) {
+  // 1. Load attacker data.
+  const { data: atkRows, error: atkErr } = await admin.from('storage')
+    .select('key, value')
+    .eq('player_id', attackerPlayerId)
+    .in('key', ['lords', 'armies', 'players']);
+  if (atkErr) return { ok: false, error: 'Failed to load attacker data: ' + atkErr.message };
+
+  const atkData      = Object.fromEntries((atkRows || []).map(r => [r.key, r.value]));
+  const atkLords     = atkData.lords   || {};
+  const atkArmies    = atkData.armies  || {};
+  const atkPlayers   = atkData.players || {};
+  const attackerLord = atkLords[attackerLordId];
+
+  if (!attackerLord) return { ok: false, error: 'Attacking lord not found' };
+  if (attackerLord.playerId !== attackerPlayerId) return { ok: false, error: 'Lord does not belong to caller' };
+
+  // 2. Stance + busy check.
+  if (attackerLord.downtimeUntil && Date.now() < attackerLord.downtimeUntil) {
+    return { ok: false, error: 'Attacking lord is incapacitated' };
+  }
+  if ((attackerLord.actionQueue || []).length > 0) {
+    return { ok: false, error: 'Lord is busy with another action' };
+  }
+  const atkStance = STANCE_DEFS[attackerLord.stance?.id || 'idle'];
+  if (atkStance?.restrictions?.includes('action')) {
+    return { ok: false, error: `Cannot attack while in ${atkStance.name} stance` };
+  }
+
+  // 3. Same-tile arrival check.
+  if (attackerLord.x !== tileX || attackerLord.y !== tileY) {
+    return {
+      ok: false,
+      error: `Attacker has not arrived at (${tileX}, ${tileY}) yet — current position is (${attackerLord.x}, ${attackerLord.y})`,
+    };
+  }
+
+  // 4. Find ALL enemy lords on the target tile.
+  const { data: allLordRows, error: lordErr } = await admin.from('storage')
+    .select('player_id, value').eq('key', 'lords');
+  if (lordErr) return { ok: false, error: 'Failed to scan lords: ' + lordErr.message };
+
+  const defenderEntries = [];
+  for (const row of (allLordRows || [])) {
+    if (row.player_id === attackerPlayerId) continue;
+    Object.values(row.value || {}).forEach(l => {
+      if (l.x === tileX && l.y === tileY) {
+        if (l.downtimeUntil && Date.now() < l.downtimeUntil) return;
+        defenderEntries.push({ playerId: row.player_id, lord: l });
+      }
+    });
+  }
+
+  if (defenderEntries.length === 0) {
+    // Clear the pending attack flag even when there are no defenders.
+    if (atkLords[attackerLordId]) {
+      atkLords[attackerLordId].pendingPvpAttack = null;
+      await admin.from('storage').upsert(
+        { player_id: attackerPlayerId, key: 'lords', value: atkLords },
+        { onConflict: 'player_id,key' }
+      );
+    }
+    return { ok: true, noDefenders: true, atkLords, atkArmies, atkPlayer: atkPlayers[attackerPlayerId] || null };
+  }
+
+  // 5. Load each defender's storage + attacker's activity_feed in one batched query.
+  const defPlayerIds = [...new Set(defenderEntries.map(e => e.playerId))];
+  const [defResult, atkFeedResult] = await Promise.all([
+    admin.from('storage')
+      .select('player_id, key, value')
+      .in('player_id', defPlayerIds)
+      .in('key', ['armies', 'lords', 'activity_feed']),
+    admin.from('storage')
+      .select('value')
+      .eq('player_id', attackerPlayerId)
+      .eq('key', 'activity_feed')
+      .maybeSingle(),
+  ]);
+  if (defResult.error) return { ok: false, error: 'Failed to load defender data: ' + defResult.error.message };
+
+  const defArmiesByPlayer   = {};
+  const defLordsByPlayer    = {};
+  const defActivityByPlayer = {};
+  for (const row of (defResult.data || [])) {
+    if (row.key === 'armies')        defArmiesByPlayer[row.player_id]   = row.value || {};
+    if (row.key === 'lords')         defLordsByPlayer[row.player_id]    = row.value || {};
+    if (row.key === 'activity_feed') defActivityByPlayer[row.player_id] = row.value || {};
+  }
+  const atkActivityFeed = atkFeedResult.data?.value || {};
+
+  const defenders = defenderEntries.map(({ playerId, lord }) => ({
+    playerId,
+    lord,
+    army: (defArmiesByPlayer[playerId] || {})[lord.id] || { lordId: lord.id, units: [] },
+  }));
+
+  // 6. Visibility check: at least one defender must be detectable.
+  const anyVisible = defenders.some(({ lord, army }) => _visibilityScore(lord, army.units) > 0);
+  if (!anyVisible) {
+    return { ok: false, error: 'All defenders are undetectable (visibility score 0)', hidden: true };
+  }
+
+  // 7. Build context and resolve.
+  const terrain = _terrain(tileX, tileY);
+  const ctx     = _buildMultiContext(attackerLord, atkArmies[attackerLord.id], defenders, terrain);
+  const report  = BattleEngine.resolve(ctx);
+
+  // 8. Apply losses.
+  const atkPlayer = atkPlayers[attackerPlayerId];
+  if (atkPlayer && report.winner === 'attacker') {
+    atkPlayer.rankingStats = atkPlayer.rankingStats || { pvpWins: 0, conquests: 0 };
+    atkPlayer.rankingStats.pvpWins = (atkPlayer.rankingStats.pvpWins || 0) + 1;
+    atkPlayers[attackerPlayerId] = atkPlayer;
+  }
+
+  const updatedAtkArmies = { ...atkArmies };
+  _applyAtkLosses(updatedAtkArmies, attackerLord, report.attacker);
+  _applyDefLosses(defenders, defArmiesByPlayer, report.defender);
+  _applyLordHp(atkLords, attackerLord.id, report.attacker.unitsSurviving, report.winner, 'attacker');
+  defenders.forEach(({ lord, playerId }) => {
+    _applyLordHp(defLordsByPlayer[playerId] || {}, lord.id, report.defender.unitsSurviving, report.winner, 'defender');
+  });
+
+  // Clear the deferred attack flag now that battle is resolved.
+  if (atkLords[attackerLordId]) atkLords[attackerLordId].pendingPvpAttack = null;
+
+  // 9. Build activity feed entries for both sides.
+  const now     = Date.now();
+  const rndTag  = () => Math.random().toString(36).slice(2, 5);
+  const atkIcon  = report.winner === 'attacker' ? '⚔' : report.winner === 'draw' ? '🤝' : '☠';
+  const atkTitle = report.winner === 'attacker' ? 'PvP Victory' : report.winner === 'draw' ? 'PvP Draw' : 'PvP Defeat';
+  const atkDetail = `${report.rounds} rounds · casualties: ${report.attacker.modelsLost} · +${report.xpEarned || 0}⭐`;
+
+  if (!atkActivityFeed[attackerPlayerId]) atkActivityFeed[attackerPlayerId] = [];
+  atkActivityFeed[attackerPlayerId].unshift({
+    id: `act_pvp_atk_${now}_${rndTag()}`, at: now, type: 'pvp_result',
+    icon: atkIcon, title: atkTitle, detail: atkDetail,
+    lordName: attackerLord.name, lordId: attackerLordId,
+    outcome: report.winner === 'attacker' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat',
+    report, terrain, rounds: report.rounds, modelsLost: report.attacker.modelsLost, xpEarned: report.xpEarned || 0,
+  });
+  atkActivityFeed[attackerPlayerId] = atkActivityFeed[attackerPlayerId].slice(0, 50);
+
+  defPlayerIds.forEach(pid => {
+    const defIcon   = report.winner === 'defender' ? '🛡' : report.winner === 'draw' ? '🤝' : '☠';
+    const defTitle  = report.winner === 'defender' ? 'Attack repelled!' : report.winner === 'draw' ? 'Battle draw' : '☠ Defeat — lord attacked';
+    const defDetail = `${attackerLord.name} attacked at (${tileX},${tileY}) · ${report.rounds} rounds · casualties: ${report.defender.modelsLost}`;
+    const feed = defActivityByPlayer[pid] || {};
+    if (!feed[pid]) feed[pid] = [];
+    feed[pid] = feed[pid].filter(e => !(e.type === 'pvp_threat' && e.lordName === attackerLord.name));
+    const defLordId   = defenders.find(d => d.playerId === pid)?.lord?.id   || null;
+    const defLordName = defenders.find(d => d.playerId === pid)?.lord?.name || '?';
+    feed[pid].unshift({
+      id: `act_pvp_def_${now}_${rndTag()}`, at: now, type: 'pvp_result',
+      icon: defIcon, title: defTitle, detail: defDetail,
+      lordName: defLordName, lordId: defLordId,
+      outcome: report.winner === 'defender' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat',
+      report, terrain, rounds: report.rounds, modelsLost: report.defender.modelsLost, xpEarned: 0,
+    });
+    feed[pid] = feed[pid].slice(0, 50);
+    defActivityByPlayer[pid] = feed;
+  });
+
+  // 10. Write all results.
+  const primaryDefender = defenders[0];
+  const writes = [
+    admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'armies',        value: updatedAtkArmies }, { onConflict: 'player_id,key' }),
+    admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'lords',         value: atkLords },         { onConflict: 'player_id,key' }),
+    admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'activity_feed', value: atkActivityFeed },  { onConflict: 'player_id,key' }),
+    admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'players',       value: atkPlayers },       { onConflict: 'player_id,key' }),
+    ...defPlayerIds.flatMap(pid => [
+      admin.from('storage').upsert({ player_id: pid, key: 'armies',        value: defArmiesByPlayer[pid]   || {} }, { onConflict: 'player_id,key' }),
+      admin.from('storage').upsert({ player_id: pid, key: 'lords',         value: defLordsByPlayer[pid]    || {} }, { onConflict: 'player_id,key' }),
+      admin.from('storage').upsert({ player_id: pid, key: 'activity_feed', value: defActivityByPlayer[pid] || {} }, { onConflict: 'player_id,key' }),
+    ]),
+    admin.from('battle_reports').insert({
+      attacker_id:      attackerPlayerId,
+      defender_id:      primaryDefender.playerId,
+      attacker_lord_id: attackerLord.id,
+      defender_lord_id: primaryDefender.lord.id,
+      tile_x:           tileX,
+      tile_y:           tileY,
+      terrain,
+      winner:           report.winner,
+      reason:           report.reason,
+      rounds:           report.rounds,
+      report_json:      report,
+    }),
+  ];
+
+  const writeResults = await Promise.all(writes);
+  const writeError   = writeResults.find(r => r.error)?.error;
+  if (writeError) console.error('[combat-resolver] write error:', writeError.message);
+
+  return {
+    ok: true,
+    report,
+    terrain,
+    defPlayerIds,
+    atkLords,
+    atkArmies: updatedAtkArmies,
+    atkPlayer: atkPlayers[attackerPlayerId] || null,
+  };
+}
+
+// ── Main HTTP handler ─────────────────────────────────────────
 
 export async function resolvePvpAttack(req, res) {
   // 1. Authenticate.
@@ -477,229 +692,142 @@ export async function resolvePvpAttack(req, res) {
     return res.status(400).json({ error: 'targetTileX/Y must be non-negative integers' });
   }
 
-  // 3. Load attacker data.
-  const { data: atkRows, error: atkErr } = await admin.from('storage')
-    .select('key, value')
-    .eq('player_id', callerId)
-    .in('key', ['lords', 'armies']);
-  if (atkErr) {
-    console.error('[pvp] attacker data fetch failed:', atkErr);
-    return res.status(500).json({ error: 'Failed to load attacker data', detail: atkErr.message });
+  // 3. Resolve.
+  const result = await _resolveCore(admin, callerId, attackerLordId, tX, tY);
+  if (!result.ok) {
+    if (result.error.includes('not found'))       return res.status(404).json({ error: result.error });
+    if (result.error.includes('does not belong')) return res.status(403).json({ error: result.error });
+    return res.status(400).json({ error: result.error });
+  }
+  if (result.noDefenders) return res.status(404).json({ error: 'No enemy lords at target tile' });
+
+  return res.status(200).json({ ok: true, report: result.report, terrain: result.terrain, player: result.atkPlayer });
+}
+
+// ── Programmatic entry point for offline PvP resolution ───────
+//
+// Called by sync.js (attacker's next login) and check-incoming
+// (defender's overview screen poll). Reads + writes Supabase directly.
+export async function resolvePvpBattle(admin, attackerPlayerId, attackerLordId, tileX, tileY) {
+  return _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tileY);
+}
+
+// ── POST /api/pvp/check-incoming ─────────────────────────────
+//
+// Called by the defender's overview screen every 30 s.
+// Handles two cases:
+//   A) attacker synced before defender: lord.pendingPvpAttack is set
+//   B) attacker is still offline: expired attack-intent move in actionQueue,
+//      catchUp never ran → lord position still at march start in Supabase.
+//      We run catchUp for the attacker here so _resolveCore finds the
+//      lord at the correct tile.
+export async function checkIncomingAttacks(req, res) {
+  const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+  if (!token) return res.status(401).json({ error: 'Missing Authorization header' });
+
+  let authClient, admin;
+  try {
+    authClient = _authClient();
+    admin      = _adminClient();
+  } catch (e) {
+    return res.status(500).json({ error: 'Server misconfiguration: ' + e.message });
   }
 
-  const atkData   = Object.fromEntries((atkRows || []).map(r => [r.key, r.value]));
-  const atkLords  = atkData.lords  || {};
-  const atkArmies = atkData.armies || {};
-  const attackerLord = atkLords[attackerLordId];
+  const { data: { user }, error: authErr } = await authClient.auth.getUser(token);
+  if (authErr || !user) return res.status(401).json({ error: 'Invalid or expired token' });
 
-  if (!attackerLord) return res.status(404).json({ error: 'Attacking lord not found' });
-  if (attackerLord.playerId !== callerId) return res.status(403).json({ error: 'Lord does not belong to you' });
+  const callerId = user.id;
 
-  // 4. Stance + busy check.
-  if (attackerLord.downtimeUntil && Date.now() < attackerLord.downtimeUntil) {
-    return res.status(400).json({ error: 'Attacking lord is incapacitated' });
-  }
-  if ((attackerLord.actionQueue || []).length > 0) {
-    return res.status(400).json({ error: 'Lord is busy with another action' });
-  }
-  const atkStance = STANCE_DEFS[attackerLord.stance?.id || 'idle'];
-  if (atkStance?.restrictions?.includes('action')) {
-    return res.status(400).json({ error: `Cannot attack while in ${atkStance.name} stance` });
-  }
+  // Find this player's lord positions.
+  const { data: defRow } = await admin.from('storage')
+    .select('value').eq('player_id', callerId).eq('key', 'lords').maybeSingle();
+  const defLords     = Object.values(defRow?.value || {});
+  const defPositions = new Set(defLords.map(l => `${l.x},${l.y}`));
 
-  // 5. Same-tile arrival check.
-  // The attack-move order (enqueued client-side with intent:'attack') sets the
-  // lord's position on the target tile when the move completes. The client then
-  // calls this endpoint. If position doesn't match, the lord hasn't arrived yet.
-  //
-  // Known limitation: position is client-authoritative. A cheater could write a
-  // fake position to skip travel time. Server-authoritative movement is the
-  // Phase 2 hardening (resolveAt timestamp approach).
-  if (attackerLord.x !== tX || attackerLord.y !== tY) {
-    return res.status(400).json({
-      error: `Attacker has not arrived at (${tX}, ${tY}) yet — current position is (${attackerLord.x}, ${attackerLord.y})`,
-    });
-  }
+  if (defPositions.size === 0) return res.json({ ok: true, battles: [] });
 
-  // 6. Find ALL enemy lords on the target tile.
-  const { data: allLordRows, error: lordErr } = await admin.from('storage')
-    .select('player_id, value')
-    .eq('key', 'lords');
-  if (lordErr) return res.status(500).json({ error: 'Failed to scan lords' });
+  // Scan all lords for both types of pending attacks.
+  const { data: allRows, error: scanErr } = await admin.from('storage')
+    .select('player_id, value').eq('key', 'lords');
+  if (scanErr) return res.status(500).json({ error: 'Failed to scan lords' });
 
-  const defenderEntries = []; // [{ playerId, lord }]
-  for (const row of (allLordRows || [])) {
+  const nowMs   = Date.now();
+  const pending = [];
+  for (const row of (allRows || [])) {
     if (row.player_id === callerId) continue;
-    Object.values(row.value || {}).forEach(l => {
-      if (l.x === tX && l.y === tY) {
-        if (l.downtimeUntil && Date.now() < l.downtimeUntil) return; // downed lords can't be attacked
-        defenderEntries.push({ playerId: row.player_id, lord: l });
+    Object.values(row.value || {}).forEach(lord => {
+      // Case A: attacker already synced, pendingPvpAttack flag is set
+      if (lord.pendingPvpAttack) {
+        const { tileX, tileY } = lord.pendingPvpAttack;
+        if (defPositions.has(`${tileX},${tileY}`)) {
+          pending.push({ attackerPlayerId: row.player_id, attackerLordId: lord.id, tileX, tileY });
+        }
+        return;
+      }
+      // Case B: attacker is offline, catchUp never ran — march is expired in actionQueue
+      const expiredAttack = (lord.actionQueue || []).find(
+        a => a.intent === 'attack' && a.finishAt != null && a.finishAt <= nowMs
+      );
+      if (expiredAttack && defPositions.has(`${expiredAttack.destX},${expiredAttack.destY}`)) {
+        pending.push({
+          attackerPlayerId: row.player_id,
+          attackerLordId:   lord.id,
+          tileX:            expiredAttack.destX,
+          tileY:            expiredAttack.destY,
+          needsCatchUp:     true,
+        });
       }
     });
   }
 
-  // TODO Phase 2: also collect city garrison at (tX, tY) for enemy cities.
-  // Requires BUILDING_DEFS to be loaded in engine-loader and _garrisonUnits() here.
-  // Shape: a synthetic defender entry { playerId: cityOwnerId, lord: syntheticGarrisonLord, army: garrisonArmy }
+  if (pending.length === 0) return res.json({ ok: true, battles: [] });
 
-  if (defenderEntries.length === 0) {
-    return res.status(404).json({ error: 'No enemy lords at target tile' });
+  const battles = [];
+  for (const { attackerPlayerId, attackerLordId, tileX, tileY, needsCatchUp } of pending) {
+    // Case B: run catchUp for the offline attacker so their lord position is
+    // updated in Supabase before _resolveCore reads it.
+    if (needsCatchUp) {
+      try {
+        const { data: atkRows } = await admin.from('storage')
+          .select('key, value')
+          .eq('player_id', attackerPlayerId)
+          .in('key', ['lords', 'armies', 'cities', 'players']);
+        if (atkRows?.length) {
+          const raw    = Object.fromEntries(atkRows.map(r => [r.key, r.value]));
+          const player = (raw.players || {})[attackerPlayerId];
+          if (player) {
+            // No engine param — quest resolution not needed; position update is enough
+            const cuResult = catchUp(
+              { player, lords: raw.lords || {}, cities: raw.cities || {}, armies: raw.armies || {} },
+              nowMs
+            );
+            if (cuResult.changed) {
+              const updatedPlayers = { ...(raw.players || {}), [attackerPlayerId]: cuResult.player };
+              await Promise.all([
+                admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'lords',   value: cuResult.lords   }, { onConflict: 'player_id,key' }),
+                admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'armies',  value: cuResult.armies  }, { onConflict: 'player_id,key' }),
+                admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'players', value: updatedPlayers   }, { onConflict: 'player_id,key' }),
+              ]);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[check-incoming] catchUp for offline attacker failed:', e.message);
+        continue;
+      }
+    }
+
+    const result = await _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tileY);
+    if (result.ok && result.report) {
+      battles.push({
+        report:  result.report,
+        terrain: result.terrain,
+        outcome: result.report.winner === 'defender' ? 'victory'
+               : result.report.winner === 'draw'     ? 'draw'
+               : 'defeat',
+      });
+    }
   }
 
-  // 7. Load each defender's storage + attacker's activity_feed in one batched query.
-  const defPlayerIds = [...new Set(defenderEntries.map(e => e.playerId))];
-  const [defResult, atkFeedResult] = await Promise.all([
-    admin.from('storage')
-      .select('player_id, key, value')
-      .in('player_id', defPlayerIds)
-      .in('key', ['armies', 'lords', 'activity_feed']),
-    admin.from('storage')
-      .select('value')
-      .eq('player_id', callerId)
-      .eq('key', 'activity_feed')
-      .maybeSingle(),
-  ]);
-  if (defResult.error) return res.status(500).json({ error: 'Failed to load defender data' });
-
-  const defArmiesByPlayer   = {};
-  const defLordsByPlayer    = {};
-  const defActivityByPlayer = {};
-  for (const row of (defResult.data || [])) {
-    if (row.key === 'armies')        defArmiesByPlayer[row.player_id]   = row.value || {};
-    if (row.key === 'lords')         defLordsByPlayer[row.player_id]    = row.value || {};
-    if (row.key === 'activity_feed') defActivityByPlayer[row.player_id] = row.value || {};
-  }
-  const atkActivityFeed = atkFeedResult.data?.value || {};
-
-  // Attach army to each defender entry.
-  const defenders = defenderEntries.map(({ playerId, lord }) => ({
-    playerId,
-    lord,
-    army: (defArmiesByPlayer[playerId] || {})[lord.id] || { lordId: lord.id, units: [] },
-  }));
-
-  // 8. Visibility check: at least one defender must be detectable.
-  const anyVisible = defenders.some(({ lord, army }) =>
-    _visibilityScore(lord, army.units) > 0
-  );
-  if (!anyVisible) {
-    return res.status(400).json({ error: 'All defenders are undetectable (visibility score 0)' });
-  }
-
-  // 9. Build context and resolve.
-  const terrain = _terrain(tX, tY);
-  const ctx     = _buildMultiContext(attackerLord, atkArmies[attackerLord.id], defenders, terrain);
-  const report  = BattleEngine.resolve(ctx);
-
-  // 10. Apply losses.
-  const updatedAtkArmies = { ...atkArmies };
-  _applyAtkLosses(updatedAtkArmies, attackerLord, report.attacker);
-  _applyDefLosses(defenders, defArmiesByPlayer, report.defender);
-
-  // Update lord HP for attacker.
-  _applyLordHp(atkLords, attackerLord.id, report.attacker.unitsSurviving, report.winner, 'attacker');
-
-  // Update lord HP for each defender.
-  defenders.forEach(({ lord, playerId }) => {
-    _applyLordHp(defLordsByPlayer[playerId] || {}, lord.id, report.defender.unitsSurviving, report.winner, 'defender');
-  });
-
-  // 11. Write battle result notifications to BOTH players' Supabase activity feeds.
-  // Defender: gets the result so their client picks it up on next poll.
-  // Attacker: also written to Supabase so future sessions / other devices stay in sync.
-  const now     = Date.now();
-  const rndTag  = () => Math.random().toString(36).slice(2, 5);
-  const atkIcon = report.winner === 'attacker' ? '⚔' : report.winner === 'draw' ? '🤝' : '☠';
-  const atkTitle = report.winner === 'attacker' ? 'PvP Victory' : report.winner === 'draw' ? 'PvP Draw' : 'PvP Defeat';
-  const atkDetail = `${report.rounds} rounds · casualties: ${report.attacker.modelsLost} · +${report.xpEarned || 0}⭐`;
-
-  // Attacker's feed
-  if (!atkActivityFeed[callerId]) atkActivityFeed[callerId] = [];
-  atkActivityFeed[callerId].unshift({
-    id: `act_pvp_atk_${now}_${rndTag()}`, at: now, type: 'pvp_result',
-    icon: atkIcon, title: atkTitle, detail: atkDetail,
-    lordName: attackerLord.name, lordId: attackerLordId,
-    outcome: report.winner === 'attacker' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat',
-    report, terrain, rounds: report.rounds, modelsLost: report.attacker.modelsLost, xpEarned: report.xpEarned || 0,
-  });
-  atkActivityFeed[callerId] = atkActivityFeed[callerId].slice(0, 50);
-
-  // Defender feeds
-  defPlayerIds.forEach(pid => {
-    const defIcon  = report.winner === 'defender' ? '🛡' : report.winner === 'draw' ? '🤝' : '☠';
-    const defTitle = report.winner === 'defender' ? 'Attack repelled!' : report.winner === 'draw' ? 'Battle draw' : '☠ Defeat — lord attacked';
-    const defDetail = `${attackerLord.name} attacked at (${tX},${tY}) · ${report.rounds} rounds · casualties: ${report.defender.modelsLost}`;
-    const feed = defActivityByPlayer[pid] || {};
-    if (!feed[pid]) feed[pid] = [];
-    // Remove pvp_threat entries from this attacker — the battle has resolved
-    feed[pid] = feed[pid].filter(e => !(e.type === 'pvp_threat' && e.lordName === attackerLord.name));
-    const defLordId = defenders.find(d => d.playerId === pid)?.lord?.id || null;
-    const defLordName = defenders.find(d => d.playerId === pid)?.lord?.name || '?';
-    feed[pid].unshift({
-      id: `act_pvp_def_${now}_${rndTag()}`, at: now, type: 'pvp_result',
-      icon: defIcon, title: defTitle, detail: defDetail,
-      lordName: defLordName, lordId: defLordId,
-      outcome: report.winner === 'defender' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat',
-      report, terrain, rounds: report.rounds, modelsLost: report.defender.modelsLost, xpEarned: 0,
-    });
-    feed[pid] = feed[pid].slice(0, 50);
-    defActivityByPlayer[pid] = feed;
-  });
-
-  // 12. Write all results (not a true transaction — see known limitation above).
-  const primaryDefender = defenders[0];
-  const writes = [
-    // Attacker armies, lords, activity_feed
-    admin.from('storage').upsert(
-      { player_id: callerId, key: 'armies', value: updatedAtkArmies },
-      { onConflict: 'player_id,key' }
-    ),
-    admin.from('storage').upsert(
-      { player_id: callerId, key: 'lords', value: atkLords },
-      { onConflict: 'player_id,key' }
-    ),
-    admin.from('storage').upsert(
-      { player_id: callerId, key: 'activity_feed', value: atkActivityFeed },
-      { onConflict: 'player_id,key' }
-    ),
-    // Each defender player (armies + lords + activity feed)
-    ...defPlayerIds.flatMap(pid => [
-      admin.from('storage').upsert(
-        { player_id: pid, key: 'armies', value: defArmiesByPlayer[pid] || {} },
-        { onConflict: 'player_id,key' }
-      ),
-      admin.from('storage').upsert(
-        { player_id: pid, key: 'lords', value: defLordsByPlayer[pid] || {} },
-        { onConflict: 'player_id,key' }
-      ),
-      admin.from('storage').upsert(
-        { player_id: pid, key: 'activity_feed', value: defActivityByPlayer[pid] || {} },
-        { onConflict: 'player_id,key' }
-      ),
-    ]),
-    // Battle report
-    admin.from('battle_reports').insert({
-      attacker_id:      callerId,
-      defender_id:      primaryDefender.playerId,
-      attacker_lord_id: attackerLord.id,
-      defender_lord_id: primaryDefender.lord.id,
-      tile_x:           tX,
-      tile_y:           tY,
-      terrain,
-      winner:           report.winner,
-      reason:           report.reason,
-      rounds:           report.rounds,
-      report_json:      report,
-    }),
-  ];
-
-  const results   = await Promise.all(writes);
-  const writeError = results.find(r => r.error)?.error;
-  if (writeError) {
-    console.error('[combat-resolver] write error:', writeError.message);
-    return res.status(500).json({ error: 'Battle resolved but failed to persist: ' + writeError.message });
-  }
-
-  // 13. Return canonical report to caller.
-  return res.status(200).json({ ok: true, report, terrain });
+  return res.json({ ok: true, battles });
 }

@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { UNIT_DEFS }                 from '../engine-loader.js';
+import { UNIT_DEFS, TALENT_POOL }   from '../engine-loader.js';
 
 const ARMY_LIMIT = 10;
 
@@ -120,8 +120,9 @@ export async function handleRecruit(req, res) {
     city.freePopulation = Math.max(0, (city.freePopulation ?? 0) - popCost);
   }
 
-  const now      = Date.now();
-  const duration = def.recruitTime * count * 1000;
+  const now          = Date.now();
+  const recruitMult  = TALENT_POOL?.[lord.talentId]?.effects?.recruitTimeMult ?? 1;
+  const duration     = Math.round(def.recruitTime * count * 1000 * recruitMult);
   city.recruitmentQueue = [{
     unitId, count, lordId,
     startedAt: now,
@@ -129,6 +130,15 @@ export async function handleRecruit(req, res) {
   }];
 
   await saveState(admin, playerId, rawPlayers, { player, lords, cities, armies });
+
+  const queueItem = city.recruitmentQueue[0];
+  const { error: evtErr } = await admin.from('pending_events').insert({
+    player_id: playerId,
+    type:      'recruit',
+    fire_at:   queueItem.finishAt,
+    payload:   { cityId, unitId: queueItem.unitId, count: queueItem.count, lordId: queueItem.lordId },
+  });
+  if (evtErr) console.warn('[recruit] pending_events insert failed:', evtErr.message);
 
   return res.json({ ok: true, city, player });
 }

@@ -4,9 +4,17 @@
 // =============================================
 
 const TimeService = (() => {
+  let _skew = 0; // offset between server clock and local clock, set on each /api/sync
+
   function now() {
     return Date.now(); // milliseconds since epoch
   }
+
+  // Server-adjusted timestamp. Use for displays that should reflect server time.
+  function serverNow() { return Date.now() + _skew; }
+
+  // Called after /api/sync with (serverTime - Date.now()) to calibrate the clock.
+  function setSkew(offsetMs) { _skew = offsetMs; }
 
   function secondsElapsed(sinceMs) {
     return (now() - sinceMs) / 1000;
@@ -33,5 +41,5 @@ const TimeService = (() => {
     return `${s}s`;
   }
 
-  return { now, secondsElapsed, hoursElapsed, secondsUntil, formatDuration };
+  return { now, serverNow, setSkew, secondsElapsed, hoursElapsed, secondsUntil, formatDuration };
 })();

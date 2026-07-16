@@ -14,6 +14,24 @@ const TERRAIN_TYPES = {
   desert:   { id: 'desert',   name: 'Desert',   icon: '🏜', desc: 'Arid and hostile wasteland',   canvasBg: '#1a1608', canvasBorder: '#2a2210', image: null,                         searchHint: 'Buried ruins and lost treasures lie beneath the sands. Few things survive here.' },
 };
 
+// Resource production multipliers per terrain. 1.0 = no change.
+var TERRAIN_RESOURCE_MODS = {
+  forest:   { wood:  1.25 },
+  plains:   { food:  1.25 },
+  hills:    { stone: 1.15, iron: 1.10 },
+  mountain: { stone: 1.30, iron: 1.25 },
+  marsh:    { food:  0.95, wood: 0.95, stone: 0.95, iron: 0.95 },
+  desert:   { food:  0.70, wood: 0.75 },
+};
+
+// Flat city-stat bonuses/penalties per terrain.
+// { stat: string, value: number } — same shape as building effects.
+var TERRAIN_STAT_MODS = {
+  marsh:    [{ stat: 'hygiene',  value: -15 }, { stat: 'security', value: 15 }],
+  mountain: [{ stat: 'security', value: 10  }],
+  desert:   [{ stat: 'happiness', value: -5 }],
+};
+
 const WorldService = (() => {
   const WORLD_KEY = 'world';
   const SIZE      = 20;

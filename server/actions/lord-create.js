@@ -23,21 +23,25 @@ function _generateId() {
 }
 
 export async function handleLordCreate(req, res) {
-  const { name, raceId, classId, cityId } = req.body || {};
-  if (!name || !raceId || !classId) {
-    return res.status(400).json({ ok: false, error: 'Missing name, raceId, or classId' });
+  const { name, classId, cityId, portrait } = req.body || {};
+  if (!name || !classId) {
+    return res.status(400).json({ ok: false, error: 'Missing name or classId' });
   }
 
   const n = name.trim();
   if (n.length < 2)  return res.status(400).json({ ok: false, error: 'Lord name must be at least 2 characters.' });
   if (n.length > 30) return res.status(400).json({ ok: false, error: 'Lord name cannot exceed 30 characters.' });
-  if (!RACES[raceId])         return res.status(400).json({ ok: false, error: 'Invalid race.' });
   if (!LORD_CLASSES[classId]) return res.status(400).json({ ok: false, error: 'Invalid class.' });
 
   const ctx = await loadAndCatchUp(req, res);
   if (!ctx) return;
 
   const { admin, playerId, rawPlayers, player, lords, cities, armies } = ctx;
+
+  const raceId = player.race;
+  if (!raceId || !RACES[raceId]) {
+    return res.status(400).json({ ok: false, error: 'No race set for your account. Please select a race first.' });
+  }
 
   const playerLords = Object.values(lords).filter(l => l.playerId === playerId);
   if (playerLords.length >= MAX_LORDS) {
@@ -61,11 +65,13 @@ export async function handleLordCreate(req, res) {
   const lord = {
     id, playerId,
     name: n, race: raceId, classId,
+    portrait: (typeof portrait === 'string' && portrait.startsWith('assets/lord/')) ? portrait : null,
     createdAt:      now,
     level:          1,
     xp:             0,
     xpToNext:       150,
     talentPoints:   0,
+    talentId:       null,
     actionQueue:    [],
     stance:         { id: 'idle', startedAt: null, finishAt: null },
     baseStats:      { ...LORD_BASE_STATS },
