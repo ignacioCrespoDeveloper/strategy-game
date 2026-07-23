@@ -3,6 +3,7 @@
 //
 //  Body (move):        { lordId, action: 'move',        destX, destY, intent? }
 //  Body (search_area): { lordId, action: 'search_area' }
+//  Body (scout):        { lordId, action: 'scout' }
 //
 //  Validates and enqueues the action server-side,
 //  then persists and returns the updated lord so
@@ -10,12 +11,18 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_CLASSES, STANCE_DEFS } from '../engine-loader.js';
+import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL } from '../engine-loader.js';
+
+// Base scout duration before the speed multiplier — mirrors move's own
+// distance*20*(5/speed) curve so speed behaves consistently everywhere.
+const _SCOUT_BASE_SECS = 240;
+const _SCOUT_MIN_SECS  = 30;
 
 function _getEffectiveSpeed(lord) {
-  const base = lord.baseStats?.speed ?? 5;
-  const cls  = LORD_CLASSES[lord.classId];
-  return base + (cls?.modifiers?.speed || 0);
+  const base  = lord.baseStats?.speed ?? 5;
+  const cls   = LORD_CLASSES[lord.classId];
+  const mount = lord.mountId ? (MOUNT_POOL?.[lord.mountId]?.effects?.speed || 0) : 0;
+  return base + (cls?.modifiers?.speed || 0) + mount;
 }
 
 function _isDown(lord) {
@@ -110,6 +117,26 @@ export async function handleLordAction(req, res) {
     lord.actionQueue    = [{ actionId: 'search_area', startedAt: now, finishAt: now + secs * 1000 }];
     updatedFatigue      = _incrementFatigue(lordId, extras.search_fatigue);
 
+  } else if (action === 'scout') {
+    if (_isStanced(lord)) {
+      const stanceDef = STANCE_DEFS[lord.stance.id];
+      if (stanceDef?.restrictions?.includes('action')) {
+        return res.status(400).json({ ok: false, error: `Cannot perform actions while in ${stanceDef.name} stance.` });
+      }
+    }
+
+    if (lord.x == null) {
+      return res.status(400).json({ ok: false, error: 'Your lord has no position. Found a city first.' });
+    }
+
+    // No search-fatigue tie-in — scouting is deliberately not throttled by
+    // the discovery-farming fatigue system; intel TTL already gives it a
+    // natural re-scout cadence.
+    const speed = _getEffectiveSpeed(lord);
+    const secs  = Math.max(_SCOUT_MIN_SECS, Math.round(_SCOUT_BASE_SECS * (5 / speed)));
+
+    lord.actionQueue = [{ actionId: 'scout', startedAt: now, finishAt: now + secs * 1000 }];
+
   } else {
     return res.status(400).json({ ok: false, error: `Unknown action: ${action}` });
   }
@@ -129,7 +156,10 @@ export async function handleLordAction(req, res) {
   const queueItem = lord.actionQueue[0];
   const { error: evtErr } = await admin.from('pending_events').insert({
     player_id: playerId,
-    type:      intent === 'attack' ? 'pvp_attack' : action === 'search_area' ? 'search_area' : 'move',
+    type:      intent === 'attack' ? 'pvp_attack'
+             : action === 'search_area' ? 'search_area'
+             : action === 'scout' ? 'scout'
+             : 'move',
     fire_at:   queueItem.finishAt,
     payload:   { lordId, ...(destX != null ? { destX, destY } : {}) },
   });

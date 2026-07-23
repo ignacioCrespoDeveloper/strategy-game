@@ -2,6 +2,11 @@
 //  lord.js — Lord domain service
 // =============================================
 
+// Mirrors server/actions/lord-action.js's _SCOUT_BASE_SECS/_SCOUT_MIN_SECS —
+// this copy is display-only (pre-confirm ETA), the server remains authoritative.
+const _SCOUT_BASE_SECS = 240;
+const _SCOUT_MIN_SECS  = 30;
+
 const LORD_ACTIONS = {
   search_area: {
     id:               'search_area',
@@ -10,6 +15,15 @@ const LORD_ACTIONS = {
     desc:             'Search the current tile for hidden opportunities.',
     duration:         300,
     xpReward:         8,
+    requiresPosition: true,
+  },
+  scout: {
+    id:               'scout',
+    name:             'Scout',
+    icon:             '🕵',
+    desc:             "Gather intelligence on this tile's enemy lord and city. Faster with higher speed. Scouting with an army risks an ambush by an enemy lord in Ambush or Raid stance here — scouting without an army is always safe.",
+    duration:         _SCOUT_BASE_SECS, // overridden per-lord by getActionDuration
+    xpReward:         0,
     requiresPosition: true,
   },
   move_lord: {
@@ -38,14 +52,22 @@ const LordService = (() => {
       : {};
   }
 
-  // Returns the lord's effective stats: base + class permanent modifiers.
+  // Returns the flat stat bonuses for the lord's equipped mount, or {} if none.
+  function getMountEffects(lord) {
+    return (typeof MOUNT_POOL !== 'undefined' && lord.mountId)
+      ? (MOUNT_POOL[lord.mountId]?.effects || {})
+      : {};
+  }
+
+  // Returns the lord's effective stats: base + class permanent modifiers + mount bonuses.
   function getEffectiveStats(lord) {
-    const base = lord.baseStats || { ...LORD_BASE_STATS };
-    const cls  = LORD_CLASSES[lord.classId];
-    const mods = cls?.modifiers || {};
+    const base  = lord.baseStats || { ...LORD_BASE_STATS };
+    const cls   = LORD_CLASSES[lord.classId];
+    const mods  = cls?.modifiers || {};
+    const mount = getMountEffects(lord);
     const result = {};
     for (const key of Object.keys(LORD_BASE_STATS)) {
-      result[key] = (base[key] ?? LORD_BASE_STATS[key]) + (mods[key] || 0);
+      result[key] = (base[key] ?? LORD_BASE_STATS[key]) + (mods[key] || 0) + (mount[key] || 0);
     }
     return result;
   }
@@ -65,6 +87,10 @@ const LordService = (() => {
         ? Math.min(clsMult, talentMult)
         : (clsMult ?? talentMult ?? 1);
       return Math.round(base * mult);
+    }
+    if (actionId === 'scout') {
+      const speed = getEffectiveStats(lord).speed;
+      return Math.max(_SCOUT_MIN_SECS, Math.round(_SCOUT_BASE_SECS * (5 / speed)));
     }
     return def.duration;
   }
@@ -117,6 +143,7 @@ const LordService = (() => {
       xpToNext:       150,
       talentPoints:   0,
       talentId:       null,
+      mountId:        null,
       actionQueue:    [],
       stance:         { id: 'idle', startedAt: null, finishAt: null },
       baseStats:      { ...LORD_BASE_STATS },
@@ -393,7 +420,7 @@ const LordService = (() => {
     getRecruitCost, getUpkeepPerHour, getCommandCapacity,
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
-    getEffectiveStats, getActionDuration, getTalentEffects,
+    getEffectiveStats, getActionDuration, getTalentEffects, getMountEffects,
     getStance, isStanced, enterStance, exitStance, tickStance,
     getArmyPowerCap,
     isDown, getDowntimeRemaining, tickDowntime,

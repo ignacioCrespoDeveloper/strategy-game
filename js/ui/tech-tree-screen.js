@@ -30,7 +30,7 @@ const TechTreeScreen = (() => {
     return `
       <div class="tt-screen">
         <div class="tt-header">
-          <div class="tt-title">📚 Tech Tree</div>
+          <h1 class="tt-title">📚 Tech Tree</h1>
           <div class="tt-tabs">
             <button class="tt-tab ${_tab === 'buildings' ? 'tt-tab--active' : ''}" data-tt-tab="buildings">🏗 Buildings</button>
             <button class="tt-tab ${_tab === 'units'     ? 'tt-tab--active' : ''}" data-tt-tab="units">⚔ Units</button>
@@ -226,7 +226,7 @@ const TechTreeScreen = (() => {
       : `<span class="tt-unit-race tt-unit-race--merc">☠ Mercenary</span>`;
 
     const portrait = unit.image
-      ? `<img class="tt-uc-img" src="${unit.image}" alt="${unit.name}" />`
+      ? `<img class="tt-uc-img" src="${unit.image}" alt="${unit.name}" loading="lazy" />`
       : `<span class="tt-uc-icon">${unit.icon}</span>`;
 
     return `

@@ -303,3 +303,73 @@ var TALENT_POOL = {
     },
   },
 };
+
+// =============================================
+//  MOUNT_POOL — Unlocked at level 5. A lord may equip exactly one
+//  mount at a time, freely swappable (unlike talents, not permanent).
+//  Each swap costs `cost` gold, deducted server-side.
+//
+//  image  → path to mount artwork (assets/mounts/...), shown instead
+//           of the icon when present; icon remains the fallback.
+//  effects keys are flat bonuses added directly onto the lord's
+//  effective stats (LordService.getEffectiveStats) — same keys as
+//  LORD_BASE_STATS (health, attack, defense, leadership, magic, speed).
+// =============================================
+
+var MOUNT_POOL = {
+  warhorse: {
+    id:          'warhorse',
+    name:        'Warhorse',
+    icon:        '🐎',
+    image:       null,
+    color:       '#c8933a',
+    description: 'A sturdy battle-trained warhorse. Balanced power and mobility for any lord.',
+    cost:        400,
+    effects: {
+      attack: 2,
+      speed:  2,
+    },
+  },
+
+  dire_wolf: {
+    id:          'dire_wolf',
+    name:        'Dire Wolf',
+    icon:        '🐺',
+    image:       null,
+    color:       '#4070d0',
+    description: 'A massive wolf bred for speed and ambush tactics. Outruns any pursuer.',
+    cost:        700,
+    effects: {
+      attack: 1,
+      speed:  4,
+    },
+  },
+
+  griffon: {
+    id:          'griffon',
+    name:        'Griffon',
+    icon:        '🦅',
+    image:       null,
+    color:       '#30a0b0',
+    description: 'A majestic aerial predator, striking from above with deadly talons.',
+    cost:        1200,
+    effects: {
+      attack:  3,
+      defense: 1,
+    },
+  },
+
+  armored_boar: {
+    id:          'armored_boar',
+    name:        'Armored Boar',
+    icon:        '🐗',
+    image:       null,
+    color:       '#8030a0',
+    description: 'A tusked war-boar clad in iron plate. Slow to provoke, brutal in the charge.',
+    cost:        900,
+    effects: {
+      attack:  2,
+      defense: 3,
+    },
+  },
+};

@@ -8,19 +8,26 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { UNIT_DEFS }                 from '../engine-loader.js';
+import { UNIT_DEFS, TALENT_POOL }    from '../engine-loader.js';
 
-const ARMY_LIMIT = 10;
-
-function _commandCapacity(lord) {
-  return 6 + 2 * (lord.level || 1);
+// Mirrors server/actions/recruit.js — Army capacity is gated by Army Power
+// alone (see that file for the full rationale). No separate weight-based
+// "command capacity" or stack-count "slot limit" any more.
+function _unitPower(def) {
+  const s = def?.combatStats || {};
+  return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
 }
 
-function _totalWeight(army) {
+function _armyPower(army) {
   return (army?.units || []).reduce((sum, stack) => {
     const def = UNIT_DEFS[stack.unitId];
-    return sum + (def?.armyWeight || 1) * stack.count;
+    return sum + (def ? _unitPower(def) : 0) * stack.count;
   }, 0);
+}
+
+function _armyPowerCap(lord) {
+  const bonus = TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  return 200 + (lord.level || 1) * 80 + bonus;
 }
 
 export async function handleHireMerc(req, res) {
@@ -44,17 +51,13 @@ export async function handleHireMerc(req, res) {
 
   const army = armies[lordId] || { lordId, units: [] };
 
-  if (army.units.length >= ARMY_LIMIT) {
-    return res.status(400).json({ ok: false, error: `Army is full (${army.units.length}/${ARMY_LIMIT}).` });
-  }
-
-  const capacity    = _commandCapacity(lord);
-  const usedWeight  = _totalWeight(army);
-  const addedWeight = def.armyWeight || 1;
-  if (usedWeight + addedWeight > capacity) {
+  const cap        = _armyPowerCap(lord);
+  const usedPower  = _armyPower(army);
+  const addedPower = _unitPower(def);
+  if (usedPower + addedPower > cap) {
     return res.status(400).json({
       ok: false,
-      error: `Not enough command capacity. Used ${usedWeight}/${capacity} pts.`,
+      error: `Not enough army power capacity. Used ${usedPower}/${cap} PWR.`,
     });
   }
 

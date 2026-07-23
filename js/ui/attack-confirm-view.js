@@ -8,6 +8,7 @@ const AttackConfirmView = (() => {
   let _targetX    = 0;
   let _targetY    = 0;
   let _enemyData  = null;  // rawData from scanTile (not wrapped in intel record)
+  let _targetCity = null;  // tiered enemy_city data, {} for unscouted, null if no city on this tile
   let _lords      = [];
 
   // ── Unit card (mirrors lord-screen's _buildUnitCard, same CSS classes) ──
@@ -22,23 +23,17 @@ const AttackConfirmView = (() => {
 
   function _unitCardHtml(def, count) {
     const tierClass = _cardTierClass(def.category);
-    const portrait  = def.image
-      ? `<img src="${def.image}" class="la-uc-img" alt="${def.name}" loading="lazy">`
-      : `<div class="la-uc-img la-uc-img--fallback">${def.icon}</div>`;
+    const portrait = def.image
+      ? `<img src="${def.image}" class="ac-unit-portrait" alt="${def.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+      : '';
+    const fallback = `<div class="ac-unit-icon-fallback" style="${def.image ? 'display:none' : ''}">${def.icon}</div>`;
     return `
-      <div class="la-uc-wrap">
-        <div class="la-unit-card${tierClass ? ' ' + tierClass : ''}">
-          ${portrait}
-          ${count > 1 ? `<div class="ac-unit-count">×${count}</div>` : ''}
+      <div class="ac-unit-slot">
+        <div class="ac-unit-portrait-wrap${tierClass ? ` ${tierClass}` : ''}">
+          ${portrait}${fallback}
         </div>
-        <div class="la-uc-tooltip">
-          <div class="la-tt-name">${def.name}</div>
-          <div class="la-tt-stats">
-            <span>⚔ ${def.combatStats.attack}</span>
-            <span>🛡 ${def.combatStats.defense}</span>
-            <span>❤ ${def.combatStats.hp}</span>
-          </div>
-        </div>
+        <div class="ac-unit-name">${def.name}</div>
+        <div class="ac-unit-count-label">×${count}</div>
       </div>`;
   }
 
@@ -53,18 +48,50 @@ const AttackConfirmView = (() => {
     }).filter(Boolean).join('')}</div>`;
   }
 
+  // ── City target card ──────────────────────────────────────────
+  // A tile can hold both a city and one or more lords (co-op defense) —
+  // this renders independently of _enemyCardHtml below. _targetCity is
+  // {} for an unscouted city (still attackable — no intel required) or
+  // tiered rawData from IntelligenceService once scouted.
+
+  function _cityCardHtml() {
+    if (!_targetCity) return '';
+    const data    = _targetCity;
+    const hasName = !!data.name;
+    const garrisonHtml = data.garrisonUnits?.length > 0
+      ? data.garrisonUnits.map(r => {
+          const def = UNIT_DEFS[r.unitId];
+          return `<div class="mip-enemy-unit-chip">${def?.icon || '⚔'} ${def?.name || r.unitId} ×${r.count}</div>`;
+        }).join('')
+      : (data.forceSize ? `<div class="mip-enemy-unit-chip">🏯 Garrison: ${data.forceSize}</div>` : '');
+
+    return `
+      <div class="ac-enemy-card ac-city-card">
+        <div class="ac-enemy-top">
+          <div class="ac-enemy-portrait"><div class="ac-enemy-portrait-icon">🏯</div></div>
+          <div class="ac-enemy-info">
+            <div class="ac-enemy-name">${hasName ? data.name : 'Unknown City'}</div>
+            <div class="ac-enemy-meta">${hasName ? 'Enemy City' : 'Never scouted — attacking anyway'}</div>
+          </div>
+        </div>
+        ${garrisonHtml ? `<div class="ac-enemy-units">${garrisonHtml}</div>` : ''}
+      </div>`;
+  }
+
   // ── Enemy intel card ──────────────────────────────────────────
 
   function _enemyCardHtml() {
     if (!_enemyData) {
-      return `<div class="ac-enemy-none">Sin datos del enemigo disponibles</div>`;
+      // A city card may already be shown above this — only show the
+      // "no data" placeholder when there's truly nothing known at all.
+      return _targetCity ? '' : `<div class="ac-enemy-none">No enemy data available</div>`;
     }
     const data  = _enemyData;
     const race  = RACES[data.lordRace] || {};
     const cls   = LORD_CLASSES[data.lordClass] || null;
-    const portraitSrc  = cls?.portrait || race.portrait;
+    const portraitSrc  = pickLordPortrait(data.lordRace, data.lordClass, data.lordId) || race.portrait;
     const portraitHtml = portraitSrc
-      ? `<img src="${portraitSrc}" class="ac-enemy-portrait-img" alt="">`
+      ? `<img src="${portraitSrc}" class="ac-enemy-portrait-img" alt="" onerror="this.style.display='none'">`
       : `<div class="ac-enemy-portrait-icon">${race.icon || '⚔'}</div>`;
 
     const units = data.units || [];
@@ -78,7 +105,7 @@ const AttackConfirmView = (() => {
         <div class="ac-enemy-top">
           <div class="ac-enemy-portrait">${portraitHtml}</div>
           <div class="ac-enemy-info">
-            <div class="ac-enemy-name">${data.lordName || 'Lord Enemigo'}</div>
+            <div class="ac-enemy-name">${data.lordName || 'Enemy Lord'}</div>
             <div class="ac-enemy-meta">
               ${race.name ? `${race.icon} ${race.name}` : ''}
               ${data.lordLevel ? ` · Lv ${data.lordLevel}` : ''}
@@ -110,16 +137,16 @@ const AttackConfirmView = (() => {
   function _attackerCardHtml(lord) {
     const race       = RACES[lord.race] || {};
     const cls        = LORD_CLASSES[lord.classId];
-    const portraitSrc  = cls?.portrait || race.portrait;
+    const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || race.portrait;
     const portraitHtml = portraitSrc
-      ? `<img src="${portraitSrc}" class="ac-atk-portrait-img" alt="${lord.name}">`
+      ? `<img src="${portraitSrc}" class="ac-atk-portrait-img" alt="${lord.name}" onerror="this.style.display='none'">`
       : `<div class="ac-atk-portrait-icon">${race.icon || '⚔'}</div>`;
     const stats  = LordService.getEffectiveStats(lord);
     const fromX  = lord.x ?? _targetX;
     const fromY  = lord.y ?? _targetY;
     const dist   = Math.max(Math.abs(_targetX - fromX), Math.abs(_targetY - fromY));
     const secs   = dist > 0 ? Math.round(dist * 20 * (5 / stats.speed)) : 0;
-    const eta    = secs > 0 ? TimeService.formatDuration(secs) : 'Inmediato';
+    const eta    = secs > 0 ? TimeService.formatDuration(secs) : 'Immediate';
     const terrain = WorldService.getTerrain(_targetX, _targetY);
 
     return `
@@ -151,12 +178,13 @@ const AttackConfirmView = (() => {
 
   // ── Main render ───────────────────────────────────────────────
 
-  function render(root, { player, targetX, targetY, enemyData }) {
-    _player    = player;
-    _targetX   = targetX;
-    _targetY   = targetY;
-    _enemyData = enemyData || null;
-    _lords     = LordService.getByPlayer(player.id).filter(l => !LordService.isDown(l) && l.actionQueue.length === 0 && l.x != null);
+  function render(root, { player, targetX, targetY, enemyData, targetCity }) {
+    _player     = player;
+    _targetX    = targetX;
+    _targetY    = targetY;
+    _enemyData  = enemyData || null;
+    _targetCity = targetCity || null;
+    _lords      = LordService.getByPlayer(player.id).filter(l => !LordService.isDown(l) && l.actionQueue.length === 0 && l.x != null);
 
     const terrain = WorldService.getTerrain(targetX, targetY);
 
@@ -165,7 +193,7 @@ const AttackConfirmView = (() => {
         <div class="ac-screen">
           <div class="ac-header">
             <button class="ac-back-btn" id="ac-back">← Back</button>
-            <div class="ac-title">Attack Order</div>
+            <h2 class="ac-title">Attack Order</h2>
           </div>
           <div class="ac-body ac-body--center">
             <div class="ac-no-lord">No lord available to attack.<br>All are busy or off the map.</div>
@@ -182,7 +210,7 @@ const AttackConfirmView = (() => {
 
         <div class="ac-header">
           <button class="ac-back-btn" id="ac-back">← Cancel</button>
-          <div class="ac-title">Attack Order — ${terrain.icon} (${targetX}, ${targetY})</div>
+          <h2 class="ac-title">Attack Order — ${terrain.icon} (${targetX}, ${targetY})</h2>
         </div>
 
         <div class="ac-body">
@@ -203,6 +231,7 @@ const AttackConfirmView = (() => {
             <!-- Right: enemy -->
             <div class="ac-col ac-col--enemy">
               <div class="ac-col-label">🎯 TARGET</div>
+              ${_cityCardHtml()}
               ${_enemyCardHtml()}
             </div>
 

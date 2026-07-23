@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-23T00:00:00Z",
+  "title": "Design System: Hexfront",
+  "extensions": {
+    "colorMeta": {
+      "gold": { "role": "primary", "displayName": "Antique Gold", "canonical": "#c8933a", "tonalRamp": ["#2a1d08", "#4a3410", "#6a4a18", "#8a6020", "#a8792c", "#c8933a", "#e0ac54", "#f0b84a"] },
+      "gold-light": { "role": "primary", "displayName": "Gold Light", "canonical": "#f0b84a" },
+      "gold-dark": { "role": "primary", "displayName": "Gold Dark", "canonical": "#8a6020" },
+      "bg-deep": { "role": "neutral", "displayName": "Void", "canonical": "#080c18" },
+      "bg-base": { "role": "neutral", "displayName": "Obsidian", "canonical": "#0d1224" },
+      "bg-surface": { "role": "neutral", "displayName": "Slate Panel", "canonical": "#111827" },
+      "bg-raised": { "role": "neutral", "displayName": "Raised Slate", "canonical": "#1a2540" },
+      "bg-overlay": { "role": "neutral", "displayName": "Overlay Black", "canonical": "rgba(8, 12, 24, 0.92)" },
+      "text-secondary": { "role": "neutral", "displayName": "Muted Steel", "canonical": "#8a9ab8" },
+      "text-muted": { "role": "neutral", "displayName": "Faded Steel", "canonical": "#7a8ab0" },
+      "text-primary": { "role": "neutral", "displayName": "Parchment Gold", "canonical": "#e8d8a8" },
+      "danger": { "role": "danger", "displayName": "Blood Red", "canonical": "#b83a2a" },
+      "success": { "role": "success", "displayName": "Field Green", "canonical": "#3a8a3a" },
+      "danger-alert": { "role": "danger", "displayName": "Alert Red", "canonical": "#9a1a1a" },
+      "danger-deep": { "role": "danger", "displayName": "Deep Red", "canonical": "#7a0000" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display / Title", "purpose": "Headings, card titles, modal titles, ceremonial labels — always Cinzel with tracking." },
+      "body": { "displayName": "Body", "purpose": "Descriptions, form input text, dense stat/data text." },
+      "data": { "displayName": "Data / Countdown", "purpose": "Ticking countdown timers and coordinate readouts — fixed-width digits only, never body text." }
+    },
+    "shadows": [
+      { "name": "ambient-float", "value": "0 32px 80px rgba(0,0,0,0.6)", "purpose": "Modals and the lord-card — heavy, dark, signals floating above the page." },
+      { "name": "card-rest", "value": "0 2px 12px rgba(0,0,0,0.4)", "purpose": "Standard panel/card resting shadow, subtle lift off the page." },
+      { "name": "gold-selection-glow", "value": "0 0 0 1px var(--gold-dark), 0 16px 56px rgba(200,147,58,0.32)", "purpose": "Selected card state — strongest state signal in the system." },
+      { "name": "gold-focus-ring", "value": "0 0 0 3px rgba(200,147,58,0.12)", "purpose": "Focused form input, quieter than selection glow." }
+    ],
+    "motion": [
+      { "name": "transition-base", "value": "160ms ease", "purpose": "Default transition for color/border/filter state changes." },
+      { "name": "card-hover-lift", "value": "transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease", "purpose": "Card hover/selection lift-and-glow, the system's signature motion." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main call-to-action button; gold gradient fill.",
+      "html": "<button class=\"ds-btn-primary\">Recruit</button>",
+      "css": ".ds-btn-primary { padding: 0.5rem 1.25rem; background: linear-gradient(180deg, #d4993e 0%, #b87e2a 100%); border: 1px solid #c8933a; border-radius: 8px; color: #1a0e04; font-family: Cinzel, Georgia, serif; font-size: 0.82rem; font-weight: 600; letter-spacing: 0.05em; transition: filter 160ms ease; } .ds-btn-primary:hover { filter: brightness(1.1); } .ds-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Low-emphasis action, sits next to Primary.",
+      "html": "<button class=\"ds-btn-secondary\">Cancel</button>",
+      "css": ".ds-btn-secondary { padding: 0.5rem 1rem; background: #1a2540; border: 1px solid #2a3d60; border-radius: 8px; color: #8a9ab8; font-family: Cinzel, Georgia, serif; font-size: 0.82rem; transition: all 160ms ease; } .ds-btn-secondary:hover { border-color: #c8933a; color: #e8d8a8; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Destructive/attack action.",
+      "html": "<button class=\"ds-btn-danger\">Attack</button>",
+      "css": ".ds-btn-danger { padding: 0.5rem 1.25rem; background: linear-gradient(180deg, #c0392b 0%, #96281b 100%); border: 1px solid #e74c3c; border-radius: 8px; color: #fff; font-family: Cinzel, Georgia, serif; font-size: 0.82rem; font-weight: 700; letter-spacing: 0.05em; transition: filter 160ms ease; } .ds-btn-danger:hover { filter: brightness(1.15); } .ds-btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }"
+    },
+    {
+      "name": "Selectable Card",
+      "kind": "card",
+      "description": "Race/option picker card — lifts and glows gold on hover/selection.",
+      "html": "<div class=\"ds-card\">\n  <div class=\"ds-card-icon\">⚔️</div>\n  <div class=\"ds-card-name\">Dwarf</div>\n</div>",
+      "css": ".ds-card { background: #111827; border: 2px solid #2a3d60; border-radius: 14px; padding: 1rem; text-align: center; cursor: pointer; transition: transform 220ms ease, border-color 220ms ease, box-shadow 220ms ease; } .ds-card:hover { border-color: #8a6a2a; transform: translateY(-6px); } .ds-card--selected { border-color: #c8933a; transform: translateY(-10px); box-shadow: 0 0 0 1px #8a6020, 0 16px 56px rgba(200,147,58,0.32); } .ds-card-icon { font-size: 2rem; margin-bottom: 0.5rem; } .ds-card-name { font-family: Cinzel, Georgia, serif; font-size: 0.9rem; color: #e8d8a8; letter-spacing: 0.05em; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "form-input",
+      "description": "Standard form field used in modals and forms.",
+      "html": "<div class=\"ds-form-group\">\n  <label class=\"ds-form-label\">Lord Name</label>\n  <input class=\"ds-form-input\" type=\"text\" placeholder=\"Enter a name\">\n</div>",
+      "css": ".ds-form-group { display: flex; flex-direction: column; gap: 0.35rem; } .ds-form-label { font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: #4a5a78; } .ds-form-input { background: #080c18; border: 1px solid #2a3d60; border-radius: 8px; padding: 0.6rem 0.8rem; color: #e8d8a8; font-size: 0.9rem; outline: none; width: 100%; transition: border-color 160ms ease, box-shadow 160ms ease; } .ds-form-input::placeholder { color: #4a5a78; } .ds-form-input:focus { border-color: #c8933a; box-shadow: 0 0 0 3px rgba(200,147,58,0.12); }"
+    },
+    {
+      "name": "Modal Card",
+      "kind": "card",
+      "description": "Floating dialog surface over a dark backdrop.",
+      "html": "<div class=\"ds-modal-backdrop\">\n  <div class=\"ds-modal-card\">\n    <div class=\"ds-modal-title\">Confirm Attack</div>\n    <div class=\"ds-modal-sub\">This action cannot be undone.</div>\n  </div>\n</div>",
+      "css": ".ds-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; backdrop-filter: blur(2px); } .ds-modal-card { background: #111827; border: 1px solid #c8933a; border-radius: 14px; padding: 2rem; width: 100%; max-width: 440px; box-shadow: 0 32px 80px rgba(0,0,0,0.7); } .ds-modal-title { font-family: Cinzel, Georgia, serif; font-size: 1.1rem; color: #f0b84a; letter-spacing: 0.08em; margin-bottom: 0.5rem; } .ds-modal-sub { font-size: 0.82rem; color: #4a5a78; margin-bottom: 1.5rem; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Midnight Throne",
+    "overview": "Hexfront's UI reads as a regal, severe seat of power: near-black obsidian surfaces hold everything at rest, and gold is the only source of warmth — spent deliberately on borders, selection states, and ceremonial headings rather than spread across the interface. The system is tactile and reactive: cards lift and gain a gold halo the instant they're hovered or selected, rewarding interaction with immediate, glowing feedback rather than staying inert until clicked. Cinzel's carved serif letterforms carry every heading and label at wide tracking, giving even small UI text an inscribed, ceremonial weight; body copy drops to plain system-ui for legibility in dense stat grids and lists.\n\nThis is explicitly not the bright, rounded, cartoon-saturated look of mobile strategy games (Clash of Clans-style). There is no candy-coating: borders are thin and precise, shadows are heavy and dark, and the only pop of color against the navy-black field is the gold accent (plus sparing red/green for danger/success).",
+    "keyCharacteristics": [
+      "Obsidian-black surfaces stepped by elevation, never a light background",
+      "Gold is rationed: borders, selected states, hover glows, headings — not fills",
+      "Cinzel serif for all display/label text at uppercase-leaning letter-spacing; system-ui for body/data",
+      "Cards lift 6–10px and gain a gold-glow ring on hover/selection — the primary feedback language",
+      "Heavy, dark drop shadows at rest; glow shadows only appear as a response to state"
+    ],
+    "rules": [
+      { "name": "The One Accent Rule", "body": "Gold is the only warm color permitted in the neutral chrome. If a new element needs emphasis, reach for gold before introducing a new hue.", "section": "colors" },
+      { "name": "The Carved Label Rule", "body": "Any text acting as a label, title, or button caption gets Cinzel and letter-spacing, even at 0.72rem.", "section": "typography" },
+      { "name": "The Flat-Until-It-Matters Rule", "body": "Surfaces are flat and shadowless at rest; shadow (and especially gold glow) is reserved for hover, focus, and selection.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep gold as the single accent color; route new emphasis needs through gold before adding a new hue.",
+      "Do use Cinzel with letter-spacing for anything acting as a title or label, even at small sizes.",
+      "Do reserve shadow and glow for state changes rather than applying it to static surfaces.",
+      "Do step backgrounds through the Void → Obsidian → Slate Panel → Raised Slate tiers to convey nesting."
+    ],
+    "donts": [
+      "Don't introduce bright, saturated, or cartoon-style color fills — this is not a Clash-of-Clans-style mobile strategy look.",
+      "Don't add a second accent hue alongside gold; danger-red and success-green are state-only.",
+      "Don't use heavy shadow at rest — flat panels are the default.",
+      "Don't round corners past 14px except true pill/circle elements."
+    ]
+  }
+}

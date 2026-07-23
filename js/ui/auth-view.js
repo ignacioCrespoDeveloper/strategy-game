@@ -30,7 +30,7 @@ const AuthView = (() => {
         <div class="auth-bg"></div>
         <div class="auth-card">
           <div class="auth-logo">⚔</div>
-          <h1 class="auth-title">REALMS</h1>
+          <h1 class="auth-title">HEXFRONT</h1>
           <p class="auth-tagline">Age of Lords</p>
 
           <div class="auth-tabs">
@@ -40,7 +40,9 @@ const AuthView = (() => {
 
           <!-- LOGIN -->
           <div class="auth-form" id="auth-form-login">
+            <label class="sr-only" for="login-email">Email</label>
             <input class="auth-input" type="email"    id="login-email"    placeholder="Email" autocomplete="email" />
+            <label class="sr-only" for="login-password">Password</label>
             <input class="auth-input" type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
             <p class="auth-error" id="login-error"></p>
             <button class="auth-btn" id="login-btn">Enter the Realm</button>
@@ -59,8 +61,11 @@ const AuthView = (() => {
 
           <!-- REGISTER -->
           <div class="auth-form auth-form--hidden" id="auth-form-register">
+            <label class="sr-only" for="reg-username">Username</label>
             <input class="auth-input" type="text"     id="reg-username" placeholder="Username (letters, numbers, _)" autocomplete="username" />
+            <label class="sr-only" for="reg-email">Email</label>
             <input class="auth-input" type="email"    id="reg-email"    placeholder="Email" autocomplete="email" />
+            <label class="sr-only" for="reg-password">Password</label>
             <input class="auth-input" type="password" id="reg-password" placeholder="Password (min 6 chars)" autocomplete="new-password" />
             <p class="auth-error" id="reg-error"></p>
             <button class="auth-btn" id="reg-btn">Choose your Race →</button>
@@ -170,7 +175,8 @@ const AuthView = (() => {
       </div>
     `;
 
-    document.getElementById('rsp-track').addEventListener('click', e => {
+    const rspTrack = document.getElementById('rsp-track');
+    rspTrack.addEventListener('click', e => {
       const card = e.target.closest('.rsp-card');
       if (!card) return;
       _selectedRace = card.dataset.race;
@@ -182,6 +188,7 @@ const AuthView = (() => {
       btn.disabled    = false;
       btn.textContent = `Play as ${race.name} →`;
     });
+    A11y.makeClickable(rspTrack, '.rsp-card');
 
     document.getElementById('rsp-confirm').addEventListener('click', _onRegisterConfirm);
     document.getElementById('rsp-back').addEventListener('click', () => render(_root));
@@ -302,10 +309,5 @@ const AuthView = (() => {
     return msg;
   }
 
-  // Called by app.js after OAuth redirect
-  function hydrateFromSession(session, user) {
-    return _hydrateSession(session, user);
-  }
-
-  return { render, hydrateFromSession };
+  return { render };
 })();

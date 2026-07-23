@@ -113,7 +113,11 @@ var LORD_PORTRAIT_POOLS = {
 };
 
 function pickLordPortrait(raceId, classId, lordId) {
-  const pool = LORD_PORTRAIT_POOLS[raceId]?.[classId];
+  const racePool = LORD_PORTRAIT_POOLS[raceId];
+  if (!racePool) return null;
+  // Classes without dedicated art (e.g. priest) fall back to another
+  // class's pool for the same race so a portrait always renders.
+  const pool = racePool[classId] || racePool.warrior || Object.values(racePool)[0];
   if (!pool || pool.length === 0) return null;
   if (lordId) {
     const hash = String(lordId).split('').reduce((a, c) => a + c.charCodeAt(0), 0);

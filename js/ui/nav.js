@@ -42,13 +42,6 @@ const Nav = (() => {
     }
   }
 
-  function setPage(page) {
-    _page = page;
-    document.querySelectorAll('.nav-link[data-nav-page]').forEach(el => {
-      el.classList.toggle('nav-link--active', el.dataset.navPage === page);
-    });
-  }
-
   // Update the activity badge count without re-rendering the whole nav
   function refreshBadge() {
     if (!_player) return;
@@ -169,5 +162,5 @@ const Nav = (() => {
     });
   }
 
-  return { show, hide, toggle, setPage, refreshBadge };
+  return { show, hide, toggle, refreshBadge };
 })();

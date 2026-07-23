@@ -3,17 +3,20 @@
 // =============================================
 
 const LordScreen = (() => {
-  let _lord      = null;
-  let _player    = null;
-  let _activeTab = 'overview';
-  let _tickTimer = null;
+  let _lord            = null;
+  let _player          = null;
+  let _activeTab       = 'overview';
+  let _tickTimer       = null;
+  let _resolvingSearch = false;
+  let _mountPickerOpen = false;
 
   // ── Entry point ───────────────────────────────────────────────
 
   function render(root, { lord, player, openTab, autoAttackRecordId }) {
-    _player    = player;
-    _lord      = LordService.getById(lord.id);
-    _activeTab = openTab || 'overview';
+    _player          = player;
+    _lord            = LordService.getById(lord.id);
+    _activeTab       = openTab || 'overview';
+    _mountPickerOpen = false;
 
     _migrateLord();
     if (LordService.tickHp(_lord)) {
@@ -32,13 +35,16 @@ const LordScreen = (() => {
 
     const completed = LordService.tickActions(_lord);
     if (completed.length > 0) {
+      LordService.save(_lord); // persist cleared actionQueue before re-reading
       _lord = LordService.getById(_lord.id);
       completed.forEach(c => {
         if (c.actionId === 'search_area') {
           _resolveSearch();
+        } else if (c.actionId === 'scout') {
+          _resolveScout();
         } else if (c.actionId === 'move_lord') {
           if (c.intent === 'attack') {
-            _toast('⚔ Ataque ejecutado — resolviendo en servidor…');
+            _toast('⚔ Attack dispatched — resolving on server…');
             // Server dispatcher resolves the battle within ~5 s.
             // Pull fresh state after that so the Battles tab shows the result.
             setTimeout(async () => {
@@ -50,7 +56,7 @@ const LordScreen = (() => {
             _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
             ActivityService.log(_player.id, {
               type: 'lord_moved', icon: '📍',
-              title: `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
+              title: `${_lord.name} arrived at (${c.destX}, ${c.destY})`,
               detail: '', lordName: _lord.name,
             });
           }
@@ -96,6 +102,7 @@ const LordScreen = (() => {
     if (!_lord.classId)             { _lord.classId      = 'warrior';              changed = true; }
     if (_lord.talentPoints == null) { _lord.talentPoints = 0;                      changed = true; }
     if (_lord.talentId     === undefined) { _lord.talentId = null;                 changed = true; }
+    if (_lord.mountId      === undefined) { _lord.mountId  = null;                 changed = true; }
     if (_lord.currentHp    == null) { _lord.currentHp    = LordService.getEffectiveStats(_lord).health; changed = true; }
     if (_lord.hpRegenAt    == null) { _lord.hpRegenAt    = TimeService.now();      changed = true; }
     if (!_lord.stance)             { _lord.stance        = { id: 'idle', startedAt: null, finishAt: null }; changed = true; }
@@ -124,7 +131,8 @@ const LordScreen = (() => {
               <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>⚔ Army</button>
               <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>🗺 Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
               <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>✨ Talents${(_lord.level || 1) >= 5 && !_lord.talentId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
-              <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">🗡 Batallas${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
+              <button class="ls-tab ${_activeTab === 'mount'     ? 'ls-tab--active' : ''}" data-tab="mount" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>🐎 Mount${(_lord.level || 1) >= 5 && !_lord.mountId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
+              <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">🗡 Battles${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
             </nav>
             <div class="ls-content" id="ls-content"></div>
           </div>
@@ -264,6 +272,37 @@ const LordScreen = (() => {
       </div>
     ` : '';
 
+    // Mount slot — always shown (locked / empty "+" / equipped), click opens the Mount tab.
+    const mountUnlocked = (_lord.level || 1) >= 5;
+    const chosenMount   = (typeof MOUNT_POOL !== 'undefined' && _lord.mountId)
+      ? MOUNT_POOL[_lord.mountId]
+      : null;
+    const mountSlotHtml = !mountUnlocked ? `
+      <div class="lm-slot-card lm-slot-card--locked lm-slot-card--sm">
+        <div class="lm-slot-plus">+</div>
+        <div class="lm-slot-label">🔒 Unlocks at level 5</div>
+      </div>`
+      : chosenMount ? `
+      <div class="lm-slot-card lm-slot-card--filled lm-slot-card--sm" style="border-color:${chosenMount.color}50" data-action="open-mount-tab">
+        <div class="lm-slot-icon">${_mountVisual(chosenMount, 'lm-slot-icon-glyph')}</div>
+        <div class="lm-slot-body">
+          <div class="lm-slot-name" style="color:${chosenMount.color}">${chosenMount.name}</div>
+          <div class="lm-stat-chips">${_mountEffectChips(chosenMount.effects)}</div>
+        </div>
+      </div>`
+      : `
+      <div class="lm-slot-card lm-slot-card--empty lm-slot-card--sm" data-action="open-mount-tab">
+        <div class="lm-slot-plus">+</div>
+        <div class="lm-slot-label">Equip a mount</div>
+      </div>`;
+    const mountHtml = `
+      <div class="cvl-divider"></div>
+      <div class="lsh-section">
+        <div class="lsh-section-title">Mount</div>
+        ${mountSlotHtml}
+      </div>
+    `;
+
 
     return `
       ${portraitHtml}
@@ -302,6 +341,7 @@ const LordScreen = (() => {
       </div>
 
       ${passiveHtml}
+      ${mountHtml}
 
     `;
   }
@@ -351,6 +391,13 @@ const LordScreen = (() => {
           _renderTab();
         });
       });
+      document.querySelector('#ls-left [data-action="open-mount-tab"]')?.addEventListener('click', () => {
+        _activeTab       = 'mount';
+        _mountPickerOpen = !_lord.mountId;
+        document.querySelectorAll('.ls-tab').forEach(b => b.classList.toggle('ls-tab--active', b.dataset.tab === 'mount'));
+        _renderTab();
+        _startCountdown();
+      });
     }
     document.getElementById('ls-revive-now')?.addEventListener('click', _reviveNow);
 
@@ -371,11 +418,13 @@ const LordScreen = (() => {
           _renderTab();
           _startCountdown();
         });
-        document.getElementById('lov-debug-camp-btn')?.addEventListener('click', () => {
-          DiscoveryService.spawnBanditCamp(_lord, _player.id, _armyPower(_lord.id));
+        document.getElementById('lov-scout-btn')?.addEventListener('click', async (e) => {
+          e.currentTarget.disabled = true;
+          const result = await ServerActions.lordScout(_lord.id);
+          if (!result.ok) { e.currentTarget.disabled = false; _toast(result.error || 'Server error'); return; }
           _lord = LordService.getById(_lord.id);
           _renderTab();
-          _refreshDiscoveryBadge();
+          _startCountdown();
         });
         document.getElementById('lov-move-btn')?.addEventListener('click', () => {
           _stopCountdown();
@@ -397,7 +446,7 @@ const LordScreen = (() => {
           const startBtn = document.getElementById('lov-stance-start');
           const stanceId = startBtn?.dataset?.stance;
           const secs     = Number(document.getElementById('lov-stance-dur')?.value || 3600);
-          if (!stanceId) { _toast('Selecciona una postura primero.'); return; }
+          if (!stanceId) { _toast('Select a stance first.'); return; }
           const result   = LordService.enterStance(_lord, stanceId, secs);
           if (!result.ok) { _toast(result.error); return; }
           _lord = LordService.getById(_lord.id);
@@ -425,6 +474,10 @@ const LordScreen = (() => {
         content.innerHTML = _talentsTabHtml();
         _bindTalentsEvents();
         break;
+      case 'mount':
+        content.innerHTML = _mountTabHtml();
+        _bindMountEvents();
+        break;
       case 'battles':
         content.innerHTML = _battlesTabHtml();
         _bindBattlesTabEvents();
@@ -445,95 +498,43 @@ const LordScreen = (() => {
     return army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * u.count, 0);
   }
 
-  // Detection difficulty per terrain — open terrain = easy to spot enemies.
-  const _TERRAIN_DETECTION = {
-    plains: 1.00, hills: 0.70, forest: 0.45,
-    mountain: 0.40, marsh: 0.40, desert: 0.80, coast: 0.90,
-  };
-  function _terrainDetectionMod(terrainId) { return _TERRAIN_DETECTION[terrainId] ?? 0.75; }
+  // Applies a discoveries[] response (from either /api/scan/tile or
+  // /api/lord/scout-resolve — same shape) into IntelligenceService, deduping
+  // by entity (lordId/cityId) and upgrading tier rather than stacking
+  // duplicate records. Shared by the Scout action; search_area no longer
+  // calls this — Scout is now the sole deliberate intel-gathering action.
+  // Returns the resulting intel records (with their real qualityTier) so the
+  // caller can build an accurate report — re-deriving the tier separately
+  // could disagree with what buildRecord actually computed (rogue override,
+  // prior-tier progression, etc.).
+  function _applyIntelDiscoveries(discoveries) {
+    const applied = [];
+    (discoveries || []).forEach(disc => {
+      const entityId = disc.rawData?.cityId || disc.rawData?.lordId || null;
+      const existing = entityId
+        ? IntelligenceService.getByType(_player.id, disc.type)
+            .find(r => r.data && (r.data.cityId === entityId || r.data.lordId === entityId))
+        : null;
+      const alreadyKnown = !!existing;
 
-  // Scan for enemy lords & cities on the current tile and log intel results.
-  // Called once per completed Search Area action, before the random discovery roll.
-  //
-  // Enemy lord detection is server-side: the client only has own-player data in
-  // localStorage (RLS prevents reading other players' rows). The /api/scan/tile
-  // endpoint uses the service role key to check all lords + army sizes server-side
-  // and returns only those that pass the visibility check.
-  async function _scanIntelligence(x, y, terrain) {
-    const isRogue = _lord.classId === 'rogue';
-
-    // Enemy cities on this tile — progressive scouting (vague → clear → precise).
-    // NOTE: In multiplayer, CityService.getAll() only has the current player's cities
-    // (RLS isolation), so this block is effectively Phase 2. Kept as a seam.
-    CityService.getAll()
-      .filter(c => c.x === x && c.y === y && c.playerId !== _player.id)
-      .forEach(city => {
-        const existing     = IntelligenceService.getByType(_player.id, 'enemy_city')
-          .find(r => r.tileX === x && r.tileY === y);
-        const alreadyKnown = !!existing;
-        const garrison     = CityService.getGarrison(city);
-        const intelRec     = IntelligenceService.buildRecord(_lord, {
-          type:        'enemy_city',
-          tileX:       x,
-          tileY:       y,
-          currentTier: existing?.qualityTier ?? null,
-          rawData: {
-            name:          city.name,
-            population:    Math.floor(city.population || 0),
-            garrisonCount: garrison.reduce((s, r) => s + r.count, 0),
-            garrisonUnits: garrison,
-          },
-        });
-        if (!alreadyKnown) {
-          IntelligenceService.addRecord(_player.id, intelRec);
-        } else if (existing.qualityTier !== 'precise') {
-          IntelligenceService.removeRecord(_player.id, existing.id);
-          IntelligenceService.addRecord(_player.id, intelRec);
-        }
-        DiscoveryService.addLog(_player.id, {
-          definitionId: 'enemy_city', tileX: x, tileY: y, terrain: terrain.id, rewards: [],
-          intelQuality: intelRec.qualityTier,
-          detail:       intelRec.data?.name || null,
-          alreadyKnown,
-        });
+      const intelRec = IntelligenceService.buildRecord(_lord, {
+        type:        disc.type,
+        tileX:       disc.tileX,
+        tileY:       disc.tileY,
+        ttl:         disc.ttl,
+        currentTier: existing?.qualityTier ?? null,
+        rawData:     disc.rawData,
       });
 
-    // Enemy lords on this tile — server-side detection (service role key).
-    // Client-side LordService.getAll() only returns own lords; army sizes of enemies
-    // are never in localStorage. The server checks both visibility conditions and
-    // returns only lords that pass, with enough data to build the intel record.
-    try {
-      const { data: { session } } = await SupabaseService.client.auth.getSession();
-      const token = session?.access_token;
-      if (!token) return;
-
-      const resp = await fetch('/api/scan/tile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify({ tileX: x, tileY: y }),
-      });
-      if (!resp.ok) return;
-      const d = await resp.json();
-      if (!d.ok || !Array.isArray(d.discoveries)) return;
-
-      d.discoveries.forEach(disc => {
-        const intelRec = IntelligenceService.buildRecord(_lord, {
-          type:    disc.type,
-          tileX:   disc.tileX,
-          tileY:   disc.tileY,
-          ttl:     disc.ttl,
-          rawData: disc.rawData,
-        });
+      if (!alreadyKnown) {
         IntelligenceService.addRecord(_player.id, intelRec);
-        DiscoveryService.addLog(_player.id, {
-          definitionId: 'enemy_lord', tileX: x, tileY: y, terrain: terrain.id, rewards: [],
-          intelQuality: intelRec.qualityTier,
-          detail: (isRogue && disc.rawData?.stanceName) ? disc.rawData.stanceName : null,
-        });
-      });
-    } catch (e) {
-      console.warn('[scan] enemy lord server scan failed:', e.message);
-    }
+      } else if (existing.qualityTier !== 'precise') {
+        IntelligenceService.removeRecord(_player.id, existing.id);
+        IntelligenceService.addRecord(_player.id, intelRec);
+      }
+      applied.push(intelRec);
+    });
+    return applied;
   }
 
   function _refreshDiscoveryBadge() {
@@ -585,6 +586,16 @@ const LordScreen = (() => {
           <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>
         </div>
       `;
+    } else if (queueItem.actionId === 'scout') {
+      const cost = _creditCost(secs);
+      statusHtml = `
+        <div class="lov-status lov-status--scouting">🕵 Scouting in progress…</div>
+        <div class="lov-progress-row">
+          <div class="lov-bar"><div class="lov-fill" id="lov-fill" style="width:${pct}%"></div></div>
+          <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
+          <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>
+        </div>
+      `;
     }
 
     // ── Location card ─────────────────────────────────────────────
@@ -594,6 +605,7 @@ const LordScreen = (() => {
     } else {
       const terrain     = WorldService.getTerrain(_lord.x, _lord.y);
       const isSearching = busy && queueItem.actionId === 'search_area'; // action id kept for compat
+      const isScouting  = busy && queueItem.actionId === 'scout';
       const isTraveling = busy && queueItem.actionId === 'move_lord';
 
       // Pending quests on this tile
@@ -607,12 +619,14 @@ const LordScreen = (() => {
       let searchHtml;
       if (isSearching) {
         searchHtml = `<span class="lov-lc-busy">🗺 Quest in progress on this tile…</span>`;
+      } else if (isScouting) {
+        searchHtml = `<span class="lov-lc-busy">🕵 Scouting this tile…</span>`;
       } else if (!busy) {
         searchHtml = `
           <div class="lov-lc-btns">
             <button class="lov-search-btn" id="lov-search-btn">🗺 Send on Quest</button>
+            <button class="lov-scout-btn" id="lov-scout-btn" title="Gather intel on this tile's enemy lord and city. Safe without an army; risks an ambush if scouting with one.">🕵 Scout</button>
             <button class="lov-move-btn" id="lov-move-btn">🗺 Go to Map</button>
-            <button class="lov-debug-btn" id="lov-debug-camp-btn">🏕 Bandit Camp</button>
           </div>`;
       } else {
         searchHtml = isTraveling
@@ -652,7 +666,7 @@ const LordScreen = (() => {
       const elapsedMs = TimeService.now() - stanceObj.startedAt;
       const sPct      = totalMs > 0 ? Math.min(100, Math.floor((elapsedMs / totalMs) * 100)) : 0;
       stanceHtml = `
-        <div class="lov-status lov-status--stanced">${stanceDef.icon} Postura: ${stanceDef.name}</div>
+        <div class="lov-status lov-status--stanced">${stanceDef.icon} Stance: ${stanceDef.name}</div>
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill" id="lov-stance-fill" style="width:${sPct}%"></div></div>
           <span class="lov-timer" id="lov-stance-timer">${TimeService.formatDuration(sRemain)}</span>
@@ -671,27 +685,30 @@ const LordScreen = (() => {
               <option value="7200">2h</option>
               <option value="14400">4h</option>
             </select>
-            <button class="lov-stance-start-btn" id="lov-stance-start" disabled>Iniciar</button>
+            <button class="lov-stance-start-btn" id="lov-stance-start" disabled>Start</button>
           </div>
-          <div class="lov-stance-pick-desc" id="lov-stance-desc">${busy ? 'No disponible mientras el lord está ocupado' : 'Selecciona una postura'}</div>
+          <div class="lov-stance-pick-desc" id="lov-stance-desc">${busy ? 'Not available while the lord is busy' : 'Select a stance'}</div>
         </div>
       `;
     }
 
     // ── Army ──────────────────────────────────────────────────────
-    const army        = ArmyService.get(_lord.id);
-    const totalUnits  = army.units.reduce((s, u) => s + u.count, 0);
-    const totalUpkeep = army.units.reduce((s, u) => s + (UNIT_DEFS[u.unitId]?.upkeep || 0) * u.count, 0);
-    const totalPower  = _armyPower(_lord.id);
-    const maxPower    = LordService.getArmyPowerCap(_lord);
-    const overviewCmdCap = LordService.getCommandCapacity(_lord);
-    const overCap     = totalPower > maxPower;
+    // Army Power is the single capacity stat — both the informational
+    // "how strong is my army" number AND the one the server actually
+    // enforces for recruiting (server/actions/recruit.js). There is
+    // deliberately no separate weight-based "CP" or stack-count "slot
+    // limit" any more — two differently-scaled numbers the UI could never
+    // keep in sync with was exactly the confusion this replaces.
+    const army         = ArmyService.get(_lord.id);
+    const totalUpkeep  = army.units.reduce((s, u) => s + (UNIT_DEFS[u.unitId]?.upkeep || 0) * u.count, 0);
+    const totalPower   = _armyPower(_lord.id);
+    const maxPower     = LordService.getArmyPowerCap(_lord);
+    const overPower    = totalPower > maxPower;
     const armyHtml    = army.units.length === 0
       ? `<p class="lov-pos-none">No troops mustered — recruit from the Army tab.</p>`
       : `
         <div class="la-unit-cards">${_armyCardsHtml(army, { removable: false })}</div>
         <div class="la-army-total">
-          ${totalUnits} / ${overviewCmdCap} units
           <span class="la-army-upkeep">💸 ${totalUpkeep}/24h upkeep</span>
         </div>
       `;
@@ -711,13 +728,13 @@ const LordScreen = (() => {
         <div class="lov-section">
           <div class="lov-section-row">
             <div class="lov-section-title">Army</div>
-            <span class="lov-army-power${overCap ? ' lov-army-power--over' : ''}">⚔ ${totalPower} / ${maxPower} CP</span>
+            <span class="lov-army-power${overPower ? ' lov-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">⚔ ${totalPower} / ${maxPower} PWR</span>
           </div>
           ${armyHtml}
         </div>
         <div class="lov-section-divider"></div>
         <div class="lov-section">
-          <div class="lov-section-title">Postura</div>
+          <div class="lov-section-title">Stance</div>
           ${stanceHtml}
         </div>
       </div>
@@ -843,8 +860,6 @@ const LordScreen = (() => {
     }).join('');
   }
 
-  const ARMY_LIMIT = 10;
-
   // ── Unit Requirements panel ───────────────────────────────────
 
   function _unitRequirementsHtml() {
@@ -857,8 +872,8 @@ const LordScreen = (() => {
     }
 
     const cityNote = city
-      ? `Requisitos para <strong>${city.name}</strong>`
-      : '<em>Tu lord no está en una ciudad — los niveles de edificios no están disponibles.</em>';
+      ? `Requirements for <strong>${city.name}</strong>`
+      : '<em>Your lord is not in a city — building levels are unavailable.</em>';
 
     const sections = Object.entries(raceRoster).map(([buildingId, levelMap]) => {
       const bldDef       = BUILDING_DEFS[buildingId];
@@ -941,12 +956,14 @@ const LordScreen = (() => {
     const city        = _getLordCurrentCity();
     const player      = PlayerService.getById(_player.id);
     const isTraveling = _lord.actionQueue.length > 0 && _lord.actionQueue[0].actionId === 'move_lord';
-    const totalUnits  = army.units.reduce((s, u) => s + u.count, 0);
-    const cmdCap      = LordService.getCommandCapacity(_lord);
-    const atLimit     = totalUnits >= cmdCap;
-    const currentCP   = _armyPower(_lord.id);
-    const maxCP       = LordService.getArmyPowerCap(_lord);
-    const overCap     = currentCP > maxCP;
+
+    // Army Power is the single capacity stat — see the identical note in
+    // _overviewTabHtml(). It's both informational (shown as a badge) and
+    // the real, server-enforced recruit limit (server/actions/recruit.js
+    // and hire-merc.js both gate on this exact same calculation).
+    const currentPower = _armyPower(_lord.id);
+    const maxPower      = LordService.getArmyPowerCap(_lord);
+    const overPower      = currentPower > maxPower;
 
     // ── Current Army ───────────────────────────────────────────
     let armyListHtml;
@@ -959,12 +976,10 @@ const LordScreen = (() => {
         </div>
       `;
     } else {
-      const total       = army.units.reduce((s, u) => s + u.count, 0);
       const totalUpkeep = army.units.reduce((s, u) => s + (UNIT_DEFS[u.unitId]?.upkeep || 0) * u.count, 0);
       armyListHtml = `
         <div class="la-unit-cards">${_armyCardsHtml(army, { removable: true })}</div>
         <div class="la-army-total">
-          ${total} / ${cmdCap} units
           <span class="la-army-upkeep">💸 ${totalUpkeep}/24h upkeep</span>
         </div>
       `;
@@ -991,7 +1006,7 @@ const LordScreen = (() => {
           <div class="la-recruit-queue">
             <div class="la-recruit-queue-label">${uDef?.icon || '⚔'} Training ${uDef?.name || job.unitId} ×${job.count}</div>
             <div class="la-progress-row">
-              <div class="la-bar"><div class="la-fill" id="la-recruit-fill" style="width:${pct}%"></div></div>
+              <div class="la-bar"><div class="la-fill" id="la-recruit-fill" style="transform:scaleX(${pct / 100})"></div></div>
               <span class="la-timer" id="la-recruit-timer">${TimeService.formatDuration(secs)}</span>
               <button class="ls-finish-btn" id="la-finish-recruit">⚡ ${recruitCost}💎</button>
             </div>
@@ -1008,10 +1023,10 @@ const LordScreen = (() => {
           const def        = UNIT_DEFS[unitId];
           if (!def) return '';
           const canAfford  = (player.coins || 0) >= def.goldCost;
-          const unitCP     = _unitPower(def);
-          const wouldExceedCap = currentCP + unitCP > maxCP;
-          const disabled   = busy || !canAfford || atLimit || wouldExceedCap;
-          const btnLabel   = busy ? 'Training…' : atLimit ? 'Army Full' : wouldExceedCap ? '⚠ Límite CP' : canAfford ? 'Recruit' : 'No gold';
+          const unitPower  = _unitPower(def);
+          const wouldExceedPower = currentPower + unitPower > maxPower;
+          const disabled   = busy || !canAfford || wouldExceedPower;
+          const btnLabel   = busy ? 'Training…' : wouldExceedPower ? '⚠ Power Limit' : canAfford ? 'Recruit' : 'No gold';
           return `
             <div class="la-recruit-card ${busy ? 'la-recruit-card--busy' : ''}">
               ${_unitPortraitHtml(def)}
@@ -1047,10 +1062,10 @@ const LordScreen = (() => {
           const def        = UNIT_DEFS[unitId];
           if (!def) return '';
           const canAfford  = (player.coins || 0) >= def.goldCost;
-          const unitCP     = _unitPower(def);
-          const wouldExceedCap = currentCP + unitCP > maxCP;
-          const disabled   = !canAfford || atLimit || wouldExceedCap;
-          const btnLabel   = atLimit ? 'Army Full' : wouldExceedCap ? '⚠ Límite CP' : canAfford ? 'Hire' : 'No gold';
+          const unitPower  = _unitPower(def);
+          const wouldExceedPower = currentPower + unitPower > maxPower;
+          const disabled   = !canAfford || wouldExceedPower;
+          const btnLabel   = wouldExceedPower ? '⚠ Power Limit' : canAfford ? 'Hire' : 'No gold';
           return `
             <div class="la-recruit-card">
               ${_unitPortraitHtml(def)}
@@ -1083,13 +1098,13 @@ const LordScreen = (() => {
       <div class="la-army-tab">
         <div class="la-section-header-row">
           <div class="la-section-title">Army</div>
-          <span class="la-army-cp${overCap ? ' la-army-cp--over' : ''}">⚔ ${currentCP} / ${maxCP} CP</span>
+          <span class="la-army-power${overPower ? ' la-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">⚔ ${currentPower} / ${maxPower} PWR</span>
         </div>
         ${armyListHtml}
         <div class="la-section-divider"></div>
         <div class="la-section-header-row">
           <div class="la-section-title">Recruit</div>
-          <button class="ur-open-btn" id="ur-open-btn">📋 Ver Requisitos</button>
+          <button class="ur-open-btn" id="ur-open-btn">📋 View Requirements</button>
         </div>
         ${recruitSectionHtml}
         ${mercHtml}
@@ -1110,9 +1125,20 @@ const LordScreen = (() => {
     // Finish recruitment instantly
     document.getElementById('la-finish-recruit')?.addEventListener('click', _finishRecruitmentNow);
 
-    // Dismiss unit from army
+    // Dismiss unit from army — click once to arm, click again within 3s to confirm
     document.querySelectorAll('.la-uc-remove').forEach(btn => {
       btn.addEventListener('click', async () => {
+        if (!btn.classList.contains('la-uc-remove--confirm')) {
+          btn.classList.add('la-uc-remove--confirm');
+          btn.title = 'Click again to confirm dismissal';
+          clearTimeout(btn._confirmTimer);
+          btn._confirmTimer = setTimeout(() => {
+            btn.classList.remove('la-uc-remove--confirm');
+            btn.title = 'Dismiss 1';
+          }, 3000);
+          return;
+        }
+        clearTimeout(btn._confirmTimer);
         btn.disabled = true;
         const unitId   = btn.dataset.unitId;
         const modelIdx = parseInt(btn.dataset.modelIdx || '0', 10);
@@ -1160,12 +1186,12 @@ const LordScreen = (() => {
 
   function _timeAgo(ms) {
     const s = Math.floor(ms / 1000);
-    if (s < 60)          return 'ahora mismo';
+    if (s < 60)          return 'just now';
     const m = Math.floor(s / 60);
-    if (m < 60)          return `hace ${m}m`;
+    if (m < 60)          return `${m}m ago`;
     const h = Math.floor(m / 60);
-    if (h < 24)          return `hace ${h}h`;
-    return `hace ${Math.floor(h / 24)}d`;
+    if (h < 24)          return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
   }
 
   function _discoveriesHtml() {
@@ -1180,113 +1206,132 @@ const LordScreen = (() => {
         </div>`;
     }
 
-    const entries = log.map(entry => {
+    const _CATEGORY_LABELS = {
+      nothing: 'Exploration', resource: 'Resource', combat: 'Combat',
+      event: 'Event', trade: 'Trade', legendary: 'Legendary', intelligence: 'Intelligence',
+    };
+    const _TIER_ROMAN = { 1: 'I', 2: 'II', 3: 'III' };
+
+    const entries = log.map((entry, idx) => {
       const def       = DISCOVERY_DEFS[entry.definitionId];
       const isNothing = !def || def.category === 'nothing';
       const isCombat  = def && _ACTION_CATEGORIES.has(def.category);
       const terrain   = TERRAIN_TYPES[entry.terrain] || { icon: '🌍', name: entry.terrain || 'Unknown' };
       const ago       = _timeAgo(TimeService.now() - entry.loggedAt);
       const icon      = def ? def.icon : '❓';
-      const name      = isNothing ? 'Nothing found' : (def ? def.name : 'Quest');
+      const name      = isNothing ? 'Nothing Found' : (def ? def.name : 'Quest');
+      const code      = `RPT-${String(log.length - idx).padStart(3, '0')}`;
 
-      // ── Summary status dot (small visual hint only) ──
-      let statusDot = '';
+      // ── Outcome kind — drives the badge, left-accent border, and card colour ──
+      let kind, kindLabel;
       if (entry.wasAttack) {
         const won = entry.combatOutcome === 'victory';
-        statusDot = `<span class="disc-log-status-dot ${won ? 'disc-log-dot--win' : 'disc-log-dot--loss'}"></span>`;
+        kind      = won ? 'win' : 'loss';
+        kindLabel = won ? 'Victory' : 'Defeat';
       } else if (isCombat) {
-        statusDot = `<span class="disc-log-status-dot disc-log-dot--camp"></span>`;
+        kind = 'camp'; kindLabel = 'Camp Found';
       } else if (isNothing) {
-        statusDot = `<span class="disc-log-status-dot disc-log-dot--nothing"></span>`;
+        kind = 'nothing'; kindLabel = 'Nothing';
       } else {
-        statusDot = `<span class="disc-log-status-dot disc-log-dot--found"></span>`;
+        kind = 'found'; kindLabel = 'Found';
       }
 
-      // ── Expanded report ──
-      const narrativeSection = entry.narrative ? `
-        <div class="disc-report-section">
-          <div class="disc-report-section-title">Scout Report</div>
-          <div class="disc-report-narrative">${entry.narrative}</div>
-        </div>` : '';
+      const categoryLabel = _CATEGORY_LABELS[def?.category] || 'Unknown';
+      const tierLabel      = def?.tier ? _TIER_ROMAN[def.tier] || def.tier : '—';
 
-      let outcomeSection = '';
+      // ── Quote / scout report ──
+      const quoteHtml = entry.narrative ? `<blockquote class="qd-quote">${entry.narrative}</blockquote>` : '';
+
+      // ── Outcome / spoils body ──
+      let bodyHtml = '';
       if (entry.wasAttack) {
-        const won  = entry.combatOutcome === 'victory';
-        const cls  = won ? 'disc-report-outcome--win' : 'disc-report-outcome--loss';
-        const lbl  = won ? 'Victory' : 'Defeat';
-        const sub  = won
-          ? 'The camp has been cleared and its spoils taken. Full battle report in the Battles tab.'
-          : 'Your forces were repelled. The camp still stands. Full battle report in the Battles tab.';
-        outcomeSection = `
-          <div class="disc-report-section">
-            <div class="disc-report-outcome-card ${cls}">
-              <span class="disc-report-outcome-icon">${won ? '⚔' : '☠'}</span>
-              <div class="disc-report-outcome-body">
-                <div class="disc-report-outcome-title">${lbl}</div>
-                <div class="disc-report-outcome-sub">${sub}</div>
-              </div>
+        const won = entry.combatOutcome === 'victory';
+        const cls = won ? 'qd-banner--win' : 'qd-banner--loss';
+        const sub = won
+          ? 'The camp has been cleared and its spoils taken.'
+          : 'Your forces were repelled. The camp still stands.';
+        const canViewReport = entry.lordId && entry.lordId === _lord.id;
+        bodyHtml = `
+          <div class="qd-banner ${cls}">
+            <span class="qd-banner-icon">${won ? '⚔' : '☠'}</span>
+            <div class="qd-banner-body">
+              <div class="qd-banner-title">${kindLabel}</div>
+              <div class="qd-banner-sub">${sub}</div>
             </div>
-          </div>`;
+          </div>
+          ${canViewReport
+            ? `<button class="qd-battle-link" data-view-battles="1">📜 View Battle Report</button>`
+            : `<div class="qd-hint">Full battle report in the Battles tab.</div>`}`;
       } else if (isCombat) {
-        const defDesc = def?.description || '';
-        outcomeSection = `
-          <div class="disc-report-section">
-            <div class="disc-report-section-title">Discovery</div>
-            <div class="disc-report-outcome-card disc-report-outcome--camp">
-              <span class="disc-report-outcome-icon">${icon}</span>
-              <div class="disc-report-outcome-body">
-                <div class="disc-report-outcome-title">${name}</div>
-                ${defDesc ? `<div class="disc-report-outcome-sub">${defDesc}</div>` : ''}
-                <div class="disc-report-camp-hint">📍 Visible on the map at (${entry.tileX}, ${entry.tileY}). Move your lord there and attack when ready.</div>
-              </div>
+        const defDesc      = def?.description || '';
+        const activeRecord = entry.recordId ? DiscoveryService.getActive(_player.id).find(r => r.id === entry.recordId) : null;
+        const campPreview  = activeRecord?.campDetails ? _campPreviewHtml(activeRecord.campDetails) : '';
+        bodyHtml = `
+          <div class="qd-banner qd-banner--camp">
+            <span class="qd-banner-icon">${icon}</span>
+            <div class="qd-banner-body">
+              <div class="qd-banner-title">${name}</div>
+              ${defDesc ? `<div class="qd-banner-sub">${defDesc}</div>` : ''}
             </div>
-          </div>`;
+          </div>
+          ${campPreview}
+          <div class="qd-hint">📍 Visible on the map at (${entry.tileX}, ${entry.tileY}). Move your lord there and attack when ready.</div>`;
       } else if (!isNothing && entry.rewards && entry.rewards.length > 0) {
-        const chips = entry.rewards
+        const rows = entry.rewards
           .filter(r => _RES_ICONS[r.type] && r.amount > 0)
-          .map(r => `<span class="disc-report-chip">${_RES_ICONS[r.type]} +${r.amount} ${r.type}</span>`)
+          .map(r => `
+            <div class="qd-spoils-row">
+              <span class="qd-spoils-icon">${_RES_ICONS[r.type]}</span>
+              <span class="qd-spoils-name">${r.type}</span>
+              <span class="qd-spoils-value">+${r.amount}</span>
+            </div>`)
           .join('');
-        if (chips) {
-          outcomeSection = `
-            <div class="disc-report-section">
-              <div class="disc-report-section-title">Resources Secured</div>
-              <div class="disc-report-chips">${chips}</div>
+        if (rows) {
+          bodyHtml = `
+            <div class="qd-spoils">
+              <div class="qd-spoils-label">Spoils of the Quest</div>
+              <div class="qd-spoils-list">${rows}</div>
             </div>`;
         }
       } else if (isNothing) {
-        outcomeSection = `
-          <div class="disc-report-section">
-            <div class="disc-report-outcome-card disc-report-outcome--nothing">
-              <span class="disc-report-outcome-icon">—</span>
-              <div class="disc-report-outcome-body">
-                <div class="disc-report-outcome-title">Nothing found</div>
-                <div class="disc-report-outcome-sub">The area yielded no discoveries this time. Try again later or explore a different tile.</div>
-              </div>
+        bodyHtml = `
+          <div class="qd-banner qd-banner--nothing">
+            <span class="qd-banner-icon">—</span>
+            <div class="qd-banner-body">
+              <div class="qd-banner-title">Nothing Found</div>
+              <div class="qd-banner-sub">The area yielded no discoveries this time. Try again later or explore a different tile.</div>
             </div>
           </div>`;
       }
 
       return `
-        <details class="disc-log-entry${isNothing ? ' disc-log-entry--nothing' : ''}${isCombat && !entry.wasAttack ? ' disc-log-entry--camp' : ''}">
-          <summary class="disc-log-summary">
-            ${statusDot}
-            <div class="disc-log-body">
-              <span class="disc-log-name">Quest — ${terrain.icon} ${terrain.name} (${entry.tileX ?? '?'}, ${entry.tileY ?? '?'})</span>
-              <span class="disc-log-meta">${ago}</span>
+        <details class="qd-card qd-card--${kind}">
+          <summary class="qd-row">
+            <span class="qd-row-icon">${icon}</span>
+            <div class="qd-row-body">
+              <span class="qd-row-title">${name}</span>
+              <span class="qd-row-sub">${terrain.icon} ${terrain.name} · (${entry.tileX ?? '?'}, ${entry.tileY ?? '?'})${entry.lordName ? ` · ${entry.lordName}` : ''}</span>
             </div>
-            <button class="disc-log-dismiss" data-log-id="${entry.id}" title="Dismiss">✕</button>
+            <span class="qd-pill qd-pill--${kind}">${kindLabel}</span>
+            <span class="qd-row-time">${ago}</span>
           </summary>
-          <div class="disc-log-detail">
-            <div class="disc-report-terrain-row">
-              <span class="disc-report-terrain-icon">${terrain.icon}</span>
-              <span class="disc-report-terrain-name">${terrain.name}</span>
-              <span class="disc-report-terrain-sep">·</span>
-              <span class="disc-report-coords">(${entry.tileX ?? '?'}, ${entry.tileY ?? '?'})</span>
-              <span class="disc-report-terrain-sep">·</span>
-              <span class="disc-report-ago">${ago}</span>
+          <div class="qd-panel">
+            <div class="qd-panel-header">
+              <div class="qd-panel-heading">
+                <span class="qd-dossier-code">Field Report · ${code}</span>
+                <h3 class="qd-panel-title">${icon} ${name}</h3>
+                <div class="qd-panel-byline">${entry.lordName ? `Scouted by <strong>${entry.lordName}</strong> · ` : ''}${terrain.icon} ${terrain.name} · (${entry.tileX ?? '?'}, ${entry.tileY ?? '?'})</div>
+              </div>
+              <span class="qd-pill qd-pill--lg qd-pill--${kind}">${kindLabel}</span>
             </div>
-            ${narrativeSection}
-            ${outcomeSection}
+            ${quoteHtml}
+            <div class="qd-stats">
+              <div class="qd-stat"><span class="qd-stat-label">Category</span><span class="qd-stat-value">${categoryLabel}</span></div>
+              <div class="qd-stat"><span class="qd-stat-label">Tier</span><span class="qd-stat-value">${tierLabel}</span></div>
+              <div class="qd-stat"><span class="qd-stat-label">Reported</span><span class="qd-stat-value">${ago}</span></div>
+            </div>
+            ${bodyHtml}
+            <button class="qd-dismiss" data-log-id="${entry.id}">✕ Dismiss report</button>
           </div>
         </details>`;
     }).join('');
@@ -1311,7 +1356,7 @@ const LordScreen = (() => {
     return `
       <div class="camp-preview">
         <div class="camp-preview-header">
-          <span class="camp-level-badge">Nivel ${cd.level}</span>
+          <span class="camp-level-badge">Level ${cd.level}</span>
           <span class="camp-type-label">${campDef.icon || '⚔'} ${campDef.displayName || cd.type}</span>
         </div>
         <div class="camp-unit-chips">${chips}</div>
@@ -1403,17 +1448,134 @@ const LordScreen = (() => {
     });
   }
 
+  // Small chip row for a mount's flat stat bonuses, e.g. "+2 ⚔  +2 💨".
+  function _mountEffectChips(effects) {
+    return Object.entries(effects || {})
+      .map(([key, val]) => {
+        const meta = LORD_STAT_META[key];
+        if (!meta || !val) return '';
+        return `<span class="lm-stat-chip">+${val} ${meta.icon}</span>`;
+      }).join('');
+  }
+
+  // Mount artwork if set (MOUNT_POOL[id].image), else a large icon fallback.
+  function _mountVisual(m, iconClass) {
+    return m.image
+      ? `<img src="${m.image}" class="lm-mount-img" alt="${m.name}" loading="lazy">`
+      : `<span class="${iconClass}" style="color:${m.color}">${m.icon}</span>`;
+  }
+
+  function _mountTabHtml() {
+    const level     = _lord.level || 1;
+    const unlocked  = level >= 5;
+    const chosenId  = _lord.mountId;
+    const chosen    = chosenId ? MOUNT_POOL[chosenId] : null;
+    const picking   = unlocked && _mountPickerOpen;
+    const coins     = _player?.coins || 0;
+
+    let slotHtml = '';
+    if (!unlocked) {
+      slotHtml = `
+        <div class="lm-slot-card lm-slot-card--locked">
+          <div class="lm-slot-plus">+</div>
+          <div class="lm-slot-label">🔒 Unlocks at level 5</div>
+        </div>`;
+    } else if (chosen && !picking) {
+      slotHtml = `
+        <div class="lm-slot-card lm-slot-card--filled" style="border-color:${chosen.color}50" data-action="open-picker">
+          <div class="lm-slot-icon">${_mountVisual(chosen, 'lm-slot-icon-glyph')}</div>
+          <div class="lm-slot-body">
+            <div class="lm-slot-name" style="color:${chosen.color}">${chosen.name}</div>
+            <div class="lm-stat-chips">${_mountEffectChips(chosen.effects)}</div>
+          </div>
+          <button class="lm-change-btn">Change</button>
+        </div>`;
+    } else if (!picking) {
+      slotHtml = `
+        <div class="lm-slot-card lm-slot-card--empty" data-action="open-picker">
+          <div class="lm-slot-plus">+</div>
+          <div class="lm-slot-label">Equip a mount</div>
+        </div>`;
+    }
+
+    const pickerHtml = picking ? `
+      <div class="lm-mount-grid">
+        ${Object.values(MOUNT_POOL).map(m => {
+          const isEquipped = m.id === chosenId;
+          const canAfford  = isEquipped || coins >= (m.cost || 0);
+          const disabled   = isEquipped || !canAfford;
+          const btnLabel   = isEquipped ? 'Equipped' : canAfford ? 'Equip' : 'No gold';
+          return `
+          <div class="lm-mount-card" style="border-color:${m.color}40">
+            <div class="lm-mount-visual">${_mountVisual(m, 'lm-mount-icon-lg')}</div>
+            <div class="lm-mount-header">
+              <span class="lm-mount-name" style="color:${m.color}">${m.name}</span>
+              <span class="lm-mount-cost${canAfford ? '' : ' lm-mount-cost--short'}">💰${m.cost || 0}</span>
+            </div>
+            <div class="lm-stat-chips">${_mountEffectChips(m.effects)}</div>
+            <button class="lm-choose-btn" data-mount-id="${m.id}" style="border-color:${m.color};color:${m.color}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>
+          </div>`;
+        }).join('')}
+      </div>
+      <button class="lm-cancel-btn">Cancel</button>
+    ` : '';
+
+    return `
+      <div class="lm-container">
+        <div class="lm-section">
+          <div class="lm-section-title">🐎 Mount</div>
+          ${slotHtml}
+          ${pickerHtml}
+        </div>
+      </div>`;
+  }
+
+  function _bindMountEvents() {
+    document.querySelectorAll('.lm-slot-card[data-action="open-picker"]').forEach(el => {
+      el.addEventListener('click', () => {
+        _mountPickerOpen = true;
+        _renderTab();
+      });
+    });
+
+    document.querySelector('.lm-change-btn')?.addEventListener('click', e => {
+      e.stopPropagation();
+      _mountPickerOpen = true;
+      _renderTab();
+    });
+
+    document.querySelector('.lm-cancel-btn')?.addEventListener('click', () => {
+      _mountPickerOpen = false;
+      _renderTab();
+    });
+
+    document.querySelectorAll('.lm-choose-btn[data-mount-id]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const result = await ServerActions.spendMount(_lord.id, btn.dataset.mountId);
+        if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
+        _lord   = LordService.getById(_lord.id);
+        _player = PlayerService.getById(_player.id);
+        HUD.refresh();
+        const mount = MOUNT_POOL[btn.dataset.mountId];
+        _toast(`${mount?.icon || '🐎'} ${mount?.name || 'Mount'} equipped!`);
+        _mountPickerOpen = false;
+        _renderTab();
+      });
+    });
+  }
+
   const _OUTCOME_META = {
-    victory: { label: 'Victoria', icon: '⚔', css: 'bh-victory' },
-    defeat:  { label: 'Derrota',  icon: '☠', css: 'bh-defeat'  },
-    draw:    { label: 'Empate',   icon: '🤝', css: 'bh-draw'    },
+    victory: { label: 'Victory', icon: '⚔', css: 'bh-victory' },
+    defeat:  { label: 'Defeat',  icon: '☠', css: 'bh-defeat'  },
+    draw:    { label: 'Draw',    icon: '🤝', css: 'bh-draw'    },
   };
 
   const _REASON_LABELS_TAB = {
-    eliminated: 'Eliminación total',
-    routed:     'Dispersión',
-    retreated:  'Retirada',
-    max_rounds: 'Duración máxima',
+    eliminated: 'Total Elimination',
+    routed:     'Routed',
+    retreated:  'Retreat',
+    max_rounds: 'Max Duration',
   };
 
   function _battlesTabHtml() {
@@ -1423,16 +1585,19 @@ const LordScreen = (() => {
       return `
         <div class="bh-empty">
           <div class="bh-empty-icon">🗡</div>
-          <p class="bh-empty-msg">Sin batallas registradas aún.</p>
-          <p class="bh-empty-hint">Ataca un campamento en la pestaña Descubrimientos.</p>
+          <p class="bh-empty-msg">No battles recorded yet.</p>
+          <p class="bh-empty-hint">Attack a camp from the Quests tab.</p>
         </div>`;
     }
 
     const rows = battles.map((b, idx) => {
       const om     = _OUTCOME_META[b.outcome] || _OUTCOME_META.defeat;
-      const date   = new Date(b.at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' });
-      const time   = new Date(b.at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-      const loot   = b.outcome === 'victory' && b.goldEarned > 0 ? `+${b.goldEarned}💰 · ` : '';
+      const date   = new Date(b.at).toLocaleDateString('en-US', { day: '2-digit', month: 'short' });
+      const time   = new Date(b.at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+      const resLoot = b.outcome === 'victory'
+        ? Object.entries(b.resourceLoot || {}).map(([t, amt]) => `+${amt}${_RES_ICONS[t] || ''} · `).join('')
+        : '';
+      const loot   = (b.outcome === 'victory' && b.goldEarned > 0 ? `+${b.goldEarned}💰 · ` : '') + resLoot;
       return `
         <div class="bh-entry ${om.css}" data-bh-idx="${idx}">
           <div class="bh-entry-header">
@@ -1440,15 +1605,16 @@ const LordScreen = (() => {
             <span class="bh-camp-name">${b.campIcon || '⚔'} ${b.campName}</span>
             <span class="bh-date">${date} ${time}</span>
           </div>
+          ${b.lordLevel ? `<div class="bh-lord-sub mip-value--muted">${_lord.name} · Lv ${b.lordLevel}</div>` : ''}
           <div class="bh-entry-stats">
-            <span>Rondas: <strong>${b.rounds}</strong></span>
-            <span>Bajas: <strong>${b.modelsLost}</strong></span>
+            <span>Rounds: <strong>${b.rounds}</strong></span>
+            <span>Losses: <strong>${b.modelsLost}</strong></span>
             <span>${loot}+${b.xpEarned}⭐</span>
             <span class="bh-reason">${_REASON_LABELS_TAB[b.reason] || b.reason}</span>
           </div>
-          <button class="bh-log-toggle" data-bh-idx="${idx}">📜 Ver informe</button>
+          <button class="bh-log-toggle" data-bh-idx="${idx}">📜 View Report</button>
           <div class="bh-log-body hidden" id="bh-log-${idx}">
-            ${b.report ? _battleLogHtml(b.report) : '<em>Informe no disponible</em>'}
+            ${b.report ? _battleLogHtml(b.report) : '<em>Report unavailable</em>'}
           </div>
         </div>`;
     }).join('');
@@ -1457,59 +1623,7 @@ const LordScreen = (() => {
   }
 
   function _battleLogHtml(report) {
-    const _PHASE_LABELS_TAB = {
-      passive: 'Pasivo', ranged: 'Distancia', charge: 'Carga',
-      melee: 'Melee', morale: 'Moral', end_round: 'Fin ronda',
-    };
-    const _RESULT_LABELS_TAB = {
-      hit: 'golpe', killed: 'modelo muerto', eliminated: 'ELIMINADO',
-      miss: 'esquivado', routed: 'DISPERSADO', retreated: 'RETIRADA', healed: 'curado',
-    };
-
-    const unitCols = `
-      <div class="bh-unit-cols">
-        <div class="bh-unit-col">
-          <div class="bh-unit-col-header">Tu Ejército</div>
-          ${report.attacker.unitsStart.map(s => {
-            const surv = report.attacker.unitsSurviving.find(u => u.sourceId === s.sourceId);
-            const cnt  = surv?.count ?? 0;
-            const def  = UNIT_DEFS[s.sourceId];
-            const icon = def?.icon || '⚔';
-            const name = def?.name || s.sourceId;
-            const badge = cnt === 0 ? '☠' : cnt < s.count ? '🩹' : '✓';
-            return `<div class="bh-unit-row"><span>${icon} ${name}</span><span class="bh-unit-cnt">${badge} ${cnt}/${s.count}</span></div>`;
-          }).join('')}
-        </div>
-        <div class="bh-unit-col">
-          <div class="bh-unit-col-header">Enemigo</div>
-          ${report.defender.unitsStart.map(s => {
-            const surv    = report.defender.unitsSurviving.find(u => u.sourceId === s.sourceId);
-            const cnt     = surv?.count ?? 0;
-            const rawId   = s.sourceId.replace(/^d\d+_/, ''); // strip PvP prefix (d0_unitId → unitId)
-            const def     = UNIT_DEFS[rawId];
-            const icon    = def?.icon || '⚔';
-            const name    = def?.name || rawId;
-            const badge = cnt === 0 ? '☠' : cnt < s.count ? '🩹' : '✓';
-            return `<div class="bh-unit-row"><span>${icon} ${name}</span><span class="bh-unit-cnt">${badge} ${cnt}/${s.count}</span></div>`;
-          }).join('')}
-        </div>
-      </div>`;
-
-    const logLines = report.events.map(e => {
-      const phase = _PHASE_LABELS_TAB[e.phase] || e.phase;
-      const res   = _RESULT_LABELS_TAB[e.result] || e.result;
-      if (!e.actorName || !e.targetName) {
-        return `<div class="bh-log-line bh-log-${e.result || 'hit'}">[R${e.round} ${phase}] ${e.result === 'routed' ? '💥' : '🚶'} ${res}</div>`;
-      }
-      if (e.result === 'healed') {
-        return `<div class="bh-log-line bh-log-healed">[R${e.round} ${phase}] ${e.actorName} ✚ ${-e.damage} curado</div>`;
-      }
-      const dmg   = e.damage > 0 ? ` ⚔ ${e.damage}` : '';
-      const trait = e.trait ? ` (${e.trait})` : '';
-      return `<div class="bh-log-line bh-log-${e.result || 'hit'}">[R${e.round} ${phase}] ${e.actorName} → ${e.targetName}${dmg}${trait} — ${res}</div>`;
-    }).join('');
-
-    return `${unitCols}<div class="bh-log-lines">${logLines}</div>`;
+    return BattleResultView.inlineReportHtml(report, _lord);
   }
 
   function _bindBattlesTabEvents() {
@@ -1527,12 +1641,9 @@ const LordScreen = (() => {
   // calls the endpoint and presents the result.
 
   async function _resolveSearch() {
-    // Scan the tile for PvP intel (stays client-side — reads other players' data).
-    if (_lord.x != null) {
-      const terrain = WorldService.getTerrain(_lord.x, _lord.y);
-      await _scanIntelligence(_lord.x, _lord.y, terrain);
-    }
-
+    if (_resolvingSearch) return;
+    _resolvingSearch = true;
+    try {
     const oldLevel = _lord.level || 1;
     const result   = await ServerActions.questResolve(_lord.id);
     if (!result.ok) {
@@ -1543,7 +1654,7 @@ const LordScreen = (() => {
     // Hydrate from server response (XP, coins, resources already applied server-side).
     _lord   = LordService.getById(_lord.id);
     _player = PlayerService.getById(_player.id);
-    if ((_lord.level || 1) > oldLevel) _toast(`⭐ ¡Subiste de nivel! Ahora nivel ${_lord.level}.`);
+    if ((_lord.level || 1) > oldLevel) _toast(`⭐ Level up! Now level ${_lord.level}.`);
 
     const discoveries = result.discoveries || [];
     if (discoveries.length === 0) {
@@ -1560,6 +1671,80 @@ const LordScreen = (() => {
     _refreshDiscoveryBadge();
     _renderTab();
     HUD.refresh();
+    } finally {
+      _resolvingSearch = false;
+    }
+  }
+
+  // Called when a 'scout' action completes. /api/lord/scout-resolve does the
+  // actual ambush-check + intel-gathering server-side (it has cross-player
+  // admin access this client never does) and returns either tiered intel
+  // discoveries or a full ambush battle report — never both, being caught
+  // replaces the scouting result.
+  let _resolvingScout = false;
+  async function _resolveScout() {
+    if (_resolvingScout) return;
+    _resolvingScout = true;
+    try {
+      const x = _lord.x, y = _lord.y;
+      const knownTiers = {};
+      if (x != null) {
+        IntelligenceService.getByType(_player.id, 'enemy_city')
+          .filter(r => r.tileX === x && r.tileY === y)
+          .forEach(r => { if (r.data?.cityId) knownTiers[r.data.cityId] = r.qualityTier; });
+        IntelligenceService.getByType(_player.id, 'enemy_lord')
+          .filter(r => r.tileX === x && r.tileY === y)
+          .forEach(r => { if (r.data?.lordId) knownTiers[r.data.lordId] = r.qualityTier; });
+      }
+
+      const result = await ServerActions.scoutResolve(_lord.id, knownTiers);
+      if (!result.ok) {
+        _toast(result.error || 'Scout error — please refresh');
+        return;
+      }
+
+      if (result.outcome === 'ambushed') {
+        // Full PvP battle already resolved+persisted server-side (same
+        // pipeline as any other PvP fight) — refresh so HP/downtime/activity
+        // feed reflect it immediately instead of waiting for the next poll.
+        await ServerActions.syncNow();
+        _lord   = LordService.getById(_lord.id);
+        _player = PlayerService.getById(_player.id);
+        const outcome = result.report?.winner === 'defender' ? 'repelled' : result.report?.winner === 'draw' ? 'draw' : 'caught';
+        _toast(outcome === 'repelled' ? '🛡 Ambushed — but you fought them off!' : outcome === 'draw' ? '🤝 Ambushed — battle was a draw' : '☠ Ambushed! No intel gathered — see Battles tab');
+        _activeTab = 'battles';
+      } else if (result.outcome === 'intel') {
+        const applied = _applyIntelDiscoveries(result.discoveries);
+        const gained   = applied.length;
+        _toast(gained > 0 ? `🕵 Scouting complete — ${gained} report${gained > 1 ? 's' : ''} gathered` : '🕵 Scouting complete — nothing on this tile');
+
+        // Persistent notification with the findings attached — City/Lord
+        // name plus a rough "how much do we know" percentage derived from
+        // the actual tier IntelligenceService recorded (vague/clear/precise
+        // → 33/66/100%), not just an icon and a name.
+        const _TIER_PCT = { vague: 33, clear: 66, precise: 100 };
+        const cityParts = applied
+          .filter(r => r.type === 'enemy_city')
+          .map(r => `City: ${r.data?.name || 'Unknown'} (${_TIER_PCT[r.qualityTier] || 0}%)`);
+        const lordParts = applied
+          .filter(r => r.type === 'enemy_lord')
+          .map(r => `Lord: ${r.data?.lordName || 'Unknown'} (${_TIER_PCT[r.qualityTier] || 0}%)`);
+        const summary = [...cityParts, ...lordParts].join(' · ');
+        ActivityService.log(_player.id, {
+          type:  'scout_result',
+          icon:  '🕵',
+          title: gained > 0 ? 'Scout report ready' : 'Scout complete — nothing found',
+          detail: x != null ? `(${x}, ${y})${summary ? ' · ' + summary : ' · tile was empty'}` : '',
+          lordName: _lord.name,
+        });
+      }
+
+      _refreshDiscoveryBadge();
+      _renderTab();
+      HUD.refresh();
+    } finally {
+      _resolvingScout = false;
+    }
   }
 
   // Handle one server-resolved quest result — add to log, add record to storage if needed.
@@ -1576,6 +1761,7 @@ const LordScreen = (() => {
         definitionId: defId,
         tileX: record?.tileX ?? _lord.x, tileY: record?.tileY ?? _lord.y,
         terrain: terrainId, rewards: [], narrative,
+        lordId: _lord.id, lordName: _lord.name,
       });
       _toast('🗺 Quest complete — nothing found');
       return;
@@ -1599,6 +1785,7 @@ const LordScreen = (() => {
       DiscoveryService.addLog(_player.id, {
         definitionId: defId, tileX: record.tileX, tileY: record.tileY,
         terrain: record.terrain, rewards: [], recordId: record.id, narrative,
+        lordId: _lord.id, lordName: _lord.name,
       });
       ActivityService.log(_player.id, {
         type: 'discovery', icon: def.icon || '🗺',
@@ -1611,6 +1798,7 @@ const LordScreen = (() => {
       DiscoveryService.addLog(_player.id, {
         definitionId: defId, tileX: record.tileX, tileY: record.tileY,
         terrain: record.terrain, rewards, narrative,
+        lordId: _lord.id, lordName: _lord.name,
       });
       const rewardStr = rewards.filter(r => r.type !== 'xp').map(r => `+${r.amount} ${r.type}`).join(', ');
       ActivityService.log(_player.id, {
@@ -1626,48 +1814,24 @@ const LordScreen = (() => {
   // ── Discovery claim ───────────────────────────────────────────
 
   function _bindDiscoveryEvents() {
-    document.querySelectorAll('.disc-log-dismiss[data-log-id]').forEach(btn => {
+    document.querySelectorAll('.qd-dismiss[data-log-id]').forEach(btn => {
       btn.addEventListener('click', e => {
         e.stopPropagation(); // prevent toggling the <details> parent
         DiscoveryService.dismissLog(_player.id, btn.dataset.logId);
         _renderTab();
       });
     });
-  }
-
-  // Shared reward application — used by auto-resolve AND manual Attack
-  const _RES_TYPES_CITY = ['food', 'wood', 'stone', 'iron'];
-  async function _applyRewards(rewards) {
-    let xpGained   = 0;
-    let cityForRes = null;
-    rewards.forEach(r => {
-      if (r.type === 'xp') {
-        xpGained += r.amount;
-      } else if (r.type === 'gold') {
-        const p = PlayerService.getById(_player.id);
-        PlayerService.update(_player.id, { coins: (p.coins || 0) + r.amount });
-        _player = PlayerService.getById(_player.id);
-      } else if (_RES_TYPES_CITY.includes(r.type)) {
-        if (!cityForRes) cityForRes = _getLordCurrentCity() || CityService.getPlayerCities(_player.id)[0] || null;
-        if (cityForRes) {
-          cityForRes.resources = cityForRes.resources || {};
-          cityForRes.resources[r.type] = (cityForRes.resources[r.type] || 0) + r.amount;
-          CityService.save(cityForRes);
-        }
-      }
+    document.querySelectorAll('.qd-battle-link[data-view-battles]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        _activeTab = 'battles';
+        document.querySelectorAll('.ls-tab').forEach(b => b.classList.toggle('ls-tab--active', b.dataset.tab === 'battles'));
+        _renderTab();
+      });
     });
-    if (xpGained > 0) {
-      _lord.xp = (_lord.xp || 0) + xpGained;
-      const leveled = LordService.checkLevelUp(_lord);
-      LordService.save(_lord);
-      _lord = LordService.getById(_lord.id);
-      if (leveled > 0) _toast(`⭐ ¡Subiste de nivel! Ahora nivel ${_lord.level}.`);
-      await ServerActions.saveLordXp(_lord.id, _lord); // must complete before syncNow() reads Supabase
-    }
-    HUD.refresh();
   }
 
-  // Called when player clicks "⚔ Atacar" on a combat discovery
+  // Called when player clicks "⚔ Attack" on a combat discovery
   async function _claimDiscovery(recordId) {
     // Read the record WITHOUT removing it so it stays available on defeat/draw.
     const record = DiscoveryService.getActive(_player.id).find(r => r.id === recordId);
@@ -1681,9 +1845,12 @@ const LordScreen = (() => {
     const baseLoot = CAMP_LEVEL_LOOT[cd?.level] || CAMP_LEVEL_LOOT[1];
     const mult     = campDef.rewardMultiplier || 1.0;
     const encounter = {
-      name:           `${campDef.displayName || 'Campamento'}${cd ? ` (Nivel ${cd.level})` : ''}`,
+      name:           `${campDef.displayName || 'Bandit Camp'}${cd ? ` (Level ${cd.level})` : ''}`,
       startingMorale: campDef.morale || 55,
-      loot:           { goldMin: Math.round(baseLoot.goldMin * mult), goldMax: Math.round(baseLoot.goldMax * mult) },
+      loot: {
+        goldMin: Math.round(baseLoot.goldMin * mult), goldMax: Math.round(baseLoot.goldMax * mult),
+        resMin:  Math.round((baseLoot.resMin || 0) * mult), resMax: Math.round((baseLoot.resMax || 0) * mult),
+      },
       xpReward:       { win: Math.round(baseLoot.xpWin * mult), loss: Math.round(baseLoot.xpLoss * mult) },
       defenders:      cd?.defenders || [{ unitId: 'bandits', count: 2 }, { unitId: 'bandit_archers', count: 1 }],
     };
@@ -1716,6 +1883,8 @@ const LordScreen = (() => {
       rewards:       [],
       wasAttack:     true,
       combatOutcome: report.winner === 'attacker' ? 'victory' : 'defeat',
+      lordId:        _lord.id,
+      lordName:      _lord.name,
     });
 
     const { leveled, freshLord } = BattleResultView.applyRewards(report, _lord, _player);
@@ -1732,9 +1901,9 @@ const LordScreen = (() => {
       actionQueue:    _lord.actionQueue    ?? [],
     });
 
-    if (leveled > 0) _toast(`⭐ ¡Subiste de nivel! Ahora nivel ${freshLord.level}.`);
-    const outcomeLabel = report.winner === 'attacker' ? '⚔ Victoria' : report.winner === 'draw' ? '🤝 Empate' : '☠ Derrota';
-    _toast(`${outcomeLabel} — informe en pestaña Batallas`);
+    if (leveled > 0) _toast(`⭐ Level up! Now level ${freshLord.level}.`);
+    const outcomeLabel = report.winner === 'attacker' ? '⚔ Victory' : report.winner === 'draw' ? '🤝 Draw' : '☠ Defeat';
+    _toast(`${outcomeLabel} — report in the Battles tab`);
     _activeTab = 'battles';
     _stopCountdown();
     _renderTab();
@@ -1808,6 +1977,7 @@ const LordScreen = (() => {
     const c = result.completedAction;
     if (c) {
       if (c.actionId === 'search_area')        await _resolveSearch();
+      else if (c.actionId === 'scout')         await _resolveScout();
       else if (c.actionId === 'move_lord')     _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
     }
     HUD.refresh();
@@ -1857,13 +2027,16 @@ const LordScreen = (() => {
       if (_lord.actionQueue.length > 0) {
         const completed = LordService.tickActions(_lord);
         if (completed.length > 0) {
+          LordService.save(_lord); // persist cleared actionQueue before re-reading
           _lord = LordService.getById(_lord.id);
           for (const c of completed) {
             if (c.actionId === 'search_area') {
               await _resolveSearch();
+            } else if (c.actionId === 'scout') {
+              await _resolveScout();
             } else if (c.actionId === 'move_lord') {
               if (c.intent === 'attack') {
-                _toast('⚔ Ataque ejecutado — resolviendo en servidor…');
+                _toast('⚔ Attack dispatched — resolving on server…');
                 setTimeout(async () => {
                   await ServerActions.syncNow();
                   _lord = LordService.getById(_lord.id);
@@ -1877,7 +2050,7 @@ const LordScreen = (() => {
                 ActivityService.log(_player.id, {
                   type:     'lord_moved',
                   icon:     '📍',
-                  title:    `${_lord.name} llegó a (${c.destX}, ${c.destY})`,
+                  title:    `${_lord.name} arrived at (${c.destX}, ${c.destY})`,
                   detail:   '',
                   lordName: _lord.name,
                 });
@@ -1887,7 +2060,7 @@ const LordScreen = (() => {
               ActivityService.log(_player.id, {
                 type:     'action_complete',
                 icon:     '✓',
-                title:    `${c.name} completado`,
+                title:    `${c.name} completed`,
                 detail:   '',
                 lordName: _lord.name,
               });
@@ -1957,7 +2130,7 @@ const LordScreen = (() => {
         } else {
           const fillEl  = document.getElementById('la-recruit-fill');
           const timerEl = document.getElementById('la-recruit-timer');
-          if (fillEl)  fillEl.style.width  = `${Math.floor(RecruitmentService.progress(city) * 100)}%`;
+          if (fillEl)  fillEl.style.transform  = `scaleX(${RecruitmentService.progress(city)})`;
           if (timerEl) timerEl.textContent = TimeService.formatDuration(RecruitmentService.timeRemaining(city));
         }
       }

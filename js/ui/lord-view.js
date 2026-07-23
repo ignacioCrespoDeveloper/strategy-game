@@ -53,7 +53,8 @@ const LordView = (() => {
   }
 
   function _bindEvents() {
-    document.getElementById('race-select-grid').addEventListener('click', e => {
+    const grid = document.getElementById('race-select-grid');
+    grid.addEventListener('click', e => {
       const card = e.target.closest('.race-card');
       if (!card) return;
       _selectedRace = card.dataset.race;
@@ -61,6 +62,7 @@ const LordView = (() => {
         c.classList.toggle('race-card--selected', c.dataset.race === _selectedRace)
       );
     });
+    A11y.makeClickable(grid, '.race-card');
 
     document.getElementById('race-select-btn').addEventListener('click', _onConfirm);
 

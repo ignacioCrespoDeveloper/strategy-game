@@ -39,6 +39,19 @@ const ActivityService = (() => {
     return _getAll()[playerId] || [];
   }
 
+  function remove(playerId, entryId) {
+    const all = _getAll();
+    if (!all[playerId]) return;
+    all[playerId] = all[playerId].filter(e => e.id !== entryId);
+    _saveAll(all);
+  }
+
+  function clear(playerId) {
+    const all = _getAll();
+    all[playerId] = [];
+    _saveAll(all);
+  }
+
   const META_KEY = 'activity_meta';
 
   function markSeen(playerId) {
@@ -53,5 +66,5 @@ const ActivityService = (() => {
     return get(playerId).filter(e => e.at > since).length;
   }
 
-  return { log, get, markSeen, getUnseenCount };
+  return { log, get, remove, clear, markSeen, getUnseenCount };
 })();

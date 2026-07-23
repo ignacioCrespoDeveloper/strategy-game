@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
-  <title>Realms — Age of Lords</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hexfront — Age of Lords</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,7 +22,7 @@
   <div id="screen-root"></div>
 
   <!-- Toast notifications (always present) -->
-  <div id="toast-container"></div>
+  <div id="toast-container" aria-live="polite"></div>
 
   <!-- ── Supabase (must load before config and core) ── -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -33,6 +33,7 @@
   <script src="js/core/time.js"></script>
   <script src="js/core/storage.js"></script>
   <script src="js/core/events.js"></script>
+  <script src="js/core/a11y.js"></script>
 
   <!-- ── Data definitions ── -->
   <script src="js/data/races.js"></script>

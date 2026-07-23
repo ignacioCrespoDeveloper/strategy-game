@@ -22,13 +22,17 @@ var TERRAIN_BATTLE_MODS = {
 };
 
 // ── Base loot by level — scaled by each camp's rewardMultiplier ──────
+//
+// resMin/resMax: a single random resource type (food/wood/stone/iron) in
+// this range is granted alongside gold on victory — camps are assumed to
+// hold plundered goods, same flavor as the coin_cache-style discoveries.
 
 var CAMP_LEVEL_LOOT = {
-  1: { goldMin: 20,   goldMax: 60,   xpWin: 20,  xpLoss: 5  },
-  2: { goldMin: 60,   goldMax: 140,  xpWin: 45,  xpLoss: 12 },
-  3: { goldMin: 140,  goldMax: 300,  xpWin: 85,  xpLoss: 25 },
-  4: { goldMin: 300,  goldMax: 650,  xpWin: 160, xpLoss: 50 },
-  5: { goldMin: 650,  goldMax: 1200, xpWin: 300, xpLoss: 90 },
+  1: { goldMin: 20,   goldMax: 60,   xpWin: 20,  xpLoss: 5,  resMin: 15,  resMax: 40   },
+  2: { goldMin: 60,   goldMax: 140,  xpWin: 45,  xpLoss: 12, resMin: 40,  resMax: 100  },
+  3: { goldMin: 140,  goldMax: 300,  xpWin: 85,  xpLoss: 25, resMin: 100, resMax: 220  },
+  4: { goldMin: 300,  goldMax: 650,  xpWin: 160, xpLoss: 50, resMin: 220, resMax: 480  },
+  5: { goldMin: 650,  goldMax: 1200, xpWin: 300, xpLoss: 90, resMin: 480, resMax: 900  },
 };
 
 // ── Camp definitions ─────────────────────────────────────────────────

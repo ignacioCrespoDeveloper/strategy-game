@@ -14,7 +14,7 @@ import 'dotenv/config';
 import express              from 'express';
 import { fileURLToPath }    from 'url';
 import { dirname, join }    from 'path';
-import { resolvePvpAttack, scanTile, declareAttack } from './combat-resolver.js';
+import { resolvePvpAttack, scanTile, scanPresence, declareAttack } from './combat-resolver.js';
 import { runDispatch } from './tick/event-dispatcher.js';
 import { BattleEngine, UNIT_DEFS } from './engine-loader.js';
 import { syncPlayerState }         from './sync.js';
@@ -27,12 +27,15 @@ import { handleHireMerc }          from './actions/hire-merc.js';
 import { handleLordRevive }        from './actions/lord-revive.js';
 import { handleArmyDisband }       from './actions/army-disband.js';
 import { handleInstantBuild }      from './actions/instant-build.js';
+import { runRankingUpdate }        from './tick/ranking-updater.js';
 import { handlePveResult }         from './actions/pve-result.js';
 import { handleInstantAction }     from './actions/instant-action.js';
 import { handleSetRace }           from './actions/set-race.js';
 import { handleLordTalents }       from './actions/lord-talents.js';
+import { handleLordMounts }        from './actions/lord-mounts.js';
 import { handleLordSaveXp }        from './actions/lord-save-xp.js';
 import { handleQuestResolve }      from './actions/quest-resolve.js';
+import { handleScoutResolve }      from './actions/scout-resolve.js';
 
 const app       = express();
 const PORT      = process.env.PORT || 3000;
@@ -71,6 +74,11 @@ app.post('/api/pvp/resolve',         resolvePvpAttack);
 //
 app.post('/api/scan/tile', scanTile);
 
+// POST /api/scan/presence — live, zero-stats "is there a lord here"
+// existence layer for the whole map. Cities have an equivalent already
+// via the global world_state table; this covers lords.
+app.post('/api/scan/presence', scanPresence);
+
 // POST /api/attack/declare — write pvp_threat notification to defenders
 app.post('/api/attack/declare', declareAttack);
 
@@ -91,8 +99,10 @@ app.post('/api/lord/pve-result',     handlePveResult);
 app.post('/api/lord/instant-action', handleInstantAction);
 app.post('/api/player/set-race',     handleSetRace);
 app.post('/api/lord/talents',        handleLordTalents);
+app.post('/api/lord/mounts',         handleLordMounts);
 app.post('/api/lord/save-xp',        handleLordSaveXp);
 app.post('/api/lord/quest-resolve',  handleQuestResolve);
+app.post('/api/lord/scout-resolve',  handleScoutResolve);
 
 // ── Lords debug ───────────────────────────────────────────────
 // GET /api/debug/lords — dumps all lords from Supabase so we can verify positions are synced
@@ -183,4 +193,8 @@ setInterval(() => runDispatch().catch(e => console.error('[dispatcher] loop erro
 app.listen(PORT, () => {
   console.log(`\n⚔  Hexfront dev server → http://localhost:${PORT}`);
   console.log(`   PvP endpoint:          POST /api/pvp/resolve\n`);
+
+  // Ranking updater — recalculate all player scores every 5 minutes
+  runRankingUpdate().catch(e => console.error('[ranking-updater] boot run error:', e.message));
+  setInterval(() => runRankingUpdate().catch(e => console.error('[ranking-updater] loop error:', e.message)), 5 * 60 * 1000);
 });

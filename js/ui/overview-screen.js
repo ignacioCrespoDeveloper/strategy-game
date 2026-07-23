@@ -13,6 +13,7 @@ const OverviewScreen = (() => {
   let _citiesCollapsed = false;
   let _lordsCollapsed  = false;
   let _selectedClass   = null;
+  let _densityInitialized = false; // one-time: default Cities/Lords collapsed for returning players so the dashboard opens on Movements, not everything at once
 
   // ── Entry point ───────────────────────────────────────────────
 
@@ -103,7 +104,7 @@ const OverviewScreen = (() => {
           // Update movement panel row timer in-place (IDs added in _movementsPanel)
           const fill = document.getElementById(`ov-mv-fill-${lord.id}`);
           const time = document.getElementById(`ov-mv-time-${lord.id}`);
-          if (fill) fill.style.width = `${Math.floor(LordService.actionProgress(lord) * 100)}%`;
+          if (fill) fill.style.transform = `scaleX(${LordService.actionProgress(lord)})`;
           if (time) time.textContent = TimeService.formatDuration(LordService.actionTimeRemaining(lord));
           // Update portrait activity overlay timer for this lord
           const actCd = document.getElementById(`ov-lord-act-cd-${lord.id}`);
@@ -161,7 +162,7 @@ const OverviewScreen = (() => {
         const incTime = document.getElementById(`ov-inc-time-${i}`);
         if (incTime) incTime.textContent = formatted;
         const incFill = document.getElementById(`ov-inc-fill-${i}`);
-        if (incFill) incFill.style.width = `${pct}%`;
+        if (incFill) incFill.style.transform = `scaleX(${pct / 100})`;
       });
 
       if (needsRerender) {
@@ -227,6 +228,7 @@ const OverviewScreen = (() => {
 
       localFeed[pid] = [...newEntries, ...localEntries].slice(0, 50);
       StorageService.set('activity_feed', localFeed);
+      Nav.refreshBadge();
 
       // Show toasts for pvp notifications and re-render
       const pvpNew = newEntries.filter(e => e.type === 'pvp_result' || e.type === 'pvp_threat');
@@ -238,9 +240,16 @@ const OverviewScreen = (() => {
         const alreadySaved = BattleHistoryService.getForLord(e.lordId).some(b => b.at === e.at);
         if (!alreadySaved) {
           BattleHistoryService.save(e.lordId, {
-            outcome: e.outcome || 'defeat', campName: 'Enemy lord', campIcon: '⚔', campLevel: null,
-            terrain: e.terrain || null, goldEarned: 0, xpEarned: e.xpEarned || 0,
-            modelsLost: e.modelsLost || 0, rounds: e.rounds || 0,
+            outcome:      e.outcome || 'defeat',
+            campName:     e.opponentName || 'Enemy Lord',
+            campIcon:     e.opponentType === 'city' ? '🏯' : '⚔',
+            campLevel:    null,
+            lordLevel:    e.lordLevel || null,
+            terrain:      e.terrain || null,
+            goldEarned:   e.goldEarned || 0,
+            resourceLoot: e.resourceLoot || null,
+            xpEarned:     e.xpEarned || 0,
+            modelsLost:   e.modelsLost || 0, rounds: e.rounds || 0,
             reason: e.report?.reason || '', report: e.report,
           });
         }
@@ -269,6 +278,7 @@ const OverviewScreen = (() => {
       if (pvpNew.length > 0) {
         _stopTicker();
         _player = PlayerService.getById(_player.id);
+        HUD.refresh();
         if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
       }
     } catch (_) {
@@ -319,6 +329,19 @@ const OverviewScreen = (() => {
     const cities = CityService.getPlayerCities(_player.id);
     const lords  = LordService.getByPlayer(_player.id);
     const showOnboarding = cities.length === 0 || lords.length === 0;
+
+    // First render only: a returning player (past onboarding) already knows
+    // what's in their empire, so open on what changed (Movements) rather than
+    // every section at once. A brand-new player has little to browse yet, so
+    // Cities/Lords stay open to reinforce what they just built. Manual toggles
+    // after this are preserved across re-renders (no re-init).
+    if (!_densityInitialized) {
+      _densityInitialized = true;
+      if (!showOnboarding) {
+        _citiesCollapsed = true;
+        _lordsCollapsed  = true;
+      }
+    }
 
     return `
       <div class="ov-screen">
@@ -401,9 +424,9 @@ const OverviewScreen = (() => {
     const classCards = Object.values(LORD_CLASSES).map(_classCardHtml).join('');
 
     return `
-      <div class="modal-overlay hidden" id="recruit-modal">
+      <div class="modal-overlay hidden" id="recruit-modal" role="dialog" aria-modal="true" aria-labelledby="recruit-modal-title">
         <div class="modal-card modal-card--wide">
-          <h2 class="modal-title">Recruit a Lord</h2>
+          <h2 class="modal-title" id="recruit-modal-title">Recruit a Lord</h2>
           <div class="form-group">
             <label class="form-label">Name</label>
             <div class="lc-name-row">
@@ -455,7 +478,7 @@ const OverviewScreen = (() => {
           <span class="ov-mv-status">⚔ INCOMING ATTACK</span>
           ${remaining !== null ? `
             <div class="ov-mv-bar-wrap">
-              <div class="ov-mv-bar"><div class="ov-mv-fill ov-mv-fill--incoming" id="ov-inc-fill-${i}" style="width:${pct}%"></div></div>
+              <div class="ov-mv-bar"><div class="ov-mv-fill ov-mv-fill--incoming" id="ov-inc-fill-${i}" style="transform:scaleX(${pct / 100})"></div></div>
               <span class="ov-mv-time" id="ov-inc-time-${i}">${TimeService.formatDuration(remaining)}</span>
             </div>` : `<span class="ov-mv-time">${t.detail || ''}</span>`}
         </div>`;
@@ -494,7 +517,7 @@ const OverviewScreen = (() => {
           <span class="ov-mv-status">${icon} ${label}</span>
           ${qItem ? `
             <div class="ov-mv-bar-wrap">
-              <div class="ov-mv-bar"><div class="ov-mv-fill${isAttacking ? ' ov-mv-fill--attack' : ''}" id="ov-mv-fill-${lord.id}" style="width:${pct}%"></div></div>
+              <div class="ov-mv-bar"><div class="ov-mv-fill${isAttacking ? ' ov-mv-fill--attack' : ''}" id="ov-mv-fill-${lord.id}" style="transform:scaleX(${pct / 100})"></div></div>
               <span class="ov-mv-time" id="ov-mv-time-${lord.id}">${TimeService.formatDuration(secs)}</span>
             </div>` : ''}
         </div>`;
@@ -578,7 +601,7 @@ const OverviewScreen = (() => {
     return `
       <div class="ov-city-card" data-city-id="${city.id}">
         <div class="ov-cc-art">
-          <img class="ov-cc-art-img" src="${tierImg}" alt="City" />
+          <img class="ov-cc-art-img" src="${tierImg}" alt="City" loading="lazy" />
           <div class="ov-cc-art-fade"></div>
         </div>
         <div class="ov-cc-inner">
@@ -740,7 +763,7 @@ const OverviewScreen = (() => {
     const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || lord.portrait || race.portrait;
     const portraitHtml = portraitSrc
       ? `<div class="ov-lc-portrait">
-           <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" />
+           <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" loading="lazy" />
            <div class="ov-lc-portrait-fade"></div>
            <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
          </div>`
@@ -795,17 +818,6 @@ const OverviewScreen = (() => {
     `;
   }
 
-  // ── Intelligence tab ──────────────────────────────────────────
-
-  const _INTEL_GROUPS = [
-    { type: 'enemy_lord',     label: 'Enemy Lords',     icon: '👑' },
-    { type: 'enemy_city',     label: 'Enemy Cities',    icon: '🏰' },
-    { type: 'bandit_camp',    label: 'Bandit Camps',    icon: '🏕' },
-    { type: 'mercenary_camp', label: 'Mercenary Camps', icon: '⚔' },
-    { type: 'resources',      label: 'Resources',       icon: '💎' },
-    { type: 'ruins',          label: 'Ruins & Relics',  icon: '🏛' },
-  ];
-
   function _timeAgo(ms) {
     const secs = Math.floor(ms / 1000);
     if (secs < 60)            return 'just now';
@@ -814,31 +826,6 @@ const OverviewScreen = (() => {
     const hours = Math.floor(mins / 60);
     if (hours < 24)           return `${hours}h ago`;
     return `${Math.floor(hours / 24)}d ago`;
-  }
-
-  function _intelRecordRow(record) {
-    const discoverer = LordService.getById(record.discoveredBy);
-    const agoLabel   = _timeAgo(TimeService.now() - record.discoveredAt);
-    const tierColors = { vague: '#777788', clear: '#c8a020', precise: '#40c0ff' };
-    const tierColor  = tierColors[record.qualityTier] || '#777788';
-    const details    = record.data
-      ? Object.entries(record.data).filter(([k, v]) => k !== 'summary' && v).map(([k, v]) => `<span class="ov-intel-detail">${k}: ${v}</span>`).join('')
-      : '';
-    return `
-      <div class="ov-intel-row" data-record-id="${record.id}">
-        <div class="ov-intel-row-body">
-          <div class="ov-intel-row-top">
-            <span class="ov-intel-tier" style="color:${tierColor}">${record.qualityTier}</span>
-            <span class="ov-intel-coords">📍 (${record.tileX}, ${record.tileY})</span>
-            ${discoverer ? `<span class="ov-intel-by">by ${discoverer.name}</span>` : ''}
-            <span class="ov-intel-ago">${agoLabel}</span>
-          </div>
-          <div class="ov-intel-summary">${record.data?.summary || ''}</div>
-          ${details ? `<div class="ov-intel-details">${details}</div>` : ''}
-        </div>
-        <button class="ov-intel-dismiss" data-record-id="${record.id}" title="Dismiss">✕</button>
-      </div>
-    `;
   }
 
   // ── Activity feed ─────────────────────────────────────────────
@@ -889,43 +876,6 @@ const OverviewScreen = (() => {
       </section>`;
   }
 
-  function _intelligenceSection() {
-    IntelligenceService.expireOld(_player.id);
-    const records = IntelligenceService.getPlayerRecords(_player.id);
-
-    if (records.length === 0) {
-      return `
-        <section class="ov-section">
-          <div class="ov-section-title">Kingdom Intelligence</div>
-          <div class="ov-intel-empty">
-            <div class="ov-intel-empty-icon">🔍</div>
-            <div class="ov-intel-empty-text">No intelligence reports yet</div>
-            <div class="ov-intel-empty-sub">Send lords to Search Area on tiles. All intel is shared across every lord in your kingdom.</div>
-          </div>
-        </section>
-      `;
-    }
-
-    const byType = {};
-    records.forEach(r => { if (!byType[r.type]) byType[r.type] = []; byType[r.type].push(r); });
-
-    const groupsHtml = _INTEL_GROUPS
-      .filter(g => byType[g.type]?.length > 0)
-      .map(g => `
-        <div class="ov-intel-group">
-          <div class="ov-intel-group-title">${g.icon} ${g.label} (${byType[g.type].length})</div>
-          <div class="ov-intel-group-rows">${byType[g.type].map(_intelRecordRow).join('')}</div>
-        </div>
-      `).join('');
-
-    return `
-      <section class="ov-section">
-        <div class="ov-section-title">Kingdom Intelligence <span class="ov-intel-count">${records.length} record${records.length !== 1 ? 's' : ''}</span></div>
-        ${groupsHtml}
-      </section>
-    `;
-  }
-
   // ── Events ────────────────────────────────────────────────────
 
   function _rerender() {
@@ -960,6 +910,7 @@ const OverviewScreen = (() => {
         if (city) App.navigate('city', { city, lord: _lord, player: _player });
       });
     });
+    A11y.makeClickable(_root, '.ov-city-card[data-city-id]');
 
     document.querySelectorAll('.ov-lord-revive-btn[data-lord-id]').forEach(btn => {
       btn.addEventListener('click', async e => {
@@ -984,6 +935,7 @@ const OverviewScreen = (() => {
         if (lord) App.navigate('lord-screen', { lord, player: _player });
       });
     });
+    A11y.makeClickable(_root, '.ov-lord-card[data-lord-id]');
 
     document.getElementById('ov-found-city-btn')?.addEventListener('click', e => {
       const cost  = parseInt(e.currentTarget.dataset.cost || '0', 10);
@@ -1028,9 +980,13 @@ const OverviewScreen = (() => {
         card.classList.add('lc-class-card--selected');
       });
     });
+    A11y.makeClickable(document.getElementById('recruit-modal'), '.lc-class-card[data-class-id]');
 
     document.getElementById('recruit-modal')?.addEventListener('click', e => {
       if (e.target === e.currentTarget) document.getElementById('recruit-modal').classList.add('hidden');
+    });
+    document.getElementById('recruit-modal')?.addEventListener('keydown', e => {
+      if (e.key === 'Escape') document.getElementById('recruit-modal').classList.add('hidden');
     });
 
     document.getElementById('rl-confirm')?.addEventListener('click', _onRecruitConfirm);
@@ -1049,13 +1005,6 @@ const OverviewScreen = (() => {
         _stopTicker();
         const lord = LordService.getById(btn.dataset.lordId);
         if (lord) App.navigate('lord-screen', { lord, player: _player, openTab: 'battles' });
-      });
-    });
-
-    document.querySelectorAll('.ov-intel-dismiss[data-record-id]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        IntelligenceService.removeRecord(_player.id, btn.dataset.recordId);
-        _rerender();
       });
     });
   }

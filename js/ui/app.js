@@ -69,6 +69,8 @@ const App = (() => {
                   terrain: evt.record?.terrain ?? 'plains',
                   rewards: evt.rewards || [],
                   recordId: (evt.category === 'combat' && evt.record) ? evt.record.id : undefined,
+                  lordId:   evt.lordId || undefined,
+                  lordName: evt.lordName || undefined,
                 });
               }
             }
@@ -95,6 +97,8 @@ const App = (() => {
         race:         existingData?.race    ?? session.user.user_metadata?.race ?? null,
         createdAt:    existingData?.createdAt ?? Date.now(),
         passwordHash: '__supabase__',
+        // Restore honorPoints from Supabase dedicated key (survives server-side player rewrites)
+        honorPoints:  serverData['honor_points'] ?? existingData?.honorPoints ?? 0,
       };
 
       localStorage.setItem('realms_players', JSON.stringify(players));

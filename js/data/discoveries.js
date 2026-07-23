@@ -519,10 +519,10 @@ var DISCOVERY_DEFS = {
   },
 
   // Intelligence-only entries — baseWeight 0 so they are never rolled randomly.
-  // Written directly by _scanIntelligence() in lord-screen.js.
+  // Written directly by _resolveScout() in lord-screen.js (the Scout action).
   enemy_city: {
     id:          'enemy_city',
-    name:        'Ciudad Enemiga',
+    name:        'Enemy City',
     icon:        '🏯',
     category:    'intelligence',
     baseWeight:  0,
@@ -531,7 +531,7 @@ var DISCOVERY_DEFS = {
   },
   enemy_lord: {
     id:          'enemy_lord',
-    name:        'Señor Enemigo',
+    name:        'Enemy Lord',
     icon:        '👑',
     category:    'intelligence',
     baseWeight:  0,

@@ -501,6 +501,17 @@ export function catchUp(state, nowMs, engine = null) {
         lord.pendingPvpAttack = { tileX: done.destX, tileY: done.destY };
       }
 
+      // scout: flag for deferred resolution. This module has zero imports and
+      // only ever sees this one player's own state slice, so it can't check
+      // other players' lords/stances or gather cross-player intel itself —
+      // same reason attack-intent moves above only set a flag instead of
+      // resolving inline. server/combat-resolver.js's resolveScout() does the
+      // actual ambush-check + intel-gathering once drained (by the dispatcher
+      // for offline players, or POST /api/lord/scout-resolve for online ones).
+      if (done.actionId === 'scout') {
+        lord.pendingScoutResolve = { tileX: lord.x, tileY: lord.y };
+      }
+
       events.push({
         type: 'lord_action_done', lordId: lord.id, lordName: lord.name || '',
         actionId: done.actionId || 'move_lord',

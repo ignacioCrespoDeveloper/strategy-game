@@ -27,6 +27,7 @@ const ActivityScreen = (() => {
       battle_defeat:  'af-defeat',
       battle_draw:    'af-draw',
       discovery:      'af-discovery',
+      scout_result:   'af-discovery',
       lord_moved:     'af-move',
       action_complete:'af-action',
     };
@@ -47,7 +48,7 @@ const ActivityScreen = (() => {
             ? `<button class="af-report-btn" data-lord-id="${reportLordId}" title="View battle report">📋 Report</button>`
             : '';
           return `
-            <div class="af-entry ${css}">
+            <div class="af-entry ${css}" data-entry-id="${e.id}">
               <span class="af-icon">${e.icon}</span>
               <div class="af-body">
                 <span class="af-title">${e.title}</span>
@@ -58,6 +59,7 @@ const ActivityScreen = (() => {
                 ${e.lordName ? `<span class="af-lord">${e.lordName}</span>` : ''}
                 <span class="af-time">${date}</span>
               </div>
+              <button class="af-dismiss" data-entry-id="${e.id}" title="Delete">✕</button>
             </div>`;
         }).join('');
 
@@ -66,6 +68,7 @@ const ActivityScreen = (() => {
         <div class="act-header">
           <h1 class="act-title">📋 Recent Activity</h1>
           ${feed.length > 0 ? `<span class="act-count">${feed.length} event${feed.length !== 1 ? 's' : ''}</span>` : ''}
+          ${feed.length > 0 ? `<button class="act-clear-btn" id="act-clear-all">Clear all</button>` : ''}
         </div>
         <div class="act-list af-list">${content}</div>
       </div>
@@ -78,6 +81,23 @@ const ActivityScreen = (() => {
         const lord = LordService.getById(btn.dataset.lordId);
         if (lord) App.navigate('lord-screen', { lord, player: _player, openTab: 'battles' });
       });
+    });
+
+    root.querySelectorAll('.af-dismiss[data-entry-id]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        ActivityService.remove(_player.id, btn.dataset.entryId);
+        Nav.refreshBadge();
+        root.innerHTML = _html();
+        _bindEvents(root);
+      });
+    });
+
+    root.querySelector('#act-clear-all')?.addEventListener('click', () => {
+      ActivityService.clear(_player.id);
+      Nav.refreshBadge();
+      root.innerHTML = _html();
+      _bindEvents(root);
     });
   }
 

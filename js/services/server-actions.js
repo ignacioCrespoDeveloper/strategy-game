@@ -127,6 +127,16 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/lord/action  (action: 'scout')
+  // Enqueues a scout action server-side (duration scales with effective speed).
+  async function lordScout(lordId) {
+    const result = await _post('/api/lord/action', { lordId, action: 'scout' });
+    if (result.ok && result.lord) {
+      StorageService.hydrate({ lords: _mergeLord(result.lord) });
+    }
+    return result;
+  }
+
   // POST /api/lord/create
   // Creates a new lord server-side (validates globally unique name, deducts cost).
   // Race is read from player.race server-side — do not pass raceId.
@@ -409,6 +419,28 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/lord/mounts
+  // Equip (or swap) a mount, unlocked at level 5. Not permanent — can be re-called to swap.
+  // Each swap costs gold (MOUNT_POOL[id].cost), so hydrates both lords and players.
+  async function spendMount(lordId, mountId) {
+    const result = await _post('/api/lord/mounts', { lordId, mountId });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord) {
+        const lords = StorageService.get('lords') || {};
+        lords[result.lord.id] = result.lord;
+        patch.lords = lords;
+      }
+      if (result.player) {
+        const players = StorageService.get('players') || {};
+        players[result.player.id] = result.player;
+        patch.players = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
   // POST /api/lord/quest-resolve
   // Called when a search_area timer expires (browser open). catchUp in loadAndCatchUp
   // has already rolled the discovery into lord.pendingDiscoveries[]; this endpoint
@@ -432,5 +464,17 @@ const ServerActions = (() => {
     return result;
   }
 
-  return { build, recruit, lordMove, lordSearch, createLord, foundCity, hireMerc, reviveLord, disbandUnit, syncNow, instantBuild, savePveResult, instantLordAction, setPlayerRace, spendTalents, saveLordXp, questResolve };
+  // POST /api/lord/scout-resolve
+  // Called when a scout timer expires (browser open). Returns { outcome:
+  // 'intel'|'ambushed'|'none', discoveries?, report?, terrain? } — this
+  // endpoint does the actual ambush-check + intel-gathering server-side
+  // (cross-player data loadAndCatchUp's single-player load can't see).
+  // knownTiers: { [lordId|cityId]: 'vague'|'clear'|'precise' } — same
+  // contract as scanTile, lets the server progress tiers instead of
+  // re-sending full detail every scout.
+  async function scoutResolve(lordId, knownTiers) {
+    return _post('/api/lord/scout-resolve', { lordId, knownTiers });
+  }
+
+  return { build, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, disbandUnit, syncNow, instantBuild, savePveResult, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve };
 })();

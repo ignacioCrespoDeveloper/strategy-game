@@ -11,21 +11,28 @@
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { UNIT_DEFS, TALENT_POOL }   from '../engine-loader.js';
 
-const ARMY_LIMIT = 10;
-
-function _totalUnits(army) {
-  return (army?.units || []).length;
+// Army capacity is gated by Army Power alone — the same combat-strength
+// score (atk×3 + def×2 + hp/10 + speed, summed per model) shown to the
+// player everywhere else as "PWR". There is deliberately no separate
+// unit-count/weight-based "command capacity" or stack-count "slot limit"
+// any more — those were a second, differently-scaled mechanic the UI could
+// never keep in sync with, which is exactly what caused the confusion this
+// replaces. Mirrors js/domain/lord.js's getArmyPowerCap()/_armyPower().
+function _unitPower(def) {
+  const s = def?.combatStats || {};
+  return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
 }
 
-function _totalWeight(army) {
+function _armyPower(army) {
   return (army?.units || []).reduce((sum, stack) => {
     const def = UNIT_DEFS[stack.unitId];
-    return sum + (def?.armyWeight || 1) * stack.count;
+    return sum + (def ? _unitPower(def) : 0) * stack.count;
   }, 0);
 }
 
-function _commandCapacity(lord) {
-  return 6 + 2 * (lord.level || 1);
+function _armyPowerCap(lord, talentPool) {
+  const bonus = talentPool?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  return 200 + (lord.level || 1) * 80 + bonus;
 }
 
 export async function handleRecruit(req, res) {
@@ -54,14 +61,7 @@ export async function handleRecruit(req, res) {
   const def = UNIT_DEFS[unitId];
   if (!def) return res.status(400).json({ ok: false, error: 'Unknown unit.' });
 
-  const army        = armies[lordId] || { units: [] };
-  const currentSize = _totalUnits(army);
-  if (currentSize + count > ARMY_LIMIT) {
-    return res.status(400).json({
-      ok: false,
-      error: `Army is full (${currentSize}/${ARMY_LIMIT}). Dismiss units first.`,
-    });
-  }
+  const army = armies[lordId] || { units: [] };
 
   if ((def.armyWeight || 1) >= 12 && (lord.level || 1) < 12) {
     return res.status(400).json({
@@ -70,13 +70,13 @@ export async function handleRecruit(req, res) {
     });
   }
 
-  const capacity    = _commandCapacity(lord);
-  const usedWeight  = _totalWeight(army);
-  const addedWeight = (def.armyWeight || 1) * count;
-  if (usedWeight + addedWeight > capacity) {
+  const cap        = _armyPowerCap(lord, TALENT_POOL);
+  const usedPower  = _armyPower(army);
+  const addedPower = _unitPower(def) * count;
+  if (usedPower + addedPower > cap) {
     return res.status(400).json({
       ok: false,
-      error: `Not enough command capacity. Used ${usedWeight}/${capacity} pts. ${def.name} costs ${def.armyWeight || 1} pts each.`,
+      error: `Not enough army power capacity. Used ${usedPower}/${cap} PWR. ${def.name} costs ${_unitPower(def)} PWR each.`,
     });
   }
 

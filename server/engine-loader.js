@@ -51,5 +51,6 @@ export const LORD_BASE_STATS     = _ctx.LORD_BASE_STATS;
 export const LORD_CLASSES        = _ctx.LORD_CLASSES;
 export const STANCE_DEFS         = _ctx.STANCE_DEFS;
 export const TALENT_POOL         = _ctx.TALENT_POOL;
+export const MOUNT_POOL          = _ctx.MOUNT_POOL;
 export const DISCOVERY_DEFS      = _ctx.DISCOVERY_DEFS;
 export const CAMP_DEFS           = _ctx.CAMP_DEFS;

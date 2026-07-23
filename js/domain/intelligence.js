@@ -45,10 +45,12 @@ const IntelligenceService = (() => {
   // Everyone else → 'vague'
 
   // currentTier: the existing tier for this record (null = first time seeing it).
-  // Cities use progressive tiers: null→vague, vague→clear, clear→precise.
+  // enemy_city and enemy_lord both use progressive tiers: null→vague, vague→clear, clear→precise.
+  // This mirrors the server's own _qualityTier in combat-resolver.js — the server enforces
+  // the same progression when truncating scan responses, so keep the two in sync.
   function getQualityTier(lord, type, currentTier = null) {
     if (lord.classId === 'rogue') return 'precise';
-    if (type === 'enemy_city') {
+    if (type === 'enemy_city' || type === 'enemy_lord') {
       if (currentTier === null)    return 'vague';
       if (currentTier === 'vague') return 'clear';
       return 'precise';
@@ -63,32 +65,50 @@ const IntelligenceService = (() => {
 
   const _DATA_BUILDERS = {
     enemy_lord(tier, raw) {
-      // Identity fields are always included — the server has full access and
-      // writes them into rawData regardless of scanning lord's class.
+      // The server (combat-resolver.js scanTile) already truncates rawData to
+      // this exact tier before it ever crosses the wire — this builder just
+      // formats whatever fields are present, it isn't the enforcement point.
+      if (tier === 'vague') {
+        return {
+          summary:   'Hostile lord sighted.',
+          lordId:    raw?.lordId    || null,
+          forceSize: raw?.forceSize || 'Unknown Force',
+        };
+      }
       const base = {
+        summary:        tier === 'clear' ? 'Enemy lord identified.' : 'Enemy lord fully scouted.',
         lordId:         raw?.lordId         || null,
         lordName:       raw?.lordName       || null,
         lordRace:       raw?.lordRace       || null,
         lordLevel:      raw?.lordLevel      || null,
         lordClass:      raw?.lordClass      || null,
         playerUsername: raw?.playerUsername || null,
-        armyCapacity:   raw?.armyCapacity   ?? null,
-        units:          raw?.units          || [],
-        lastActivity:   raw?.lastActivity   || null,
+        forceSize:      raw?.forceSize      || 'Unknown Force',
       };
-      // Stance detail only with precise (rogue) scan
-      if (tier === 'precise') {
-        return { ...base, stanceId: raw?.stanceId || null, stanceName: raw?.stanceName || null };
-      }
-      return base;
+      if (tier === 'clear') return base;
+      /* precise */ return {
+        ...base,
+        armyCapacity: raw?.armyCapacity ?? null,
+        units:        raw?.units        || [],
+        lastActivity: raw?.lastActivity || null,
+        stanceId:     raw?.stanceId     || null,
+        stanceName:   raw?.stanceName   || null,
+      };
     },
     enemy_city(tier, raw) {
-      const name          = raw?.name || 'Desconocido';
-      const garrisonCount = raw?.garrisonCount ?? null;
-      const garrisonUnits = raw?.garrisonUnits || [];
-      if (tier === 'vague')   return { summary: 'Asentamiento enemigo avistado.', name, garrisonCount, garrisonUnits: null };
-      if (tier === 'clear')   return { summary: 'Ciudad enemiga reconocida.',     name, garrisonCount, garrisonUnits };
-      /* precise */           return { summary: 'Ciudad enemiga identificada.',   name, garrisonCount, garrisonUnits, population: raw?.population };
+      const name = raw?.name || 'Unknown';
+      // vague reveals only a bucketed force-size label, never an exact
+      // garrison count — same "no leaked numbers" rule as enemy_lord.
+      if (tier === 'vague') {
+        return { summary: 'Enemy settlement sighted.', name, cityId: raw?.cityId || null, forceSize: raw?.forceSize || 'Unknown' };
+      }
+      if (tier === 'clear') {
+        return { summary: 'Enemy city scouted.', name, cityId: raw?.cityId || null, forceSize: raw?.forceSize, garrisonUnits: raw?.garrisonUnits || [] };
+      }
+      /* precise */ return {
+        summary: 'Enemy city identified.', name, cityId: raw?.cityId || null,
+        garrisonCount: raw?.garrisonCount ?? null, garrisonUnits: raw?.garrisonUnits || [], population: raw?.population,
+      };
     },
     bandit_camp(tier, raw) {
       if (tier === 'vague')   return { summary: 'Hostile presence detected.' };

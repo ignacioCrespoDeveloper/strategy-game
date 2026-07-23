@@ -18,7 +18,7 @@
 
 import { createClient }     from '@supabase/supabase-js';
 import { catchUp }          from './catch-up.js';
-import { resolvePvpBattle } from '../combat-resolver.js';
+import { resolvePvpBattle, resolveScout } from '../combat-resolver.js';
 import {
   DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL,
   LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS,
@@ -73,6 +73,21 @@ async function _advancePlayer(admin, playerId) {
       await resolvePvpBattle(admin, playerId, lord.id, tileX, tileY);
     } catch (e) {
       console.warn(`[dispatcher] PvP resolve failed for lord ${lord.id}:`, e.message);
+    }
+  }
+
+  // Drain any pending scout resolutions (offline case — the player's browser
+  // was closed when the scout action completed). No knownTiers available
+  // here, so an offline-resolved scout always comes back at 'vague' tier
+  // (unless Rogue) — same limitation search_area's offline path already has
+  // for tier progression, not a new gap.
+  for (const lord of Object.values(result.lords)) {
+    if (!lord?.pendingScoutResolve) continue;
+    const { tileX, tileY } = lord.pendingScoutResolve;
+    try {
+      await resolveScout(admin, playerId, lord.id, tileX, tileY);
+    } catch (e) {
+      console.warn(`[dispatcher] Scout resolve failed for lord ${lord.id}:`, e.message);
     }
   }
 }

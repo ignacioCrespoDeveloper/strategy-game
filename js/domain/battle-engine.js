@@ -411,13 +411,13 @@ var BattleEngine = (() => {
     // The `routed` flag on each entry lets the UI show them differently.
     const surviving = side.units
       .filter(u => u.count > 0)
-      .map(u => ({ sourceId: u.sourceId, count: u.count, avgHp: u.currentHp, routed: u.isRouting }));
+      .map(u => ({ sourceId: u.sourceId, name: u.name, count: u.count, avgHp: u.currentHp, routed: u.isRouting }));
 
     // modelsLost = only actual deaths (count decremented by overflow damage)
     const modelsLost = side.units.reduce((sum, u) => sum + (u.startCount - u.count), 0);
 
     return {
-      unitsStart:     side.units.map(u => ({ sourceId: u.sourceId, count: u.startCount })),
+      unitsStart:     side.units.map(u => ({ sourceId: u.sourceId, name: u.name, count: u.startCount })),
       unitsSurviving: surviving,
       modelsLost:     Math.max(0, modelsLost),
       moraleEnd:      Math.round(Math.max(0, side.morale)),
@@ -425,14 +425,23 @@ var BattleEngine = (() => {
     };
   }
 
+  const _LOOT_RES_TYPES = ['food', 'wood', 'stone', 'iron'];
+
   function _buildReport(ctx, winner, reason, rounds, events) {
     // ctx.encounter is absent when called from the battle simulator (no PvE encounter)
     const enc = ctx.encounter || null;
     let lootGold = 0;
+    let lootResource = null; // { [resType]: amount } — a single random resource, camps hold plundered goods.
+    // Same shape as the PvP city-loot object (server/combat-resolver.js _lootResources),
+    // just sparse to one key, so both feed the same display code client-side.
     let xpEarned = 0;
     if (enc) {
       if (winner === 'attacker') {
         lootGold = Math.floor((enc.loot?.goldMin ?? 0) + Math.random() * ((enc.loot?.goldMax ?? 0) - (enc.loot?.goldMin ?? 0)));
+        if (enc.loot?.resMax > 0) {
+          const amount = Math.floor((enc.loot.resMin ?? 0) + Math.random() * (enc.loot.resMax - (enc.loot.resMin ?? 0)));
+          if (amount > 0) lootResource = { [_LOOT_RES_TYPES[Math.floor(Math.random() * _LOOT_RES_TYPES.length)]]: amount };
+        }
         xpEarned = enc.xpReward?.win ?? 0;
       } else {
         xpEarned = enc.xpReward?.loss ?? 0;
@@ -446,7 +455,7 @@ var BattleEngine = (() => {
       attacker:  _sideReport(ctx.attacker),
       defender:  _sideReport(ctx.defender),
       xpEarned,
-      loot:      { gold: lootGold },
+      loot:      { gold: lootGold, resource: lootResource },
       events,
     };
   }

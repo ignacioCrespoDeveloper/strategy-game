@@ -9,6 +9,10 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
+import { catchUp } from '../tick/catch-up.js';
+import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS } from '../engine-loader.js';
+
+const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS };
 
 export async function handleInstantAction(req, res) {
   const { lordId } = req.body || {};
@@ -44,7 +48,37 @@ export async function handleInstantAction(req, res) {
 
   player.credits = (player.credits || 0) - cost;
 
-  // Complete the action: dequeue it and apply side-effects (move updates position)
+  if (action.actionId === 'search_area') {
+    // For quest actions: backdate finishAt and re-run catchUp with engine so
+    // _resolveSearchArea fires and pushes into lord.pendingDiscoveries[].
+    // quest-resolve.js drains pendingDiscoveries and returns them to the client.
+    lord.actionQueue[0]     = { ...action, finishAt: Date.now() - 1 };
+    lord.pendingDiscoveries = []; // clear stale entries so only this quest's result is returned
+    lords[lordId] = lord;
+    const cu = catchUp({ player, lords, cities, armies }, Date.now(), _ENGINE);
+    await saveState(admin, playerId, rawPlayers, {
+      player: cu.player, lords: cu.lords, cities: cu.cities, armies: cu.armies,
+    });
+    return res.json({ ok: true, lord: cu.lords[lordId], player: cu.player, completedAction: action });
+  }
+
+  if (action.actionId === 'scout') {
+    // Backdate + catchUp only sets lord.pendingScoutResolve (catchUp is a
+    // single-player module — it can't do the cross-player ambush-check or
+    // intel-gathering itself). The client follows up with
+    // ServerActions.scoutResolve(), same as the normal countdown-expiry path,
+    // which calls resolveScout() in combat-resolver.js to do that part.
+    lord.actionQueue[0]     = { ...action, finishAt: Date.now() - 1 };
+    lord.pendingScoutResolve = null; // clear stale entries so only this scout's result is returned
+    lords[lordId] = lord;
+    const cu = catchUp({ player, lords, cities, armies }, Date.now(), _ENGINE);
+    await saveState(admin, playerId, rawPlayers, {
+      player: cu.player, lords: cu.lords, cities: cu.cities, armies: cu.armies,
+    });
+    return res.json({ ok: true, lord: cu.lords[lordId], player: cu.player, completedAction: action });
+  }
+
+  // For move/other: dequeue manually and apply position side-effects
   const completed = lord.actionQueue.shift();
   if (completed.actionId === 'move_lord' && completed.destX != null) {
     lord.x = completed.destX;

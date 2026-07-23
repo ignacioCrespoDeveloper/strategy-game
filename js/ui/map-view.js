@@ -7,6 +7,11 @@ const MapView = (() => {
   const GAP  = 1;
   const STEP = TILE + GAP;
 
+  // Shared fog-of-war tier styling — used by both the enemy-city and
+  // enemy-lord cards in the tile panel.
+  const _TIER_COLORS = { vague: '#888899', clear: '#c8b040', precise: '#40c0ff' };
+  const _TIER_LABELS = { vague: 'Vague', clear: 'Clear', precise: 'Precise' };
+
   let _canvas        = null;
   let _ctx           = null;
   let _lord          = null;
@@ -17,10 +22,14 @@ const MapView = (() => {
   let _selectedTile  = null;
   let _movingLord    = null;
   let _moveTarget    = null;
-  let _tileEnemies   = [];
-  let _scanningTile  = null;
-  let _scanDone      = false;
-  let _scanError     = null;
+  // Keyboard-cursor state: lets a keyboard-only user move a focus ring across
+  // the canvas with arrow keys and select with Enter/Space, mirroring mouse click.
+  let _keyCursor     = null;
+  let _canvasFocused = false;
+  // Live, zero-stats existence layer for enemy lords (army > 0 only) — "x,y"
+  // strings from /api/scan/presence. Cities already have an equivalent via
+  // the global world_state table (WorldService.getOccupiedTiles()).
+  let _presence       = new Set();
 
   // ── Entry point ───────────────────────────────────────────────
 
@@ -31,29 +40,30 @@ const MapView = (() => {
     _selectedTile = null;
     _moveTarget   = null;
     _movingLord   = mode === 'move-lord' ? lord : null;
+    _keyCursor    = { x: lord?.x ?? Math.floor(_size / 2), y: lord?.y ?? Math.floor(_size / 2) };
 
     root.innerHTML = `
       <div class="map-screen">
 
         <div class="map-move-bar${_movingLord ? '' : ' hidden'}" id="map-move-bar">
-          <span class="map-move-msg" id="map-move-msg">${_movingLord ? `📍 Selecciona destino para <b>${_movingLord.name}</b>` : ''}</span>
-          <button class="map-cancel-move-btn" id="map-cancel-move">✕ Cancelar</button>
+          <span class="map-move-msg" id="map-move-msg">${_movingLord ? `📍 Select a destination for <b>${_movingLord.name}</b>` : ''}</span>
+          <button class="map-cancel-move-btn" id="map-cancel-move">✕ Cancel</button>
         </div>
 
         <div class="map-body">
           <div class="map-area" id="map-area">
-            <canvas id="world-canvas"></canvas>
+            <canvas id="world-canvas" tabindex="0" role="application" aria-label="World map. Use arrow keys to move the cursor, Enter to select a tile."></canvas>
             <div class="map-prompt" id="map-prompt"></div>
           </div>
-          <aside class="map-info-panel" id="map-info-panel">
+          <aside class="map-info-panel" id="map-info-panel" aria-live="polite">
             ${_movingLord && _movingLord.x != null ? _selectDestHtml() : _emptyPanelHtml()}
           </aside>
         </div>
 
         <!-- Found-city modal -->
-        <div class="modal-overlay hidden" id="found-modal">
+        <div class="modal-overlay hidden" id="found-modal" role="dialog" aria-modal="true" aria-labelledby="found-modal-title">
           <div class="modal-card">
-            <h2 class="modal-title">Found a City</h2>
+            <h2 class="modal-title" id="found-modal-title">Found a City</h2>
             <p class="modal-sub" id="found-coords"></p>
             <div class="form-group">
               <label class="form-label" for="city-name-input">City Name</label>
@@ -77,7 +87,9 @@ const MapView = (() => {
     _initCanvas();
     _bindEvents();
     _draw();
+    _updateCanvasAriaLabel();
     _updatePrompt();
+    _fetchPresence();
   }
 
   // ── Canvas setup ─────────────────────────────────────────────
@@ -120,9 +132,13 @@ const MapView = (() => {
       ? new Set(IntelligenceService.getByType(_player.id, 'enemy_city').map(r => `${r.tileX},${r.tileY}`))
       : new Set();
 
-    const enemyLordTiles = _player
+    // Two separate layers: intel (scouted via Search Area, tiered detail)
+    // and presence (live, zero-stats, always current — drives the marker
+    // even before any scouting has happened, same as cities already work).
+    const intelLordTiles = _player
       ? new Set(IntelligenceService.getByType(_player.id, 'enemy_lord').map(r => `${r.tileX},${r.tileY}`))
       : new Set();
+    const presenceOnlyTiles = new Set([..._presence].filter(k => !intelLordTiles.has(k)));
 
     const banditTiles = _player
       ? new Set(DiscoveryService.getActive(_player.id)
@@ -168,10 +184,11 @@ const MapView = (() => {
       _ctx.fillText('⚔', px + TILE / 2, py + TILE / 2);
     });
 
-    // ── Enemy lords from intel records ───────────────────────
-    // Only rendered where an enemy_lord IntelRecord exists.
-    // Intel expires after 30 min (set in _scanIntelligence TTL).
-    enemyLordTiles.forEach(key => {
+    // ── Enemy lords — known (intel) vs presence-only (unscouted) ─────
+    // Intel expires after a TTL (set by the Scout action's server response); presence
+    // is re-fetched live on map open / tile select and always reflects
+    // current server state.
+    intelLordTiles.forEach(key => {
       if (cityMap[key]) return; // city tiles handled by city rendering
       const [ex, ey] = key.split(',').map(Number);
       const px = _offset.x + ex * STEP;
@@ -185,6 +202,27 @@ const MapView = (() => {
       _ctx.textAlign    = 'center';
       _ctx.textBaseline = 'middle';
       _ctx.fillText('👁', px + TILE / 2, py + TILE / 2);
+    });
+
+    // Presence-only: something is here, but never scouted — subdued marker,
+    // distinct from the intel-known 👁 above.
+    presenceOnlyTiles.forEach(key => {
+      if (cityMap[key]) return;
+      const [ex, ey] = key.split(',').map(Number);
+      const px = _offset.x + ex * STEP;
+      const py = _offset.y + ey * STEP;
+      if (px + TILE < 0 || px > W || py + TILE < 0 || py > H) return;
+      _ctx.strokeStyle = 'rgba(140,140,150,0.55)';
+      _ctx.lineWidth   = 1;
+      _ctx.setLineDash([2, 2]);
+      _roundRect(px + 1, py + 1, TILE - 2, TILE - 2, 2);
+      _ctx.stroke();
+      _ctx.setLineDash([]);
+      _ctx.font         = `${Math.floor(TILE * 0.32)}px serif`;
+      _ctx.textAlign    = 'center';
+      _ctx.textBaseline = 'middle';
+      _ctx.fillStyle    = 'rgba(180,180,190,0.75)';
+      _ctx.fillText('❔', px + TILE / 2, py + TILE / 2);
     });
 
     // ── Lords — draw on ALL tiles, including city tiles ───────
@@ -339,6 +377,19 @@ const MapView = (() => {
         _ctx.fill();
       }
     }
+
+    // Keyboard-cursor ring — only drawn while the canvas actually has
+    // keyboard focus, so mouse-only users never see an extra ring they
+    // didn't ask for.
+    if (_canvasFocused && _keyCursor) {
+      const px = _offset.x + _keyCursor.x * STEP;
+      const py = _offset.y + _keyCursor.y * STEP;
+      _ctx.strokeStyle = '#c8933a';
+      _ctx.lineWidth   = 2;
+      _ctx.setLineDash([4, 3]);
+      _ctx.strokeRect(px - 1, py - 1, TILE + 2, TILE + 2);
+      _ctx.setLineDash([]);
+    }
   }
 
   function _drawTile(px, py, x, y, cityId, myCityIds, isCityKnown, isSelected) {
@@ -423,7 +474,7 @@ const MapView = (() => {
     return `
       <div class="mip-empty">
         <div class="mip-empty-icon">🗺</div>
-        <div class="mip-empty-text">Toca cualquier tile</div>
+        <div class="mip-empty-text">Tap any tile</div>
       </div>
     `;
   }
@@ -432,8 +483,8 @@ const MapView = (() => {
     return `
       <div class="mip-empty">
         <div class="mip-empty-icon">📍</div>
-        <div class="mip-empty-text">Selecciona el destino</div>
-        <div class="mip-empty-sub" style="font-size:0.7rem;color:var(--text-muted);text-align:center;padding:0 1rem">Toca el tile de destino para ver el tiempo de viaje</div>
+        <div class="mip-empty-text">Select a destination</div>
+        <div class="mip-empty-sub" style="font-size:0.7rem;color:var(--text-muted);text-align:center;padding:0 1rem">Tap the destination tile to see travel time</div>
       </div>
     `;
   }
@@ -451,7 +502,7 @@ const MapView = (() => {
 
     return `
       <div class="mip-section">
-        <div class="mip-section-label">🗺 Mover Lord</div>
+        <div class="mip-section-label">🗺 Move Lord</div>
         <div class="mip-tile-header">
           <div class="mip-tile-icon">${race.icon || '👤'}</div>
           <div>
@@ -463,26 +514,26 @@ const MapView = (() => {
       <div class="mip-divider"></div>
       <div class="mip-section">
         <div class="mip-stat-row">
-          <span class="mip-label">Desde</span>
+          <span class="mip-label">From</span>
           <span class="mip-value">${fromTerrain.icon} (${lord.x}, ${lord.y})</span>
         </div>
         <div class="mip-stat-row">
-          <span class="mip-label">Hasta</span>
+          <span class="mip-label">To</span>
           <span class="mip-value">${toTerrain.icon} (${tx}, ${ty})</span>
         </div>
         <div class="mip-stat-row">
-          <span class="mip-label">Distancia</span>
+          <span class="mip-label">Distance</span>
           <span class="mip-value">${dist} tile${dist !== 1 ? 's' : ''}</span>
         </div>
         <div class="mip-stat-row">
-          <span class="mip-label">Tiempo</span>
+          <span class="mip-label">Time</span>
           <span class="mip-value mip-value--gold">⏱ ${TimeService.formatDuration(secs)}</span>
         </div>
       </div>
       <div class="mip-divider"></div>
       <div class="mip-section">
-        <button class="btn-primary mip-action-btn" id="mip-confirm-move-btn">✓ Confirmar Movimiento</button>
-        <button class="mip-cancel-move-link" id="mip-cancel-move-btn">✕ Cancelar</button>
+        <button class="btn-primary mip-action-btn" id="mip-confirm-move-btn">✓ Confirm Move</button>
+        <button class="mip-cancel-move-link" id="mip-cancel-move-btn">✕ Cancel</button>
       </div>
     `;
   }
@@ -490,9 +541,14 @@ const MapView = (() => {
   function _tilePanelHtml(x, y) {
     const terrain   = WorldService.getTerrain(x, y);
     const cityId    = WorldService.getTile(x, y);
+    // rawCity is only ever non-null for the player's OWN cities — client-side
+    // CityService is RLS-scoped and structurally can't see other players'
+    // city records. Gating intelRec on `rawCity` (instead of the globally-
+    // visible `cityId` from world_state) meant an enemy city's intel could
+    // never be found here regardless of how many times it was scouted — bug.
     const rawCity   = cityId ? CityService.getById(cityId) : null;
-    const isOwnCity = rawCity && _player && CityService.getPlayerCities(_player.id).some(c => c.id === cityId);
-    const intelRec  = (!isOwnCity && rawCity && _player)
+    const isOwnCity = !!rawCity && _player && CityService.getPlayerCities(_player.id).some(c => c.id === cityId);
+    const intelRec  = (!isOwnCity && cityId && _player)
       ? IntelligenceService.getByType(_player.id, 'enemy_city').find(r => r.tileX === x && r.tileY === y)
       : null;
     const isDiscoveredEnemy = !!intelRec;
@@ -509,8 +565,6 @@ const MapView = (() => {
         })
       : [];
 
-    // Enemy lords come from the auto-scan result (updated asynchronously after tile click).
-    // _tileEnemies holds rawData objects directly — no intel record wrapper needed.
     const myLordsIdle = _player
       ? LordService.getByPlayer(_player.id).filter(l => l.actionQueue.length === 0 && l.x != null)
       : [];
@@ -520,7 +574,7 @@ const MapView = (() => {
       <div class="mip-section">
         <div class="mip-terrain-card">
           ${terrain.image
-            ? `<img class="mip-tc-img" src="${terrain.image}" alt="${terrain.name}" />`
+            ? `<img class="mip-tc-img" src="${terrain.image}" alt="${terrain.name}" loading="lazy" />`
             : `<div class="mip-tc-icon-fallback"><span>${terrain.icon}</span></div>`}
           <div class="mip-tc-overlay"></div>
           <div class="mip-tc-body">
@@ -588,7 +642,7 @@ const MapView = (() => {
         <div class="mip-section">
         <div class="ov-city-card mip-card-wide" id="mip-open-city-btn" data-city-id="${rawCity.id}" style="cursor:pointer">
           <div class="ov-cc-art">
-            <img class="ov-cc-art-img" src="${_tierImg}" alt="${rawCity.name}" />
+            <img class="ov-cc-art-img" src="${_tierImg}" alt="${rawCity.name}" loading="lazy" />
             <div class="ov-cc-art-fade"></div>
           </div>
           <div class="ov-cc-inner">
@@ -636,8 +690,6 @@ const MapView = (() => {
       // Scouted enemy city — card matching own city format
       const idata      = intelRec.data;
       const intelTier  = intelRec.qualityTier;
-      const TIER_COLORS = { vague: '#888899', clear: '#c8b040', precise: '#40c0ff' };
-      const TIER_LABELS = { vague: 'Vague', clear: 'Clear', precise: 'Precise' };
       const knownPop   = intelTier === 'precise' && idata.population ? idata.population : null;
       const cityLevel  = knownPop ? (() => {
         if (knownPop >= 100000) return 5;
@@ -649,27 +701,30 @@ const MapView = (() => {
       const _tierImgs  = ['assets/city/tier1.webp','assets/city/tier1.webp','assets/city/tier2.jpg','assets/city/tier3.jpg','assets/city/tier4.jpg','assets/city/tier4.jpg'];
       const _tierImg   = _tierImgs[Math.min(cityLevel || 1, _tierImgs.length - 1)];
       const ownerLabel = idata.playerUsername ? `👤 ${idata.playerUsername}` : 'Enemy';
+      // vague only ever reveals a bucketed force-size label, never an exact
+      // garrison count (same rule as enemy lords) — clear/precise show the
+      // real composition once actually scouted that far.
       let garrisonHtml = '';
-      if (intelTier === 'vague' && idata.garrisonCount != null) {
-        garrisonHtml = `<div class="ov-cc-stat"><span class="ov-cc-stat-label">Garrison</span><span class="ov-cc-stat-value">~${idata.garrisonCount} units</span></div>`;
-      } else if (idata.garrisonUnits?.length > 0) {
+      if (idata.garrisonUnits?.length > 0) {
         garrisonHtml = idata.garrisonUnits.map(r => {
           const def = UNIT_DEFS[r.unitId];
           return `<div class="ov-cc-stat"><span class="ov-cc-stat-label">${def?.icon || '⚔'} ${def?.name || r.unitId}</span><span class="ov-cc-stat-value">×${r.count}</span></div>`;
         }).join('');
+      } else if (idata.forceSize) {
+        garrisonHtml = `<div class="ov-cc-stat"><span class="ov-cc-stat-label">Garrison</span><span class="ov-cc-stat-value">${idata.forceSize}</span></div>`;
       }
       citySection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
         <div class="ov-city-card mip-card-wide mip-enemy-city-card">
           <div class="ov-cc-art">
-            <img class="ov-cc-art-img" src="${_tierImg}" alt="${idata.name || 'Enemy City'}" />
+            <img class="ov-cc-art-img" src="${_tierImg}" alt="${idata.name || 'Enemy City'}" loading="lazy" />
             <div class="ov-cc-art-fade"></div>
           </div>
           <div class="ov-cc-inner">
             <div class="ov-cc-name-row">
               <span class="ov-cc-name mip-enemy-city-name">${idata.name || 'Enemy City'}</span>
-              <span class="mip-intel-badge" style="color:${TIER_COLORS[intelTier]}">👁 ${TIER_LABELS[intelTier]}</span>
+              <span class="mip-intel-badge" style="color:${_TIER_COLORS[intelTier]}">👁 ${_TIER_LABELS[intelTier]}</span>
             </div>
             <div class="ov-cc-coords">${ownerLabel}</div>
             <div class="ov-cc-divider"></div>
@@ -686,10 +741,12 @@ const MapView = (() => {
             </div>
           </div>
         </div>
+        <button class="mip-city-attack-btn mip-attack-btn mip-card-wide" style="margin-top:0.5rem">⚔ Attack City</button>
         </div>
       `;
     } else {
-      // City exists but never scouted — unknown card
+      // City exists but never scouted — unknown card. Still attackable:
+      // requirement is that attacking never depends on prior scouting.
       citySection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
@@ -709,6 +766,7 @@ const MapView = (() => {
             </div>
           </div>
         </div>
+        <button class="mip-city-attack-btn mip-attack-btn mip-card-wide" style="margin-top:0.5rem">⚔ Attack City</button>
         </div>
       `;
     }
@@ -717,7 +775,7 @@ const MapView = (() => {
     const lordsSection = lordsHere.length > 0 ? `
       <div class="mip-divider"></div>
       <div class="mip-section">
-        <div class="mip-section-label">Lord${lordsHere.length > 1 ? 's' : ''} aquí</div>
+        <div class="mip-section-label">Lord${lordsHere.length > 1 ? 's' : ''} Here</div>
         ${lordsHere.map(lord => {
           const race        = RACES[lord.race] || {};
           const cls         = LORD_CLASSES[lord.classId];
@@ -747,15 +805,18 @@ const MapView = (() => {
             : '';
 
           const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || lord.portrait || race.portrait;
+          const ownerBadge   = `<div class="ov-lc-portrait-owner">👤 ${_player?.username || 'You'}</div>`;
           const portraitHtml = portraitSrc
             ? `<div class="ov-lc-portrait">
-                 <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" />
+                 <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" loading="lazy" />
                  <div class="ov-lc-portrait-fade"></div>
                  <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+                 ${ownerBadge}
                </div>`
             : `<div class="ov-lc-portrait ov-lc-portrait--icon">
                  <span>${race.icon || '👤'}</span>
                  <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+                 ${ownerBadge}
                </div>`;
 
           let locationLabel = 'Wandering';
@@ -794,7 +855,8 @@ const MapView = (() => {
           const actionsHtml = !busy ? `
             <div class="mip-lord-actions" style="margin-top:6px;display:flex;gap:6px">
               <button class="mip-lord-search-btn mip-action-btn-sm" data-lord-id="${lord.id}">🔍 Search</button>
-              <button class="mip-lord-move-btn mip-action-btn-sm" data-lord-id="${lord.id}">🗺 Mover</button>
+              <button class="mip-lord-scout-btn mip-action-btn-sm" data-lord-id="${lord.id}" title="Gather intel on this tile's enemy lord and city. Safe without an army; risks an ambush if scouting with one.">🕵 Scout</button>
+              <button class="mip-lord-move-btn mip-action-btn-sm" data-lord-id="${lord.id}">🗺 Move</button>
             </div>
           ` : '';
 
@@ -849,52 +911,102 @@ const MapView = (() => {
       </div>
     ` : '';
 
-    // 4 — Bandit camps
+    // 4 — Bandit camps (same card design as enemy lords)
     const lordForAttack = lordsHere.find(l => l.actionQueue.length === 0);
+    const banditCampCards = banditsHere.map(r => {
+      const def       = DISCOVERY_DEFS[r.definitionId] || {};
+      const level     = r.campDetails?.level || 1;
+      const defenders = r.campDetails?.defenders || [];
+      const expiry    = DiscoveryService.formatExpiry(r);
+      const mercs     = (r.mercenaryUnits || []).map(id => UNIT_DEFS[id]?.name || id).join(', ');
+
+      const cp = defenders.reduce((sum, u) => {
+        const ud = UNIT_DEFS[u.unitId];
+        if (!ud) return sum;
+        const s = ud.combatStats || {};
+        return sum + ((s.attack||0)*3 + (s.defense||0)*2 + Math.floor((s.hp||0)/10) + (s.speed||0)) * u.count;
+      }, 0);
+
+      const unitCardsInner = defenders.length > 0
+        ? defenders.flatMap(u => {
+            const ud = UNIT_DEFS[u.unitId] || {};
+            const tierClass = ud.category === 'mercenary' ? ' la-unit-card--merc'
+              : (ud.category === 'elite' || ud.category === 'cavalry') ? ' la-unit-card--elite'
+              : ud.category === 'monster' ? ' la-unit-card--monster'
+              : ud.category === 'legendary' ? ' la-unit-card--legendary' : '';
+            const portrait = ud.image
+              ? `<img src="${ud.image}" class="la-uc-img" alt="${ud.name || u.unitId}" loading="lazy">`
+              : `<div class="la-uc-img la-uc-img--fallback">${ud.icon || '⚔'}</div>`;
+            return Array.from({ length: u.count }, () => `
+              <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${ud.name || u.unitId}">
+                <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
+                ${portrait}
+              </div>`);
+          }).join('')
+        : '<span class="mip-note">No units</span>';
+
+      const armyToggleId = `mip-army-camp-${r.id}`;
+      const totalUnits    = defenders.reduce((s, u) => s + u.count, 0);
+
+      const attackBtn = lordForAttack
+        ? `<button class="mip-bandit-attack-btn mip-attack-btn mip-card-wide" data-record-id="${r.id}" data-lord-id="${lordForAttack.id}">⚔ Attack</button>`
+        : `<p class="mip-note mip-note--warn">Move a lord here to attack</p>`;
+
+      return `
+        <div class="mip-enemy-lord-card mip-card-wide">
+          <div class="ov-lc-portrait ov-lc-portrait--icon">
+            <span style="font-size:2rem">${def.icon || '⚔'}</span>
+            <div class="ov-lc-portrait-fade"></div>
+            <div class="ov-lc-portrait-level">Lv ${level}</div>
+            <div class="ov-lc-portrait-owner">⏱ ${expiry}</div>
+          </div>
+          <div class="ov-lc-body">
+            <div class="ov-lc-top">
+              <span class="ov-lc-name">${def.name || 'Enemy Camp'}</span>
+              ${cp > 0 ? `<span class="mip-lc-cp mip-lc-cp--enemy">⚔ ${cp}</span>` : ''}
+            </div>
+            ${mercs ? `<div class="ov-lc-badges"><span class="ov-lc-race mip-value--gold">🤝 ${mercs}</span></div>` : ''}
+            <button class="mip-army-toggle mip-army-toggle--enemy" data-target="${armyToggleId}">▶ Army (${totalUnits})</button>
+            <div class="mip-army-units mip-army-hidden" id="${armyToggleId}">
+              <div class="mip-enemy-unit-cards">${unitCardsInner}</div>
+            </div>
+          </div>
+          ${attackBtn}
+        </div>`;
+    }).join('');
+
     const banditsSection = banditsHere.length > 0 ? `
       <div class="mip-divider"></div>
       <div class="mip-section">
-        <div class="mip-section-label">⚔ Enemy Camp</div>
-        ${banditsHere.map(r => {
-          const def   = DISCOVERY_DEFS[r.definitionId];
-          const mercs = (r.mercenaryUnits || []).map(id => UNIT_DEFS[id]?.name || id).join(', ');
-          const expiry = DiscoveryService.formatExpiry(r);
-          const attackBtn = lordForAttack
-            ? `<button class="mip-bandit-attack-btn btn-danger" data-record-id="${r.id}" data-lord-id="${lordForAttack.id}" style="width:100%;margin-top:0.5rem">⚔ Attack</button>`
-            : `<p class="mip-note mip-note--warn">Move a lord here to attack</p>`;
-          return `
-            <div class="mip-bandit-row">
-              <div class="mip-stat-row"><span class="mip-label">${def?.icon || '⚔'} Camp</span><span class="mip-value">${def?.name || 'Enemy Camp'}</span></div>
-              <div class="mip-stat-row"><span class="mip-label">Expires</span><span class="mip-value mip-value--muted">⏱ ${expiry}</span></div>
-              ${mercs ? `<div class="mip-stat-row"><span class="mip-label">Mercs</span><span class="mip-value mip-value--gold">${mercs}</span></div>` : ''}
-              ${attackBtn}
-            </div>`;
-        }).join('')}
+        <div class="mip-section-label">🏕 Enemy Camp${banditsHere.length > 1 ? 's' : ''}</div>
+        ${banditCampCards}
       </div>
     ` : '';
 
-    // 5 — Enemy lords (from auto-scan; state reflects _scanDone / _tileEnemies)
+    // 5 — Enemy lords: presence (live, no scouting needed, zero stats) +
+    // intel (tiered detail, built up via Search Area quests). The server
+    // already truncates rawData to the caller's tier before it crosses the
+    // wire (combat-resolver.js scanTile) — this just renders whatever
+    // fields are present, it isn't the enforcement point.
+    const tileKey          = `${x},${y}`;
+    const hasLordPresence  = _presence.has(tileKey);
+    const lordIntelRecords = _player
+      ? IntelligenceService.getByType(_player.id, 'enemy_lord').filter(r => r.tileX === x && r.tileY === y)
+      : [];
+
     let enemyLordSection = '';
-    if (!_scanDone) {
-      enemyLordSection = `
-        <div class="mip-divider"></div>
-        <div class="mip-section mip-scan-pending">🔍 Scanning tile…</div>`;
-    } else if (_scanError) {
-      enemyLordSection = `
-        <div class="mip-divider"></div>
-        <div class="mip-section mip-scan-error">⚠ Error: ${_scanError}</div>`;
-    } else if (_tileEnemies.length === 0) {
-      enemyLordSection = `
-        <div class="mip-divider"></div>
-        <div class="mip-section mip-scan-empty">No enemy lords on this tile</div>`;
-    } else {
-      const enemyCards = _tileEnemies.map((data, idx) => {
-        const race       = RACES[data.lordRace] || {};
-        const cls        = LORD_CLASSES[data.lordClass] || null;
-        const portraitSrc = cls?.portrait || race.portrait;
+    if (lordIntelRecords.length > 0) {
+      const enemyCards = lordIntelRecords.map((rec, idx) => {
+        const data      = rec.data;
+        const intelTier = rec.qualityTier;
+        const race      = RACES[data.lordRace] || {};
+        const cls       = LORD_CLASSES[data.lordClass] || null;
+        const portraitSrc = data.lordRace
+          ? (pickLordPortrait(data.lordRace, data.lordClass, data.lordId) || race.portrait)
+          : null;
         const portraitInner = portraitSrc
-          ? `<img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${data.lordName || ''}" />`
-          : `<span style="font-size:2rem">${race.icon || '👤'}</span>`;
+          ? `<img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${data.lordName || ''}" loading="lazy" />`
+          : `<span style="font-size:2rem">${race.icon || '❔'}</span>`;
 
         const units = data.units || [];
         const cp    = units.reduce((sum, u) => {
@@ -903,29 +1015,29 @@ const MapView = (() => {
           const s = def.combatStats || {};
           return sum + ((s.attack||0)*3 + (s.defense||0)*2 + Math.floor((s.hp||0)/10) + (s.speed||0)) * u.count;
         }, 0);
+        const totalUnits = units.length > 0 ? units.reduce((s, u) => s + u.count, 0) : null;
 
-        const unitCardsInner = units.length > 0
-          ? units.flatMap(u => {
-              const def = UNIT_DEFS[u.unitId] || {};
-              const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
-                : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
-                : def.category === 'monster' ? ' la-unit-card--monster'
-                : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
-              const portrait = def.image
-                ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || u.unitId}" loading="lazy">`
-                : `<div class="la-uc-img la-uc-img--fallback">${def.icon || '⚔'}</div>`;
-              return Array.from({ length: u.count }, () => `
-                <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || u.unitId}">
-                  <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
-                  ${portrait}
-                </div>`);
-            }).join('')
-          : '<span class="mip-note">No units</span>';
-        const armyToggleId  = `mip-army-enemy-${idx}`;
-        const totalUnits    = units.reduce((s, u) => s + u.count, 0);
+        const unitCardsInner = units.flatMap(u => {
+          const def = UNIT_DEFS[u.unitId] || {};
+          const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
+            : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
+            : def.category === 'monster' ? ' la-unit-card--monster'
+            : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+          const portrait = def.image
+            ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || u.unitId}" loading="lazy">`
+            : `<div class="la-uc-img la-uc-img--fallback">${def.icon || '⚔'}</div>`;
+          return Array.from({ length: u.count }, () => `
+            <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || u.unitId}">
+              <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
+              ${portrait}
+            </div>`);
+        }).join('');
+        const armyToggleId = `mip-army-enemy-${idx}`;
 
+        // Attacking never requires scouting — the button is always
+        // available at any intel tier, including vague.
         const attackBtn = myLordsIdle.length > 0
-          ? `<button class="mip-attack-btn mip-card-wide" data-enemy-idx="${idx}">⚔ Attack</button>`
+          ? `<button class="mip-attack-btn mip-card-wide" data-lord-record-idx="${idx}">⚔ Attack</button>`
           : `<p class="mip-note mip-note--warn">No lord available to attack</p>`;
 
         return `
@@ -933,22 +1045,25 @@ const MapView = (() => {
             <div class="ov-lc-portrait${portraitSrc ? '' : ' ov-lc-portrait--icon'}">
               ${portraitInner}
               <div class="ov-lc-portrait-fade"></div>
-              <div class="ov-lc-portrait-level">Lv ${data.lordLevel || 1}</div>
+              ${data.lordLevel ? `<div class="ov-lc-portrait-level">Lv ${data.lordLevel}</div>` : ''}
+              ${data.playerUsername ? `<div class="ov-lc-portrait-owner">👤 ${data.playerUsername}</div>` : ''}
             </div>
             <div class="ov-lc-body">
               <div class="ov-lc-top">
                 <span class="ov-lc-name">${data.lordName || 'Unknown Lord'}</span>
+                <span class="mip-intel-badge" style="color:${_TIER_COLORS[intelTier]}">👁 ${_TIER_LABELS[intelTier]}</span>
                 ${cp > 0 ? `<span class="mip-lc-cp mip-lc-cp--enemy">⚔ ${cp}</span>` : ''}
               </div>
               <div class="ov-lc-badges">
-                <span class="ov-lc-race">${race.name || ''}</span>
+                ${race.name ? `<span class="ov-lc-race">${race.name}</span>` : ''}
                 ${cls ? `<span class="ov-lc-class-badge" style="color:${cls.color}">${cls.icon} ${cls.name}</span>` : ''}
               </div>
-              ${data.playerUsername ? `<div class="mip-enemy-username">👤 ${data.playerUsername}</div>` : ''}
-              <button class="mip-army-toggle mip-army-toggle--enemy" data-target="${armyToggleId}">▶ Army (${totalUnits})</button>
-              <div class="mip-army-units mip-army-hidden" id="${armyToggleId}">
-                <div class="mip-enemy-unit-cards">${unitCardsInner}</div>
-              </div>
+              ${totalUnits != null
+                ? `<button class="mip-army-toggle mip-army-toggle--enemy" data-target="${armyToggleId}">▶ Army (${totalUnits})</button>
+                   <div class="mip-army-units mip-army-hidden" id="${armyToggleId}">
+                     <div class="mip-enemy-unit-cards">${unitCardsInner}</div>
+                   </div>`
+                : `<div class="mip-note">${data.forceSize || 'Unknown force size'}</div>`}
             </div>
             ${attackBtn}
           </div>`;
@@ -957,12 +1072,29 @@ const MapView = (() => {
       enemyLordSection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
-          <div class="mip-section-label">⚔ Enemy Lord${_tileEnemies.length > 1 ? 's' : ''}</div>
+          <div class="mip-section-label">⚔ Enemy Lord${lordIntelRecords.length > 1 ? 's' : ''}</div>
           ${enemyCards}
+        </div>`;
+    } else if (hasLordPresence) {
+      // Presence detected, never scouted — still attackable with zero info.
+      enemyLordSection = `
+        <div class="mip-divider"></div>
+        <div class="mip-section">
+          <div class="mip-section-label">⚔ Unknown Force</div>
+          <div class="mip-enemy-lord-card mip-card-wide">
+            <div class="ov-lc-portrait ov-lc-portrait--icon"><span style="font-size:2rem">❔</span></div>
+            <div class="ov-lc-body">
+              <div class="ov-lc-top"><span class="ov-lc-name">Unknown Force</span></div>
+              <div class="mip-note mip-note--muted">Scout this area for intelligence</div>
+            </div>
+            ${myLordsIdle.length > 0
+              ? `<button class="mip-attack-btn mip-card-wide" data-attack-unknown-lord="1">⚔ Attack</button>`
+              : `<p class="mip-note mip-note--warn">No lord available to attack</p>`}
+          </div>
         </div>`;
     }
 
-    return `${terrainSection}${citySection}${lordsSection}${banditsSection}${enemyLordSection}`;
+    return `${terrainSection}${citySection}${lordsSection}${enemyLordSection}${banditsSection}`;
   }
 
   function _updatePanel(x, y) {
@@ -981,11 +1113,14 @@ const MapView = (() => {
   }
 
   function _bindTilePanelEvents(x, y) {
+    const panel = document.getElementById('map-info-panel');
+
     document.getElementById('mip-open-city-btn')?.addEventListener('click', () => {
       const cityId = WorldService.getTile(x, y);
       const city   = CityService.getById(cityId);
       if (city) EventBus.emit('city:open', { city, lord: _lord, player: _player });
     });
+    if (panel) A11y.makeClickable(panel, '#mip-open-city-btn');
 
     document.getElementById('mip-found-btn')?.addEventListener('click', () => {
       _openFoundModal(x, y);
@@ -998,6 +1133,7 @@ const MapView = (() => {
         if (lord) EventBus.emit('lord:open', { lord, player: _player });
       });
     });
+    if (panel) A11y.makeClickable(panel, '.ov-lord-card[data-lord-id]');
 
     // Army toggle (own + enemy lords)
     document.querySelectorAll('.mip-army-toggle').forEach(btn => {
@@ -1030,6 +1166,26 @@ const MapView = (() => {
       });
     });
 
+    // Scout from map — start action then open lord-screen to show countdown
+    document.querySelectorAll('.mip-lord-scout-btn[data-lord-id]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const lord = LordService.getById(btn.dataset.lordId);
+        if (!lord) return;
+        btn.disabled = true;
+        const result = await ServerActions.lordScout(lord.id);
+        if (!result.ok) {
+          btn.disabled = false;
+          const err = document.createElement('div');
+          err.className = 'mip-err-msg';
+          err.textContent = result.error || 'Server error';
+          btn.closest('.mip-lord-actions')?.appendChild(err);
+          return;
+        }
+        const updated = LordService.getById(lord.id);
+        EventBus.emit('lord:open', { lord: updated, player: _player });
+      });
+    });
+
     // Attack bandit camp from map tile panel
     document.querySelectorAll('.mip-bandit-attack-btn[data-record-id]').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -1043,13 +1199,35 @@ const MapView = (() => {
       });
     });
 
-    // Attack: per-lord attack buttons target the specific enemy
-    document.querySelectorAll('.mip-attack-btn[data-enemy-idx]').forEach(btn => {
+    // Attack: per-lord attack buttons target a specific scouted enemy record
+    document.querySelectorAll('.mip-attack-btn[data-lord-record-idx]').forEach(btn => {
       btn.addEventListener('click', () => {
-        const idx = parseInt(btn.dataset.enemyIdx, 10);
+        const idx     = parseInt(btn.dataset.lordRecordIdx, 10);
+        const records = _player
+          ? IntelligenceService.getByType(_player.id, 'enemy_lord').filter(r => r.tileX === x && r.tileY === y)
+          : [];
         App.navigate('attack-confirm', {
           player: _player, targetX: x, targetY: y,
-          enemyData: _tileEnemies[idx] || null,
+          enemyData: records[idx]?.data || null,
+        });
+      });
+    });
+
+    // Attack an unknown, unscouted force — blind attack, zero information.
+    document.querySelector('.mip-attack-btn[data-attack-unknown-lord]')?.addEventListener('click', () => {
+      App.navigate('attack-confirm', { player: _player, targetX: x, targetY: y, enemyData: null });
+    });
+
+    // Attack a city — works at any intel tier, including never-scouted.
+    document.querySelectorAll('.mip-city-attack-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const cityIntelRec = _player
+          ? IntelligenceService.getByType(_player.id, 'enemy_city').find(r => r.tileX === x && r.tileY === y)
+          : null;
+        App.navigate('attack-confirm', {
+          player: _player, targetX: x, targetY: y,
+          enemyData: null,
+          targetCity: cityIntelRec ? cityIntelRec.data : {},
         });
       });
     });
@@ -1124,7 +1302,7 @@ const MapView = (() => {
     if (!bar) return;
     if (_movingLord) {
       bar.classList.remove('hidden');
-      if (msg) msg.innerHTML = `📍 Selecciona destino para <b>${_movingLord.name}</b>`;
+      if (msg) msg.innerHTML = `📍 Select a destination for <b>${_movingLord.name}</b>`;
     } else {
       bar.classList.add('hidden');
       if (msg) msg.innerHTML = '';
@@ -1154,6 +1332,15 @@ const MapView = (() => {
     return { x: tx, y: ty };
   }
 
+  function _updateCanvasAriaLabel() {
+    if (!_canvas || !_keyCursor) return;
+    const { x, y } = _keyCursor;
+    const terrain  = WorldService.getTerrain(x, y);
+    const occupied = WorldService.getOccupiedTiles().some(t => t.x === x && t.y === y);
+    _canvas.setAttribute('aria-label',
+      `Tile (${x}, ${y}), ${terrain?.name || 'unknown terrain'}${occupied ? ', has a city' : ''}. Press Enter to select.`);
+  }
+
   function _canvasXY(e) {
     const rect = _canvas.getBoundingClientRect();
     return {
@@ -1162,58 +1349,36 @@ const MapView = (() => {
     };
   }
 
-  // ── Auto tile scan ────────────────────────────────────────────
-  // Fires on every tile click. Hits /api/scan/tile to get all enemy lords
-  // on that tile without requiring a Search Area action.
+  // ── Live presence fetch ────────────────────────────────────────
+  // Zero-stats "is there an enemy lord here" layer for the whole map —
+  // fetched on map open and refreshed on every tile select (not a blind
+  // timer, since that would multiply this cross-player scan by however
+  // many map tabs happen to be open). Attacks always resolve against live
+  // server state regardless of how fresh this snapshot is, so staleness
+  // here only ever costs a wasted trip, never a wrong outcome.
 
-  async function _autoScanTile(x, y) {
-    _scanningTile = { x, y };
-
+  async function _fetchPresence() {
     let token = null;
     try {
       const { data: { session } } = await SupabaseService.client.auth.getSession();
       token = session?.access_token || null;
     } catch (e) {
-      console.error('[scan] getSession error:', e);
+      console.error('[presence] getSession error:', e);
     }
+    if (!token) return;
 
-    if (!token) {
-      console.warn('[scan] no token');
-      _scanDone = true;
-      _tileEnemies = [];
-      if (_selectedTile?.x === x && _selectedTile?.y === y) _updatePanel(x, y);
-      return;
-    }
-
-    let scanError = null;
     try {
-      const resp = await fetch('/api/scan/tile', {
+      const resp = await fetch('/api/scan/presence', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body:    JSON.stringify({ tileX: x, tileY: y }),
       });
       const d = await resp.json();
-      console.log('[scan] tile', x, y, '→', d);
-
-      if (!_scanningTile || _scanningTile.x !== x || _scanningTile.y !== y) return;
-      if (d.ok) {
-        _tileEnemies = (d.discoveries || []).filter(r => r.type === 'enemy_lord').map(r => r.rawData);
-      } else {
-        scanError = d.error || 'error';
-        _tileEnemies = [];
-      }
+      if (!d.ok || !Array.isArray(d.lords)) return;
+      _presence = new Set(d.lords.map(l => `${l.x},${l.y}`));
+      _draw();
+      if (_selectedTile && !_movingLord) _updatePanel(_selectedTile.x, _selectedTile.y);
     } catch (e) {
-      console.error('[scan] fetch error:', e);
-      scanError = e.message;
-      _tileEnemies = [];
-    }
-
-    _scanDone = true;
-    // Store error so panel can show it
-    _scanError = scanError;
-
-    if (_selectedTile?.x === x && _selectedTile?.y === y && !_movingLord) {
-      _updatePanel(x, y);
+      console.warn('[presence] fetch failed:', e.message);
     }
   }
 
@@ -1232,6 +1397,26 @@ const MapView = (() => {
       if (tile) _onTileClick(tile.x, tile.y);
     });
 
+    _canvas.addEventListener('focus', () => { _canvasFocused = true; _updateCanvasAriaLabel(); _draw(); });
+    _canvas.addEventListener('blur',  () => { _canvasFocused = false; _draw(); });
+
+    _canvas.addEventListener('keydown', e => {
+      if (!_keyCursor) return;
+      const moves = { ArrowUp: [0,-1], ArrowDown: [0,1], ArrowLeft: [-1,0], ArrowRight: [1,0] };
+      if (moves[e.key]) {
+        e.preventDefault();
+        const [dx, dy] = moves[e.key];
+        const nx = Math.min(_size - 1, Math.max(0, _keyCursor.x + dx));
+        const ny = Math.min(_size - 1, Math.max(0, _keyCursor.y + dy));
+        _keyCursor = { x: nx, y: ny };
+        _updateCanvasAriaLabel();
+        _draw();
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        _onTileClick(_keyCursor.x, _keyCursor.y);
+      }
+    });
+
     // Banner cancel button (also re-bound dynamically in _updateMoveBanner)
     document.getElementById('map-cancel-move')?.addEventListener('click', _cancelMove);
 
@@ -1248,6 +1433,9 @@ const MapView = (() => {
     document.getElementById('found-modal').addEventListener('click', e => {
       if (e.target === e.currentTarget) _closeModal();
     });
+    document.getElementById('found-modal').addEventListener('keydown', e => {
+      if (e.key === 'Escape') _closeModal();
+    });
   }
 
   function _onTileClick(x, y) {
@@ -1260,14 +1448,10 @@ const MapView = (() => {
       return;
     }
 
-    _tileEnemies  = [];
-    _scanDone     = false;
-    _scanError    = null;
-    _scanningTile = null;
     _selectedTile = { x, y };
     _draw();
     _updatePanel(x, y);
-    _autoScanTile(x, y);
+    _fetchPresence(); // refresh-on-tile-select, per the plan's cadence
   }
 
   const _PENDING_CITY_KEY = 'hexfront_pending_city_name';

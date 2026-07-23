@@ -58,6 +58,7 @@ const PlayerService = (() => {
       lordId:       null,
       coins:        600,
       credits:      0,
+      honorPoints:  0,
     };
 
     players[player.id] = player;

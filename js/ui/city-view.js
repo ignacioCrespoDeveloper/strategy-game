@@ -82,10 +82,10 @@ const CityView = (() => {
 
   // ── Left panel ────────────────────────────────────────────────
 
-  function _cityTierImg(thLevel) {
-    if (thLevel >= 16) return 'assets/city/tier4.jpg';
-    if (thLevel >= 11) return 'assets/city/tier3.jpg';
-    if (thLevel >= 6)  return 'assets/city/tier2.jpg';
+  function _cityTierImg(level) {
+    if (level >= 4) return 'assets/city/tier4.jpg';
+    if (level >= 3) return 'assets/city/tier3.jpg';
+    if (level >= 2) return 'assets/city/tier2.jpg';
     return 'assets/city/tier1.webp';
   }
 
@@ -110,8 +110,8 @@ const CityView = (() => {
     const mainStats  = ['happiness', 'corruption', 'hygiene', 'unemployment', 'religion', 'culture'];
     const extraStats = ['stability', 'security'];
 
-    const thLevel = _city.buildings.town_hall || 0;
-    const tierImg = _cityTierImg(thLevel);
+    const { level: cityLevel } = CityStatsService.getSlotInfo(_city);
+    const tierImg = _cityTierImg(cityLevel);
 
     return `
       <div class="cvl-artwork">
@@ -121,7 +121,7 @@ const CityView = (() => {
       </div>
 
       <div class="cvl-city-header">
-        <div class="cvl-city-name">${_city.name}</div>
+        <h1 class="cvl-city-name">${_city.name}</h1>
       </div>
       <div class="cvl-terrain-row">
         <span>${terrain.icon} ${terrain.name}</span>
@@ -606,7 +606,7 @@ const CityView = (() => {
       <div class="cv-queue-inner">
         <span class="cv-queue-icon">🔨</span>
         <span class="cv-queue-label">${def?.name || item.buildingId} → Level ${item.targetLevel}</span>
-        <div class="cv-queue-bar"><div class="cv-queue-fill" id="cv-q-fill" style="width:${pct}%"></div></div>
+        <div class="cv-queue-bar"><div class="cv-queue-fill" id="cv-q-fill" style="transform:scaleX(${pct / 100})"></div></div>
         <span class="cv-queue-timer" id="cv-q-timer">${TimeService.formatDuration(secs)}</span>
         <button class="cv-boost-btn ${canBoost ? '' : 'cv-boost-btn--cant'}" id="cv-boost-btn" ${canBoost ? '' : 'disabled'}>
           ⚡ ${boostCost}💎
@@ -637,11 +637,6 @@ const CityView = (() => {
   // ── Event binding ─────────────────────────────────────────────
 
   function _bindShellEvents() {
-    document.getElementById('cv-back')?.addEventListener('click', () => {
-      _stopCountdown();
-      _selectedStat = null;
-      App.navigate('overview', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id) });
-    });
     document.getElementById('cv-map-btn')?.addEventListener('click', () => {
       _stopCountdown();
       _selectedStat = null;
@@ -739,7 +734,7 @@ const CityView = (() => {
       const fillEl  = document.getElementById('cv-q-fill');
       if (!timerEl) { _stopCountdown(); return; }
       timerEl.textContent = TimeService.formatDuration(ConstructionService.timeRemaining(_city));
-      if (fillEl) fillEl.style.width = `${Math.floor(ConstructionService.progress(_city) * 100)}%`;
+      if (fillEl) fillEl.style.transform = `scaleX(${ConstructionService.progress(_city)})`;
     }, 1000);
   }
 

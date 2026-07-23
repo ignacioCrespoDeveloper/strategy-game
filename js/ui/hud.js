@@ -106,9 +106,23 @@ const HUD = (() => {
 
     const credEl = document.getElementById('hud-credits-amount');
     if (credEl) credEl.textContent = _fmt(player?.credits || 0);
+
+    const honor   = player.honorPoints || 0;
+    const honorEl = document.getElementById('hud-honor-display');
+    if (honorEl) {
+      const icon = honor >= 50 ? '⚜ ' : honor <= -50 ? '☠ ' : '';
+      const sign = honor > 0 ? '+' : honor < 0 ? '−' : '';
+      const cls  = honor > 0 ? 'hud-honor--pos' : honor < 0 ? 'hud-honor--neg' : 'hud-honor--zero';
+      honorEl.textContent = `${icon}${sign}${_fmtHonor(Math.abs(honor))}`;
+      honorEl.className   = `hud-honor-display ${cls}`;
+      honorEl.style.display = '';
+    }
   }
 
-  function setLord(lord) { _lord = lord; refresh(); }
+  function _fmtHonor(n) {
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return String(n);
+  }
 
   function _html() {
     const race = RACES[_player?.race] || {};
@@ -133,6 +147,7 @@ const HUD = (() => {
           <div class="hud-lord-name">
             ${_player?.username || ''}
             <span id="hud-rank-badge" class="hud-rank-badge">${_rank ? `(#${_rank})` : ''}</span>
+            <span id="hud-honor-display" class="hud-honor-display hud-honor--zero">0</span>
           </div>
           <div class="hud-lord-race">${race.name || 'New Player'}</div>
         </div>
@@ -159,9 +174,11 @@ const HUD = (() => {
     document.getElementById('hud-signout-btn')?.addEventListener('click', () => {
       EventBus.emit('player:logout');
     });
-    document.getElementById('hud-lord-btn')?.addEventListener('click', () => {
+    const lordBtn = document.getElementById('hud-lord-btn');
+    lordBtn?.addEventListener('click', () => {
       if (_player) EventBus.emit('overview:open', { player: _player, lord: _lord });
     });
+    if (lordBtn) A11y.makeClickable(lordBtn.parentElement, '#hud-lord-btn');
     document.getElementById('hud-hamburger')?.addEventListener('click', () => {
       Nav.toggle(_player, _lord);
     });
@@ -180,5 +197,5 @@ const HUD = (() => {
     return (r > 0 ? '+' : '') + _fmt(Math.abs(r)) + '/h';
   }
 
-  return { show, hide, refresh, setLord };
+  return { show, hide, refresh };
 })();
