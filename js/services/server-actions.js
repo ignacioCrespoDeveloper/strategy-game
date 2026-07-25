@@ -33,6 +33,19 @@ const ServerActions = (() => {
     return lords;
   }
 
+  // Defense-in-depth for a server-returned player object: honorPoints lives
+  // in its own Supabase key (see combat-resolver.js/pve-attack.js), not the
+  // 'players' blob these action responses come from, so action-base.js
+  // stamps it on server-side before returning. If some future/overlooked
+  // endpoint ever forgets that, a raw full-replace here would silently wipe
+  // the locally cached honor back to 0 — this falls back to whatever's
+  // already cached locally instead of trusting an absent field.
+  function _mergePlayer(serverPlayer) {
+    const players = StorageService.get('players') || {};
+    const local   = players[serverPlayer.id];
+    return { ...serverPlayer, honorPoints: serverPlayer.honorPoints ?? local?.honorPoints ?? 0 };
+  }
+
   async function _token() {
     const { data: { session } } = await SupabaseService.client.auth.getSession();
     return session?.access_token || null;
@@ -69,7 +82,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players            = StorageService.get('players') || {};
-        players[result.player.id] = result.player;
+        players[result.player.id] = _mergePlayer(result.player);
         patch.players            = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -91,7 +104,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players        = StorageService.get('players') || {};
-        players[result.player.id] = result.player;
+        players[result.player.id] = _mergePlayer(result.player);
         patch.players        = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -152,7 +165,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players                     = StorageService.get('players') || {};
-        players[result.player.id]         = result.player;
+        players[result.player.id]         = _mergePlayer(result.player);
         patch.players                     = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -174,7 +187,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players                 = StorageService.get('players') || {};
-        players[result.player.id]     = result.player;
+        players[result.player.id]     = _mergePlayer(result.player);
         patch.players                 = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -196,7 +209,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players             = StorageService.get('players') || {};
-        players[result.player.id] = result.player;
+        players[result.player.id] = _mergePlayer(result.player);
         patch.players             = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -207,7 +220,7 @@ const ServerActions = (() => {
   // POST /api/lord/revive
   // Spends credits and clears lord downtime server-side.
   // Sends clientDowntimeUntil so the server can compute the cost even if
-  // savePveResult hadn't committed the fallen state to Supabase yet.
+  // pveAttack hadn't committed the fallen state to Supabase yet.
   async function reviveLord(lordId) {
     const lords     = StorageService.get('lords') || {};
     const localLord = lords[lordId];
@@ -224,12 +237,48 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players = StorageService.get('players') || {};
-        players[result.player.id] = result.player;
+        players[result.player.id] = _mergePlayer(result.player);
         patch.players = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
     }
     return result;
+  }
+
+  // POST /api/lord/ransom
+  // Pays the fixed, level-scaled gold ransom to free the caller's own
+  // captured lord immediately. On success, hydrates lord + player.
+  async function ransomLord(lordId) {
+    const result = await _post('/api/lord/ransom', { lordId });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord) {
+        const lords = StorageService.get('lords') || {};
+        lords[result.lord.id] = result.lord;
+        patch.lords = lords;
+      }
+      if (result.player) {
+        const players = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/lord/release
+  // Frees a lord the caller holds captive, for free. Nothing of the
+  // caller's own state changes — no hydrate patch needed, the caller's
+  // Prison list just needs a fresh getPrisonList() call to reflect it.
+  async function releaseLord(lordId, ownerId) {
+    return _post('/api/lord/release', { lordId, ownerId });
+  }
+
+  // POST /api/lord/prison-list
+  // Returns every lord currently held captive by the caller.
+  async function getPrisonList() {
+    return _post('/api/lord/prison-list', {});
   }
 
   // POST /api/city/instant-build
@@ -246,7 +295,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players             = StorageService.get('players') || {};
-        players[result.player.id] = result.player;
+        players[result.player.id] = _mergePlayer(result.player);
         patch.players             = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -254,12 +303,64 @@ const ServerActions = (() => {
     return result;
   }
 
-  // POST /api/lord/pve-result
-  // Persists post-battle army + lord state to Supabase right after a PvE fight.
-  // Passes fallen fields (downtimeUntil, downtimeReason, actionQueue) so a refresh
-  // after a defeat restores the fallen state instead of reviving the lord.
-  async function savePveResult(lordId, armyUnits, lordHpAfter, fallen = {}) {
-    const result = await _post('/api/lord/pve-result', { lordId, armyUnits, lordHpAfter, ...fallen });
+  // POST /api/city/instant-recruit
+  // Spends credits to instantly complete the first item in a city's
+  // recruitment queue, server-side. Replaces the old client-only "finish
+  // now" (which faked a past finishAt locally — it displayed as complete
+  // but reverted on the next refresh since nothing was ever actually
+  // applied or persisted server-side).
+  async function instantRecruit(cityId) {
+    const result = await _post('/api/city/instant-recruit', { cityId });
+    if (result.ok) {
+      const patch = {};
+      if (result.city) {
+        const cities   = StorageService.get('cities') || {};
+        cities[cityId] = result.city;
+        patch.cities   = cities;
+      }
+      if (result.army) {
+        const armies                = StorageService.get('armies') || {};
+        armies[result.army.lordId]  = result.army;
+        patch.armies                = armies;
+      }
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/lord/pve-attack
+  // Server-authoritative PvE combat resolution (bandit camps, quest combat).
+  // The server re-derives the encounter from the already-trustworthy discovery
+  // record (rolled server-side at search time) and runs BattleEngine itself —
+  // the client never computes or self-reports a battle outcome for PvE.
+  // Returns { ok, report, leveled, lord, army, player, honorPoints, honorDelta, discoveries }.
+  async function pveAttack(lordId, recordId) {
+    const result = await _post('/api/lord/pve-attack', { lordId, recordId });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord) patch.lords = _mergeLord(result.lord);
+      if (result.army) {
+        const armies              = StorageService.get('armies') || {};
+        armies[result.army.lordId] = result.army;
+        patch.armies              = armies;
+      }
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
+      if (result.discoveries) {
+        const discoveries          = StorageService.get('discoveries') || {};
+        discoveries[result.player?.id] = result.discoveries;
+        patch.discoveries          = discoveries;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
     return result;
   }
 
@@ -282,7 +383,7 @@ const ServerActions = (() => {
         if (existing) {
           players[result.player.id] = { ...existing, credits: result.player.credits };
         } else {
-          players[result.player.id] = result.player;
+          players[result.player.id] = _mergePlayer(result.player);
         }
         patch.players = players;
       }
@@ -299,7 +400,7 @@ const ServerActions = (() => {
     const result = await _post('/api/player/set-race', { raceId });
     if (result.ok && result.player) {
       const players = StorageService.get('players') || {};
-      players[result.player.id] = result.player;
+      players[result.player.id] = _mergePlayer(result.player);
       StorageService.hydrate({ players });
     }
     return result;
@@ -433,7 +534,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players = StorageService.get('players') || {};
-        players[result.player.id] = result.player;
+        players[result.player.id] = _mergePlayer(result.player);
         patch.players = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -456,7 +557,7 @@ const ServerActions = (() => {
       }
       if (result.player) {
         const players = StorageService.get('players') || {};
-        players[result.player.id] = result.player;
+        players[result.player.id] = _mergePlayer(result.player);
         patch.players = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
@@ -476,5 +577,100 @@ const ServerActions = (() => {
     return _post('/api/lord/scout-resolve', { lordId, knownTiers });
   }
 
-  return { build, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, disbandUnit, syncNow, instantBuild, savePveResult, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve };
+  // POST /api/lord/raid-start — durationSecs must be one of
+  // STANCE_DEFS.raiding.durations (server re-validates regardless).
+  async function raidStart(lordId, durationSecs) {
+    const result = await _post('/api/lord/raid-start', { lordId, durationSecs });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord)   patch.lords   = _mergeLord(result.lord);
+      if (result.player) patch.players = _mergePlayer(result.player);
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/lord/raid-cancel — free, forfeits everything accrued so far.
+  async function raidCancel(lordId) {
+    const result = await _post('/api/lord/raid-cancel', { lordId });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord)   patch.lords   = _mergeLord(result.lord);
+      if (result.player) patch.players = _mergePlayer(result.player);
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/lord/raid-instant — spends credits to pay out the full raid
+  // immediately (same cost formula as instantLordAction).
+  async function raidInstant(lordId) {
+    const result = await _post('/api/lord/raid-instant', { lordId });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord)   patch.lords   = _mergeLord(result.lord);
+      if (result.player) patch.players = _mergePlayer(result.player);
+      if (result.army) {
+        const armies = StorageService.get('armies') || {};
+        armies[result.army.lordId] = result.army;
+        patch.armies = armies;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/clan/create — { name, tag }
+  async function clanCreate(name, tag) {
+    const result = await _post('/api/clan/create', { name, tag });
+    if (result.ok && result.player) {
+      const players = StorageService.get('players') || {};
+      players[result.player.id] = _mergePlayer(result.player);
+      StorageService.hydrate({ players });
+    }
+    return result;
+  }
+
+  // POST /api/clan/apply — { clanId } — adds caller to the clan's pending list
+  async function clanApply(clanId) {
+    return _post('/api/clan/apply', { clanId });
+  }
+
+  // POST /api/clan/accept — { targetPlayerId } — leader-only
+  async function clanAccept(targetPlayerId) {
+    return _post('/api/clan/accept', { targetPlayerId });
+  }
+
+  // POST /api/clan/reject — { targetPlayerId } — leader-only
+  async function clanReject(targetPlayerId) {
+    return _post('/api/clan/reject', { targetPlayerId });
+  }
+
+  // POST /api/clan/leave
+  async function clanLeave() {
+    const result = await _post('/api/clan/leave', {});
+    if (result.ok && result.player) {
+      const players = StorageService.get('players') || {};
+      players[result.player.id] = _mergePlayer(result.player);
+      StorageService.hydrate({ players });
+    }
+    return result;
+  }
+
+  // POST /api/clan/kick — { targetPlayerId } — leader-only
+  async function clanKick(targetPlayerId) {
+    return _post('/api/clan/kick', { targetPlayerId });
+  }
+
+  // POST /api/clan/list — every clan, for browsing + finding your own roster
+  async function clanList() {
+    return _post('/api/clan/list', {});
+  }
+
+  // POST /api/clan/war-declare — { targetClanId, durationSecs } — leader-only
+  async function clanWarDeclare(targetClanId, durationSecs) {
+    return _post('/api/clan/war-declare', { targetClanId, durationSecs });
+  }
+
+  return { build, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, syncNow, instantBuild, instantRecruit, pveAttack, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
 })();

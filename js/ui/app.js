@@ -5,6 +5,17 @@
 const App = (() => {
   const _root = () => document.getElementById('screen-root');
 
+  // The currently-active screen's stop() function, if it has one.
+  // OverviewScreen/LordScreen/CityView all run background setInterval timers
+  // (activity-feed polling, action countdowns, recruitment ticks). None of
+  // them were ever being stopped on navigation — worst case is
+  // OverviewScreen's poll handler, which unconditionally overwrites
+  // #screen-root with its own shell whenever a new pvp_result event arrives,
+  // silently hijacking the user back to the Overview screen mid-battle no
+  // matter what screen they'd since navigated to. Calling this before every
+  // navigation closes that off for all three screens at once.
+  let _currentStop = null;
+
   // ── Boot ──────────────────────────────────────────────────────
   async function init() {
     _registerEvents();
@@ -115,7 +126,39 @@ const App = (() => {
   }
 
   // ── Routing ───────────────────────────────────────────────────
-  function _goto(screen, data) {
+  //
+  // Screens that show live game state (army, city, lord, rankings…) always
+  // resync with the server before rendering — like Ogame, where every tab
+  // is its own page load through the server. Without this, navigating to a
+  // screen just re-rendered whatever the last periodic background sync (up
+  // to 30s old) or the last action's response happened to leave in the
+  // local cache — e.g. opening a Lord's screen wouldn't show a PvP loss
+  // that landed 5 seconds ago until the next unrelated action or poll tick.
+  const _SYNC_ON_ENTER = new Set([
+    'map', 'city', 'lord-screen', 'overview', 'activity',
+    'tech-tree', 'attack-confirm', 'rankings', 'clan',
+  ]);
+
+  async function _goto(screen, data) {
+    // Stop whatever background timer the previous screen had running before
+    // switching away — see _currentStop's declaration above for why.
+    if (_currentStop) { _currentStop(); _currentStop = null; }
+
+    if (_SYNC_ON_ENTER.has(screen) && data?.player?.id) {
+      const root = _root();
+      root.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100vh;
+                    color:#b8963c;font-size:1rem;letter-spacing:0.15em;font-family:inherit;">
+          ⚔ &nbsp; SYNCING…
+        </div>`;
+      await ServerActions.syncNow();
+      // Re-read from the just-refreshed local cache instead of trusting
+      // whatever `data` was captured with before the sync ran.
+      data = { ...data, player: PlayerService.getById(data.player.id) || data.player };
+      if (data.lord) data.lord = LordService.getById(data.lord.id) || data.lord;
+      if (data.city) data.city = CityService.getById(data.city.id) || data.city;
+    }
+
     const root = _root();
     switch (screen) {
       case 'auth':
@@ -137,16 +180,19 @@ const App = (() => {
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'home');
         CityView.render(root, data);
+        _currentStop = CityView.stop;
         break;
       case 'lord-screen':
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'home');
         LordScreen.render(root, data);
+        _currentStop = LordScreen.stop;
         break;
       case 'overview':
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'home');
         OverviewScreen.render(root, data);
+        _currentStop = OverviewScreen.stop;
         break;
       case 'activity':
         HUD.show(data.player, data.lord);
@@ -163,11 +209,6 @@ const App = (() => {
         Nav.show(data.player, data.lord, 'map');
         AttackConfirmView.render(root, data);
         break;
-      case 'battle-result':
-        Nav.hide();
-        HUD.hide();
-        BattleResultView.render(root, data);
-        break;
       case 'battle-simulator':
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'battle-simulator');
@@ -177,6 +218,11 @@ const App = (() => {
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'rankings');
         RankingScreen.render(root, data);
+        break;
+      case 'clan':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'clan');
+        ClanScreen.render(root, data);
         break;
       default:
         Nav.hide();

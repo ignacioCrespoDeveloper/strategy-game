@@ -44,6 +44,7 @@ import {
   LORD_CLASSES,
   STANCE_DEFS,
   MOUNT_POOL,
+  TALENT_POOL,
 } from './engine-loader.js';
 
 // ── Supabase clients ──────────────────────────────────────────
@@ -69,7 +70,7 @@ function _adminClient() {
 
 // ── Pure helpers (no StorageService dependency) ───────────────
 
-function _effectiveStats(lord) {
+export function _effectiveStats(lord) {
   const base  = lord.baseStats || { ...LORD_BASE_STATS };
   const cls   = LORD_CLASSES[lord.classId];
   const mods  = cls?.modifiers || {};
@@ -92,7 +93,9 @@ const _CLASS_VIS_MULT = { rogue: 0.35 };
 
 // Total unit count across an army's stacks — the single "does this army
 // exist at all" check, shared by visibility scoring, scanning, and combat.
-function _armyTotal(units) {
+// Exported for server/actions/raid-start.js (raiding requires an army, same
+// rule as every other "does this lord count for combat" check).
+export function _armyTotal(units) {
   return (units || []).reduce((s, u) => s + u.count, 0);
 }
 
@@ -137,7 +140,7 @@ function _truncateLordData(tier, raw) {
     return {
       lordId: raw.lordId, lordName: raw.lordName, lordRace: raw.lordRace,
       lordLevel: raw.lordLevel, lordClass: raw.lordClass,
-      playerUsername: raw.playerUsername, forceSize: raw.forceSize,
+      playerUsername: raw.playerUsername, playerId: raw.playerId, forceSize: raw.forceSize,
     };
   }
   return raw; // precise — full detail, including stance for rogue scanners
@@ -180,12 +183,18 @@ function _getGarrison(city) {
 
 // Find the city (if any) sitting on a tile, and who owns it. Cities are
 // globally visible via the shared world_state table (world.tiles[x,y] =
-// cityId); the owner has to be found with one cross-player scan of the
-// 'cities' storage key, same pattern already used for lords elsewhere in
-// this file. Returns null if no city, or if it belongs to excludePlayerId.
-async function _findCityAtTile(admin, tileX, tileY, excludePlayerId) {
+// { cityId, name, ownerId, ownerUsername } — the name/owner ride along so
+// clients can show them without scouting; see js/ui/map-view.js); the
+// owner's full city record still has to be found with one cross-player
+// scan of the 'cities' storage key, same pattern already used for lords
+// elsewhere in this file. Returns null if no city, or if it belongs to
+// excludePlayerId. Exported for server/actions/raid-start.js — raiding is
+// only allowed on a tile with NO city (own or enemy), so it calls this with
+// excludePlayerId=null to check for ANY city at all, not just enemy ones.
+export async function _findCityAtTile(admin, tileX, tileY, excludePlayerId) {
   const { data: worldRows } = await admin.from('world_state').select('value').eq('key', 'world').maybeSingle();
-  const cityId = worldRows?.value?.tiles?.[`${tileX},${tileY}`];
+  const tileEntry = worldRows?.value?.tiles?.[`${tileX},${tileY}`];
+  const cityId = typeof tileEntry === 'string' ? tileEntry : tileEntry?.cityId;
   if (!cityId) return null;
 
   const { data: cityRows } = await admin.from('storage').select('player_id, value').eq('key', 'cities');
@@ -259,21 +268,100 @@ const _RESOURCE_LOOT_PCT = 0.05;  // fraction of the city owner's resource pool 
 
 // Sum of unit "power" for a battle-army stack list — mirrors the combat
 // power formula already used client-side (lord-screen.js, map-view.js) and
-// server-side in catch-up.js's own copy of the same formula.
+// server-side in catch-up.js's own copy of the same formula. Dampened per
+// stack (count^0.8) to match battle-engine.js's _stackDamageMult — otherwise
+// this overvalues numerous cheap units relative to what they actually deal.
 function _armyPower(units) {
   return (units || []).reduce((sum, u) => {
     const def = UNIT_DEFS[u.unitId];
     if (!def) return sum;
     const s = def.combatStats || {};
-    return sum + ((s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0)) * u.count;
+    return sum + ((s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0)) * Math.pow(u.count, 0.8);
   }, 0);
+}
+
+// A lord's own combat contribution, scored with the same per-model formula
+// as _armyPower (treated as a single un-dampened "model" — a lord is always
+// exactly one). Used together with _armyPower for the honor system's power
+// comparison, which needs a full "how strong is this side, lord included"
+// figure — _armyPower alone (recruited units only) understates a
+// high-level lord's real fighting contribution.
+function _lordPower(lord) {
+  const s = _effectiveStats(lord);
+  return s.attack * 3 + s.defense * 2 + Math.floor(s.health / 10) + s.speed;
+}
+
+function _totalCombatPower(lord, army) {
+  return _lordPower(lord) + _armyPower(army?.units);
+}
+
+// Total raw damage one side's units dealt, read straight from the battle's
+// own event log (each event already carries actorSide from battle-engine.js).
+// No longer used for honor (see _sidePowerLost below) — kept for the
+// battle-report display and any future use.
+function _sideDamageDealt(events, side) {
+  return (events || []).reduce((sum, e) => (e.actorSide === side && e.damage > 0) ? sum + e.damage : sum, 0);
+}
+
+// "Power destroyed" on a side — the drop in that side's own ARMY power
+// (regular unit stacks only; a lord's own HP loss is deliberately excluded,
+// mirroring how _applyAtkLosses/_applyDefLosses already separate lord HP
+// from unit casualties) between the start and end of the battle. This is
+// what PvP honor is based on: killing 200 points' worth of a 400-point army
+// is worth 200, regardless of how much raw HP damage it took getting there
+// — an overkill wipe isn't worth more than the army actually was.
+// `lordIds` is the set of sourceIds on this side that are lord units (always
+// their raw lord.id, per _makeLordUnit) rather than a UNIT_DEFS stack.
+function _sidePowerLost(sideReport, lordIds) {
+  let before = 0, after = 0;
+  (sideReport.unitsStart || []).forEach(({ sourceId, count }) => {
+    if (lordIds.has(sourceId)) return;
+    let unitId = sourceId;
+    const defMatch = /^d\d+_(.+)$/.exec(sourceId);
+    if (defMatch) unitId = defMatch[1];
+    else if (sourceId.startsWith('garrison_')) unitId = sourceId.slice('garrison_'.length);
+    const def = UNIT_DEFS[unitId];
+    if (!def) return;
+    const s     = def.combatStats || {};
+    const power = (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
+    before += power * Math.pow(count, 0.8);
+    const surv      = sideReport.unitsSurviving.find(u => u.sourceId === sourceId);
+    const survCount = surv?.count ?? 0;
+    if (survCount > 0) after += power * Math.pow(survCount, 0.8);
+  });
+  return Math.max(0, before - after);
+}
+
+// Adds power-destroyed to whichever active clan_wars row matches these two
+// clans (if any) — fetches active wars and matches in JS rather than
+// building a filter string, same reasoning as clan-create.js/
+// clan-war-declare.js's uniqueness checks. A no-op if the clans aren't at
+// war, or if neither side destroyed anything this fight.
+async function _accrueClanWarScore(admin, clanId1, powerDestroyedBy1, clanId2, powerDestroyedBy2) {
+  if (!clanId1 || !clanId2 || clanId1 === clanId2) return;
+  if (powerDestroyedBy1 <= 0 && powerDestroyedBy2 <= 0) return;
+
+  const { data: activeWars, error } = await admin
+    .from('clan_wars').select('id, clan_a_id, clan_b_id, score_a, score_b').eq('status', 'active');
+  if (error || !activeWars) return;
+
+  const war = activeWars.find(w =>
+    (w.clan_a_id === clanId1 && w.clan_b_id === clanId2) ||
+    (w.clan_a_id === clanId2 && w.clan_b_id === clanId1));
+  if (!war) return;
+
+  const isClan1A = war.clan_a_id === clanId1;
+  const scoreA = Number(war.score_a) + (isClan1A ? powerDestroyedBy1 : powerDestroyedBy2);
+  const scoreB = Number(war.score_b) + (isClan1A ? powerDestroyedBy2 : powerDestroyedBy1);
+
+  await admin.from('clan_wars').update({ score_a: scoreA, score_b: scoreB }).eq('id', war.id);
 }
 
 // XP threshold + level-up — mirrors js/domain/lord.js checkLevelUp(). This
 // is a third independent copy of the same small formula (server/tick/catch-up.js
 // already has its own, by design — that module is dependency-free).
 function _xpToNextLevel(level) { return 50 * (2 * level + 1); }
-function _checkLevelUp(lord) {
+export function _checkLevelUp(lord) {
   const cls     = LORD_CLASSES[lord.classId];
   const clsKeys = new Set(Object.keys(cls?.modifiers || {}));
   let leveled = 0;
@@ -376,20 +464,38 @@ function _unitRole(def) {
 // Build a lord unit for the battle context.
 // prefix: 'a' for attacker, 'd0'/'d1'/... for defenders.
 // sourceId is always lord.id (unique globally) — no prefix needed.
+// Applies the lord's chosen combat talent (attack/defense bonus + traits) —
+// mirrors js/domain/battle-engine.js buildContext()'s client-side PvE path,
+// which this previously lacked entirely, silently no-op'ing every combat
+// talent (blademaster, double_strike, pyroblast, iron_wall) in PvP.
 function _makeLordUnit(lord, stats, prefix) {
+  const traits = ['backline'];
+  let   attack = stats.attack;
+  let   defense = stats.defense;
+
+  const talentEffects = (lord.talentId && TALENT_POOL[lord.talentId]?.effects) || {};
+  if (talentEffects.battleUnitAttackBonus)  attack  += talentEffects.battleUnitAttackBonus;
+  if (talentEffects.battleUnitDefenseBonus) defense += talentEffects.battleUnitDefenseBonus;
+  if (talentEffects.battleUnitTraits) {
+    for (const t of talentEffects.battleUnitTraits) {
+      if (!traits.includes(t)) traits.push(t);
+    }
+  }
+
   return {
     id:          `${prefix}_lord`,
     sourceId:    lord.id,
     name:        lord.name,
     role:        'lord',
-    traits:      ['backline'],
+    traits,
     abilities:   [],
     maxHp:       stats.health,
     currentHp:   lord.currentHp ?? stats.health,
-    attack:      stats.attack,
-    defense:     stats.defense,
+    attack,
+    defense,
     speed:       stats.speed,
     leadership:  stats.leadership,
+    magic:       stats.magic || 0,
     count:       1,
     startCount:  1,
     isLord:      true,
@@ -527,19 +633,47 @@ function _applyDefLosses(defenders, defArmiesByPlayer, sideReport) {
 // Update lord HP and downtime from the battle report's surviving units list.
 // winner: 'attacker'|'defender'|'draw'
 // side:   'attacker'|'defender' — which side this lord fought on
-// Eliminated defenders against a winning attacker are 'captured'; all others are 'defeated'.
-function _applyLordHp(lordsObj, lordId, unitsSurviving, winner, side) {
+// capturerInfo: { playerId, username } of the winning attacker — only used
+//   (and only needed) when this call can produce a 'captured' result, i.e.
+//   the defender-side call. Eliminated defenders against a winning attacker
+//   are 'captured'; all others are 'defeated'.
+//
+// Captured lords get a far-future downtimeUntil sentinel instead of null —
+// every "is this lord unavailable" check across the codebase (isDown(),
+// catch-up.js's expiry clear + its Deno mirror, this file's own inline scan/
+// combat gates) already keys off `downtimeUntil && now < downtimeUntil`, so
+// the sentinel makes a captured lord permanently unavailable everywhere for
+// free, with no second condition to add or keep in sync. downtimeReason
+// stays cosmetic-only (a player's own client can already claim it for a PvE
+// loss — see pve-result.js) — capturedByPlayerId is the sole authority for
+// blocking revive, enabling ransom/release, and prison-list membership.
+const _CAPTURE_SENTINEL_MS = 100 * 365 * 24 * 60 * 60 * 1000; // ~100 years
+function _applyLordHp(lordsObj, lordId, unitsSurviving, winner, side, capturerInfo) {
   const lord = lordsObj[lordId];
   if (!lord) return;
   const unit = unitsSurviving.find(u => u.sourceId === lordId);
   if (unit) {
-    lord.currentHp      = Math.max(1, Math.round(unit.avgHp));
-    lord.downtimeUntil  = null;
-    lord.downtimeReason = null;
+    lord.currentHp          = Math.max(1, Math.round(unit.avgHp));
+    lord.downtimeUntil      = null;
+    lord.downtimeReason     = null;
+    lord.capturedByPlayerId = null;
+    lord.capturedByUsername = null;
+    lord.capturedAt         = null;
   } else {
+    const isCapture = side === 'defender' && winner === 'attacker';
     lord.currentHp      = 0;
-    lord.downtimeUntil  = Date.now() + 60 * 60 * 1000; // 1 hour
-    lord.downtimeReason = (side === 'defender' && winner === 'attacker') ? 'captured' : 'defeated';
+    lord.downtimeReason = isCapture ? 'captured' : 'defeated';
+    if (isCapture) {
+      lord.downtimeUntil      = Date.now() + _CAPTURE_SENTINEL_MS;
+      lord.capturedByPlayerId = capturerInfo?.playerId || null;
+      lord.capturedByUsername = capturerInfo?.username || null;
+      lord.capturedAt         = Date.now();
+    } else {
+      lord.downtimeUntil      = Date.now() + 60 * 60 * 1000; // 1 hour
+      lord.capturedByPlayerId = null;
+      lord.capturedByUsername = null;
+      lord.capturedAt         = null;
+    }
   }
   lordsObj[lordId] = lord;
 }
@@ -623,6 +757,7 @@ async function _gatherTileIntel(admin, callerId, callerClassId, x, y, knownTiers
         lordLevel:      lord.level || 1,
         lordClass:      lord.classId,
         playerUsername: username,
+        playerId:       row.player_id,
         armyCapacity:   armyPoints,
         units:          unitsSummary,
         lastActivity:   lord.actionQueue?.length > 0 ? lord.actionQueue[0].actionId : 'idle',
@@ -842,7 +977,7 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   if ((attackerLord.actionQueue || []).length > 0) {
     return { ok: false, error: 'Lord is busy with another action' };
   }
-  // skipAttackerStanceGate: used when an ambush/raid-stanced lord is reacting
+  // skipAttackerStanceGate: used when an ambush-stanced lord is reacting
   // to a scout entering their tile (server/combat-resolver.js resolveScout) —
   // this gate exists to stop a stanced lord from *issuing new orders*, which
   // doesn't apply to a stance passively triggering a fight it's the cause of.
@@ -927,6 +1062,22 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
     if (row.key === 'players')       defPlayersByPlayer[row.player_id]  = (row.value || {})[row.player_id] || {};
     if (row.key === 'honor_points')  defHonorByPlayer[row.player_id]    = row.value ?? 0;
   }
+
+  // Ally check: an ally is strictly a fellow clan member — nothing broader.
+  // Same-clan targets are unattackable outright rather than just discouraged,
+  // so this has to reject the whole fight before anything else runs.
+  const attackerClanId = atkPlayers[attackerPlayerId]?.clanId || null;
+  if (attackerClanId && defPlayerIds.some(pid => defPlayersByPlayer[pid]?.clanId === attackerClanId)) {
+    if (atkLords[attackerLordId]) {
+      atkLords[attackerLordId].pendingPvpAttack = null;
+      await admin.from('storage').upsert(
+        { player_id: attackerPlayerId, key: 'lords', value: atkLords },
+        { onConflict: 'player_id,key' }
+      );
+    }
+    return { ok: false, error: 'Cannot attack a member of your own clan.' };
+  }
+
   const atkActivityFeed = atkFeedResult.data?.value || {};
   const atkHonorRow     = (atkRows || []).find(r => r.key === 'honor_points');
   const atkHonorCurrent = atkHonorRow?.value ?? 0;
@@ -955,6 +1106,108 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   const ctx     = _buildMultiContext(attackerLord, atkArmies[attackerLord.id], defenders, garrisonUnits, terrain);
   const report  = BattleEngine.resolve(ctx);
 
+  // Per-participant identity for the client to render one report column per
+  // real defender instead of flattening a garrison + multiple defending
+  // lords into one "Enemy" blob — see js/ui/battle-result-view.js. Array
+  // order here MUST match the d{idx} prefixing _buildMultiContext/
+  // _applyDefLosses use (both iterate `defenders` the same way), since the
+  // report itself only carries sourceId prefixes, not names. race/classId
+  // are included so the client can call pickLordPortrait() for an ENEMY
+  // lord too, not just the viewer's own — it's a pure hash of
+  // (race, classId, lordId), so any client computes the same portrait for
+  // any lord without needing to have that lord's data locally cached.
+  report._meta = {
+    attacker:       { lordId: attackerLord.id, lordName: attackerLord.name, race: attackerLord.race, classId: attackerLord.classId },
+    defenderGroups: defenders.map(({ lord }) => ({ lordId: lord.id, lordName: lord.name, race: lord.race, classId: lord.classId })),
+    garrison:       cityHit ? { cityId: cityHit.city.id, cityName: cityHit.city.name } : null,
+  };
+
+  // Honor: scaled by ARMY POWER DESTROYED (not raw damage) × the relative
+  // power gap between the two sides, for BOTH attacker and defender — no
+  // more flat participation cost. Killing 200 points' worth of a 400-point
+  // army is worth 200 (before the ratio scaling below) regardless of how
+  // much raw HP damage it took getting there — an overkill wipe isn't worth
+  // more than the army actually was. Fighting someone stronger than you
+  // swings honor UP (bigger the more power you destroy and the bigger the
+  // gap); fighting someone weaker swings it DOWN the same way. An even
+  // fight (comparable power) nets close to zero regardless of power
+  // destroyed — beating an equal isn't shameful or especially glorious,
+  // it's just expected. PvE (bandit camp) wins remain the flat +5 source
+  // of honor — see pve-attack.js — this formula only applies to PvP.
+  // Losing your own lord isn't a separate penalty any more; it's already
+  // reflected naturally in how lopsided the power-destroyed numbers end up.
+  // Computed here (rather than down by the writes) so the honor swing can
+  // be stamped onto both sides' activity-feed entries below, for display
+  // in the battle report.
+  //
+  // _honorFactor turns a power ratio (opponent power ÷ own power) into a
+  // SIGNED, SYMMETRIC multiplier: ratio > 1 (opponent stronger — punching
+  // up) swings honor up; ratio < 1 (opponent weaker — punching down/
+  // bullying) swings it down by the same MAGNITUDE for the same degree of
+  // mismatch. A naive `clamp(ratio, 0.2, 5) - 1` is NOT symmetric: it tops
+  // out at +4 for the 5x-stronger case but only -0.8 for the 5x-weaker
+  // case, an inherent 5x asymmetry that made bullying weaker defenders
+  // barely dent honor while punching up swung it hugely — exactly the bug
+  // reported. Reframing the "weaker" branch as -(1/ratio - 1) makes both
+  // ends of the clamp land on the same magnitude (±4).
+  const _honorFactor = ratio => {
+    const clamped = Math.max(0.2, Math.min(5, ratio));
+    return clamped >= 1 ? (clamped - 1) : -(1 / clamped - 1);
+  };
+
+  const atkTotalPower = _totalCombatPower(attackerLord, atkArmies[attackerLord.id]);
+  // Each defending player's own ratio uses THEIR power vs the attacker (not
+  // the whole co-op coalition's combined power) — a weak defender fighting
+  // alongside stronger allies is still individually the underdog, and that
+  // shouldn't get diluted by an ally (or the city garrison) inflating the
+  // comparison for them specifically.
+  const defPowerByPlayer = {};
+  defenders.forEach(({ playerId, lord, army }) => {
+    defPowerByPlayer[playerId] = _totalCombatPower(lord, army);
+  });
+  if (cityHit && defPowerByPlayer[cityHit.playerId] == null) {
+    defPowerByPlayer[cityHit.playerId] = _armyPower(garrisonUnits);
+  }
+  // The attacker's ratio uses the COMBINED defending force — facing down a
+  // coalition of several lords (+ garrison) is "fighting up" if their
+  // combined power is high, even if each individual defender is weaker.
+  const combinedDefPower = Object.values(defPowerByPlayer).reduce((s, p) => s + p, 0);
+
+  // sourceIds that are lord units (excluded from power-lost — see
+  // _sidePowerLost) rather than a regular UNIT_DEFS stack.
+  const atkLordIds = new Set([attackerLord.id]);
+  const defLordIds = new Set(defenders.map(({ lord }) => lord.id));
+
+  // Power the attacker actually destroyed = the defending side's power lost.
+  // Power the defenders actually destroyed = the attacking side's power lost.
+  const atkPowerDestroyed = _sidePowerLost(report.defender, defLordIds);
+  const defPowerDestroyed = _sidePowerLost(report.attacker, atkLordIds);
+
+  // Clan-war score accrual: reuses the same power-destroyed numbers as honor
+  // above ("puntos por victorias... puntos destruidos"), scored for BOTH
+  // sides independently rather than only for a battle "winner" — mirrors how
+  // honor already works dual-sided in this codebase. Only scored when the
+  // defending side belongs to a single clan; a tile with defenders from more
+  // than one clan is a rare coalition edge case, skipped rather than guessing
+  // how to split credit between wars.
+  const defClanIds = [...new Set(defPlayerIds.map(pid => defPlayersByPlayer[pid]?.clanId).filter(Boolean))];
+  if (attackerClanId && defClanIds.length === 1) {
+    await _accrueClanWarScore(admin, attackerClanId, atkPowerDestroyed, defClanIds[0], defPowerDestroyed);
+  }
+
+  const atkPowerRatio = atkTotalPower > 0 ? combinedDefPower / atkTotalPower : 5;
+  const atkHonorDelta = Math.round(atkPowerDestroyed * _honorFactor(atkPowerRatio));
+  const atkHonorNew   = atkHonorCurrent + atkHonorDelta;
+
+  // Per-defender honor delta, keyed by playerId — computed once here, reused
+  // both in the activity-feed entry (below) and in the honor_points write.
+  const defHonorDeltaByPlayer = {};
+  defPlayerIds.forEach(pid => {
+    const defPower   = defPowerByPlayer[pid] || 0;
+    const ratio      = defPower > 0 ? atkTotalPower / defPower : 5;
+    defHonorDeltaByPlayer[pid] = Math.round(defPowerDestroyed * _honorFactor(ratio));
+  });
+
   // Rewards — gold/resources are attacker-only and only on victory; XP goes
   // to both sides on every outcome. See _computeRewards for the formula.
   const rewards = _computeRewards({ winner: report.winner, defenders, garrisonUnits, cityHit });
@@ -982,9 +1235,20 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   _applyDefLosses(defenders, defArmiesByPlayer, report.defender);
   _applyLordHp(atkLords, attackerLord.id, report.attacker.unitsSurviving, report.winner, 'attacker');
   _awardXp(attackerLord, rewards.atkXp);
+  const capturerInfo = { playerId: attackerPlayerId, username: atkPlayer?.username || null };
   defenders.forEach(({ lord, playerId }) => {
-    _applyLordHp(defLordsByPlayer[playerId] || {}, lord.id, report.defender.unitsSurviving, report.winner, 'defender');
+    _applyLordHp(defLordsByPlayer[playerId] || {}, lord.id, report.defender.unitsSurviving, report.winner, 'defender', capturerInfo);
     _awardXp((defLordsByPlayer[playerId] || {})[lord.id], rewards.defXp);
+    // Raiding lord defeated: forfeit the stance. Rewards are only ever paid
+    // out at completion (natural or instant-via-credits) — never accrued
+    // anywhere along the way — so clearing the stance here IS forfeiting
+    // everything earned so far, with nothing further to claw back. A
+    // successful defense (raider wins) leaves the stance untouched — the
+    // raid just continues as if the fight never happened.
+    const defendingLord = (defLordsByPlayer[playerId] || {})[lord.id];
+    if (defendingLord?.stance?.id === 'raiding' && report.winner === 'attacker') {
+      defendingLord.stance = { id: 'idle', startedAt: null, finishAt: null };
+    }
   });
 
   // Clear the deferred attack flag now that battle is resolved.
@@ -996,7 +1260,8 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   const atkIcon  = report.winner === 'attacker' ? '⚔' : report.winner === 'draw' ? '🤝' : '☠';
   const atkTitle = report.winner === 'attacker' ? 'PvP Victory' : report.winner === 'draw' ? 'PvP Draw' : 'PvP Defeat';
   const atkDetail = `${report.rounds} rounds · casualties: ${report.attacker.modelsLost} · +${rewards.atkXp}⭐`
-    + (rewards.atkGold > 0 ? ` · +${rewards.atkGold}💰` : '');
+    + (rewards.atkGold > 0 ? ` · +${rewards.atkGold}💰` : '')
+    + (atkHonorDelta !== 0 ? ` · ${atkHonorDelta > 0 ? '+' : ''}${atkHonorDelta}⚖` : '');
 
   // What/who was actually attacked — a city, or the first defending lord.
   // Distinct from `lordName`/`lordId` above (which always identify the
@@ -1013,14 +1278,16 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
     opponentType: atkOpponentType, opponentName: atkOpponentName,
     outcome: report.winner === 'attacker' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat',
     report, terrain, rounds: report.rounds, modelsLost: report.attacker.modelsLost,
-    xpEarned: rewards.atkXp, goldEarned: rewards.atkGold, resourceLoot,
+    xpEarned: rewards.atkXp, goldEarned: rewards.atkGold, resourceLoot, honorEarned: atkHonorDelta,
   });
   atkActivityFeed[attackerPlayerId] = atkActivityFeed[attackerPlayerId].slice(0, 50);
 
   defPlayerIds.forEach(pid => {
     const defIcon   = report.winner === 'defender' ? '🛡' : report.winner === 'draw' ? '🤝' : '☠';
     const defTitle  = report.winner === 'defender' ? 'Attack repelled!' : report.winner === 'draw' ? 'Battle draw' : '☠ Defeat — lord attacked';
-    const defDetail = `${attackerLord.name} attacked at (${tileX},${tileY}) · ${report.rounds} rounds · casualties: ${report.defender.modelsLost} · +${rewards.defXp}⭐`;
+    const pidHonorDelta = defHonorDeltaByPlayer[pid] || 0;
+    const defDetail = `${attackerLord.name} attacked at (${tileX},${tileY}) · ${report.rounds} rounds · casualties: ${report.defender.modelsLost} · +${rewards.defXp}⭐`
+      + (pidHonorDelta !== 0 ? ` · ${pidHonorDelta > 0 ? '+' : ''}${pidHonorDelta}⚖` : '');
     const feed = defActivityByPlayer[pid] || {};
     if (!feed[pid]) feed[pid] = [];
     feed[pid] = feed[pid].filter(e => !(e.type === 'pvp_threat' && e.lordName === attackerLord.name));
@@ -1036,6 +1303,7 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
       outcome: report.winner === 'defender' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat',
       report, terrain, rounds: report.rounds, modelsLost: report.defender.modelsLost,
       xpEarned: defLordEntry ? rewards.defXp : 0, // no lord present (garrison-only) → nobody to award XP to
+      honorEarned: defHonorDeltaByPlayer[pid] || 0,
     });
     feed[pid] = feed[pid].slice(0, 50);
     defActivityByPlayer[pid] = feed;
@@ -1048,23 +1316,23 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   // prefixed placeholder id rather than null for garrison-only defenses.
   const primaryDefender = defenders[0]
     || (cityHit ? { playerId: cityHit.playerId, lord: { id: `garrison_${cityHit.city.id}`, name: cityHit.city.name } } : null);
-  // Honor: attacker always loses 15 for PvP attacking; defenders gain 15 on victory, 3 on draw.
-  const atkHonorNew = atkHonorCurrent - 15;
-  const defHonorDelta = report.winner === 'defender' ? 15 : report.winner === 'draw' ? 3 : 0;
 
   const writes = [
     admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'armies',        value: updatedAtkArmies },  { onConflict: 'player_id,key' }),
     admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'lords',         value: atkLords },          { onConflict: 'player_id,key' }),
     admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'activity_feed', value: atkActivityFeed },   { onConflict: 'player_id,key' }),
     admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'players',       value: atkPlayers },        { onConflict: 'player_id,key' }),
-    admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'honor_points',  value: atkHonorNew },       { onConflict: 'player_id,key' }),
-    ...defPlayerIds.flatMap(pid => [
-      admin.from('storage').upsert({ player_id: pid, key: 'armies',        value: defArmiesByPlayer[pid]   || {} }, { onConflict: 'player_id,key' }),
-      admin.from('storage').upsert({ player_id: pid, key: 'lords',         value: defLordsByPlayer[pid]    || {} }, { onConflict: 'player_id,key' }),
-      admin.from('storage').upsert({ player_id: pid, key: 'activity_feed', value: defActivityByPlayer[pid] || {} }, { onConflict: 'player_id,key' }),
-      admin.from('storage').upsert({ player_id: pid, key: 'players',       value: { [pid]: defPlayersByPlayer[pid] || {} } }, { onConflict: 'player_id,key' }),
-      ...(defHonorDelta > 0 ? [admin.from('storage').upsert({ player_id: pid, key: 'honor_points', value: (defHonorByPlayer[pid] ?? 0) + defHonorDelta }, { onConflict: 'player_id,key' })] : []),
-    ]),
+    ...(atkHonorDelta !== 0 ? [admin.from('storage').upsert({ player_id: attackerPlayerId, key: 'honor_points', value: atkHonorNew }, { onConflict: 'player_id,key' })] : []),
+    ...defPlayerIds.flatMap(pid => {
+      const honorDelta = defHonorDeltaByPlayer[pid] || 0;
+      return [
+        admin.from('storage').upsert({ player_id: pid, key: 'armies',        value: defArmiesByPlayer[pid]   || {} }, { onConflict: 'player_id,key' }),
+        admin.from('storage').upsert({ player_id: pid, key: 'lords',         value: defLordsByPlayer[pid]    || {} }, { onConflict: 'player_id,key' }),
+        admin.from('storage').upsert({ player_id: pid, key: 'activity_feed', value: defActivityByPlayer[pid] || {} }, { onConflict: 'player_id,key' }),
+        admin.from('storage').upsert({ player_id: pid, key: 'players',       value: { [pid]: defPlayersByPlayer[pid] || {} } }, { onConflict: 'player_id,key' }),
+        ...(honorDelta !== 0 ? [admin.from('storage').upsert({ player_id: pid, key: 'honor_points', value: (defHonorByPlayer[pid] ?? 0) + honorDelta }, { onConflict: 'player_id,key' })] : []),
+      ];
+    }),
     admin.from('battle_reports').insert({
       attacker_id:      attackerPlayerId,
       defender_id:      primaryDefender.playerId,
@@ -1158,7 +1426,7 @@ export async function resolvePvpBattle(admin, attackerPlayerId, attackerLordId, 
 // Army-less lords are always safe (already invisible/unattackable per the
 // existing army-less rule) and go straight to gathering intel. A lord
 // scouting WITH an army risks an ambush: if an enemy lord on that exact tile
-// is in 'ambush' or 'raid' stance, roll _visibilityScore (the same formula
+// is in 'ambush' stance, roll _visibilityScore (the same formula
 // used everywhere else for "can this army be seen") as the detection chance.
 // If detected, the ambusher becomes the attacker in a full _resolveCore
 // fight and the scout gets NO intel regardless of outcome — getting caught
@@ -1195,7 +1463,7 @@ export async function resolveScout(admin, playerId, lordId, tileX, tileY, knownT
     return { ok: true, outcome: 'intel', discoveries };
   }
 
-  // Look for an enemy (never own-player) lord in ambush/raid stance on this
+  // Look for an enemy (never own-player) lord in ambush stance on this
   // exact tile — same-tile only, no adjacent-tile interception.
   const { data: allLordRows } = await admin.from('storage')
     .select('player_id, value').eq('key', 'lords');
@@ -1206,7 +1474,7 @@ export async function resolveScout(admin, playerId, lordId, tileX, tileY, knownT
     const hit = Object.values(row.value || {}).find(l =>
       l.x === tileX && l.y === tileY &&
       !(l.downtimeUntil && now < l.downtimeUntil) &&
-      (l.stance?.id === 'ambush' || l.stance?.id === 'raid') &&
+      l.stance?.id === 'ambush' &&
       !(l.stance?.finishAt && now >= l.stance.finishAt)
     );
     if (hit) { ambusher = { playerId: row.player_id, lord: hit }; break; }
@@ -1228,6 +1496,90 @@ export async function resolveScout(admin, playerId, lordId, tileX, tileY, knownT
   const discoveries = await _gatherTileIntel(admin, playerId, lord.classId, tileX, tileY, knownTiers);
   await _clearScoutPending(admin, playerId, lords, lordId);
   return { ok: true, outcome: 'intel', discoveries };
+}
+
+// ── Raiding: auto-combat on arrival ────────────────────────────
+//
+// Called when ANY non-attack-intent move_lord action completes: server/tick/
+// catch-up.js sets lord.pendingArrivalCheck = { tileX, tileY } unconditionally
+// (it can't check other players' lords itself — same "pure, single-player
+// module" reason attack-intent moves and scouts only ever set a flag too).
+// This function is what actually has admin access, drained by both:
+//   - server/tick/event-dispatcher.js's _advancePlayer (offline case)
+//   - server/sync.js (online-login / periodic-nav-sync case)
+//
+// If another player's lord is sitting on that exact tile in the 'raiding'
+// stance (with an army — same "army-less lords don't exist for combat"
+// rule as everywhere else), the ARRIVING lord becomes the attacker in a
+// normal _resolveCore fight — no special flag needed on their side, they're
+// genuinely initiating it just by walking in. The raiding lord doesn't need
+// any bypass either: _resolveCore already discovers every lord sitting on
+// the target tile as a defender on its own (same tile-scan multi-defender
+// lords already share with a city garrison), and the raid-forfeit-on-loss
+// hook lives inside _resolveCore itself (see the defenders.forEach block).
+async function _clearArrivalPending(admin, playerId, lords, lordId) {
+  if (!lords[lordId]) return;
+  lords[lordId].pendingArrivalCheck = null;
+  await admin.from('storage').upsert(
+    { player_id: playerId, key: 'lords', value: lords },
+    { onConflict: 'player_id,key' }
+  );
+}
+
+export async function resolveArrivalCheck(admin, playerId, lordId, tileX, tileY) {
+  const { data: rows, error } = await admin.from('storage')
+    .select('key, value').eq('player_id', playerId).in('key', ['lords', 'armies']);
+  if (error) return { ok: false, error: 'Failed to load arrival data: ' + error.message };
+
+  const data   = Object.fromEntries((rows || []).map(r => [r.key, r.value]));
+  const lords  = data.lords  || {};
+  const armies = data.armies || {};
+  const lord   = lords[lordId];
+  if (!lord) return { ok: false, error: 'Arriving lord not found' };
+  if (lord.x !== tileX || lord.y !== tileY) {
+    await _clearArrivalPending(admin, playerId, lords, lordId);
+    return { ok: true, outcome: 'moved_on' };
+  }
+
+  const armyUnits = (armies[lordId]?.units) || [];
+  if (_armyTotal(armyUnits) <= 0) {
+    // Army-less lords don't exist for combat purposes — same rule as
+    // scouting/detection everywhere else. Nothing to trigger.
+    await _clearArrivalPending(admin, playerId, lords, lordId);
+    return { ok: true, outcome: 'no_army' };
+  }
+
+  const { data: allLordRows } = await admin.from('storage')
+    .select('player_id, value').eq('key', 'lords');
+  const now = Date.now();
+  let raider = null;
+  for (const row of (allLordRows || [])) {
+    if (row.player_id === playerId) continue;
+    const hit = Object.values(row.value || {}).find(l =>
+      l.x === tileX && l.y === tileY &&
+      !(l.downtimeUntil && now < l.downtimeUntil) &&
+      l.stance?.id === 'raiding' &&
+      !(l.stance?.finishAt && now >= l.stance.finishAt)
+    );
+    if (hit) { raider = { playerId: row.player_id, lord: hit }; break; }
+  }
+
+  if (!raider) {
+    await _clearArrivalPending(admin, playerId, lords, lordId);
+    return { ok: true, outcome: 'no_target' };
+  }
+
+  await _clearArrivalPending(admin, playerId, lords, lordId);
+  const result = await _resolveCore(admin, playerId, lordId, tileX, tileY);
+  if (!result.ok) return result;
+  return {
+    ok: true, outcome: 'raid_combat', report: result.report, terrain: result.terrain,
+    // Forwarded so callers (sync.js / event-dispatcher.js) can hydrate the
+    // MOVER's post-fight state the same way resolvePvpBattle's callers do —
+    // the mover is the attacker here, _resolveCore returns their updated
+    // lords/armies/player under these same field names.
+    atkLords: result.atkLords, atkArmies: result.atkArmies, atkPlayer: result.atkPlayer,
+  };
 }
 
 // ── POST /api/pvp/check-incoming ─────────────────────────────

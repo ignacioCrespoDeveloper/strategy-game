@@ -22,7 +22,7 @@ const CityView = (() => {
     { id: 'infrastructure', label: 'Infrastructure', icon: '🏛' },
     { id: 'economy',        label: 'Economy',        icon: '💰' },
     { id: 'military',       label: 'Military',       icon: '⚔'  },
-    { id: 'landmarks',      label: 'Landmarks',      icon: '⭐' },
+    { id: 'landmarks',      label: 'Landmarks',      icon: '🏵' },
   ];
 
   // ── Entry point ───────────────────────────────────────────────
@@ -237,11 +237,12 @@ const CityView = (() => {
         const { locked } = BuildingUnlockService.check(_city, _lord, def);
         return !locked;
       });
-    const busy      = _city.constructionQueue.length > 0;
+    const MAX_QUEUE  = 5;
+    const queueFull  = _city.constructionQueue.length >= MAX_QUEUE;
 
     return tabsHtml +
       (_bldTab === 'landmarks' ? _landmarkHeaderHtml() : '') +
-      `<div class="bld2-list">${buildings.map(def => _cardHtml(def, busy)).join('')}</div>`;
+      `<div class="bld2-list">${buildings.map(def => _cardHtml(def, queueFull)).join('')}</div>`;
   }
 
   function _overviewTabHtml() {
@@ -431,11 +432,11 @@ const CityView = (() => {
 
         ${_city.landmark ? `
         <div class="cvov-section">
-          <div class="cvov-section-title">⭐ Landmark</div>
+          <div class="cvov-section-title">🏵 Landmark</div>
           <div class="cvov-landmark-row">
-            <span class="cvov-lm-icon">${BUILDING_DEFS[_city.landmark]?.icon || '⭐'}</span>
+            <span class="cvov-lm-icon">${BUILDING_DEFS[_city.landmark]?.icon || '🏵'}</span>
             <span class="cvov-lm-name">${BUILDING_DEFS[_city.landmark]?.name || _city.landmark}</span>
-            <span class="cvl-lm-level">Lv ${_city.buildings[_city.landmark] || 1}</span>
+            <span class="cvov-lm-level">Lv ${_city.buildings[_city.landmark] || 1}</span>
           </div>
         </div>
         ` : ''}
@@ -460,7 +461,7 @@ const CityView = (() => {
     const current = _city.landmark ? BUILDING_DEFS[_city.landmark] : null;
     return `
       <div class="bld2-lm-notice">
-        <div class="bld2-lm-notice-title">⭐ City Landmark</div>
+        <div class="bld2-lm-notice-title">🏵 City Landmark</div>
         <div class="bld2-lm-notice-body">Each city may construct ONE Landmark. Choose wisely — you cannot switch to a different one.</div>
         ${current ? `
           <div class="bld2-lm-active">
@@ -471,18 +472,25 @@ const CityView = (() => {
     `;
   }
 
-  function _cardHtml(def, busy) {
-    const currentLvl = _city.buildings[def.id] || 0;
-    const targetLvl  = currentLvl + 1;
-    const atMax      = currentLvl >= def.maxLevel;
-    const inQueue    = _city.constructionQueue.some(q => q.buildingId === def.id);
+  function _cardHtml(def, queueFull) {
+    const currentLvl    = _city.buildings[def.id] || 0;
+    // Same-building upgrades already queued push the next target level up,
+    // mirroring server/actions/build.js's effectiveLevel stacking so the
+    // displayed cost/duration/max-level state matches what the server will
+    // actually do when this card is clicked again.
+    const queuedForThis  = _city.constructionQueue.filter(q => q.buildingId === def.id).length;
+    const effectiveLevel = currentLvl + queuedForThis;
+    const targetLvl  = effectiveLevel + 1;
+    const atMax      = effectiveLevel >= def.maxLevel;
+    const inQueue    = queuedForThis > 0;
     const isLandmark = !!def.isLandmark;
 
     const { locked, reasons } = BuildingUnlockService.check(_city, _lord, def);
 
     const playerRes = (_player && _player.resources) ? _player.resources : {};
-    const canAfford = !atMax && !locked && !busy && !inQueue && ConstructionService.canAfford(_city, def.id, playerRes);
     const cost      = !atMax ? def.cost(targetLvl) : {};
+    const canAfford = !atMax && !locked && !queueFull &&
+      Object.entries(cost).every(([res, amt]) => amt <= 0 || Math.floor(playerRes[res] || 0) >= amt);
     const duration  = !atMax ? TimeService.formatDuration(def.buildTime(targetLvl)) : '';
 
     const effects   = def.effects ? def.effects(Math.max(1, currentLvl)) : [];
@@ -495,14 +503,14 @@ const CityView = (() => {
     let btnLabel, btnClass, btnDisabled;
     if (atMax) {
       btnLabel = 'Max Level'; btnClass = 'bld2-btn--maxed'; btnDisabled = true;
-    } else if (inQueue) {
-      btnLabel = '⚙ Building…'; btnClass = 'bld2-btn--busy'; btnDisabled = true;
     } else if (locked) {
       btnLabel = '🔒 Locked'; btnClass = 'bld2-btn--locked'; btnDisabled = true;
-    } else if (busy) {
-      btnLabel = 'Queue Busy'; btnClass = 'bld2-btn--busy'; btnDisabled = true;
+    } else if (queueFull) {
+      btnLabel = 'Queue Full'; btnClass = 'bld2-btn--busy'; btnDisabled = true;
     } else if (!canAfford) {
       btnLabel = 'Need Resources'; btnClass = 'bld2-btn--cant'; btnDisabled = true;
+    } else if (inQueue) {
+      btnLabel = `▲ Queue Lv ${targetLvl}`; btnClass = 'bld2-btn--ready'; btnDisabled = false;
     } else {
       btnLabel = currentLvl === 0 ? '▶ Build' : '▲ Upgrade'; btnClass = 'bld2-btn--ready'; btnDisabled = false;
     }
@@ -527,7 +535,7 @@ const CityView = (() => {
 
     return `
       <div class="${cardClasses}">
-        ${isLandmark ? '<div class="bld2-lm-banner">⭐ LANDMARK</div>' : ''}
+        ${isLandmark ? '<div class="bld2-lm-banner">🏵 LANDMARK</div>' : ''}
 
         <div class="bld2-card-main">
 
@@ -595,6 +603,7 @@ const CityView = (() => {
 
   function _queueBannerHtml() {
     if (_city.constructionQueue.length === 0) return '';
+    const MAX_QUEUE = 5;
     const item      = _city.constructionQueue[0];
     const def       = BUILDING_DEFS[item.buildingId];
     const secs      = ConstructionService.timeRemaining(_city);
@@ -602,6 +611,21 @@ const CityView = (() => {
     const boostCost = Math.max(1, Math.ceil(secs / 60));
     const player    = PlayerService.getById(_player.id);
     const canBoost  = (player?.credits || 0) >= boostCost;
+
+    // Queued-but-not-yet-started upgrades (position 1+) — each already has a
+    // real sequenced startedAt/finishAt from the server, so its ETA is just
+    // "time until ITS finishAt", same formula as the front item.
+    const upcomingHtml = _city.constructionQueue.slice(1).map((q, i) => {
+      const qDef    = BUILDING_DEFS[q.buildingId];
+      const etaSecs = Math.max(0, Math.round((q.finishAt - TimeService.now()) / 1000));
+      return `
+        <div class="cv-queue-item">
+          <span class="cv-queue-item-pos">#${i + 2}</span>
+          <span class="cv-queue-item-name">${qDef?.name || q.buildingId} → Lv ${q.targetLevel}</span>
+          <span class="cv-queue-item-eta">${TimeService.formatDuration(etaSecs)}</span>
+        </div>`;
+    }).join('');
+
     return `
       <div class="cv-queue-inner">
         <span class="cv-queue-icon">🔨</span>
@@ -612,6 +636,8 @@ const CityView = (() => {
           ⚡ ${boostCost}💎
         </button>
       </div>
+      ${upcomingHtml ? `<div class="cv-queue-upcoming">${upcomingHtml}</div>` : ''}
+      <div class="cv-queue-slots">${_city.constructionQueue.length}/${MAX_QUEUE} queue slots used</div>
     `;
   }
 
@@ -742,14 +768,12 @@ const CityView = (() => {
     if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
   }
 
-  function _toast(msg) {
-    const c = document.getElementById('toast-container');
-    if (!c) return;
-    const el = document.createElement('div');
-    el.className = 'toast'; el.textContent = msg;
-    c.appendChild(el);
-    setTimeout(() => el.remove(), 3200);
+  // Exposed so App can stop this screen's background timer on navigation away.
+  function stop() {
+    _stopCountdown();
   }
 
-  return { render };
+  function _toast(msg) { ToastService.show(msg); }
+
+  return { render, stop };
 })();

@@ -174,4 +174,131 @@ const TRAIT_DEFS = {
     hook:        'onRangedPhase.dealDamage',
   },
 
+  // ── Formation ─────────────────────────────────────────────────
+
+  frontline: {
+    id:          'frontline',
+    name:        'Frontline',
+    description: 'Stands at the front of the formation — enemy melee attacks target Frontline units first, shielding those behind.',
+    hook:        'onTargetSelect.frontlinePriority',
+  },
+
+  // ── Discipline / Morale ──────────────────────────────────────
+
+  discipline: {
+    id:          'discipline',
+    name:        'Discipline',
+    description: 'Well-drilled and steady under fire — more resistant to morale loss.',
+    hook:        'onMoralePhase.reduceMoraleLossTaken',
+  },
+
+  stubborn: {
+    id:          'stubborn',
+    name:        'Stubborn',
+    description: 'Refuses to break — significantly more resistant to retreat once morale is faltering.',
+    hook:        'onMoralePhase.resistRetreat',
+  },
+
+  fearless: {
+    id:          'fearless',
+    name:        'Fearless',
+    description: 'Immune to Fear and Terror — never suffers the pre-battle morale penalty from them.',
+    hook:        'onBattleStart.immuneToFearTerror',
+  },
+
+  coward: {
+    id:          'coward',
+    name:        'Coward',
+    description: 'Prone to fleeing — more likely to break and retreat once the fight turns against it.',
+    hook:        'onMoralePhase.increasedRetreatChance',
+  },
+
+  mercenary: {
+    id:          'mercenary',
+    name:        'Mercenary',
+    description: 'Fights only for coin, not loyalty — raises the whole side\'s chance to retreat once morale starts slipping.',
+    hook:        'onMoralePhase.raiseSideRetreatChance',
+  },
+
+  // ── Combat / Special ─────────────────────────────────────────
+
+  heavy_armor: {
+    id:          'heavy_armor',
+    name:        'Heavy Armor',
+    description: 'Exceptionally well-armored — sharply reduces damage from attacks that aren\'t Armor Piercing.',
+    hook:        'onReceiveDamage.reduceNonApDamage',
+  },
+
+  veteran: {
+    id:          'veteran',
+    name:        'Veteran',
+    description: 'Battle-hardened from countless campaigns — fights more effectively than a fresh recruit.',
+    hook:        'onAttack.veteranBonus',
+  },
+
+  berserk: {
+    id:          'berserk',
+    name:        'Berserk',
+    description: 'Fights with reckless fury — deals increasing damage the more wounded it becomes.',
+    hook:        'onAttack.bonusWhenWounded',
+  },
+
+  duelist: {
+    id:          'duelist',
+    name:        'Duelist',
+    description: 'A master of single combat — deals bonus damage against enemy heroes and champions.',
+    hook:        'onAttack.bonusVsHeroes',
+  },
+
+  aggressive: {
+    id:          'aggressive',
+    name:        'Aggressive',
+    description: 'Eager for battle — gains an attack bonus in the opening rounds of combat.',
+    hook:        'onRoundStart.earlyRoundAttackBonus',
+  },
+
+  impact: {
+    id:          'impact',
+    name:        'Impact',
+    description: 'A charge that knocks enemy formations off balance, disrupting their footing.',
+    hook:        'onCavalryPhase.knockbackBonus',
+  },
+
+  poison: {
+    id:          'poison',
+    name:        'Poison',
+    description: 'Venomous attacks that keep damaging the target after the initial hit.',
+    hook:        'onAttack.applyPoisonDamageOverTime',
+  },
+
+  accurate: {
+    id:          'accurate',
+    name:        'Accurate',
+    description: 'Rarely misses — improved chance to strike true at range.',
+    hook:        'onRangedPhase.improvedAccuracy',
+  },
+
+  // ── Siege ─────────────────────────────────────────────────────
+
+  artillery: {
+    id:          'artillery',
+    name:        'Artillery',
+    description: 'Heavy siege weaponry — devastating firepower, but slow and vulnerable up close.',
+    hook:        'onRangedPhase.artilleryDamage',
+  },
+
+  siege: {
+    id:          'siege',
+    name:        'Siege',
+    description: 'Built to break fortifications — deals bonus damage against defended positions.',
+    hook:        'onAttack.bonusVsFortifications',
+  },
+
+  splash_damage: {
+    id:          'splash_damage',
+    name:        'Splash Damage',
+    description: 'Ranged attacks hit an area, damaging multiple enemy models at once.',
+    hook:        'onRangedPhase.areaOfEffectDamage',
+  },
+
 };

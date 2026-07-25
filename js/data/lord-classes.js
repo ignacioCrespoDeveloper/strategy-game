@@ -373,3 +373,14 @@ var MOUNT_POOL = {
     },
   },
 };
+
+// =============================================
+//  Lord capture — fixed, non-negotiable gold ransom to free a captured lord.
+//  Scales with level so a high-level lord costs meaningfully more to free
+//  than a fresh one. Used both client-side (price display before paying) and
+//  server-side (server/actions/lord-ransom.js validates/charges this exact
+//  number) — loaded server-side via server/engine-loader.js.
+// =============================================
+function lordRansomCost(level) {
+  return 300 + (level || 1) * 150;
+}

@@ -96,7 +96,7 @@ var CAMP_DEFS = {
     morale:           70,
     rewardMultiplier: 1.5,
     levelRange:       [2, 4],
-    mercenaryRoster:  ['swordsmen', 'pikemen', 'crossbowmen'],
+    mercenaryRoster:  ['swordsmen', 'mercenary_spearmen', 'crossbowmen'],
     defenderRosterByLevel: {
       2: [{ unitId: 'mercenary_spearmen', count: 3 }, { unitId: 'mercenary_crossbows', count: 1 }],
       3: [{ unitId: 'mercenary_spearmen', count: 5 }, { unitId: 'mercenary_crossbows', count: 2 }],

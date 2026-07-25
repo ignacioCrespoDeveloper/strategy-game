@@ -72,7 +72,7 @@ const LordScreen = (() => {
     _bindEvents();
     _startCountdown();
     if (autoAttackRecordId) {
-      _activeTab = 'quests';
+      _activeTab = 'discovery';
       _renderTab();
       _claimDiscovery(autoAttackRecordId);
     }
@@ -129,7 +129,7 @@ const LordScreen = (() => {
             <nav class="ls-tabs">
               <button class="ls-tab ${_activeTab === 'overview'  ? 'ls-tab--active' : ''}" data-tab="overview">📍 Overview</button>
               <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>⚔ Army</button>
-              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>🗺 Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
+              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>🔍 Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id, _lord.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
               <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>✨ Talents${(_lord.level || 1) >= 5 && !_lord.talentId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
               <button class="ls-tab ${_activeTab === 'mount'     ? 'ls-tab--active' : ''}" data-tab="mount" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>🐎 Mount${(_lord.level || 1) >= 5 && !_lord.mountId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
               <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">🗡 Battles${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
@@ -137,16 +137,6 @@ const LordScreen = (() => {
             <div class="ls-content" id="ls-content"></div>
           </div>
 
-        </div>
-      </div>
-
-      <div class="unit-req-overlay hidden" id="unit-req-overlay">
-        <div class="unit-req-panel">
-          <div class="unit-req-header">
-            <span class="unit-req-title">🗂 Unit Roster</span>
-            <button class="unit-req-close" id="unit-req-close">✕</button>
-          </div>
-          <div class="unit-req-body" id="unit-req-body"></div>
         </div>
       </div>
 
@@ -174,7 +164,13 @@ const LordScreen = (() => {
     const downReason    = _lord.downtimeReason || 'defeated';
     const downRemSecs   = lordIsDown ? Math.ceil(LordService.getDowntimeRemaining(_lord) / 1000) : 0;
     const downReviveCost = lordIsDown ? _creditCost(downRemSecs) : 0;
-    const downOverlay    = lordIsDown ? `
+    const downOverlay    = lordIsDown && _lord.capturedByPlayerId ? `
+      <div class="lsl-portrait-down-overlay">
+        <div class="lsl-portrait-down-icon">⛓</div>
+        <div class="lsl-portrait-down-label lsl-portrait-down-label--captured">CAPTURED</div>
+        <div class="lsl-captor">by ${_lord.capturedByUsername || 'Unknown'}</div>
+        <button class="ls-finish-btn ls-ransom-btn" id="ls-ransom-now">💰 Pay Ransom (${lordRansomCost(_lord.level)})</button>
+      </div>` : lordIsDown ? `
       <div class="lsl-portrait-down-overlay">
         <div class="lsl-portrait-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
         <div class="lsl-portrait-down-label lsl-portrait-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
@@ -185,26 +181,33 @@ const LordScreen = (() => {
     const lsQueueItem  = _lord.actionQueue?.[0] ?? null;
     const lsIsAttacking = lsQueueItem?.intent === 'attack';
     const lsIsQuesting  = !lordIsDown && lsQueueItem?.actionId === 'search_area';
+    const lsIsScouting  = !lordIsDown && lsQueueItem?.actionId === 'scout';
     const lsIsMoving    = !lordIsDown && lsQueueItem?.actionId === 'move_lord' && !lsIsAttacking;
     const lsActionSecs  = lsQueueItem ? LordService.actionTimeRemaining(_lord) : 0;
 
     const activityOverlay = lsIsAttacking ? `
       <div class="lsl-portrait-activity-overlay lsl-portrait-activity-overlay--attack">
         <div class="ov-lord-activity-icon">&#9876;</div>
-        <div class="ov-lord-activity-label">Atacando</div>
+        <div class="ov-lord-activity-label">Attacking</div>
         <div class="ov-lord-activity-dest">(${lsQueueItem.destX}, ${lsQueueItem.destY})</div>
         <div class="ov-lord-activity-cd" id="ls-act-cd">${TimeService.formatDuration(lsActionSecs)}</div>
       </div>` :
     lsIsQuesting ? `
       <div class="lsl-portrait-activity-overlay lsl-portrait-activity-overlay--quest">
         <div class="ov-lord-activity-icon">&#128506;</div>
-        <div class="ov-lord-activity-label">En Quest</div>
+        <div class="ov-lord-activity-label">Questing</div>
+        <div class="ov-lord-activity-cd" id="ls-act-cd">${TimeService.formatDuration(lsActionSecs)}</div>
+      </div>` :
+    lsIsScouting ? `
+      <div class="lsl-portrait-activity-overlay lsl-portrait-activity-overlay--scout">
+        <div class="ov-lord-activity-icon">&#128373;</div>
+        <div class="ov-lord-activity-label">Scouting</div>
         <div class="ov-lord-activity-cd" id="ls-act-cd">${TimeService.formatDuration(lsActionSecs)}</div>
       </div>` :
     lsIsMoving ? `
       <div class="lsl-portrait-activity-overlay lsl-portrait-activity-overlay--move">
         <div class="ov-lord-activity-icon">&#128694;</div>
-        <div class="ov-lord-activity-label">Marchando</div>
+        <div class="ov-lord-activity-label">Marching</div>
         <div class="ov-lord-activity-dest">(${lsQueueItem.destX}, ${lsQueueItem.destY})</div>
         <div class="ov-lord-activity-cd" id="ls-act-cd">${TimeService.formatDuration(lsActionSecs)}</div>
       </div>` : '';
@@ -266,7 +269,6 @@ const LordScreen = (() => {
           <div class="lsh-passive-icon">${chosenTalent.icon}</div>
           <div class="lsh-passive-body">
             <div class="lsh-passive-name">${chosenTalent.name}</div>
-            <div class="lsh-passive-desc">${chosenTalent.description}</div>
           </div>
         </div>
       </div>
@@ -400,6 +402,7 @@ const LordScreen = (() => {
       });
     }
     document.getElementById('ls-revive-now')?.addEventListener('click', _reviveNow);
+    document.getElementById('ls-ransom-now')?.addEventListener('click', _ransomNow);
 
     // Force back to overview while downed
     if (LordService.isDown(_lord) && (_activeTab === 'army' || _activeTab === 'discovery')) {
@@ -430,7 +433,9 @@ const LordScreen = (() => {
           _stopCountdown();
           App.navigate('map', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id), mode: 'move-lord' });
         });
-        // Stance picker — toggle Ambush / Raid selection
+        // Stance picker — toggle Ambush / Raid / Raiding selection. Duration
+        // options are rebuilt per-stance since Raiding offers longer presets
+        // (1h/4h/8h/24h) than Ambush/Raid's 1h/2h/4h.
         document.querySelectorAll('.lov-stance-pick-btn[data-pick]').forEach(btn => {
           btn.addEventListener('click', () => {
             document.querySelectorAll('.lov-stance-pick-btn').forEach(b => b.classList.remove('lov-stance-pick-btn--active'));
@@ -438,16 +443,34 @@ const LordScreen = (() => {
             const def    = STANCE_DEFS[btn.dataset.pick];
             const descEl = document.getElementById('lov-stance-desc');
             if (descEl && def) descEl.textContent = def.description;
+            const durSel = document.getElementById('lov-stance-dur');
+            if (durSel && def) {
+              durSel.innerHTML = def.durations.map(s => `<option value="${s}">${TimeService.formatDuration(s)}</option>`).join('');
+            }
             const startBtn = document.getElementById('lov-stance-start');
             if (startBtn) { startBtn.disabled = false; startBtn.dataset.stance = btn.dataset.pick; }
           });
         });
-        document.getElementById('lov-stance-start')?.addEventListener('click', () => {
+        document.getElementById('lov-stance-start')?.addEventListener('click', async () => {
           const startBtn = document.getElementById('lov-stance-start');
           const stanceId = startBtn?.dataset?.stance;
           const secs     = Number(document.getElementById('lov-stance-dur')?.value || 3600);
           if (!stanceId) { _toast('Select a stance first.'); return; }
-          const result   = LordService.enterStance(_lord, stanceId, secs);
+
+          if (stanceId === 'raiding') {
+            // Server-authoritative — real gold/resources at stake, and the
+            // server is the only place that can validate "no city on this
+            // tile" (a regular client's RLS can't see other players' cities).
+            startBtn.disabled = true;
+            const result = await ServerActions.raidStart(_lord.id, secs);
+            if (!result.ok) { _toast(result.error || 'Server error'); startBtn.disabled = false; return; }
+            _lord = LordService.getById(_lord.id);
+            _renderTab();
+            _startCountdown();
+            return;
+          }
+
+          const result = LordService.enterStance(_lord, stanceId, secs);
           if (!result.ok) { _toast(result.error); return; }
           _lord = LordService.getById(_lord.id);
           _renderTab();
@@ -459,13 +482,34 @@ const LordScreen = (() => {
           _renderTab();
           _startCountdown();
         });
+        document.getElementById('lov-raid-cancel-btn')?.addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          if (!confirm('Cancel raiding? Everything earned so far will be lost.')) return;
+          btn.disabled = true;
+          const result = await ServerActions.raidCancel(_lord.id);
+          if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
+          _lord = LordService.getById(_lord.id);
+          _renderTab();
+          _startCountdown();
+        });
+        document.getElementById('lov-raid-finish-btn')?.addEventListener('click', async (e) => {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          const result = await ServerActions.raidInstant(_lord.id);
+          if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
+          _toast(`Raid complete: +${result.goldEarned || 0}💰`);
+          _lord = LordService.getById(_lord.id);
+          _renderTab();
+          _startCountdown();
+          HUD.refresh();
+        });
         break;
       case 'army':
         content.innerHTML = _armyHtml();
         _bindArmyEvents();
         break;
       case 'discovery':
-        DiscoveryService.markLogSeen(_player.id);
+        DiscoveryService.markLogSeen(_player.id, _lord.id);
         _refreshDiscoveryBadge();
         content.innerHTML = _discoveriesHtml();
         _bindDiscoveryEvents();
@@ -493,9 +537,42 @@ const LordScreen = (() => {
     return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
   }
 
+  // Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult —
+  // otherwise this overvalues numerous cheap units relative to what they actually deal.
+  // Rounded here (not just at display time) so every caller — display, the
+  // recruit-button pre-check, etc. — sees the same whole-number PWR value.
   function _armyPower(lordId) {
     const army = ArmyService.get(lordId);
-    return army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * u.count, 0);
+    return Math.round(army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0));
+  }
+
+  // Display-only mirror of server/tick/catch-up.js's _raidHourlyRewards —
+  // the server is what actually pays out (at completion, never here), this
+  // is purely for showing an "earned so far" preview while a raid is active.
+  function _raidHourlyRewardsPreview(lord) {
+    const lvl  = lord.level || 1;
+    const gold = Math.round(25 + lvl * 5);
+    const res  = Math.round(15 + lvl * 3);
+    return { gold, food: res, wood: res, stone: res, iron: res };
+  }
+
+  // Army power if `addCount` more of `unitId` were added to this lord's army.
+  // Recomputes that stack's whole dampened total rather than adding a flat
+  // per-unit delta — dampening is non-linear, so the marginal power of the
+  // 16th model in an existing 15-stack is less than the 1st in a fresh stack.
+  // Mirrors server/actions/recruit.js's _projectedArmyPower — must match
+  // exactly, since the server is the authoritative gate and this is only the
+  // client-side pre-check that disables the Recruit/Hire button.
+  function _projectedArmyPower(lordId, unitId, addCount) {
+    const army     = ArmyService.get(lordId);
+    const def      = UNIT_DEFS[unitId];
+    if (!def) return _armyPower(lordId);
+    const existing   = army.units.find(u => u.unitId === unitId);
+    const otherPower = army.units
+      .filter(u => u.unitId !== unitId)
+      .reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0);
+    const newCount = (existing?.count || 0) + addCount;
+    return otherPower + _unitPower(def) * Math.pow(newCount, 0.8);
   }
 
   // Applies a discoveries[] response (from either /api/scan/tile or
@@ -541,7 +618,7 @@ const LordScreen = (() => {
     const btn = document.getElementById('ls-tab-discovery');
     if (!btn) return;
     const existing = btn.querySelector('.ls-tab-badge');
-    const n = DiscoveryService.getUnseenCount(_player.id);
+    const n = DiscoveryService.getUnseenCount(_player.id, _lord.id);
     if (n > 0 && !existing) {
       btn.insertAdjacentHTML('beforeend', `<span class="ls-tab-badge">${n}</span>`);
     } else if (n > 0 && existing) {
@@ -559,16 +636,36 @@ const LordScreen = (() => {
     const secs      = busy ? LordService.actionTimeRemaining(_lord) : 0;
     const pct       = busy ? Math.floor(LordService.actionProgress(_lord) * 100) : 0;
 
+    // Stances (raiding, ambush) don't go through actionQueue, so `busy` alone
+    // would call a raiding lord "Idle" — computed here (not just in the
+    // Stance section below) so Status can tell the two apart too.
+    const stanceObj  = LordService.getStance(_lord);
+    const stanceDef  = STANCE_DEFS[stanceObj.id] || STANCE_DEFS.idle;
+    const isInStance = LordService.isStanced(_lord);
+    const isRaiding  = isInStance && stanceObj.id === 'raiding';
+
     // ── Status ────────────────────────────────────────────────────
     let statusHtml;
-    if (!busy) {
+    if (isRaiding) {
+      const sRemain = Math.max(0, Math.floor((stanceObj.finishAt - TimeService.now()) / 1000));
+      const totalMs   = stanceObj.finishAt - stanceObj.startedAt;
+      const elapsedMs = TimeService.now() - stanceObj.startedAt;
+      const sPct      = totalMs > 0 ? Math.min(100, Math.floor((elapsedMs / totalMs) * 100)) : 0;
+      statusHtml = `
+        <div class="lov-status lov-status--stanced">${STANCE_DEFS.raiding.icon} Raiding — earnings below</div>
+        <div class="lov-progress-row">
+          <div class="lov-bar"><div class="lov-fill" id="lov-status-stance-fill" style="width:${sPct}%"></div></div>
+          <span class="lov-timer" id="lov-status-stance-timer">${TimeService.formatDuration(sRemain)}</span>
+        </div>
+      `;
+    } else if (!busy) {
       statusHtml = `<div class="lov-status lov-status--idle">⏳ Idle — no active task</div>`;
     } else if (queueItem.actionId === 'move_lord') {
       const isAttacking = queueItem.intent === 'attack';
       const cost = _creditCost(secs);
       statusHtml = `
         <div class="lov-status ${isAttacking ? 'lov-status--attacking' : 'lov-status--traveling'}">
-          ${isAttacking ? '⚔ ATACANDO — llegando a ('+queueItem.destX+', '+queueItem.destY+')' : '🗺 Traveling to ('+queueItem.destX+', '+queueItem.destY+')'}
+          ${isAttacking ? '⚔ ATTACKING — arriving at ('+queueItem.destX+', '+queueItem.destY+')' : '🧭 Traveling to ('+queueItem.destX+', '+queueItem.destY+')'}
         </div>
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill${isAttacking ? ' lov-fill--attack' : ''}" id="lov-fill" style="width:${pct}%"></div></div>
@@ -579,7 +676,7 @@ const LordScreen = (() => {
     } else if (queueItem.actionId === 'search_area') {
       const cost = _creditCost(secs);
       statusHtml = `
-        <div class="lov-status lov-status--searching">🗺 Quest in progress…</div>
+        <div class="lov-status lov-status--searching">🔍 Quest in progress…</div>
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill" id="lov-fill" style="width:${pct}%"></div></div>
           <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
@@ -612,19 +709,19 @@ const LordScreen = (() => {
       const tileDiscs = DiscoveryService.getActive(_player.id)
         .filter(r => r.tileX === _lord.x && r.tileY === _lord.y);
       const discCountHtml = tileDiscs.length > 0
-        ? `<div class="lov-lc-disc">🗺 ${tileDiscs.length} pending quest${tileDiscs.length > 1 ? 's' : ''} on this tile</div>`
-        : `<div class="lov-lc-disc lov-lc-disc--none">🗺 No quests here yet</div>`;
+        ? `<div class="lov-lc-disc">🔍 ${tileDiscs.length} pending quest${tileDiscs.length > 1 ? 's' : ''} on this tile</div>`
+        : `<div class="lov-lc-disc lov-lc-disc--none">🔍 No quests here yet</div>`;
 
       // Search action
       let searchHtml;
       if (isSearching) {
-        searchHtml = `<span class="lov-lc-busy">🗺 Quest in progress on this tile…</span>`;
+        searchHtml = `<span class="lov-lc-busy">🔍 Quest in progress on this tile…</span>`;
       } else if (isScouting) {
         searchHtml = `<span class="lov-lc-busy">🕵 Scouting this tile…</span>`;
       } else if (!busy) {
         searchHtml = `
           <div class="lov-lc-btns">
-            <button class="lov-search-btn" id="lov-search-btn">🗺 Send on Quest</button>
+            <button class="lov-search-btn" id="lov-search-btn">🔍 Send on Quest</button>
             <button class="lov-scout-btn" id="lov-scout-btn" title="Gather intel on this tile's enemy lord and city. Safe without an army; risks an ambush if scouting with one.">🕵 Scout</button>
             <button class="lov-move-btn" id="lov-move-btn">🗺 Go to Map</button>
           </div>`;
@@ -656,11 +753,39 @@ const LordScreen = (() => {
     }
 
     // ── Stance (own section, after Army) ─────────────────────────
-    const stanceObj  = LordService.getStance(_lord);
-    const stanceDef  = STANCE_DEFS[stanceObj.id] || STANCE_DEFS.idle;
-    const isInStance = LordService.isStanced(_lord);
+    // stanceObj/stanceDef/isInStance computed above, alongside Status.
     let stanceHtml;
-    if (isInStance) {
+    if (isInStance && stanceObj.id === 'raiding') {
+      // Raiding is server-authoritative (real gold/resources at stake) — its
+      // own status block instead of the generic ✕ Exit button, since exiting
+      // here has two very different costs: Cancel is free but forfeits
+      // everything earned so far, Finish Now pays credits to collect the
+      // full reward immediately. See server/actions/raid-{cancel,instant}.js.
+      const sRemain    = Math.max(0, Math.floor((stanceObj.finishAt - TimeService.now()) / 1000));
+      const totalMs    = stanceObj.finishAt - stanceObj.startedAt;
+      const elapsedMs  = TimeService.now() - stanceObj.startedAt;
+      const sPct       = totalMs > 0 ? Math.min(100, Math.floor((elapsedMs / totalMs) * 100)) : 0;
+      const rates      = _raidHourlyRewardsPreview(_lord);
+      const elapsedHrs = Math.max(0, elapsedMs / 3_600_000);
+      const goldSoFar  = Math.floor(rates.gold * elapsedHrs);
+      const resSoFar   = Math.floor(rates.food * elapsedHrs); // all 4 resource types share the same rate
+      const finishCost = Math.max(1, Math.ceil(sRemain / 60));
+      stanceHtml = `
+        <div class="lov-status lov-status--stanced">${STANCE_DEFS.raiding.icon} Raiding</div>
+        <div class="lov-progress-row">
+          <div class="lov-bar"><div class="lov-fill" id="lov-stance-fill" style="width:${sPct}%"></div></div>
+          <span class="lov-timer" id="lov-stance-timer">${TimeService.formatDuration(sRemain)}</span>
+        </div>
+        <div class="lov-raid-earnings">
+          Earned so far (paid only when the raid ends): <b>+${goldSoFar}💰</b> · <b>+${resSoFar}</b> of each resource
+        </div>
+        <div class="lov-raid-warn">⚠ Any enemy lord with an army that arrives here will trigger an automatic fight. Losing forfeits the raid and everything earned.</div>
+        <div class="lov-raid-btn-row">
+          <button class="lov-raid-cancel-btn" id="lov-raid-cancel-btn">✕ Cancel (forfeit)</button>
+          <button class="lov-raid-finish-btn" id="lov-raid-finish-btn">💎 Finish Now — ${finishCost}</button>
+        </div>
+      `;
+    } else if (isInStance) {
       const sRemain   = Math.max(0, Math.floor((stanceObj.finishAt - TimeService.now()) / 1000));
       const totalMs   = stanceObj.finishAt - stanceObj.startedAt;
       const elapsedMs = TimeService.now() - stanceObj.startedAt;
@@ -672,19 +797,15 @@ const LordScreen = (() => {
           <span class="lov-timer" id="lov-stance-timer">${TimeService.formatDuration(sRemain)}</span>
         </div>
         <div class="lov-stance-desc-inline">${stanceDef.description}</div>
-        <button class="lov-stance-exit-btn">✕ Salir</button>
+        <button class="lov-stance-exit-btn">✕ Exit</button>
       `;
     } else {
       stanceHtml = `
         <div class="lov-stance-picker" id="lov-stance-picker">
           <div class="lov-stance-pick-row">
             <button class="lov-stance-pick-btn" data-pick="ambush"${busy ? ' disabled' : ''}>${STANCE_DEFS.ambush.icon} Ambush</button>
-            <button class="lov-stance-pick-btn" data-pick="raid"${busy ? ' disabled' : ''}>${STANCE_DEFS.raid.icon} Raid</button>
-            <select class="lov-stance-dur-sel" id="lov-stance-dur"${busy ? ' disabled' : ''}>
-              <option value="3600">1h</option>
-              <option value="7200">2h</option>
-              <option value="14400">4h</option>
-            </select>
+            <button class="lov-stance-pick-btn" data-pick="raiding"${busy ? ' disabled' : ''}>${STANCE_DEFS.raiding.icon} Raiding</button>
+            <select class="lov-stance-dur-sel" id="lov-stance-dur"${busy ? ' disabled' : ''}></select>
             <button class="lov-stance-start-btn" id="lov-stance-start" disabled>Start</button>
           </div>
           <div class="lov-stance-pick-desc" id="lov-stance-desc">${busy ? 'Not available while the lord is busy' : 'Select a stance'}</div>
@@ -860,97 +981,6 @@ const LordScreen = (() => {
     }).join('');
   }
 
-  // ── Unit Requirements panel ───────────────────────────────────
-
-  function _unitRequirementsHtml() {
-    const city       = _getLordCurrentCity();
-    const raceRoster = UNIT_ROSTER[_lord.race];
-    const race       = RACES[_lord.race];
-
-    if (!raceRoster) {
-      return `<p class="ur-empty">No unit roster defined for ${race?.name || _lord.race}.</p>`;
-    }
-
-    const cityNote = city
-      ? `Requirements for <strong>${city.name}</strong>`
-      : '<em>Your lord is not in a city — building levels are unavailable.</em>';
-
-    const sections = Object.entries(raceRoster).map(([buildingId, levelMap]) => {
-      const bldDef       = BUILDING_DEFS[buildingId];
-      const currentLevel = city ? (city.buildings[buildingId] || 0) : -1;
-      const allMinLevels = Object.keys(levelMap).map(Number);
-      const maxRequired  = Math.max(...allMinLevels);
-
-      const levelEntries = Object.entries(levelMap)
-        .map(([lvl, unitIds]) => ({ minLevel: Number(lvl), unitIds }))
-        .sort((a, b) => a.minLevel - b.minLevel);
-
-      const unitsHtml = levelEntries.map(({ minLevel, unitIds }) =>
-        unitIds.map(unitId => {
-          const def      = UNIT_DEFS[unitId];
-          if (!def) return '';
-          const unlocked = currentLevel >= minLevel;
-          const portrait = def.image
-            ? `<img src="${def.image}" class="ur-unit-img" alt="${def.name}" loading="lazy">`
-            : `<div class="ur-unit-img ur-unit-img--icon">${def.icon}</div>`;
-          const tierClass = _cardTierClass(def.category);
-
-          return `
-            <div class="ur-unit-row ${unlocked ? 'ur-unit--unlocked' : 'ur-unit--locked'}">
-              <div class="ur-unit-portrait ur-portrait${tierClass ? '--' + tierClass.replace('la-unit-card--','') : ''}">${portrait}</div>
-              <div class="ur-unit-body">
-                <div class="ur-unit-name">${def.name}</div>
-                <div class="ur-unit-req-line">
-                  ${unlocked
-                    ? `<span class="ur-tag ur-tag--unlocked">✓ Desbloqueado</span>`
-                    : `<span class="ur-tag ur-tag--locked">🔒 Requiere ${bldDef?.name || buildingId} Lv ${minLevel}</span>`}
-                  ${!unlocked && currentLevel > 0
-                    ? `<span class="ur-tag ur-tag--progress">Tienes Lv ${currentLevel}</span>`
-                    : ''}
-                </div>
-                <div class="ur-unit-stats">
-                  <span title="Attack">⚔ ${def.combatStats.attack}</span>
-                  <span title="Defense">🛡 ${def.combatStats.defense}</span>
-                  <span title="HP">❤ ${def.combatStats.hp}</span>
-                  <span title="Speed">💨 ${def.combatStats.speed}</span>
-                </div>
-                <div class="ur-unit-cost">💰 ${def.goldCost} · ⏱ ${TimeService.formatDuration(def.recruitTime)} · 💸 ${def.upkeep}/24h</div>
-              </div>
-              <div class="ur-unit-status-icon">${unlocked ? '✓' : '🔒'}</div>
-            </div>
-          `;
-        }).join('')
-      ).join('');
-
-      const bldStatusClass = currentLevel < 0 ? '' :
-                             currentLevel === 0 ? 'ur-bld--missing' :
-                             currentLevel < maxRequired ? 'ur-bld--partial' : 'ur-bld--complete';
-
-      const bldLevelLabel = currentLevel < 0 ? '—'
-                          : currentLevel === 0 ? 'No construido'
-                          : `Lv ${currentLevel} / ${bldDef?.maxLevel || '?'}`;
-
-      return `
-        <div class="ur-building-group">
-          <div class="ur-building-header ${bldStatusClass}">
-            <span class="ur-bld-icon">${bldDef?.icon || '🏛'}</span>
-            <div class="ur-bld-name-wrap">
-              <span class="ur-bld-name">${bldDef?.name || buildingId}</span>
-              <span class="ur-bld-desc">${bldDef?.description?.split('.')[0] || ''}</span>
-            </div>
-            <span class="ur-bld-level">${bldLevelLabel}</span>
-          </div>
-          <div class="ur-units">${unitsHtml}</div>
-        </div>
-      `;
-    }).join('');
-
-    return `
-      <div class="ur-city-note">${cityNote}</div>
-      ${sections}
-    `;
-  }
-
   function _armyHtml() {
     const army        = ArmyService.get(_lord.id);
     const city        = _getLordCurrentCity();
@@ -992,8 +1022,10 @@ const LordScreen = (() => {
     } else if (!city) {
       recruitSectionHtml = `<p class="la-recruit-note">Your lord must be standing inside one of your cities to recruit.</p>`;
     } else {
-      const queue    = city.recruitmentQueue || [];
-      const busy     = queue.length > 0;
+      const queue      = city.recruitmentQueue || [];
+      const MAX_QUEUE  = 5;
+      const busy       = queue.length > 0;
+      const queueFull  = queue.length >= MAX_QUEUE;
 
       let queueHtml = '';
       if (busy) {
@@ -1002,6 +1034,22 @@ const LordScreen = (() => {
         const pct  = Math.floor(RecruitmentService.progress(city) * 100);
         const secs = RecruitmentService.timeRemaining(city);
         const recruitCost = _creditCost(secs);
+
+        // Queued-but-not-yet-started batches (position 1+) — each already has
+        // real sequenced startedAt/finishAt from the server, so its own ETA
+        // is just "time until ITS finishAt", same formula as the front item.
+        const upcomingHtml = queue.slice(1).map((q, i) => {
+          const qDef     = UNIT_DEFS[q.unitId];
+          const etaSecs  = Math.max(0, Math.round((q.finishAt - TimeService.now()) / 1000));
+          return `
+            <div class="la-recruit-queue-item">
+              <span class="la-recruit-queue-pos">#${i + 2}</span>
+              <span class="la-recruit-queue-icon">${qDef?.icon || '⚔'}</span>
+              <span class="la-recruit-queue-name">${qDef?.name || q.unitId} ×${q.count}</span>
+              <span class="la-recruit-queue-eta">${TimeService.formatDuration(etaSecs)}</span>
+            </div>`;
+        }).join('');
+
         queueHtml = `
           <div class="la-recruit-queue">
             <div class="la-recruit-queue-label">${uDef?.icon || '⚔'} Training ${uDef?.name || job.unitId} ×${job.count}</div>
@@ -1010,6 +1058,8 @@ const LordScreen = (() => {
               <span class="la-timer" id="la-recruit-timer">${TimeService.formatDuration(secs)}</span>
               <button class="ls-finish-btn" id="la-finish-recruit">⚡ ${recruitCost}💎</button>
             </div>
+            ${upcomingHtml ? `<div class="la-recruit-queue-upcoming">${upcomingHtml}</div>` : ''}
+            <div class="la-recruit-queue-slots">${queue.length}/${MAX_QUEUE} queue slots used</div>
           </div>
         `;
       }
@@ -1023,12 +1073,11 @@ const LordScreen = (() => {
           const def        = UNIT_DEFS[unitId];
           if (!def) return '';
           const canAfford  = (player.coins || 0) >= def.goldCost;
-          const unitPower  = _unitPower(def);
-          const wouldExceedPower = currentPower + unitPower > maxPower;
-          const disabled   = busy || !canAfford || wouldExceedPower;
-          const btnLabel   = busy ? 'Training…' : wouldExceedPower ? '⚠ Power Limit' : canAfford ? 'Recruit' : 'No gold';
+          const wouldExceedPower = _projectedArmyPower(_lord.id, unitId, 1) > maxPower;
+          const disabled   = queueFull || !canAfford || wouldExceedPower;
+          const btnLabel   = queueFull ? 'Queue Full' : wouldExceedPower ? '⚠ Power Limit' : canAfford ? 'Recruit' : 'No gold';
           return `
-            <div class="la-recruit-card ${busy ? 'la-recruit-card--busy' : ''}">
+            <div class="la-recruit-card ${queueFull ? 'la-recruit-card--busy' : ''}">
               ${_unitPortraitHtml(def)}
               <div class="la-recruit-body">
                 <div class="la-recruit-name">${def.name}</div>
@@ -1062,8 +1111,7 @@ const LordScreen = (() => {
           const def        = UNIT_DEFS[unitId];
           if (!def) return '';
           const canAfford  = (player.coins || 0) >= def.goldCost;
-          const unitPower  = _unitPower(def);
-          const wouldExceedPower = currentPower + unitPower > maxPower;
+          const wouldExceedPower = _projectedArmyPower(_lord.id, unitId, 1) > maxPower;
           const disabled   = !canAfford || wouldExceedPower;
           const btnLabel   = wouldExceedPower ? '⚠ Power Limit' : canAfford ? 'Hire' : 'No gold';
           return `
@@ -1104,7 +1152,6 @@ const LordScreen = (() => {
         <div class="la-section-divider"></div>
         <div class="la-section-header-row">
           <div class="la-section-title">Recruit</div>
-          <button class="ur-open-btn" id="ur-open-btn">📋 View Requirements</button>
         </div>
         ${recruitSectionHtml}
         ${mercHtml}
@@ -1113,15 +1160,6 @@ const LordScreen = (() => {
   }
 
   function _bindArmyEvents() {
-    // Unit requirements panel
-    document.getElementById('ur-open-btn')?.addEventListener('click', () => {
-      const body    = document.getElementById('unit-req-body');
-      const overlay = document.getElementById('unit-req-overlay');
-      if (!body || !overlay) return;
-      body.innerHTML = _unitRequirementsHtml();
-      overlay.classList.remove('hidden');
-    });
-
     // Finish recruitment instantly
     document.getElementById('la-finish-recruit')?.addEventListener('click', _finishRecruitmentNow);
 
@@ -1195,12 +1233,15 @@ const LordScreen = (() => {
   }
 
   function _discoveriesHtml() {
-    const log = DiscoveryService.getLog(_player.id);
+    // Each lord's own quest log only — entries carry lordId from addLog()
+    // time, but getLog() itself stays player-scoped storage (see
+    // discovery.js), so the per-lord split happens here on render.
+    const log = DiscoveryService.getLog(_player.id).filter(e => e.lordId === _lord.id);
 
     if (log.length === 0) {
       return `
         <div class="la-placeholder">
-          <div class="la-placeholder-icon">🗺</div>
+          <div class="la-placeholder-icon">🔍</div>
           <div class="la-placeholder-text">No quests yet</div>
           <div class="la-placeholder-sub">Use <strong>Send on Quest</strong> to explore this tile.</div>
         </div>`;
@@ -1219,7 +1260,13 @@ const LordScreen = (() => {
       const terrain   = TERRAIN_TYPES[entry.terrain] || { icon: '🌍', name: entry.terrain || 'Unknown' };
       const ago       = _timeAgo(TimeService.now() - entry.loggedAt);
       const icon      = def ? def.icon : '❓';
-      const name      = isNothing ? 'Nothing Found' : (def ? def.name : 'Quest');
+      const defName   = isNothing ? 'Nothing Found' : (def ? def.name : 'Quest');
+      const name      = entry.storyTitle || defName;
+      // When a story quest supplied a custom headline, still surface the
+      // underlying discovery type (e.g. "Goblin Camp") as a small tag so
+      // players don't lose that at-a-glance identification — matters most
+      // for combat, to gauge a fight before committing to it.
+      const typeTagHtml = (entry.storyTitle && def) ? `<span class="qd-type-tag">${icon} ${defName}</span>` : '';
       const code      = `RPT-${String(log.length - idx).padStart(3, '0')}`;
 
       // ── Outcome kind — drives the badge, left-accent border, and card colour ──
@@ -1239,8 +1286,12 @@ const LordScreen = (() => {
       const categoryLabel = _CATEGORY_LABELS[def?.category] || 'Unknown';
       const tierLabel      = def?.tier ? _TIER_ROMAN[def.tier] || def.tier : '—';
 
-      // ── Quote / scout report ──
+      // ── Quote / scout report — the journey. Lore — the thing itself. ──
       const quoteHtml = entry.narrative ? `<blockquote class="qd-quote">${entry.narrative}</blockquote>` : '';
+      // Skip the generic def lore when a story quest already fired — its
+      // narrative covers both the journey and the discovery itself, and
+      // repeating the generic blurb right after would just be redundant.
+      const loreHtml  = (!isNothing && !entry.storyTitle && def?.description) ? `<p class="qd-lore">${def.description}</p>` : '';
 
       // ── Outcome / spoils body ──
       let bodyHtml = '';
@@ -1263,7 +1314,6 @@ const LordScreen = (() => {
             ? `<button class="qd-battle-link" data-view-battles="1">📜 View Battle Report</button>`
             : `<div class="qd-hint">Full battle report in the Battles tab.</div>`}`;
       } else if (isCombat) {
-        const defDesc      = def?.description || '';
         const activeRecord = entry.recordId ? DiscoveryService.getActive(_player.id).find(r => r.id === entry.recordId) : null;
         const campPreview  = activeRecord?.campDetails ? _campPreviewHtml(activeRecord.campDetails) : '';
         bodyHtml = `
@@ -1271,7 +1321,6 @@ const LordScreen = (() => {
             <span class="qd-banner-icon">${icon}</span>
             <div class="qd-banner-body">
               <div class="qd-banner-title">${name}</div>
-              ${defDesc ? `<div class="qd-banner-sub">${defDesc}</div>` : ''}
             </div>
           </div>
           ${campPreview}
@@ -1321,10 +1370,12 @@ const LordScreen = (() => {
                 <span class="qd-dossier-code">Field Report · ${code}</span>
                 <h3 class="qd-panel-title">${icon} ${name}</h3>
                 <div class="qd-panel-byline">${entry.lordName ? `Scouted by <strong>${entry.lordName}</strong> · ` : ''}${terrain.icon} ${terrain.name} · (${entry.tileX ?? '?'}, ${entry.tileY ?? '?'})</div>
+                ${typeTagHtml}
               </div>
               <span class="qd-pill qd-pill--lg qd-pill--${kind}">${kindLabel}</span>
             </div>
             ${quoteHtml}
+            ${loreHtml}
             <div class="qd-stats">
               <div class="qd-stat"><span class="qd-stat-label">Category</span><span class="qd-stat-value">${categoryLabel}</span></div>
               <div class="qd-stat"><span class="qd-stat-label">Tier</span><span class="qd-stat-value">${tierLabel}</span></div>
@@ -1437,15 +1488,6 @@ const LordScreen = (() => {
       });
     });
 
-    document.querySelectorAll('.lt-stat-btn[data-stat-key]').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        const result = await ServerActions.spendTalents(_lord.id, { statKey: btn.dataset.statKey, statPoints: 1 });
-        if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
-        _lord = LordService.getById(_lord.id);
-        _renderTab();
-      });
-    });
   }
 
   // Small chip row for a mount's flat stat bonuses, e.g. "+2 ⚔  +2 💨".
@@ -1598,6 +1640,11 @@ const LordScreen = (() => {
         ? Object.entries(b.resourceLoot || {}).map(([t, amt]) => `+${amt}${_RES_ICONS[t] || ''} · `).join('')
         : '';
       const loot   = (b.outcome === 'victory' && b.goldEarned > 0 ? `+${b.goldEarned}💰 · ` : '') + resLoot;
+      const honor  = b.honorEarned || 0;
+      const honorCls = honor > 0 ? 'bh-honor--pos' : honor < 0 ? 'bh-honor--neg' : '';
+      const honorHtml = honor !== 0
+        ? `<span class="bh-honor ${honorCls}">${honor > 0 ? '+' : ''}${honor} honor</span>`
+        : '';
       return `
         <div class="bh-entry ${om.css}" data-bh-idx="${idx}">
           <div class="bh-entry-header">
@@ -1610,11 +1657,12 @@ const LordScreen = (() => {
             <span>Rounds: <strong>${b.rounds}</strong></span>
             <span>Losses: <strong>${b.modelsLost}</strong></span>
             <span>${loot}+${b.xpEarned}⭐</span>
+            ${honorHtml}
             <span class="bh-reason">${_REASON_LABELS_TAB[b.reason] || b.reason}</span>
           </div>
           <button class="bh-log-toggle" data-bh-idx="${idx}">📜 View Report</button>
           <div class="bh-log-body hidden" id="bh-log-${idx}">
-            ${b.report ? _battleLogHtml(b.report) : '<em>Report unavailable</em>'}
+            ${b.report ? _battleLogHtml(b) : '<em>Report unavailable</em>'}
           </div>
         </div>`;
     }).join('');
@@ -1622,8 +1670,8 @@ const LordScreen = (() => {
     return `<div class="bh-list">${rows}</div>`;
   }
 
-  function _battleLogHtml(report) {
-    return BattleResultView.inlineReportHtml(report, _lord);
+  function _battleLogHtml(b) {
+    return BattleResultView.inlineReportHtml(b.report, _lord, b.campName);
   }
 
   function _bindBattlesTabEvents() {
@@ -1658,7 +1706,7 @@ const LordScreen = (() => {
 
     const discoveries = result.discoveries || [];
     if (discoveries.length === 0) {
-      _toast('🗺 Quest complete — see Quests tab');
+      _toast('🔍 Quest complete — see Quests tab');
       _refreshDiscoveryBadge();
       _renderTab();
       HUD.refresh();
@@ -1753,17 +1801,23 @@ const LordScreen = (() => {
     const def = DISCOVERY_DEFS?.[defId];
     if (!def) return;
 
-    const terrainId = record?.terrain || (_lord.x != null ? WorldService.getTerrain(_lord.x, _lord.y).id : 'plains');
-    const narrative = pickQuestNarrative(def, terrainId);
+    const terrainId  = record?.terrain || (_lord.x != null ? WorldService.getTerrain(_lord.x, _lord.y).id : 'plains');
+    // Prefer a curated story vignette (story-quests.js) over the generic
+    // pooled narrative when one exists for this category — gives the quest
+    // a proper name (storyTitle) and a fuller D&D-style narrative.
+    const storyQuest = (typeof pickStoryQuest === 'function') ? pickStoryQuest(category) : null;
+    const narrative  = storyQuest ? storyQuest.story : pickQuestNarrative(def, terrainId);
+    const storyTitle = storyQuest ? storyQuest.title : null;
+    const reportName = storyTitle || def.name;
 
     if (category === 'nothing') {
       DiscoveryService.addLog(_player.id, {
         definitionId: defId,
         tileX: record?.tileX ?? _lord.x, tileY: record?.tileY ?? _lord.y,
-        terrain: terrainId, rewards: [], narrative,
+        terrain: terrainId, rewards: [], narrative, storyTitle,
         lordId: _lord.id, lordName: _lord.name,
       });
-      _toast('🗺 Quest complete — nothing found');
+      _toast(storyTitle ? `🔍 ${storyTitle} — see Quests tab` : '🔍 Quest complete — nothing found');
       return;
     }
 
@@ -1784,30 +1838,30 @@ const LordScreen = (() => {
 
       DiscoveryService.addLog(_player.id, {
         definitionId: defId, tileX: record.tileX, tileY: record.tileY,
-        terrain: record.terrain, rewards: [], recordId: record.id, narrative,
+        terrain: record.terrain, rewards: [], recordId: record.id, narrative, storyTitle,
         lordId: _lord.id, lordName: _lord.name,
       });
       ActivityService.log(_player.id, {
-        type: 'discovery', icon: def.icon || '🗺',
-        title: `${def.name} discovered`, detail: `(${record.tileX}, ${record.tileY})`,
+        type: 'discovery', icon: def.icon || '🔍',
+        title: `${reportName} discovered`, detail: `(${record.tileX}, ${record.tileY})`,
         lordName: _lord.name,
       });
-      _toast(`${def.icon} ${def.name} spotted — attack from the map`);
+      _toast(`${def.icon} ${reportName} spotted — attack from the map`);
     } else {
       // Non-combat: gold/resources/XP already applied server-side; just show the log.
       DiscoveryService.addLog(_player.id, {
         definitionId: defId, tileX: record.tileX, tileY: record.tileY,
-        terrain: record.terrain, rewards, narrative,
+        terrain: record.terrain, rewards, narrative, storyTitle,
         lordId: _lord.id, lordName: _lord.name,
       });
       const rewardStr = rewards.filter(r => r.type !== 'xp').map(r => `+${r.amount} ${r.type}`).join(', ');
       ActivityService.log(_player.id, {
-        type: 'discovery', icon: def.icon || '🗺',
-        title: `${def.name} claimed`,
+        type: 'discovery', icon: def.icon || '🔍',
+        title: `${reportName} claimed`,
         detail: rewardStr || `+${rewards.find(r => r.type === 'xp')?.amount || 0}⭐`,
         lordName: _lord.name,
       });
-      _toast(`${def.icon} ${def.name} — see Quests tab`);
+      _toast(`${def.icon} ${reportName} — see Quests tab`);
     }
   }
 
@@ -1831,49 +1885,27 @@ const LordScreen = (() => {
     });
   }
 
-  // Called when player clicks "⚔ Attack" on a combat discovery
+  // Called when player clicks "⚔ Attack" on a combat discovery.
+  // Battle resolution is fully server-authoritative (server/actions/pve-attack.js) —
+  // the client never computes the outcome itself. It re-derives the same encounter
+  // from the discovery record's server-rolled campDetails and runs BattleEngine
+  // there, so nothing about wins/losses/loot is client-supplied.
   async function _claimDiscovery(recordId) {
-    // Read the record WITHOUT removing it so it stays available on defeat/draw.
     const record = DiscoveryService.getActive(_player.id).find(r => r.id === recordId);
     if (!record) { _toast('Camp no longer available.'); return; }
     const def = DISCOVERY_DEFS[record.definitionId];
     if (!def || def.category !== 'combat') return;
 
-    // Build encounter dynamically from campDetails stored in the record
-    const cd       = record.campDetails;
-    const campDef  = CAMP_DEFS[cd?.type] || CAMP_DEFS[def.id] || {};
-    const baseLoot = CAMP_LEVEL_LOOT[cd?.level] || CAMP_LEVEL_LOOT[1];
-    const mult     = campDef.rewardMultiplier || 1.0;
-    const encounter = {
-      name:           `${campDef.displayName || 'Bandit Camp'}${cd ? ` (Level ${cd.level})` : ''}`,
-      startingMorale: campDef.morale || 55,
-      loot: {
-        goldMin: Math.round(baseLoot.goldMin * mult), goldMax: Math.round(baseLoot.goldMax * mult),
-        resMin:  Math.round((baseLoot.resMin || 0) * mult), resMax: Math.round((baseLoot.resMax || 0) * mult),
-      },
-      xpReward:       { win: Math.round(baseLoot.xpWin * mult), loss: Math.round(baseLoot.xpLoss * mult) },
-      defenders:      cd?.defenders || [{ unitId: 'bandits', count: 2 }, { unitId: 'bandit_archers', count: 1 }],
-    };
-
-    const ctx = BattleEngine.buildContext({
-      lord:     _lord,
-      army:     ArmyService.get(_lord.id),
-      encounter,
-      terrain:  record.terrain,
-    });
-
-    const report = BattleEngine.resolve(ctx);
-    report._meta = {
-      campName:  encounter.name,
-      campIcon:  campDef.icon  || '⚔',
-      campLevel: cd?.level     || 1,
-      terrain:   record.terrain,
-    };
-
-    // Only remove the record if the attacker won — on defeat/draw the camp survives.
-    if (report.winner === 'attacker') {
-      DiscoveryService.claim(recordId, _player.id);
+    const result = await ServerActions.pveAttack(_lord.id, recordId);
+    if (!result.ok) {
+      _toast(result.error || 'Attack failed — try again.');
+      return;
     }
+
+    const report = result.report;
+    const meta    = report._meta || {};
+    const outcome = report.winner === 'attacker' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat';
+    const resourceLoot = outcome === 'victory' ? report.loot.resource : null;
 
     DiscoveryService.addLog(_player.id, {
       definitionId:  def.id,
@@ -1882,27 +1914,49 @@ const LordScreen = (() => {
       terrain:       record.terrain,
       rewards:       [],
       wasAttack:     true,
-      combatOutcome: report.winner === 'attacker' ? 'victory' : 'defeat',
+      combatOutcome: outcome === 'victory' ? 'victory' : 'defeat',
       lordId:        _lord.id,
       lordName:      _lord.name,
     });
 
-    const { leveled, freshLord } = BattleResultView.applyRewards(report, _lord, _player);
-    _lord   = freshLord;
-    _player = PlayerService.getById(_player.id);
-
-    // Persist post-battle army + lord state to Supabase BEFORE rendering.
-    // Must complete before the Revive button appears — otherwise the server
-    // won't know the lord is fallen and /api/lord/revive returns 400.
-    const postArmy = ArmyService.get(_lord.id);
-    await ServerActions.savePveResult(_lord.id, postArmy?.units || [], _lord.currentHp, {
-      downtimeUntil:  _lord.downtimeUntil  ?? null,
-      downtimeReason: _lord.downtimeReason ?? null,
-      actionQueue:    _lord.actionQueue    ?? [],
+    BattleHistoryService.save(_lord.id, {
+      outcome,
+      campName:   meta.campName  || 'Enemy',
+      campIcon:   meta.campIcon  || '⚔',
+      campLevel:  meta.campLevel || null,
+      terrain:    meta.terrain   || null,
+      goldEarned: outcome === 'victory' ? report.loot.gold : 0,
+      resourceLoot,
+      xpEarned:   report.xpEarned,
+      modelsLost: report.attacker.modelsLost,
+      rounds:     report.rounds,
+      reason:     report.reason,
+      report,
+      honorEarned: result.honorDelta || 0,
     });
 
-    if (leveled > 0) _toast(`⭐ Level up! Now level ${freshLord.level}.`);
-    const outcomeLabel = report.winner === 'attacker' ? '⚔ Victory' : report.winner === 'draw' ? '🤝 Draw' : '☠ Defeat';
+    const actIcon  = outcome === 'victory' ? '⚔' : outcome === 'draw' ? '🤝' : '☠';
+    const actTitle = outcome === 'victory' ? `Victory: ${meta.campName || 'Enemy'}`
+                   : outcome === 'draw'    ? `Draw: ${meta.campName || 'Enemy'}`
+                   : `Defeat: ${meta.campName || 'Enemy'}`;
+    const resLabel = Object.entries(resourceLoot || {}).map(([t, amt]) => ` · +${amt} ${_RES_ICONS[t] || ''}`).join('');
+    ActivityService.log(_player.id, {
+      type:     `battle_${outcome}`,
+      icon:     actIcon,
+      title:    actTitle,
+      detail:   `${report.rounds} rounds · losses: ${report.attacker.modelsLost}${outcome === 'victory' ? ` · +${report.loot.gold}💰${resLabel}` : ''} · +${report.xpEarned}⭐`
+        + (result.honorDelta ? ` · ${result.honorDelta > 0 ? '+' : ''}${result.honorDelta}⚖` : ''),
+      lordName: _lord.name,
+    });
+
+    // Server already persisted everything (army, lord, player, honor, discoveries) —
+    // just re-read the freshly-hydrated local cache that ServerActions.pveAttack wrote.
+    _lord   = LordService.getById(_lord.id);
+    _player = PlayerService.getById(_player.id);
+    HUD.refresh();
+
+    if (result.leveled > 0) _toast(`⭐ Level up! Now level ${_lord.level}.`);
+    const outcomeLabel = outcome === 'victory' ? '⚔ Victory' : outcome === 'draw' ? '🤝 Draw' : '☠ Defeat';
     _toast(`${outcomeLabel} — report in the Battles tab`);
     _activeTab = 'battles';
     _stopCountdown();
@@ -1913,22 +1967,6 @@ const LordScreen = (() => {
   // ── Events ────────────────────────────────────────────────────
 
   function _bindEvents() {
-    document.getElementById('ls-back')?.addEventListener('click', () => {
-      _stopCountdown();
-      App.navigate('overview', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id) });
-    });
-    document.getElementById('ls-map-btn')?.addEventListener('click', () => {
-      _stopCountdown();
-      App.navigate('map', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id) });
-    });
-
-    document.getElementById('unit-req-close')?.addEventListener('click', () => {
-      document.getElementById('unit-req-overlay')?.classList.add('hidden');
-    });
-    document.getElementById('unit-req-overlay')?.addEventListener('click', e => {
-      if (e.target === e.currentTarget) e.currentTarget.classList.add('hidden');
-    });
-
     document.querySelectorAll('.ls-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
@@ -1952,6 +1990,18 @@ const LordScreen = (() => {
   async function _reviveNow() {
     const result = await ServerActions.reviveLord(_lord.id);
     if (!result.ok) { _toast(result.error || 'Server error'); return; }
+    _lord   = LordService.getById(_lord.id);
+    _player = PlayerService.getById(_player.id);
+    HUD.refresh();
+    _stopCountdown();
+    _renderTab();
+    _startCountdown();
+  }
+
+  async function _ransomNow() {
+    const result = await ServerActions.ransomLord(_lord.id);
+    if (!result.ok) { _toast(result.error || 'Server error'); return; }
+    _toast('🔓 Ransom paid — your lord is free.');
     _lord   = LordService.getById(_lord.id);
     _player = PlayerService.getById(_player.id);
     HUD.refresh();
@@ -1986,23 +2036,30 @@ const LordScreen = (() => {
     _startCountdown();
   }
 
-  function _finishRecruitmentNow() {
+  // Server-authoritative — previously this faked a past finishAt purely
+  // client-side (spent credits locally, ticked it, saved), which displayed
+  // as complete but was never actually applied server-side: the next full
+  // sync/refresh reverted it back to "still training" since the server's
+  // own copy of finishAt was untouched. /api/city/instant-recruit is the
+  // real fix — spends credits, applies the unit, and resequences whatever's
+  // left in the queue, all server-side.
+  async function _finishRecruitmentNow() {
     const city = _getLordCurrentCity();
     if (!city || (city.recruitmentQueue || []).length === 0) return;
-    const secs = RecruitmentService.timeRemaining(city);
-    const cost = _creditCost(secs);
-    const result = PlayerService.spendCredits(_player.id, cost);
-    if (!result.ok) { _toast(result.error); return; }
+    const job = city.recruitmentQueue[0];
+    const btn = document.getElementById('la-finish-recruit');
+    if (btn) btn.disabled = true;
 
-    city.recruitmentQueue[0].finishAt = TimeService.now() - 1;
-    CityService.save(city);
+    const result = await ServerActions.instantRecruit(city.id);
+    if (!result.ok) {
+      if (btn) btn.disabled = false;
+      _toast(result.error || 'Server error');
+      return;
+    }
 
-    const completed = RecruitmentService.tick(city);
     _player = PlayerService.getById(_player.id);
-    completed.forEach(c => {
-      const uDef = UNIT_DEFS[c.unitId];
-      _toast(`${uDef?.icon || '⚔'} ${uDef?.name || c.unitId} ×${c.count} ready!`);
-    });
+    const uDef = UNIT_DEFS[job.unitId];
+    _toast(`${uDef?.icon || '⚔'} ${uDef?.name || job.unitId} ×${job.count} ready!`);
     HUD.refresh();
     _stopCountdown();
     _renderTab();
@@ -2113,6 +2170,11 @@ const LordScreen = (() => {
           const fillEl    = document.getElementById('lov-stance-fill');
           if (timerEl) timerEl.textContent = TimeService.formatDuration(sRemain);
           if (fillEl)  fillEl.style.width  = `${sPct}%`;
+          // Same numbers, mirrored into the Status section's own raiding bar (see _overviewTabHtml).
+          const statusTimerEl = document.getElementById('lov-status-stance-timer');
+          const statusFillEl  = document.getElementById('lov-status-stance-fill');
+          if (statusTimerEl) statusTimerEl.textContent = TimeService.formatDuration(sRemain);
+          if (statusFillEl)  statusFillEl.style.width  = `${sPct}%`;
         }
       }
 
@@ -2147,14 +2209,18 @@ const LordScreen = (() => {
     if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
   }
 
-  function _toast(msg) {
-    const c = document.getElementById('toast-container');
-    if (!c) return;
-    const el = document.createElement('div');
-    el.className = 'toast'; el.textContent = msg;
-    c.appendChild(el);
-    setTimeout(() => el.remove(), 3200);
+  // Exposed so App can stop this screen's background timer when navigating
+  // away to a different screen. Without this, _tickTimer keeps firing after
+  // the user leaves — _renderTab()/_resolveSearch() etc. self-defend against
+  // missing DOM (harmless no-op), but the interval leaks forever and keeps
+  // doing pointless work (tickActions, syncNow calls) for a screen nobody is
+  // looking at. See also OverviewScreen.stop(), which has the same purpose
+  // but a more serious consequence if left uncalled (see app.js _goto).
+  function stop() {
+    _stopCountdown();
   }
 
-  return { render };
+  function _toast(msg) { ToastService.show(msg); }
+
+  return { render, stop };
 })();

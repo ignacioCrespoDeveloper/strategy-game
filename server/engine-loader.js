@@ -40,7 +40,7 @@ load('js/data/discoveries.js');      // DISCOVERY_DEFS
 load('js/domain/battle-targeting.js');
 load('js/domain/battle-morale.js');  // needs TERRAIN_BATTLE_MODS
 load('js/domain/battle-traits.js');
-load('js/domain/battle-engine.js'); // needs all above; buildContext() not used server-side
+load('js/domain/battle-engine.js'); // needs all above; buildContext() drives server-side PvE resolution
 
 export const BattleEngine        = _ctx.BattleEngine;
 export const UNIT_DEFS           = _ctx.UNIT_DEFS;
@@ -52,5 +52,7 @@ export const LORD_CLASSES        = _ctx.LORD_CLASSES;
 export const STANCE_DEFS         = _ctx.STANCE_DEFS;
 export const TALENT_POOL         = _ctx.TALENT_POOL;
 export const MOUNT_POOL          = _ctx.MOUNT_POOL;
+export const lordRansomCost      = _ctx.lordRansomCost;
 export const DISCOVERY_DEFS      = _ctx.DISCOVERY_DEFS;
 export const CAMP_DEFS           = _ctx.CAMP_DEFS;
+export const CAMP_LEVEL_LOOT     = _ctx.CAMP_LEVEL_LOOT;

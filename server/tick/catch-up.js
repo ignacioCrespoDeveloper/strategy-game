@@ -121,10 +121,10 @@ const _UNIT_UPKEEP = {
   orc_boyz:1, orc_goblin_archers:1, boar_boyz:2, black_orcs:2, trolls:3,
   rock_lobber:2, arachnarok_spider:13,
   bandits:3, bandit_archers:4,
-  goblin_spearmen:2, pikemen:4, crossbowmen:4,
+  goblin_spearmen:2, crossbowmen:4,
   ogre_bulls:12, ironguts:18,
   goblin_rabble:0, goblin_archers:2, goblin_wolf_riders:5,
-  mercenary_spearmen:0, mercenary_crossbows:0,
+  mercenary_spearmen:4, mercenary_crossbows:0,
   forest_troll:0, ogre_warrior:0, ogre_champion:0,
   dragon_guard:0, young_dragon:0,
   city_guard:0, militia_archer:0, garrison_soldier:0,
@@ -227,10 +227,10 @@ function _degradeExcessBuildings(city) {
   const usedSlots = Object.values(city.buildings || {}).reduce((s, v) => s + v, 0);
   const pop = city.population || 1000;
   const maxSlots =
-    pop >= 100000 ? 320 :
-    pop >= 50000  ? 220 :
-    pop >= 25000  ? 150 :
-    pop >= 10000  ? 100 : 60;
+    pop >= 100000 ? 150 :
+    pop >= 50000  ? 100 :
+    pop >= 25000  ? 75  :
+    pop >= 10000  ? 50  : 30;
 
   let excess = usedSlots - maxSlots;
   if (excess <= 0) return false;
@@ -256,6 +256,18 @@ function _maxHp(lord) {
   const baseHp   = (lord.baseStats?.health) ?? _LORD_BASE_HP;
   const classMod = _LORD_CLASS_HP_MOD[lord.classId] ?? 0;
   return baseHp + classMod;
+}
+
+// Raiding stance hourly reward rate — scales with lord level. Landed
+// between passive city income (~7-65 gold/hr) and the effective rate of
+// actively-played search quests (well above that), since raiding requires
+// zero further input once started but locks the lord and risks losing
+// everything accrued to any passing army.
+function _raidHourlyRewards(lord) {
+  const lvl  = lord.level || 1;
+  const gold = Math.round(25 + lvl * 5);
+  const res  = Math.round(15 + lvl * 3);
+  return { gold, food: res, wood: res, stone: res, iron: res };
 }
 
 // ── Server-side quest resolution helpers ──────────────────────
@@ -292,6 +304,8 @@ function _checkLevelUp(lord, engine) {
 }
 
 // Army combat power from the armies map — mirrors _armyPower() in lord-screen.js.
+// Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult —
+// otherwise this overvalues numerous cheap units relative to what they actually deal.
 function _armyPower(armies, lordId, UNIT_DEFS) {
   const army = armies?.[lordId];
   if (!army?.units || !UNIT_DEFS) return 0;
@@ -299,7 +313,7 @@ function _armyPower(armies, lordId, UNIT_DEFS) {
     const d = UNIT_DEFS[u.unitId];
     if (!d) return sum;
     const s = d.combatStats || {};
-    return sum + ((s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0)) * (u.count || 0);
+    return sum + ((s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0)) * Math.pow(u.count || 0, 0.8);
   }, 0);
 }
 
@@ -512,6 +526,17 @@ export function catchUp(state, nowMs, engine = null) {
         lord.pendingScoutResolve = { tileX: lord.x, tileY: lord.y };
       }
 
+      // Plain (non-attack) arrival: flag for a deferred "is a raiding lord
+      // sitting here" check — same zero-cross-player-visibility reason as
+      // above. Skipped for attack-intent moves, which already resolve via
+      // pendingPvpAttack; setting both would resolve the same arrival twice.
+      // server/combat-resolver.js's resolveArrivalCheck() does the actual
+      // cross-player scan once drained (event-dispatcher for offline movers,
+      // sync.js for online ones).
+      if (done.actionId === 'move_lord' && done.destX != null && done.intent !== 'attack') {
+        lord.pendingArrivalCheck = { tileX: done.destX, tileY: done.destY };
+      }
+
       events.push({
         type: 'lord_action_done', lordId: lord.id, lordName: lord.name || '',
         actionId: done.actionId || 'move_lord',
@@ -519,6 +544,45 @@ export function catchUp(state, nowMs, engine = null) {
       });
     }
     if (queueChanged) lord.actionQueue = queue;
+
+    // 1d. Raiding stance — passive heal while active, full payout + heal on
+    // natural completion (reaching finishAt without ever losing a fight).
+    // Forfeiture on loss is handled entirely in combat-resolver.js's
+    // _resolveCore (clears lord.stance the moment the raider loses) — by the
+    // time control ever reaches here for a given tick, either the stance is
+    // still legitimately active or it's already been cleared, so there's
+    // nothing extra to reconcile on the loss path.
+    if (lord.stance?.id === 'raiding') {
+      const maxHp = _maxHp(lord);
+      const army  = armies[lord.id];
+      const healUnits = () => {
+        if (!army || !engine?.UNIT_DEFS) return;
+        army.units.forEach(u => {
+          const unitMaxHp = engine.UNIT_DEFS[u.unitId]?.combatStats?.hp;
+          if (unitMaxHp && u.currentHp !== unitMaxHp) { u.currentHp = unitMaxHp; changed = true; }
+        });
+      };
+
+      if (nowMs >= lord.stance.finishAt) {
+        const hours = Math.max(0, (lord.stance.finishAt - lord.stance.startedAt) / 3_600_000);
+        const rates = _raidHourlyRewards(lord);
+        const goldEarned = Math.floor(rates.gold * hours);
+        player.coins      = Math.floor((player.coins || 0) + goldEarned);
+        player.resources  = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
+        ['food', 'wood', 'stone', 'iron'].forEach(r => {
+          player.resources[r] = Math.floor((player.resources[r] || 0) + rates[r] * hours);
+        });
+        lord.currentHp = maxHp;
+        lord.hpRegenAt = nowMs;
+        healUnits();
+        lord.stance = { id: 'idle', startedAt: null, finishAt: null };
+        events.push({ type: 'raid_complete', lordId: lord.id, lordName: lord.name || '', goldEarned });
+        changed = true;
+      } else {
+        if (lord.currentHp !== maxHp) { lord.currentHp = maxHp; lord.hpRegenAt = nowMs; changed = true; }
+        healUnits();
+      }
+    }
   }
 
   // ── 2. City queue ticks ─────────────────────────────────────

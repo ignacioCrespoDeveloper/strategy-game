@@ -1,9 +1,17 @@
 // =============================================
 //  ranking-screen.js — RankingScreen
 //
-//  5 tabs: Overall · Cities · Lords · PvP · Quests
+//  5 tabs: Overall · Infrastructure · Lords · Militar · Honor
+//    Infrastructure = Buildings + City Tier Bonus
+//    Lords          = Lord Levels + Quests
+//    Militar        = Army PWR only (PvP wins/conquests no longer score
+//                      ranking points — PvP's reward is honor instead,
+//                      scaled by power destroyed; see combat-resolver.js)
 //  Each tab sorts the same leaderboard data by a different field.
-//  No extra Supabase fetches on tab switch.
+//  No extra Supabase fetches on tab switch. Each row shows a ▲/▼ badge
+//  when the player's rank in that tab has moved in roughly the last hour.
+//  "YOUR SCORE" is a closed-by-default <details> dropdown — only the
+//  grouped category totals show, the per-field breakdown is opt-in.
 // =============================================
 
 const RankingScreen = (() => {
@@ -13,6 +21,7 @@ const RankingScreen = (() => {
   let _leaderboard = [];
   let _ownScore   = null;
   let _activeTab  = 'overall';
+  let _clanByPid  = {};
 
   async function render(root, { player }) {
     _root      = root;
@@ -24,26 +33,37 @@ const RankingScreen = (() => {
     const scoreObj = RankingService.computeScore(player);
     _ownScore      = scoreObj;
 
-    await RankingService.saveScore(player, scoreObj);
+    // saveScore's write and fetchLeaderboard's reads don't depend on each
+    // other — running them together (instead of awaiting the save before
+    // even starting the fetch) was the main reason this screen felt slow.
+    // This does mean fetchLeaderboard can occasionally win the race and
+    // return our OWN entry a moment stale; the patch below always
+    // overwrites it with the just-computed local values regardless, so
+    // that race never actually reaches the screen.
+    const [, leaderboard, clanMap] = await Promise.all([
+      RankingService.saveScore(player, scoreObj),
+      RankingService.fetchLeaderboard(),
+      ClanService.getPlayerClanMap(),
+    ]);
+    _leaderboard = leaderboard;
+    _clanByPid   = clanMap;
 
-    _leaderboard = await RankingService.fetchLeaderboard();
-
-    // Inject own entry if not yet saved (or patch honorPoints if missing)
+    // Inject own entry if not yet saved, or overwrite it with the fresh
+    // local computation so this visit's own row/score/breakdown are never
+    // stale regardless of how the save/fetch race above landed.
     const ownIdx = _leaderboard.findIndex(e => e.playerId === player.id);
+    const ownEntry = {
+      playerId:    player.id,
+      username:    player.username,
+      score:       scoreObj.total,
+      breakdown:   scoreObj.breakdown,
+      lordMeta:    scoreObj.lordMeta,
+      honorPoints: player.honorPoints || 0,
+    };
     if (ownIdx === -1) {
-      _leaderboard.push({
-        playerId:    player.id,
-        username:    player.username,
-        score:       scoreObj.total,
-        breakdown:   scoreObj.breakdown,
-        lordMeta:    scoreObj.lordMeta,
-        honorPoints: player.honorPoints || 0,
-      });
+      _leaderboard.push(ownEntry);
     } else {
-      // Ensure honorPoints is present (may be missing on stale Supabase rows)
-      if (_leaderboard[ownIdx].honorPoints == null) {
-        _leaderboard[ownIdx].honorPoints = player.honorPoints || 0;
-      }
+      _leaderboard[ownIdx] = { ..._leaderboard[ownIdx], ...ownEntry };
     }
 
     _renderFull();
@@ -58,13 +78,30 @@ const RankingScreen = (() => {
   }
 
   const _TABS = [
-    { id: 'overall', label: '🏆 Overall', name: 'Overall' },
-    { id: 'cities',  label: '🏰 Cities',  name: 'Cities'  },
-    { id: 'lords',   label: '👑 Lords',   name: 'Lords'   },
-    { id: 'pvp',     label: '⚔ PvP',     name: 'PvP'     },
-    { id: 'quests',  label: '🔍 Quests',  name: 'Quests'  },
-    { id: 'honor',   label: '🛡 Honor',   name: 'Honor'   },
+    { id: 'overall',  label: '🏆 Overall',        name: 'Overall'        },
+    { id: 'infra',    label: '🏛 Infrastructure', name: 'Infrastructure' },
+    { id: 'lords',    label: '👑 Lords',          name: 'Lords'          },
+    { id: 'militar',  label: '⚔ Military',        name: 'Military'       },
+    { id: 'honor',    label: '🛡 Honor',          name: 'Honor'          },
   ];
+
+  // Grouped-category totals — the single source of truth for what each
+  // group means, shared by tab sorting, the own-score dropdown, and row
+  // subtitles so they can never drift out of sync with each other.
+  // Militar is pure army PWR now — PvP wins and conquests no longer award
+  // ranking points at all (PvP's reward is honor, scaled by power
+  // destroyed — see combat-resolver.js).
+  function _militarPts(entry) {
+    return entry.breakdown?.armyPts || 0;
+  }
+  function _infraPts(entry) {
+    const b = entry.breakdown || {};
+    return (b.buildingPts || 0) + (b.tierPts || 0);
+  }
+  function _lordsPts(entry) {
+    const b = entry.breakdown || {};
+    return (b.lordPts || 0) + (b.questPts || 0);
+  }
 
   // Single source of truth for "how is this tab sorted" — used both to
   // render the list and to compute the header's position-in-this-tab,
@@ -74,13 +111,53 @@ const RankingScreen = (() => {
     const sorted = [..._leaderboard];
     switch (tab) {
       case 'overall': sorted.sort((a, b) => b.score - a.score); break;
-      case 'cities':  sorted.sort((a, b) => (b.breakdown?.buildingPts || 0) - (a.breakdown?.buildingPts || 0)); break;
-      case 'lords':   sorted.sort((a, b) => (b.breakdown?.lordPts || 0) - (a.breakdown?.lordPts || 0)); break;
-      case 'pvp':     sorted.sort((a, b) => (b.breakdown?.pvpPts || 0) - (a.breakdown?.pvpPts || 0)); break;
-      case 'quests':  sorted.sort((a, b) => (b.breakdown?.questPts || 0) - (a.breakdown?.questPts || 0)); break;
+      case 'infra':   sorted.sort((a, b) => _infraPts(b) - _infraPts(a)); break;
+      case 'lords':   sorted.sort((a, b) => _lordsPts(b) - _lordsPts(a)); break;
+      case 'militar': sorted.sort((a, b) => _militarPts(b) - _militarPts(a)); break;
       case 'honor':   sorted.sort((a, b) => (b.honorPoints || 0) - (a.honorPoints || 0)); break;
     }
     return sorted;
+  }
+
+  // Same shape as _sortedForTab, but built from each entry's ~1h-old
+  // snapshot (falling back to their CURRENT values when they have no
+  // snapshot yet, so the population used for ranking stays apples-to-apples
+  // with _sortedForTab — only entries with real historical data ever get a
+  // delta badge, but everyone else still occupies a sane relative slot).
+  function _historicalSortedForTab(tab) {
+    const historical = _leaderboard.map(e => ({
+      playerId:    e.playerId,
+      score:       e.snapshot?.score       ?? e.score,
+      breakdown:   e.snapshot?.breakdown   ?? e.breakdown,
+      honorPoints: e.snapshot?.honorPoints ?? e.honorPoints,
+    }));
+    switch (tab) {
+      case 'overall': historical.sort((a, b) => b.score - a.score); break;
+      case 'infra':   historical.sort((a, b) => _infraPts(b) - _infraPts(a)); break;
+      case 'lords':   historical.sort((a, b) => _lordsPts(b) - _lordsPts(a)); break;
+      case 'militar': historical.sort((a, b) => _militarPts(b) - _militarPts(a)); break;
+      case 'honor':   historical.sort((a, b) => (b.honorPoints || 0) - (a.honorPoints || 0)); break;
+    }
+    return historical;
+  }
+
+  // Positions moved in the last ~hour: positive = moved up (rank number
+  // got smaller), negative = moved down. Null when this player has no
+  // snapshot yet (brand new to the leaderboard — nothing to diff against).
+  function _rankDelta(tab, playerId) {
+    const entry = _leaderboard.find(e => e.playerId === playerId);
+    if (!entry || !entry.snapshot) return null;
+    const curIdx  = _sortedForTab(tab).findIndex(e => e.playerId === playerId);
+    const histIdx = _historicalSortedForTab(tab).findIndex(e => e.playerId === playerId);
+    if (curIdx === -1 || histIdx === -1) return null;
+    return histIdx - curIdx;
+  }
+
+  function _deltaBadgeHtml(tab, playerId) {
+    const delta = _rankDelta(tab, playerId);
+    if (delta == null || delta === 0) return '';
+    const up = delta > 0;
+    return `<span class="rank-delta ${up ? 'rank-delta--up' : 'rank-delta--down'}">${up ? '▲' : '▼'}${Math.abs(delta)}</span>`;
   }
 
   function _rankForTab(tab) {
@@ -114,55 +191,66 @@ const RankingScreen = (() => {
       </div>`;
   }
 
-  function _honorIcon(pts) {
-    if (pts >= 50)  return '⚜';
-    if (pts <= -50) return '☠';
-    return '';   // no icon between thresholds
+  // Tiered Good/Evil crest, shown only once honor clears the first tier threshold.
+  function _honorTag(pts) {
+    const tier = getHonorTier(pts);
+    return tier ? `<span class="rank-honor-tag">${honorCrestHtml(tier)}</span> ` : '';
   }
 
-  function _honorChip(pts, compact) {
-    const n    = pts || 0;
+  // Signed honor value shown in parens right after the username.
+  function _honorValue(pts) {
+    const n = pts || 0;
     const sign = n > 0 ? '+' : n < 0 ? '−' : '';
     const cls  = n > 0 ? 'rank-honor--pos' : n < 0 ? 'rank-honor--neg' : 'rank-honor--zero';
-    const icon = _honorIcon(n);
-    const val  = `${icon ? icon + ' ' : ''}${sign}${_fmt(Math.abs(n))}`;
-    return compact
-      ? `<span class="rank-honor-chip rank-honor-chip--compact ${cls}">${val}</span>`
-      : `<span class="rank-honor-chip ${cls}">${val}</span>`;
+    return `<span class="rank-honor-value ${cls}">(${sign}${_fmt(Math.abs(n))})</span>`;
+  }
+  // Clan tag prefix, e.g. "[TAG] " — looked up by playerId, blank if unclanned.
+  function _clanTag(playerId) {
+    const c = _clanByPid[playerId];
+    return c ? `<span class="rank-clan-tag">[${c.tag}]</span> ` : '';
+  }
+
+  // "[Good/Evil] [TAG] username (honor)" — the single shared format for every
+  // place username + honor points appear together on the Rankings screen.
+  function _nameWithHonor(username, honor, extraHtml, playerId) {
+    return `${_honorTag(honor)}${_clanTag(playerId)}${username || '?'}${extraHtml || ''} ${_honorValue(honor)}`;
   }
 
   function _ownScoreCard() {
     const b     = _ownScore.breakdown;
     const honor = _player.honorPoints || 0;
-    const rows  = [
-      { icon: '🏰', label: 'Buildings',       pts: b.buildingPts },
-      { icon: '🏙', label: 'City Tier Bonus', pts: b.tierPts || 0 },
-      { icon: '👑', label: 'Lords',           pts: b.lordPts     },
-      { icon: '🔍', label: 'Quests',          pts: b.questPts    },
-      { icon: '⚔',  label: 'PvP',             pts: b.pvpPts      },
-      { icon: '🏯', label: 'Conquests',       pts: b.conquestPts },
+    const entry = { breakdown: b };
+    const groups = [
+      { icon: '⚔', label: 'Military',       pts: _militarPts(entry), sub: `Army Power ${_fmt(b.armyPts || 0)} (lords' combined PWR)` },
+      { icon: '🏛', label: 'Infrastructure', pts: _infraPts(entry),   sub: `Buildings ${_fmt(b.buildingPts || 0)} · City Tier Bonus ${_fmt(b.tierPts || 0)}` },
+      { icon: '👑', label: 'Lords',          pts: _lordsPts(entry),   sub: `Lord Levels ${_fmt(b.lordPts || 0)} · Quests ${_fmt(b.questPts || 0)}` },
     ];
 
     return `
       <section class="rank-section">
         <div class="rank-section-title">YOUR SCORE</div>
-        <div class="rank-own-card">
-          <div class="rank-own-top">
-            <span class="rank-own-name">${_player.username}</span>
+        <details class="rank-own-card">
+          <summary class="rank-own-top">
+            <span class="rank-own-name">${_nameWithHonor(_player.username, honor, '', _player.id)}</span>
             <div class="rank-own-right">
-              ${_honorChip(honor)}
               <span class="rank-own-total">${_fmt(_ownScore.total)} <span class="rank-pts-unit">pts</span></span>
+              <span class="rank-own-chevron">▾</span>
             </div>
-          </div>
+          </summary>
           <div class="rank-breakdown">
-            ${rows.map(r => `
+            ${groups.map(g => `
               <div class="rank-brow">
-                <span class="rank-brow-icon">${r.icon}</span>
-                <span class="rank-brow-label">${r.label}</span>
-                <span class="rank-brow-pts">${_fmt(r.pts)}</span>
+                <span class="rank-brow-icon">${g.icon}</span>
+                <div class="rank-brow-body">
+                  <div class="rank-brow-top">
+                    <span class="rank-brow-label">${g.label}</span>
+                    <span class="rank-brow-pts">${_fmt(g.pts)}</span>
+                  </div>
+                  <div class="rank-brow-sub">${g.sub}</div>
+                </div>
               </div>`).join('')}
           </div>
-        </div>
+        </details>
       </section>`;
   }
 
@@ -173,8 +261,8 @@ const RankingScreen = (() => {
   }
 
   const _ROW_FNS = {
-    overall: _overallRow, cities: _citiesRow, lords: _lordsRow,
-    pvp: _pvpRow, quests: _questsRow, honor: _honorRow,
+    overall: _overallRow, infra: _infraRow, lords: _lordsRow,
+    militar: _militarRow, honor: _honorRow,
   };
 
   function _tabHtml(tab) {
@@ -210,15 +298,16 @@ const RankingScreen = (() => {
   }
 
 
-  function _row(entry, i, pts, subtitle) {
+  function _row(entry, i, pts, subtitle, tab) {
+    const delta = tab ? _deltaBadgeHtml(tab, entry.playerId) : '';
     return `
       <div class="rank-row${_cls(entry)}">
         <div class="rank-row-medal">${_medalOf(i)}</div>
         <div class="rank-row-body">
           <div class="rank-row-top">
-            <span class="rank-row-name">${entry.username || '?'}${_youBadge(entry)}</span>
+            <span class="rank-row-name">${_nameWithHonor(entry.username, entry.honorPoints || 0, _youBadge(entry), entry.playerId)}</span>
             <div class="rank-row-right">
-              ${_honorChip(entry.honorPoints || 0, true)}
+              ${delta}
               <span class="rank-row-score">${_fmt(pts)} pts</span>
             </div>
           </div>
@@ -228,31 +317,34 @@ const RankingScreen = (() => {
   }
 
   function _honorRow(entry, i) {
-    const h   = entry.honorPoints || 0;
-    const cls = h > 0 ? 'rank-honor--pos' : h < 0 ? 'rank-honor--neg' : 'rank-honor--zero';
-    const icon = _honorIcon(h);
-    const sign = h > 0 ? '+' : h < 0 ? '−' : '';
+    const h     = entry.honorPoints || 0;
+    const delta = _deltaBadgeHtml('honor', entry.playerId);
     return `
       <div class="rank-row${_cls(entry)}">
         <div class="rank-row-medal">${_medalOf(i)}</div>
         <div class="rank-row-body">
           <div class="rank-row-top">
-            <span class="rank-row-name">${entry.username || '?'}${_youBadge(entry)}</span>
-            <span class="rank-row-score ${cls}">${icon ? icon + ' ' : ''}${sign}${_fmt(Math.abs(h))}</span>
+            <span class="rank-row-name">${_nameWithHonor(entry.username, h, _youBadge(entry), entry.playerId)}</span>
+            <div class="rank-row-right">${delta}</div>
           </div>
         </div>
       </div>`;
   }
 
-  function _overallRow(entry, i) { return _row(entry, i, entry.score || 0); }
-  function _citiesRow(entry, i)  { return _row(entry, i, (entry.breakdown?.buildingPts || 0) + (entry.breakdown?.tierPts || 0)); }
+  function _overallRow(entry, i) { return _row(entry, i, entry.score || 0, null, 'overall'); }
+  function _infraRow(entry, i) {
+    const sub = `Buildings ${entry.breakdown?.buildingPts || 0}pts · City Tier ${entry.breakdown?.tierPts || 0}pts`;
+    return _row(entry, i, _infraPts(entry), sub, 'infra');
+  }
   function _lordsRow(entry, i)   {
     const m = entry.lordMeta;
-    const sub = m ? `${m.name} · Level ${m.level}` : '';
-    return _row(entry, i, entry.breakdown?.lordPts || 0, sub);
+    const lordSub = m ? `${m.name} · Level ${m.level}` : '';
+    const sub = `${lordSub}${lordSub ? ' · ' : ''}Quests ${entry.breakdown?.questPts || 0}pts`;
+    return _row(entry, i, _lordsPts(entry), sub, 'lords');
   }
-  function _pvpRow(entry, i)     { return _row(entry, i, entry.breakdown?.pvpPts   || 0); }
-  function _questsRow(entry, i)  { return _row(entry, i, entry.breakdown?.questPts || 0); }
+  function _militarRow(entry, i) {
+    return _row(entry, i, _militarPts(entry), null, 'militar');
+  }
 
   function _fmt(n) { return Math.round(n || 0).toLocaleString(); }
 

@@ -1,9 +1,9 @@
 // =============================================
 //  battle-result-view.js — BattleResultView
 //
-//  Renders a BattleReport as a readable result screen.
-//  On "Continue" click: applies gold, XP, unit losses,
-//  lord HP, then navigates back to the lord screen.
+//  Renders a BattleReport's round-by-round inline log, embedded in the
+//  Lord Screen's Battles tab. Both PvE and PvP resolve entirely server-
+//  side now — this file only formats an already-resolved report.
 // =============================================
 
 const BattleResultView = (() => {
@@ -19,16 +19,6 @@ const BattleResultView = (() => {
     end_round: 'Round End',
   };
 
-  const _RESULT_LABELS = {
-    hit:        'hit',
-    killed:     'model killed',
-    eliminated: 'ELIMINATED',
-    miss:       'missed',
-    routed:     'ROUTED',
-    retreated:  'RETREATED',
-    healed:     'healed',
-  };
-
   const _REASON_LABELS = {
     eliminated: 'Total Elimination',
     routed:     'Morale Rout',
@@ -36,23 +26,42 @@ const BattleResultView = (() => {
     max_rounds: 'Max Duration',
   };
 
-  const _RES_ICONS = { wood: '🪵', stone: '⛏', iron: '⚒', food: '🌾' };
+  // Compact "Victory/Defeat → cause" tag, framed from the viewer's side —
+  // for PvE the viewer is always the attacker; for PvP they may be either,
+  // so this always resolves relative to viewerIsDefenderSide rather than
+  // assuming report.winner === 'attacker' means "I won".
+  function _outcomeTag(report, viewerIsDefenderSide) {
+    const { reason, winner } = report;
+    if (winner === 'draw') return { cls: 'br-outcome--draw', label: 'Draw → Fought to a Standstill' };
+
+    const viewerWon = winner === (viewerIsDefenderSide ? 'defender' : 'attacker');
+    const result     = viewerWon ? 'Victory' : 'Defeat';
+    const cls        = viewerWon ? 'br-outcome--win' : 'br-outcome--loss';
+
+    let cause;
+    switch (reason) {
+      case 'eliminated': cause = viewerWon ? 'Enemy Wiped Out'        : 'Your Army Wiped Out'; break;
+      case 'routed':      cause = viewerWon ? 'Enemy Morale Collapsed' : 'Your Morale Collapsed'; break;
+      case 'retreated':   cause = viewerWon ? 'Enemy Retreated'        : 'You Retreated'; break;
+      case 'max_rounds':  cause = viewerWon ? 'Stronger Force Remaining' : 'Weaker Force Remaining'; break;
+      default:            cause = _REASON_LABELS[reason] || reason;
+    }
+    return { cls, label: `${result} → ${cause}` };
+  }
+
+  // Both sides' final morale, side by side — lets the outcome tag above be
+  // verified at a glance instead of taken on faith.
+  function _moraleCompareHtml(report, viewerIsDefenderSide) {
+    const mine  = viewerIsDefenderSide ? report.defender : report.attacker;
+    const theirs = viewerIsDefenderSide ? report.attacker : report.defender;
+    return `
+      <div class="br-morale-compare">
+        <span>Your Morale: <strong>${mine.moraleEnd}</strong></span>
+        <span>Enemy Morale: <strong>${theirs.moraleEnd}</strong></span>
+      </div>`;
+  }
 
   // ── Unit helpers ────────────────────────────────────────────────
-
-  function _unitDisplayName(unit) {
-    // unit from unitsStart: { sourceId, name, count }
-    if (unit.name) return unit.name;
-    return UNIT_DEFS[unit.sourceId]?.name || unit.sourceId;
-  }
-
-  function _unitImage(sourceId) {
-    return UNIT_DEFS[sourceId]?.image || null;
-  }
-
-  function _unitIcon(sourceId) {
-    return UNIT_DEFS[sourceId]?.icon || '⚔';
-  }
 
   function _hpColor(pct) {
     if (pct >= 0.6) return '#4a9a4a';
@@ -69,66 +78,20 @@ const BattleResultView = (() => {
     return '';
   }
 
-  // ── Unit card ────────────────────────────────────────────────────
-
-  // One compact card per starting model — same visual language as the
-  // battle simulator's lineup cards (portrait + top HP strip + hover tooltip).
-  function _unitCardHtml(s, sideData) {
-    const surv         = sideData.unitsSurviving.find(u => u.sourceId === s.sourceId);
-    const survCount    = surv?.count ?? 0;
-    const isRoutedType = !!surv?.routed && survCount > 0;
-    const def   = UNIT_DEFS[s.sourceId];
-    const maxHp = def?.combatStats?.hp ?? null;
-    const avgHp = surv?.avgHp ?? 0;
-    const hpPct = (maxHp && avgHp) ? Math.min(1, avgHp / maxHp) : 0;
-
-    const img  = _unitImage(s.sourceId);
-    const icon = _unitIcon(s.sourceId);
-    const name = _unitDisplayName(s);
-    const tier = _cardTierClass(def?.category);
-
-    return Array.from({ length: s.count }, (_, idx) => {
-      const isAlive      = idx < survCount;
-      const hpPctDisplay = isAlive ? Math.round(hpPct * 100) : 0;
-      const portrait = img
-        ? `<img src="${img}" class="la-uc-img" alt="${name}" loading="lazy">`
-        : `<div class="la-uc-img la-uc-img--fallback">${icon}</div>`;
-      const stateBadge = !isAlive
-        ? `<div class="bsim-dmg-badge">☠</div>`
-        : isRoutedType ? `<div class="bsim-dmg-badge">🏃</div>` : '';
-      const statusWord = !isAlive ? 'Dead' : isRoutedType ? 'Routed' : (hpPct < 0.85 ? 'Wounded' : 'Alive');
-      const statusColor = !isAlive ? '#e07070' : isRoutedType ? '#c8933a' : 'var(--text-secondary)';
-
-      return `
-        <div class="la-uc-wrap">
-          <div class="la-unit-card${tier ? ' ' + tier : ''}${!isAlive ? ' bsim-card--dead' : ''}">
-            <div class="la-uc-top">
-              <div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:${hpPctDisplay}%;background:${_hpColor(isAlive ? hpPct : 0)}"></div></div>
-            </div>
-            ${portrait}
-            ${stateBadge}
-          </div>
-          <div class="la-uc-tooltip">
-            <div class="la-tt-name">${name}</div>
-            <div class="la-tt-stats">
-              <span>❤ ${isAlive ? Math.round(avgHp) : 0}${maxHp ? `/${maxHp}` : ''}</span>
-              <span>⚔ ${def?.combatStats?.attack ?? '—'}</span>
-              <span>🛡 ${def?.combatStats?.defense ?? '—'}</span>
-            </div>
-            <div class="la-tt-row" style="color:${statusColor}">${statusWord}</div>
-          </div>
-        </div>`;
-    }).join('');
-  }
-
-  function _sideHtml(sideData) {
-    return sideData.unitsStart.map(s => _unitCardHtml(s, sideData)).join('');
-  }
-
   // ── Round-by-round timeline ──────────────────────────────────────
 
-  function _timelineHtml(events) {
+  // viewerIsDefenderSide: true when the person looking at this log fought as
+  // the report's `defender` side (PvP: a defending player opening their own
+  // Battles tab). Events carry raw actorSide/targetSide ('attacker'/'defender'
+  // per the *report's* fixed roles) — this flips them so "mine" always means
+  // "the side the viewer actually fought on", regardless of who physically
+  // initiated the attack.
+  function _timelineHtml(events, viewerIsDefenderSide) {
     if (!events || events.length === 0) return '<div class="br-no-events">No events recorded.</div>';
+
+    const _isMine  = side => side ? ((side === 'attacker') !== !!viewerIsDefenderSide) : null;
+    const _sideCls = mine => mine === null ? '' : mine ? ' br-tl-side--mine' : ' br-tl-side--enemy';
+    const _sideTag = mine => mine === null ? '' : `<span class="br-tl-side-tag${mine ? ' br-tl-side-tag--mine' : ' br-tl-side-tag--enemy'}">${mine ? 'YOU' : 'ENEMY'}</span>`;
 
     // Group events by round
     const byRound = {};
@@ -151,18 +114,26 @@ const BattleResultView = (() => {
         if (isMiss)                   cls += ' br-tl-event--miss';
         if (isHeal)                   cls += ' br-tl-event--heal';
 
-        const phase = _PHASE_LABELS[e.phase] || e.phase;
+        const phase      = _PHASE_LABELS[e.phase] || e.phase;
+        const actorMine  = _isMine(e.actorSide);
+        const targetMine = _isMine(e.targetSide);
+        const actorCls   = _sideCls(actorMine);
+        const targetCls  = _sideCls(targetMine);
 
         if (!e.actorName && !e.targetName) {
-          return `<div class="${cls} br-tl-event--morale">
+          const whoseArmy = actorMine === null ? '' : actorMine ? 'Your army ' : 'Enemy army ';
+          return `<div class="${cls} br-tl-event--morale${actorCls}">
             <span class="br-tl-phase">${phase}</span>
-            <span class="br-tl-desc">💥 ${e.result === 'routed' ? 'Routed' : 'Retreat'}</span>
+            <span class="br-tl-desc">💥 ${whoseArmy}${e.result === 'routed' ? 'Routed' : 'Retreat'}</span>
           </div>`;
         }
+        const actorCountStr = e.actorCount > 1 ? ` <span class="br-tl-count">×${e.actorCount}</span>` : '';
+
         if (isHeal) {
           return `<div class="${cls}">
             <span class="br-tl-phase">${phase}</span>
-            <span class="br-tl-actor">${e.actorName}</span>
+            ${_sideTag(actorMine)}
+            <span class="br-tl-actor${actorCls}">${e.actorName}</span>${actorCountStr}
             <span class="br-tl-arrow">✚</span>
             <span class="br-tl-heal">+${-e.damage} healed</span>
           </div>`;
@@ -170,17 +141,20 @@ const BattleResultView = (() => {
 
         const dmgStr   = e.damage > 0 ? `<span class="br-tl-dmg">⚔${e.damage}</span>` : '';
         const traitStr = e.trait ? `<span class="br-tl-trait">[${e.trait}]</span>` : '';
-        const killStr  = isKilled ? '<span class="br-tl-kill-tag">💀</span>'
+        const armorStr = e.heavyArmor ? '<span class="br-tl-trait" title="Target\'s armor absorbed most of this hit">[heavy armor]</span>' : '';
+        const killStr  = isKilled ? '<span class="br-tl-kill-tag">💀 KILL</span>'
                        : isEliminated ? '<span class="br-tl-elim-tag">☠ ELIM</span>'
                        : isRouted ? '<span class="br-tl-rout-tag">💥 ROUT</span>'
                        : '';
 
         return `<div class="${cls}">
           <span class="br-tl-phase">${phase}</span>
-          <span class="br-tl-actor">${e.actorName}</span>
+          ${_sideTag(actorMine)}
+          <span class="br-tl-actor${actorCls}">${e.actorName}</span>${actorCountStr}
           <span class="br-tl-arrow">→</span>
-          <span class="br-tl-target">${e.targetName}</span>
-          ${dmgStr}${traitStr}${killStr}
+          ${_sideTag(targetMine)}
+          <span class="br-tl-target${targetCls}">${e.targetName}</span>
+          ${dmgStr}${traitStr}${armorStr}${killStr}
         </div>`;
       }).join('');
 
@@ -202,220 +176,55 @@ const BattleResultView = (() => {
     }).join('');
   }
 
-  // ── Reward application ──────────────────────────────────────────
-
-  function _applyRewards(report, lord, player) {
-    if (report.loot.gold > 0) {
-      const p = PlayerService.getById(player.id);
-      PlayerService.update(player.id, { coins: (p.coins || 0) + report.loot.gold });
-    }
-
-    const lootedResEntries = Object.entries(report.loot.resource || {});
-    if (lootedResEntries.length > 0) {
-      const city = (lord.x != null && CityService.getPlayerCities(player.id).find(c => c.x === lord.x && c.y === lord.y))
-        || CityService.getPlayerCities(player.id)[0] || null;
-      if (city) {
-        city.resources = city.resources || {};
-        lootedResEntries.forEach(([type, amount]) => {
-          city.resources[type] = (city.resources[type] || 0) + amount;
-        });
-        CityService.save(city);
-      }
-    }
-
-    const freshLord = LordService.getById(lord.id);
-    freshLord.xp    = (freshLord.xp || 0) + report.xpEarned;
-    const leveled   = LordService.checkLevelUp(freshLord);
-
-    const lordSurv = report.attacker.unitsSurviving.find(u => u.sourceId === lord.id);
-    if (lordSurv) {
-      freshLord.currentHp      = Math.max(1, Math.round(lordSurv.avgHp));
-      freshLord.downtimeUntil  = null;
-      freshLord.downtimeReason = null;
-    } else {
-      freshLord.currentHp      = 0;
-      freshLord.downtimeUntil  = TimeService.now() + 60 * 60 * 1000;
-      freshLord.downtimeReason = 'defeated';
-      freshLord.actionQueue    = [];
-    }
-
-    LordService.save(freshLord);
-
-    const losses    = [];
-    const hpUpdates = [];
-    report.attacker.unitsStart
-      .filter(s => s.sourceId !== lord.id)
-      .forEach(s => {
-        const surv       = report.attacker.unitsSurviving.find(u => u.sourceId === s.sourceId);
-        const modelsLost = s.count - (surv?.count ?? 0);
-        if (modelsLost > 0)         losses.push({ unitId: s.sourceId, modelsLost });
-        if (surv && surv.count > 0) hpUpdates.push({ unitId: s.sourceId, currentHp: surv.avgHp });
-      });
-
-    ArmyService.applyBattleLosses(lord.id, losses, hpUpdates);
-
-    const meta      = report._meta || {};
-    const outcome   = report.winner === 'attacker' ? 'victory' : report.winner === 'draw' ? 'draw' : 'defeat';
-    const resourceLoot = outcome === 'victory' ? report.loot.resource : null;
-    BattleHistoryService.save(lord.id, {
-      outcome,
-      campName:   meta.campName   || report.defender?.id || 'Enemy',
-      campIcon:   meta.campIcon   || '⚔',
-      campLevel:  meta.campLevel  || null,
-      terrain:    meta.terrain    || null,
-      goldEarned: outcome === 'victory' ? report.loot.gold : 0,
-      resourceLoot,
-      xpEarned:   report.xpEarned,
-      modelsLost: report.attacker.modelsLost,
-      rounds:     report.rounds,
-      reason:     report.reason,
-      report,
-    });
-
-    const actIcon  = outcome === 'victory' ? '⚔' : outcome === 'draw' ? '🤝' : '☠';
-    const actTitle = outcome === 'victory'
-      ? `Victory: ${meta.campName || report.defender?.id || 'Enemy'}`
-      : outcome === 'draw'
-        ? `Draw: ${meta.campName || report.defender?.id || 'Enemy'}`
-        : `Defeat: ${meta.campName || report.defender?.id || 'Enemy'}`;
-    const resLabel = Object.entries(resourceLoot || {}).map(([t, amt]) => ` · +${amt} ${_RES_ICONS[t] || ''}`).join('');
-    ActivityService.log(player.id, {
-      type:     `battle_${outcome}`,
-      icon:     actIcon,
-      title:    actTitle,
-      detail:   `${report.rounds} rounds · losses: ${report.attacker.modelsLost}${outcome === 'victory' ? ` · +${report.loot.gold}💰${resLabel}` : ''} · +${report.xpEarned}⭐`,
-      lordName: lord.name,
-    });
-
-    // Honor points — PvE camps only (no _meta.pvpAttacker flag)
-    if (!report._meta?.pvpAttacker) {
-      if (report.winner === 'attacker') {
-        RankingService.addHonor(player.id, 5);
-      }
-    }
-
-    HUD.refresh();
-    return { leveled, freshLord };
-  }
-
-  function _toast(msg) {
-    const c = document.getElementById('toast-container');
-    if (!c) return;
-    const t = document.createElement('div');
-    t.className   = 'toast';
-    t.textContent = msg;
-    c.appendChild(t);
-    setTimeout(() => t.remove(), 3000);
-  }
-
-  // ── Public render ───────────────────────────────────────────────
-
-  function render(root, { report, lord, player }) {
-    const isVictory = report.winner === 'attacker';
-    const isDraw    = report.winner === 'draw';
-    const meta      = report._meta || {};
-    const enemyName = meta.campName || 'Enemy';
-
-    const bannerCls   = isVictory ? 'br-banner--victory' : isDraw ? 'br-banner--draw' : 'br-banner--defeat';
-    const bannerLabel = isVictory ? '⚔ VICTORY' : isDraw ? '🤝 DRAW' : '☠ DEFEAT';
-
-    const lootHtml = (isVictory || isDraw) ? `
-      <div class="br-loot-row">
-        ${report.loot.gold > 0 ? `<span class="br-loot-chip br-loot-gold">+${report.loot.gold} 💰</span>` : ''}
-        ${Object.entries(report.loot.resource || {}).map(([type, amount]) =>
-          `<span class="br-loot-chip">${_RES_ICONS[type] || ''} +${amount}</span>`).join('')}
-        <span class="br-loot-chip br-loot-xp">+${report.xpEarned} ⭐ XP</span>
-      </div>` : `
-      <div class="br-loot-row">
-        <span class="br-loot-chip br-loot-xp">+${report.xpEarned} ⭐ XP</span>
-      </div>`;
-
-    root.innerHTML = `
-      <div class="br-screen">
-
-        <div class="br-banner ${bannerCls}">
-          <div class="br-banner-title">${bannerLabel}</div>
-          <div class="br-banner-reason">${_REASON_LABELS[report.reason] || report.reason}</div>
-        </div>
-
-        <div class="br-summary-row">
-          <span>Rounds: <strong>${report.rounds}</strong></span>
-          <span>Own Losses: <strong>${report.attacker.modelsLost}</strong></span>
-          <span>Enemy Losses: <strong>${report.defender.modelsLost}</strong></span>
-          <span>Final Morale: <strong>${report.attacker.moraleEnd}</strong></span>
-        </div>
-
-        <div class="br-armies">
-          <div class="br-army-col">
-            <div class="br-army-header">
-              <span class="br-army-label">⚔ Your Army</span>
-              <span class="br-army-lord">${lord.name}</span>
-            </div>
-            <div class="la-unit-cards">${_sideHtml(report.attacker)}</div>
-          </div>
-          <div class="br-vs-divider">VS</div>
-          <div class="br-army-col">
-            <div class="br-army-header">
-              <span class="br-army-label">💀 Enemy</span>
-              <span class="br-army-lord">${enemyName}</span>
-            </div>
-            <div class="la-unit-cards">${_sideHtml(report.defender)}</div>
-          </div>
-        </div>
-
-        ${lootHtml}
-
-        <div class="br-timeline-section">
-          <button class="br-log-toggle" id="br-log-toggle">📜 Detailed Round-by-Round Report</button>
-          <div class="br-timeline-body hidden" id="br-log-body">
-            ${_timelineHtml(report.events)}
-          </div>
-        </div>
-
-        <button class="br-continue-btn" id="br-continue">Continue →</button>
-      </div>
-    `;
-
-    document.getElementById('br-log-toggle')?.addEventListener('click', () => {
-      document.getElementById('br-log-body')?.classList.toggle('hidden');
-    });
-
-    document.getElementById('br-continue')?.addEventListener('click', () => {
-      const { leveled, freshLord } = _applyRewards(report, lord, player);
-      if (leveled > 0) _toast(`⭐ Level up! Now level ${freshLord.level}.`);
-      const refreshedPlayer = PlayerService.getById(player.id);
-      EventBus.emit('lord:open', { lord: freshLord, player: refreshedPlayer });
-    });
-  }
-
   // ── Inline embed (used in lord-screen battles tab) ─────────────
 
-  function _inlineReportHtml(report, attackerLord) {
+  // viewerLord: the lord whose Battles tab is currently open. report.attacker/
+  // report.defender are FIXED by who physically attacked — they are NOT "me"
+  // and "the enemy". A defending player opening their own battle log needs to
+  // see their own army under "Your Army", even though they're report.defender.
+  // opponentName: precomputed per-viewer label (BattleHistoryService record's
+  // campName — the server already computed this correctly from each side's
+  // perspective), used instead of guessing from the report itself.
+  function _inlineReportHtml(report, viewerLord, opponentName) {
     if (!report) return '<em>Report unavailable</em>';
 
-    const meta      = report._meta || {};
-    const enemyName = meta.campName || report.defender?.id || 'Enemy';
+    const meta = report._meta || {};
 
-    const atkPortrait = attackerLord
-      ? pickLordPortrait(attackerLord.race, attackerLord.classId, attackerLord.id) || null
+    const viewerIsDefenderSide = !!viewerLord
+      && (report.defender?.unitsStart || []).some(u => u.sourceId === viewerLord.id);
+
+    const atkPortrait = viewerLord
+      ? pickLordPortrait(viewerLord.race, viewerLord.classId, viewerLord.id) || null
       : null;
 
-    function sideCardsHtml(sideData, isDefender) {
-      return sideData.unitsStart.flatMap(s => {
-        const rawId = isDefender ? s.sourceId.replace(/^d\d+_/, '') : s.sourceId;
-        const surv         = sideData.unitsSurviving.find(u => u.sourceId === s.sourceId);
+    // fullSide: report.attacker or report.defender (the whole side's unitsStart/
+    // unitsSurviving — a participant group is a filtered slice of one of these,
+    // not a separate array). matchesSourceId: which of that side's units belong
+    // to this particular participant. stripPrefix: true for anything pulled
+    // from report.defender, since only that side's sourceIds carry the
+    // d{idx}_/garrison_ multi-participant prefix (see combat-resolver.js
+    // _buildMultiContext) — attacker sourceIds are always bare unitIds.
+    // lordPortrait: this participant's own lord portrait (viewer's own via
+    // atkPortrait, or an enemy lord's via pickLordPortrait(meta race/classId)
+    // — see groups construction below), or null for garrison (no lord).
+    function participantCardsHtml(fullSide, matchesSourceId, stripPrefix, lordPortrait) {
+      return fullSide.unitsStart.filter(s => matchesSourceId(s.sourceId)).flatMap(s => {
+        const rawId = stripPrefix ? s.sourceId.replace(/^(d\d+|garrison)_/, '') : s.sourceId;
+        const surv         = fullSide.unitsSurviving.find(u => u.sourceId === s.sourceId);
         const survCount    = surv?.count ?? 0;
         const isRoutedType = !!surv?.routed && survCount > 0;
-        const maxHp = UNIT_DEFS[rawId]?.combatStats?.hp ?? null;
+        // Prefer maxHp baked into the report — lords aren't in UNIT_DEFS at all,
+        // so falling back to it alone left their HP bar permanently at 0%.
+        const maxHp = s.maxHp ?? UNIT_DEFS[rawId]?.combatStats?.hp ?? null;
         const avgHp = surv?.avgHp ?? 0;
         const hpPct = (maxHp && avgHp) ? Math.min(1, avgHp / maxHp) : 0;
 
-        const isLord = !UNIT_DEFS[rawId];
+        const isLord = !!s.isLord || !UNIT_DEFS[rawId];
         let img = null;
         if (!isLord) {
           img = UNIT_DEFS[rawId]?.image || null;
-        } else if (!isDefender && atkPortrait) {
-          img = atkPortrait;
+        } else if (lordPortrait) {
+          img = lordPortrait;
         }
         const icon = isLord ? '⚔' : (UNIT_DEFS[rawId]?.icon || '⚔');
         const name = s.name || (UNIT_DEFS[rawId]?.name) || rawId;
@@ -455,33 +264,107 @@ const BattleResultView = (() => {
       }).join('');
     }
 
-    const lordName = attackerLord?.name || 'Your Lord';
+    // One card group per real participant: the attacker (always exactly one —
+    // there's no allied co-attack mechanic today), then each defending lord,
+    // then the city garrison if present. Falls back to today's flattened
+    // single-column-per-side shape when report._meta.defenderGroups is
+    // missing — true for PvE reports (which stamp their own _meta.campName
+    // instead) and for any battle history saved before this per-participant
+    // metadata existed.
+    // A participant's own portrait: the viewer's own lord always uses their
+    // already-computed atkPortrait (their own local race/classId — no need
+    // to round-trip through meta); anyone else's lord is derived from the
+    // race/classId this session's server change now stamps onto _meta, via
+    // the same deterministic pickLordPortrait() hash every client computes
+    // identically. Old reports without that metadata simply get no portrait
+    // (icon fallback), same as before this fix.
+    function lordPortraitFor(isMine, metaEntry) {
+      if (isMine) return atkPortrait;
+      if (!metaEntry?.race) return null;
+      return pickLordPortrait(metaEntry.race, metaEntry.classId, metaEntry.lordId) || null;
+    }
+
+    const attackerIsMine = !viewerIsDefenderSide;
+    const attackerLordName = attackerIsMine
+      ? (viewerLord?.name || 'Your Lord')
+      : (opponentName || meta.attacker?.lordName || 'Enemy Lord');
+    const groups = [{
+      isMine: attackerIsMine,
+      isGarrison: false,
+      lordLabel: attackerLordName,
+      cardsHtml: participantCardsHtml(report.attacker, () => true, false, lordPortraitFor(attackerIsMine, meta.attacker)),
+    }];
+
+    if (meta.garrison || meta.defenderGroups) {
+      if (meta.garrison) {
+        groups.push({
+          isMine: false,
+          isGarrison: true,
+          lordLabel: meta.garrison.cityName,
+          cardsHtml: participantCardsHtml(report.defender, id => id.startsWith('garrison_'), true, null),
+        });
+      }
+      (meta.defenderGroups || []).forEach((g, idx) => {
+        const isMine = viewerIsDefenderSide && !!viewerLord && g.lordId === viewerLord.id;
+        groups.push({
+          isMine,
+          isGarrison: false,
+          lordLabel: g.lordName,
+          cardsHtml: participantCardsHtml(
+            report.defender,
+            id => id === g.lordId || id.startsWith(`d${idx}_`),
+            true, lordPortraitFor(isMine, g),
+          ),
+        });
+      });
+    } else {
+      // Fallback: one flattened defender column, exactly like before this change.
+      const isMine = viewerIsDefenderSide;
+      groups.push({
+        isMine,
+        isGarrison: false,
+        lordLabel: isMine ? (viewerLord?.name || 'Your Lord') : (opponentName || meta.campName || 'Enemy'),
+        cardsHtml: participantCardsHtml(report.defender, () => true, true, lordPortraitFor(isMine, null)),
+      });
+    }
+
+    function participantColHtml(g) {
+      const colCls = g.isGarrison ? 'br-army-col--garrison' : (g.isMine ? 'br-army-col--mine' : 'br-army-col--enemy');
+      const badge  = g.isGarrison ? '🏯 Garrison' : (g.isMine ? '⚔ Your Army' : '💀 Enemy');
+      return `
+        <div class="br-army-col ${colCls}">
+          <div class="br-army-header">
+            <span class="br-army-label">${badge}</span>
+            <span class="br-army-lord">${g.lordLabel}</span>
+          </div>
+          <div class="la-unit-cards">${g.cardsHtml}</div>
+        </div>`;
+    }
+
+    const outcomeTag = _outcomeTag(report, viewerIsDefenderSide);
+
+    // groups[0] is always the attacker (see construction above — pushed
+    // first, exactly one entry, no allied-attacker mechanic exists). Laid
+    // out as attacker-on-the-left vs. a vertical stack of every defender
+    // participant on the right, rather than one flat wrapping row.
+    const [attackerGroup, ...defenderGroups] = groups;
 
     return `
       <div class="br-inline-report">
+        <div class="br-outcome-row">
+          <span class="br-outcome-tag ${outcomeTag.cls}">${outcomeTag.label}</span>
+          ${_moraleCompareHtml(report, viewerIsDefenderSide)}
+        </div>
         <div class="br-armies">
-          <div class="br-army-col">
-            <div class="br-army-header">
-              <span class="br-army-label">⚔ Your Army</span>
-              <span class="br-army-lord">${lordName}</span>
-            </div>
-            <div class="la-unit-cards">${sideCardsHtml(report.attacker, false)}</div>
-          </div>
-          <div class="br-vs-divider">VS</div>
-          <div class="br-army-col">
-            <div class="br-army-header">
-              <span class="br-army-label">💀 Enemy</span>
-              <span class="br-army-lord">${enemyName}</span>
-            </div>
-            <div class="la-unit-cards">${sideCardsHtml(report.defender, true)}</div>
-          </div>
+          <div class="br-armies-attacker">${participantColHtml(attackerGroup)}</div>
+          <div class="br-armies-defenders">${defenderGroups.map(participantColHtml).join('')}</div>
         </div>
         <div class="br-inline-timeline">
           <div class="br-tl-section-label">📜 Round-by-Round Report</div>
-          ${_timelineHtml(report.events)}
+          ${_timelineHtml(report.events, viewerIsDefenderSide)}
         </div>
       </div>`;
   }
 
-  return { render, applyRewards: _applyRewards, inlineReportHtml: _inlineReportHtml };
+  return { inlineReportHtml: _inlineReportHtml };
 })();

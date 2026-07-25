@@ -56,15 +56,7 @@ const Nav = (() => {
     if (actBtn) actBtn.classList.toggle('nav-link--notif', count > 0);
   }
 
-  function _toast(msg) {
-    const c = document.getElementById('toast-container');
-    if (!c) return;
-    const t = document.createElement('div');
-    t.className   = 'toast';
-    t.textContent = msg;
-    c.appendChild(t);
-    setTimeout(() => t.remove(), 3200);
-  }
+  function _toast(msg) { ToastService.show(msg); }
 
   function _html() {
     const unseenCount = _player ? ActivityService.getUnseenCount(_player.id) : 0;
@@ -77,6 +69,7 @@ const Nav = (() => {
       { page: 'tech-tree',        icon: '📚', label: 'Tech Tree' },
       { page: 'battle-simulator', icon: '⚔',  label: 'Battle Sim' },
       { page: 'rankings',         icon: '📊', label: 'Rankings' },
+      { page: 'clan',             icon: '🛡',  label: 'Clan' },
       { page: 'account',          icon: '⚙',  label: 'Account' },
     ];
 
@@ -151,6 +144,12 @@ const Nav = (() => {
       const player = PlayerService.getSession();
       const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
       App.navigate('rankings', { player, lord });
+    });
+
+    document.querySelector('[data-nav-page="clan"]')?.addEventListener('click', () => {
+      const player = PlayerService.getSession();
+      const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
+      App.navigate('clan', { player, lord });
     });
 
     document.querySelector('[data-nav-page="account"]')?.addEventListener('click', () => {

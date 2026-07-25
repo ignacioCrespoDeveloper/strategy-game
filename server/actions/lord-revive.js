@@ -22,10 +22,20 @@ export async function handleLordRevive(req, res) {
   if (!lord) return res.status(404).json({ ok: false, error: 'Lord not found' });
   if (lord.playerId !== playerId) return res.status(403).json({ ok: false, error: 'Not your lord' });
 
+  // Captured lords aren't diamond-revivable — only a free release from the
+  // captor or a gold ransom (POST /api/lord/release, POST /api/lord/ransom)
+  // frees them. Gated on capturedByPlayerId (server-set, authoritative),
+  // never on downtimeReason — a player's own client can already claim
+  // downtimeReason for their own PvE loss (see pve-result.js), so it can't
+  // be trusted for anything that matters.
+  if (lord.capturedByPlayerId) {
+    return res.status(400).json({ ok: false, error: 'This lord is captured — pay the ransom or wait to be released.' });
+  }
+
   const now = Date.now();
 
   // Use server's downtimeUntil if available. Fall back to clientDowntimeUntil when
-  // savePveResult didn't commit the fallen state to Supabase (e.g. a race condition
+  // pveAttack didn't commit the fallen state to Supabase (e.g. a race condition
   // or transient write failure). Validate the client value is in a plausible range
   // (must be in the future and within 2 hours from now) to prevent trivially cheap revives.
   const MAX_DOWNTIME_MS = 2 * 60 * 60 * 1000;

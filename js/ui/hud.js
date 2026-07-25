@@ -7,6 +7,9 @@ const HUD = (() => {
   let _player      = null;
   let _rank        = null;
   let _clockTimer  = null;
+  let _alertTimer  = null;
+  let _alertTick   = 0;
+  let _lastSeenFeedId = null;
 
   const RES = {
     coins: { icon: '💰', label: 'Gold'  },
@@ -39,6 +42,7 @@ const HUD = (() => {
     _updateClock();
     if (_clockTimer) clearInterval(_clockTimer);
     _clockTimer = setInterval(_updateClock, 1000);
+    _startAlertPolling();
   }
 
   async function _refreshRank() {
@@ -57,12 +61,154 @@ const HUD = (() => {
 
   function hide() {
     if (_clockTimer) { clearInterval(_clockTimer); _clockTimer = null; }
+    _stopAlertPolling();
     const bar = document.getElementById('hud-bar');
     bar.classList.add('hidden');
     bar.innerHTML = '';
     document.body.classList.remove('hud-active');
     _lord = _player = null;
   }
+
+  // ── PvP alert polling — runs on EVERY screen, not just Overview ──
+  //
+  // Previously this lived only in overview-screen.js's own poll timer, which
+  // only ran while that specific screen was mounted. A defender sitting on
+  // the map, a city, or their lord screen when an attack resolved got zero
+  // notification — the activity_feed entry just sat in Supabase until they
+  // either navigated back to Overview or did a full page reload (which
+  // always lands on Overview via App._afterAuth, incidentally "fixing" it).
+  // Hosting it here instead means it's live everywhere HUD is shown, which
+  // is effectively every authenticated screen.
+  function _startAlertPolling() {
+    _stopAlertPolling();
+    _alertTick = 0;
+    _alertTimer = setInterval(() => {
+      _alertTick++;
+      _pollActivityFeed();
+    }, 10000);
+    _pollActivityFeed(); // don't wait a full 10s for the first check
+  }
+
+  function _stopAlertPolling() {
+    if (_alertTimer) { clearInterval(_alertTimer); _alertTimer = null; }
+  }
+
+  async function _pollActivityFeed() {
+    if (!_player) return;
+    try {
+      const { data: { session } } = await SupabaseService.client.auth.getSession();
+      if (!session?.user?.id) return;
+      const pid = session.user.id;
+
+      const { data } = await SupabaseService.client
+        .from('storage')
+        .select('value')
+        .eq('player_id', pid)
+        .eq('key', 'activity_feed')
+        .maybeSingle();
+
+      const remoteEntries = (data?.value?.[pid] || []);
+      if (remoteEntries.length === 0) return;
+
+      const latestId = remoteEntries[0]?.id;
+      if (latestId === _lastSeenFeedId) return;
+      _lastSeenFeedId = latestId;
+
+      // Merge new server entries into local storage
+      const localFeed    = StorageService.get('activity_feed') || {};
+      const localEntries = localFeed[pid] || [];
+      const localIds     = new Set(localEntries.map(e => e.id));
+      const newEntries   = remoteEntries.filter(e => !localIds.has(e.id));
+      if (newEntries.length === 0) return;
+
+      localFeed[pid] = [...newEntries, ...localEntries].slice(0, 50);
+      StorageService.set('activity_feed', localFeed);
+      Nav.refreshBadge();
+
+      // Show toasts for pvp notifications regardless of which screen is active.
+      const pvpNew = newEntries.filter(e => e.type === 'pvp_result' || e.type === 'pvp_threat');
+      pvpNew.forEach(e => _toast(`${e.icon} ${e.title}`));
+
+      // Save battle history + sync lord HP for both sides from activity_feed
+      // entries. The server dispatcher writes the authoritative result; this
+      // just hydrates local cache so the Battles tab / lord state stay current
+      // no matter what screen the player was on when it happened.
+      newEntries.filter(e => e.type === 'pvp_result' && e.lordId && e.report).forEach(e => {
+        const alreadySaved = BattleHistoryService.getForLord(e.lordId).some(b => b.at === e.at);
+        if (!alreadySaved) {
+          BattleHistoryService.save(e.lordId, {
+            outcome:      e.outcome || 'defeat',
+            campName:     e.opponentName || 'Enemy Lord',
+            campIcon:     e.opponentType === 'city' ? '🏯' : '⚔',
+            campLevel:    null,
+            lordLevel:    e.lordLevel || null,
+            terrain:      e.terrain || null,
+            goldEarned:   e.goldEarned || 0,
+            resourceLoot: e.resourceLoot || null,
+            xpEarned:     e.xpEarned || 0,
+            modelsLost:   e.modelsLost || 0, rounds: e.rounds || 0,
+            reason: e.report?.reason || '', report: e.report,
+            honorEarned: e.honorEarned || 0,
+          });
+        }
+        // Update local lord HP from the battle report for whichever side this player was on.
+        const defStart = e.report?.defender?.unitsStart || [];
+        if (defStart.some(u => u.sourceId === e.lordId)) {
+          const lordsStorage = StorageService.get('lords') || {};
+          const lordRec      = lordsStorage[e.lordId];
+          if (lordRec) {
+            const defLordUnit = (e.report.defender.unitsSurviving || []).find(s => s.sourceId === e.lordId);
+            if (defLordUnit) {
+              lordRec.currentHp      = Math.max(1, Math.round(defLordUnit.avgHp));
+              lordRec.downtimeUntil  = null;
+              lordRec.downtimeReason = null;
+            } else {
+              const isCapture = e.report?.winner === 'attacker';
+              lordRec.currentHp      = 0;
+              // Captured: far-future sentinel, same trick as the server's
+              // _applyLordHp (see combat-resolver.js) — no countdown makes
+              // sense for an indefinite capture. capturedByPlayerId is left
+              // unset here (this feed entry doesn't reliably carry the
+              // attacker's player id) and fills in on the next full sync;
+              // until then the UI just shows the old-style countdown branch,
+              // which self-corrects and isn't authoritative for anything.
+              lordRec.downtimeUntil  = isCapture ? TimeService.now() + 100 * 365 * 24 * 3600 * 1000 : TimeService.now() + 3600000;
+              lordRec.downtimeReason = isCapture ? 'captured' : 'defeated';
+            }
+            lordsStorage[e.lordId] = lordRec;
+            StorageService.set('lords', lordsStorage);
+          }
+        }
+      });
+
+      if (_player) refresh();
+
+      // Let whichever screen is currently mounted decide how to react (e.g.
+      // Overview re-renders its dashboard) without HUD needing to know about
+      // every screen's internals.
+      if (pvpNew.length > 0) {
+        EventBus.emit('pvp:alert', { newEntries, pvpNew });
+      } else if (newEntries.length > 0) {
+        EventBus.emit('activity:updated', { newEntries });
+      }
+
+      // Full state sync every 30s (3rd tick) — picks up server-resolved
+      // outcomes (building completions, recruitment, lord moves) the same
+      // way overview-screen.js's own tick used to, but now runs everywhere.
+      if (_alertTick % 3 === 0) {
+        try {
+          await ServerActions.syncNow();
+          if (_lord)   _lord   = LordService.getById(_lord.id);
+          if (_player) _player = PlayerService.getById(_player.id);
+          refresh();
+        } catch (_) {}
+      }
+    } catch (_) {
+      // Non-fatal — polling will retry next interval
+    }
+  }
+
+  function _toast(msg) { ToastService.show(msg); }
 
   function refresh() {
     const player = _player ? PlayerService.getById(_player.id) : null;
@@ -108,14 +254,15 @@ const HUD = (() => {
     if (credEl) credEl.textContent = _fmt(player?.credits || 0);
 
     const honor   = player.honorPoints || 0;
+    const tagEl   = document.getElementById('hud-honor-tag');
     const honorEl = document.getElementById('hud-honor-display');
-    if (honorEl) {
-      const icon = honor >= 50 ? '⚜ ' : honor <= -50 ? '☠ ' : '';
+    if (tagEl && honorEl) {
+      const tier = getHonorTier(honor);
       const sign = honor > 0 ? '+' : honor < 0 ? '−' : '';
       const cls  = honor > 0 ? 'hud-honor--pos' : honor < 0 ? 'hud-honor--neg' : 'hud-honor--zero';
-      honorEl.textContent = `${icon}${sign}${_fmtHonor(Math.abs(honor))}`;
+      tagEl.innerHTML      = honorCrestHtml(tier);
+      honorEl.textContent = `(${sign}${_fmtHonor(Math.abs(honor))})`;
       honorEl.className   = `hud-honor-display ${cls}`;
-      honorEl.style.display = '';
     }
   }
 
@@ -145,9 +292,9 @@ const HUD = (() => {
         <div class="hud-lord-portrait">${race.icon || '👤'}</div>
         <div class="hud-lord-text">
           <div class="hud-lord-name">
-            ${_player?.username || ''}
+            <span id="hud-honor-tag" class="hud-honor-tag"></span>${_player?.username || ''}
+            <span id="hud-honor-display" class="hud-honor-display hud-honor--zero"></span>
             <span id="hud-rank-badge" class="hud-rank-badge">${_rank ? `(#${_rank})` : ''}</span>
-            <span id="hud-honor-display" class="hud-honor-display hud-honor--zero">0</span>
           </div>
           <div class="hud-lord-race">${race.name || 'New Player'}</div>
         </div>

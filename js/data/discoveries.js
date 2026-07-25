@@ -539,16 +539,3 @@ var DISCOVERY_DEFS = {
     intelType:   'enemy_lord',
   },
 };
-
-// ── Category display metadata ──────────────────────────────────
-
-const DISCOVERY_CATEGORY_META = {
-  nothing:      { label: 'Nothing',      icon: '🌫', cssClass: 'dc-nothing'      },
-  resource:     { label: 'Resource',     icon: '💎', cssClass: 'dc-resource'     },
-  combat:       { label: 'Combat',       icon: '⚔',  cssClass: 'dc-combat'       },
-  event:        { label: 'Event',        icon: '📜', cssClass: 'dc-event'        },
-  trade:        { label: 'Trade',        icon: '🤝', cssClass: 'dc-trade'        },
-  quest:        { label: 'Quest',        icon: '⚡', cssClass: 'dc-quest'        },
-  legendary:    { label: 'Legendary',    icon: '⭐', cssClass: 'dc-legendary'    },
-  intelligence: { label: 'Intelligence', icon: '👁', cssClass: 'dc-intelligence' },
-};

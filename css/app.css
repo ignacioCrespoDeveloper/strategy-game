@@ -1,4 +1,4 @@
-﻿/* =============================================
+/* =============================================
    app.css â€” Design system + all screens
    ============================================= */
 
@@ -511,6 +511,10 @@ body.nav-open #screen-root {
   font-weight: 700;
   white-space: nowrap;
   flex-shrink: 0;
+}
+.tt-unit-cost--none {
+  color: var(--text-secondary);
+  font-weight: 600;
 }
 .tt-unit-race {
   display: inline-block;
@@ -1534,6 +1538,7 @@ body.nav-open #screen-root {
   letter-spacing: 0.06em;
   pointer-events: none;
 }
+.map-prompt:empty { display: none; }
 
 /* =============================================
    CITY VIEW â€” Full screen, OGame style
@@ -1546,92 +1551,6 @@ body.nav-open #screen-root {
   height: 100%;
   background: var(--bg-deep);
   overflow: hidden;
-}
-
-/* â”€â”€ City header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.cv-header {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  padding: 0 1.5rem;
-  height: 56px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-gold);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.4);
-  flex-shrink: 0;
-}
-
-.cv-back-btn {
-  padding: 0.3rem 0.9rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  white-space: nowrap;
-  transition: all var(--transition);
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.cv-back-btn:hover {
-  border-color: var(--border-gold);
-  color: var(--text-gold);
-}
-
-.cv-map-btn {
-  padding: 0.3rem 0.9rem;
-  background: linear-gradient(180deg, #b8821e 0%, #7a5010 100%);
-  border: 1px solid var(--border-gold);
-  border-radius: var(--radius-md);
-  color: var(--text-gold-light);
-  font-size: 0.8rem;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all var(--transition);
-  flex-shrink: 0;
-}
-.cv-map-btn:hover { background: linear-gradient(180deg, #d09030 0%, #9a6820 100%); }
-
-.cv-city-title {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  flex-shrink: 0;
-}
-.cv-city-icon  { font-size: 1.2rem; }
-.cv-city-name  {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  color: var(--text-gold-light);
-  letter-spacing: 0.06em;
-}
-.cv-city-coords {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-
-/* Resources bar â€” centered, grows to fill space */
-.cv-res-bar {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1.5rem;
-}
-.cv-res-item {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  font-size: 0.88rem;
-}
-.cv-res-icon   { font-size: 1rem; }
-.cv-res-amount { color: var(--text-primary); font-weight: 600; }
-
-.cv-lord-badge {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  letter-spacing: 0.06em;
-  flex-shrink: 0;
 }
 
 /* â”€â”€ Construction queue banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -1665,168 +1584,31 @@ body.nav-open #screen-root {
   transition: transform 1s linear;
 }
 .cv-queue-timer { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; }
-
-/* â”€â”€ Tab navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.cv-tabs {
-  display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--border-muted);
-  background: var(--bg-surface);
-  padding: 0 1.5rem;
-  flex-shrink: 0;
-}
-.cv-tab {
-  padding: 0.65rem 1.25rem;
-  font-size: 0.82rem;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color var(--transition), border-color var(--transition);
-}
-.cv-tab:hover      { color: var(--text-secondary); }
-.cv-tab--active    { color: var(--text-gold); border-bottom-color: var(--gold); }
-
-/* â”€â”€ Tab content area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.cv-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1.5rem;
-}
-
-/* â”€â”€ Overview tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.ov-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 1rem;
-  max-width: 900px;
-}
-.ov-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-md);
-  padding: 1rem 1.1rem;
-}
-.ov-card-title {
-  font-size: 0.68rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  border-bottom: 1px solid var(--border-muted);
-  padding-bottom: 0.4rem;
-  margin-bottom: 0.75rem;
-}
-.ov-stat-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 0.3rem 0;
-  border-bottom: 1px solid var(--border-muted);
-  font-size: 0.85rem;
-}
-.ov-stat-row:last-child { border-bottom: none; }
-.ov-label { color: var(--text-muted); }
-.ov-value { color: var(--text-primary); font-weight: 500; }
-.ov-rate  { font-size: 0.72rem; color: var(--text-success); margin-left: 0.4rem; }
-
-/* â”€â”€ Buildings tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.bld-list {
+.cv-queue-upcoming {
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-muted);
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  max-width: 900px;
-}
-
-.bld-row {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-muted);
-  border-radius: var(--radius-md);
-  padding: 0.9rem 1rem;
-  transition: border-color var(--transition);
-}
-.bld-row:hover        { border-color: var(--border-base); }
-.bld-row--unbuilt     { opacity: 0.75; }
-.bld-row--unbuilt:hover { opacity: 1; }
-
-.bld-left {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: 0.3rem;
-  flex-shrink: 0;
-  width: 52px;
+  max-width: 760px;
 }
-.bld-icon     { font-size: 2rem; line-height: 1; }
-.bld-lvl-badge {
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-base);
-  border-radius: 10px;
-  padding: 0.1rem 0.4rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-}
-.bld-lvl--max { border-color: var(--gold-dark); color: var(--gold); }
-
-.bld-body {
-  flex: 1;
-  min-width: 0;
+.cv-queue-item {
   display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
 }
-.bld-name       { font-size: 0.95rem; font-weight: 600; color: var(--text-primary); }
-.bld-desc       { font-size: 0.78rem; color: var(--text-muted); }
-.bld-metrics    { font-size: 0.78rem; display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
-.bld-prod-now   { color: var(--text-secondary); }
-.bld-prod-arrow { color: var(--text-muted); }
-.bld-prod-next  { color: var(--text-success); }
-.bld-cost-line  { font-size: 0.76rem; color: var(--text-muted); margin-top: 0.1rem; }
-.cost-unaffordable { color: var(--text-danger); }
-
-.bld-action { flex-shrink: 0; }
-
-.bld-btn {
-  padding: 0.5rem 0.9rem;
-  border-radius: var(--radius-md);
-  font-size: 0.78rem;
-  line-height: 1.4;
-  text-align: center;
-  border: 1px solid transparent;
-  transition: all var(--transition);
-  min-width: 100px;
-  white-space: nowrap;
-}
-.bld-btn--ready {
-  background: linear-gradient(180deg, #2a4f2a 0%, #1a3a1a 100%);
-  border-color: #4a8a4a;
-  color: #8ae08a;
-  cursor: pointer;
-}
-.bld-btn--ready:hover {
-  background: linear-gradient(180deg, #3a6a3a 0%, #2a4f2a 100%);
-  color: #b0ffb0;
-}
-.bld-btn--cant {
-  background: var(--bg-raised);
-  border-color: var(--border-muted);
+.cv-queue-item-pos  { color: var(--text-muted); font-weight: 700; min-width: 1.6rem; }
+.cv-queue-item-name { flex: 1; color: var(--text-primary); }
+.cv-queue-item-eta  { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.cv-queue-slots {
+  font-size: 0.62rem;
   color: var(--text-muted);
-  cursor: not-allowed;
-  opacity: 0.7;
-}
-.bld-btn--locked {
-  background: var(--bg-raised);
-  border-color: var(--border-muted);
-  color: var(--text-muted);
-  cursor: not-allowed;
-  font-size: 0.72rem;
+  margin-top: 0.4rem;
+  text-align: right;
+  max-width: 760px;
 }
 
 /* â”€â”€ Modal overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -2173,21 +1955,31 @@ body.nav-open #screen-root {
   margin-left: 0.3em;
 }
 
+.hud-honor-tag {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-right: 0.3em;
+}
 .hud-honor-display {
   font-family: var(--font-body, sans-serif);
   font-size: 0.72rem;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.01em;
-  margin-left: 0.5em;
-  padding: 0.1rem 0.5rem;
-  border-radius: 10px;
-  border: 1px solid transparent;
-  display: inline-block;
+  margin-left: 0.35em;
   vertical-align: middle;
 }
-.hud-honor--pos  { color: #5db85d; background: rgba(40,120,40,0.22); border-color: rgba(93,184,93,0.45);  }
-.hud-honor--neg  { color: #c05050; background: rgba(140,30,30,0.22); border-color: rgba(192,80,80,0.45);  }
-.hud-honor--zero { color: #7a8a7a; background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); }
+.hud-honor--pos  { color: #5db85d; }
+.hud-honor--neg  { color: #c05050; }
+.hud-honor--zero { color: #7a8a7a; }
+
+/* Tiered honor crest SVG — shared by the HUD and the Rankings screen,
+   sized relative to whatever font-size it's dropped into. */
+.honor-crest {
+  width: 1.15em;
+  height: 1.15em;
+  vertical-align: -0.2em;
+  flex-shrink: 0;
+}
 
 .hud-lord-race {
   font-size: 0.65rem;
@@ -2471,57 +2263,6 @@ body.nav-open #screen-root {
   font-weight: 600;
 }
 
-.mip-lord-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.75rem;
-}
-
-.mip-lord-portrait {
-  font-size: 1.5rem;
-  line-height: 1;
-}
-
-.mip-lord-name {
-  font-family: var(--font-display);
-  font-size: 0.82rem;
-  color: var(--text-primary);
-  letter-spacing: 0.05em;
-}
-
-.mip-lord-race {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-top: 1px;
-}
-
-.mip-label-header {
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 0.1rem;
-}
-
-.mip-prod-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.3rem;
-}
-
-.mip-prod-item {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
-  display: flex;
-  gap: 0.3rem;
-}
-
 .mip-note {
   font-size: 0.74rem;
   color: var(--text-muted);
@@ -2544,13 +2285,6 @@ body.nav-open #screen-root {
   text-transform: uppercase;
   letter-spacing: 0.12em;
   margin-bottom: 0.4rem;
-}
-
-.mip-tile-desc {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  font-style: italic;
-  margin-top: 0.2rem;
 }
 
 /* ── Terrain card ───────────────────────────────────────────── */
@@ -2621,41 +2355,6 @@ body.nav-open #screen-root {
   font-weight: normal;
 }
 
-/* â”€â”€ Lord card in map tile panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.mip-lord-card {
-  padding: 0.55rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-}
-.mip-lord-card:last-child { border-bottom: none; }
-
-.mip-lord-top {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.mip-lord-open-btn {
-  margin-left: auto;
-  background: none;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 0.1rem 0.35rem;
-  line-height: 1.4;
-  flex-shrink: 0;
-  transition: border-color var(--transition), color var(--transition);
-}
-.mip-lord-open-btn:hover { border-color: var(--border-gold); color: var(--text-gold-light); }
-
-.mip-lord-status {
-  font-size: 0.64rem;
-  color: var(--text-muted);
-  margin-top: 0.3rem;
-  padding-left: 0.15rem;
-}
-
 .mip-lord-actions {
   display: flex;
   gap: 0.4rem;
@@ -2703,55 +2402,6 @@ body.nav-open #screen-root {
   color: var(--text-muted);
   text-align: center;
   padding: 0 1rem;
-}
-
-/* Lord clickable button in info panel (legacy) */
-.mip-lord-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-md);
-  padding: 0.5rem 0.6rem;
-  cursor: pointer;
-  transition: all var(--transition);
-  text-align: left;
-}
-
-.mip-lord-btn:hover {
-  border-color: var(--border-gold);
-  background: rgba(200,147,58,0.08);
-}
-
-.mip-lord-portrait {
-  font-size: 1.5rem;
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.mip-lord-info-text {
-  flex: 1;
-}
-
-.mip-lord-name {
-  font-family: var(--font-display);
-  font-size: 0.82rem;
-  color: var(--text-primary);
-}
-
-.mip-lord-race {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.mip-lord-arrow {
-  font-size: 1.2rem;
-  color: var(--text-muted);
-  flex-shrink: 0;
 }
 
 /* =============================================
@@ -2930,14 +2580,6 @@ body.nav-open #screen-root {
   z-index: 1;
 }
 
-/* City info block */
-.cvl-info {
-  padding: 0.7rem 0.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
-
 .cvl-city-name {
   font-family: var(--font-display);
   font-size: 0.95rem;
@@ -2946,77 +2588,10 @@ body.nav-open #screen-root {
   margin-bottom: 0.15rem;
 }
 
-.cvl-info-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 0.75rem;
-}
-
-.cvl-info-label { color: var(--text-muted); }
-.cvl-info-value { color: var(--text-primary); font-weight: 600; }
-
 .cvl-divider {
   height: 1px;
   background: var(--border-muted);
   margin: 0 0.9rem;
-}
-
-/* City stats block */
-.cvl-stats {
-  padding: 0.7rem 0.9rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.cvl-stats-title {
-  font-size: 0.6rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  margin-bottom: 0.15rem;
-}
-
-.cvl-stat-row {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.cvl-stat-label {
-  width: 88px;
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-  flex-shrink: 0;
-}
-
-.cvl-stat-bar {
-  flex: 1;
-  height: 4px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.cvl-stat-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.4s ease;
-}
-
-.cvl-stat-fill--good   { background: var(--success); }
-.cvl-stat-fill--bad    { background: var(--danger); }
-.cvl-stat-fill--purple { background: #7a4aaa; }
-.cvl-stat-fill--gold   { background: var(--gold); }
-
-.cvl-stat-value {
-  width: 32px;
-  text-align: right;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  flex-shrink: 0;
 }
 
 /* =============================================
@@ -3212,102 +2787,6 @@ body.nav-open #screen-root {
    LORD SCREEN â€” Full screen view
    ============================================= */
 
-/* Header */
-.ls-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0 1.5rem;
-  height: 56px;
-  background: var(--bg-surface);
-  border-bottom: 1px solid var(--border-gold);
-  box-shadow: 0 2px 16px rgba(0,0,0,0.4);
-  flex-shrink: 0;
-}
-
-.ls-back-btn {
-  padding: 0.3rem 0.9rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  white-space: nowrap;
-  transition: all var(--transition);
-  flex-shrink: 0;
-  cursor: pointer;
-}
-.ls-back-btn:hover { border-color: var(--border-gold); color: var(--text-gold); }
-
-.ls-map-btn {
-  margin-left: 0.5rem;
-  padding: 0.28rem 0.85rem;
-  background: linear-gradient(180deg, #b8821e 0%, #7a5010 100%);
-  border: 1px solid var(--border-gold);
-  border-radius: var(--radius-md);
-  color: var(--text-gold-light);
-  font-size: 0.76rem;
-  font-family: var(--font-display);
-  letter-spacing: 0.04em;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: all var(--transition);
-  flex-shrink: 0;
-}
-.ls-map-btn:hover {
-  background: linear-gradient(180deg, #d09030 0%, #9a6820 100%);
-  box-shadow: 0 0 10px rgba(200,147,58,0.3);
-}
-
-.ls-title {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
-.ls-portrait { font-size: 1.5rem; line-height: 1; }
-
-.ls-header-portrait {
-  width: 34px;
-  height: 34px;
-  object-fit: cover;
-  object-position: center 10%;
-  border-radius: 50%;
-  border: 1px solid var(--border-gold);
-  flex-shrink: 0;
-}
-
-.ls-lord-name {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  color: var(--text-gold-light);
-  letter-spacing: 0.06em;
-}
-
-.ls-race-badge {
-  font-size: 0.7rem;
-  padding: 0.15rem 0.55rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-pill);
-  color: var(--text-gold);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.ls-level-badge {
-  padding: 0.2rem 0.7rem;
-  background: rgba(200,147,58,0.15);
-  border: 1px solid var(--border-gold);
-  border-radius: var(--radius-pill);
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-gold-light);
-  font-family: var(--font-display);
-  flex-shrink: 0;
-}
-
 /* Body layout */
 .ls-body {
   flex: 1;
@@ -3400,9 +2879,14 @@ body.nav-open #screen-root {
   gap: 0.35rem;
   pointer-events: none; /* children opt in with pointer-events: auto */
 }
-.ls-revive-btn {
+.ls-revive-btn, .ls-ransom-btn {
   pointer-events: auto;
   margin-top: 0.4rem;
+}
+.lsl-captor {
+  font-size: 0.72rem;
+  color: #a08858;
+  text-shadow: 0 0 6px rgba(0,0,0,0.9);
 }
 .lsl-portrait-down-icon {
   font-size: 3.2rem;
@@ -3425,7 +2909,7 @@ body.nav-open #screen-root {
   text-shadow: 0 0 6px rgba(0,0,0,0.9);
 }
 
-/* Activity overlays on lord-screen portrait (quest / attack / march) */
+/* Activity overlays on lord-screen portrait (quest / scout / attack / march) */
 .lsl-portrait-activity-overlay {
   position: absolute;
   inset: 0;
@@ -3438,6 +2922,7 @@ body.nav-open #screen-root {
   pointer-events: none;
 }
 .lsl-portrait-activity-overlay--quest   { background: rgba(12, 9, 0, 0.75); }
+.lsl-portrait-activity-overlay--scout   { background: rgba(0, 12, 10, 0.75); }
 .lsl-portrait-activity-overlay--attack  { background: rgba(15, 0, 0, 0.80); }
 .lsl-portrait-activity-overlay--move    { background: rgba(0, 8, 18, 0.75); }
 /* Reuse the ov-lord-activity-* classes for icon/label/dest/cd — already defined */
@@ -3812,7 +3297,6 @@ body.nav-open #screen-root {
   margin: 0.4rem 0;
 }
 
-/* Header row: title + roster button side by side */
 .la-section-header-row {
   display: flex;
   align-items: center;
@@ -3820,228 +3304,6 @@ body.nav-open #screen-root {
   gap: 0.5rem;
 }
 .la-section-header-row .la-section-title { margin-bottom: 0; }
-.ur-open-btn {
-  padding: 0.22rem 0.6rem;
-  font-size: 0.66rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(200,160,60,0.3);
-  background: rgba(200,160,60,0.07);
-  color: var(--text-gold);
-  cursor: pointer;
-  letter-spacing: 0.03em;
-  transition: background 0.15s, border-color 0.15s;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.ur-open-btn:hover {
-  background: rgba(200,160,60,0.15);
-  border-color: rgba(200,160,60,0.6);
-}
-
-/* â”€â”€ Unit Requirements overlay â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.unit-req-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 500;
-  background: rgba(0,0,0,0.72);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 2rem 1rem;
-  overflow-y: auto;
-}
-.unit-req-overlay.hidden { display: none; }
-.unit-req-panel {
-  background: #0e0b18;
-  border: 1px solid #3a2a5a;
-  border-radius: 10px;
-  width: 100%;
-  max-width: 560px;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 8px 40px rgba(0,0,0,0.8);
-  overflow: hidden;
-}
-.unit-req-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.9rem 1.2rem;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
-  flex-shrink: 0;
-}
-.unit-req-title {
-  font-family: var(--font-display);
-  font-size: 0.88rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  color: var(--text-gold);
-}
-.unit-req-close {
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 4px;
-  color: var(--text-muted);
-  font-size: 0.8rem;
-  cursor: pointer;
-  padding: 0.2rem 0.5rem;
-  transition: background 0.15s, color 0.15s;
-}
-.unit-req-close:hover { background: rgba(200,60,60,0.2); color: #e08080; border-color: #8a3a3a; }
-.unit-req-body {
-  overflow-y: auto;
-  max-height: 76vh;
-  padding: 0.8rem 1rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.ur-city-note {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  padding: 0.4rem 0.2rem;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  padding-bottom: 0.6rem;
-}
-.ur-city-note strong { color: var(--text-gold); }
-.ur-empty { color: var(--text-muted); font-size: 0.75rem; padding: 1rem 0; }
-
-/* Building group */
-.ur-building-group { display: flex; flex-direction: column; gap: 0; }
-.ur-building-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.6rem;
-  border-radius: 6px 6px 0 0;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-bottom: none;
-  background: rgba(255,255,255,0.03);
-}
-.ur-building-header.ur-bld--missing  { border-color: rgba(180,60,60,0.3); background: rgba(180,60,60,0.05); }
-.ur-building-header.ur-bld--partial  { border-color: rgba(200,140,30,0.35); background: rgba(200,140,30,0.06); }
-.ur-building-header.ur-bld--complete { border-color: rgba(60,160,80,0.35); background: rgba(60,160,80,0.06); }
-.ur-bld-icon { font-size: 1.1rem; flex-shrink: 0; }
-.ur-bld-name-wrap { flex: 1; min-width: 0; }
-.ur-bld-name {
-  font-family: var(--font-display);
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: block;
-}
-.ur-bld-desc {
-  font-size: 0.62rem;
-  color: var(--text-muted);
-  display: block;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.ur-bld-level {
-  font-size: 0.64rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-.ur-bld--missing  .ur-bld-level { color: #cc5555; }
-.ur-bld--partial  .ur-bld-level { color: #c8a030; }
-.ur-bld--complete .ur-bld-level { color: #50b870; }
-
-/* Unit rows */
-.ur-units {
-  border: 1px solid rgba(255,255,255,0.08);
-  border-top: none;
-  border-radius: 0 0 6px 6px;
-  overflow: hidden;
-}
-.ur-unit-row {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-  padding: 0.6rem 0.7rem;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  transition: background 0.15s;
-}
-.ur-unit-row:last-child { border-bottom: none; }
-.ur-unit--unlocked { background: rgba(50,120,70,0.07); }
-.ur-unit--locked   { background: rgba(0,0,0,0.15); opacity: 0.75; }
-.ur-unit--unlocked:hover { background: rgba(50,120,70,0.12); }
-.ur-unit--locked:hover   { opacity: 1; }
-
-/* Unit portrait in the panel */
-.ur-unit-portrait {
-  width: 44px;
-  height: 54px;
-  flex-shrink: 0;
-  border-radius: 4px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.12);
-}
-.ur-unit-img { width: 100%; height: 100%; object-fit: cover; }
-.ur-unit-img--icon {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.4rem;
-  background: rgba(255,255,255,0.04);
-}
-/* Tier border colors matching unit cards */
-.ur-portrait--elite   { border-color: #3a6a9a; }
-.ur-portrait--monster { border-color: #6a2a9a; }
-.ur-portrait--legendary { border-color: #c040ff; }
-
-.ur-unit-body { flex: 1; min-width: 0; }
-.ur-unit-name {
-  font-family: var(--font-display);
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.18rem;
-}
-.ur-unit-req-line {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  flex-wrap: wrap;
-  margin-bottom: 0.25rem;
-}
-.ur-tag {
-  font-size: 0.6rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.08rem 0.35rem;
-  border-radius: 3px;
-}
-.ur-tag--unlocked { background: rgba(50,160,80,0.2); color: #60d080; border: 1px solid rgba(50,160,80,0.3); }
-.ur-tag--locked   { background: rgba(180,60,60,0.15); color: #d07070; border: 1px solid rgba(180,60,60,0.25); }
-.ur-tag--progress { background: rgba(200,140,30,0.15); color: #c8a030; border: 1px solid rgba(200,140,30,0.25); }
-.ur-unit-stats {
-  display: flex;
-  gap: 0.45rem;
-  font-size: 0.66rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.18rem;
-}
-.ur-unit-cost { font-size: 0.6rem; color: var(--text-muted); }
-
-/* Lock icon on the right */
-.ur-unit-status-icon {
-  flex-shrink: 0;
-  font-size: 1rem;
-  width: 1.2rem;
-  text-align: center;
-}
-.ur-unit--unlocked .ur-unit-status-icon { color: #50b870; }
-.ur-unit--locked   .ur-unit-status-icon { color: #887799; filter: grayscale(0.3); }
-
 /* â”€â”€ Total Warâ€“style unit cards (recruited army) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .la-unit-cards {
   display: flex;
@@ -4240,6 +3502,31 @@ body.nav-open #screen-root {
   color: #c8933a;
   font-weight: 600;
   margin-bottom: 0.35rem;
+}
+.la-recruit-queue-upcoming {
+  margin-top: 0.5rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid rgba(200,147,58,0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.la-recruit-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+.la-recruit-queue-pos  { color: var(--text-muted); font-weight: 700; min-width: 1.6rem; }
+.la-recruit-queue-icon { flex-shrink: 0; }
+.la-recruit-queue-name { flex: 1; color: var(--text-primary); }
+.la-recruit-queue-eta  { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.la-recruit-queue-slots {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  margin-top: 0.4rem;
+  text-align: right;
 }
 
 /* Recruitment cards */
@@ -4829,6 +4116,58 @@ body.nav-open #screen-root {
   color: #f0a0a0;
 }
 
+/* ── Raiding status block (lord-screen stance tab) ─────────────── */
+.lov-raid-earnings {
+  font-size: 0.68rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  margin: 0.35rem 0 0.25rem;
+}
+.lov-raid-earnings b { color: #d8a840; }
+.lov-raid-warn {
+  font-size: 0.65rem;
+  color: #c07a30;
+  line-height: 1.4;
+  margin-bottom: 0.5rem;
+}
+.lov-raid-btn-row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.lov-raid-cancel-btn {
+  padding: 0.22rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid #7a3a3a;
+  background: linear-gradient(180deg, #3a1a1a 0%, #241010 100%);
+  color: #e08080;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.lov-raid-cancel-btn:hover {
+  background: linear-gradient(180deg, #5a2a2a 0%, #3a1818 100%);
+  border-color: #aa5050;
+  color: #f0a0a0;
+}
+.lov-raid-finish-btn {
+  padding: 0.22rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  border: 1px solid #6a3a8a;
+  background: linear-gradient(180deg, #3a1a4a 0%, #241030 100%);
+  color: #d0a0f0;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.lov-raid-finish-btn:hover {
+  background: linear-gradient(180deg, #5a2a6a 0%, #3a1848 100%);
+  border-color: #9a5aba;
+  color: #f0c0ff;
+}
+
 /* â”€â”€ Overview / Empire Dashboard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .ov-screen {
   display: flex;
@@ -5144,6 +4483,54 @@ body.nav-open #screen-root {
   margin-bottom: 0.15rem;
 }
 
+/* Enemy city/lord owner display — bigger and more prominent than the plain
+   coords label, with the owner's honor rank riding alongside (fetched lazily,
+   see map-view.js's _ownerBadgeHtml). */
+.ov-cc-owner-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.3rem;
+}
+.mip-owner-badge {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-gold-light, #e0c080);
+}
+.mip-owner-badge--unknown {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.mip-honor-crest { width: 1.3em; height: 1.3em; }
+.mip-honor-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.mip-honor--pos  { color: #5db85d; }
+.mip-honor--neg  { color: #c05050; }
+.mip-honor--zero { color: var(--text-muted); }
+.mip-owner-clan-tag {
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  color: var(--text-gold, #c9973a);
+  font-size: 0.85em;
+}
+.mip-ally-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #6ab0e0;
+}
+.mip-ally-notice {
+  padding: 0.5rem 0.7rem;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #6ab0e0;
+  background: rgba(70,130,220,0.1);
+  border: 1px solid #3a608a;
+  border-radius: var(--radius-sm, 4px);
+}
+
 .ov-cc-divider {
   height: 1px;
   background: var(--border-muted);
@@ -5454,13 +4841,46 @@ body.nav-open #screen-root {
   background: rgba(200, 147, 58, 0.15);
 }
 
-/* ── Lord card activity overlays (quest / attack / march) ─────────── */
+.ov-lord-captor {
+  font-size: 0.66rem;
+  color: #a08858;
+  margin-top: 0.1rem;
+}
+.ov-lord-ransom-btn {
+  pointer-events: none; /* hidden = not clickable, prevents eating card clicks */
+  margin-top: 0.5rem;
+  padding: 0.3rem 0.7rem;
+  background: rgba(30, 15, 5, 0.9);
+  border: 1px solid #c8933a;
+  border-radius: 4px;
+  color: #c8933a;
+  font-size: 0.68rem;
+  font-weight: 600;
+  cursor: pointer;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.15s, transform 0.15s;
+}
+.ov-lord-card:hover .ov-lord-ransom-btn {
+  pointer-events: auto; /* visible = clickable */
+  opacity: 1;
+  transform: translateY(0);
+}
+.ov-lord-ransom-btn:hover {
+  background: rgba(200, 147, 58, 0.15);
+}
+
+/* ── Lord card activity overlays (quest / scout / attack / march / raiding) ─────────── */
 .ov-lord-card--questing  { border-color: #3a2e00; }
+.ov-lord-card--scouting  { border-color: #0a3028; }
 .ov-lord-card--attacking { border-color: #5a1a1a; }
 .ov-lord-card--marching  { border-color: #0a2030; }
+.ov-lord-card--raiding   { border-color: #4a1a4a; }
 .ov-lord-card--questing:hover  { border-color: #6a5600; box-shadow: 0 0 14px rgba(160,120,20,0.18); }
+.ov-lord-card--scouting:hover  { border-color: #1a6050; box-shadow: 0 0 14px rgba(30,160,130,0.18); }
 .ov-lord-card--attacking:hover { border-color: #8a2020; box-shadow: 0 0 14px rgba(160,30,30,0.18); }
 .ov-lord-card--marching:hover  { border-color: #1a4060; box-shadow: 0 0 14px rgba(30,100,160,0.18); }
+.ov-lord-card--raiding:hover   { border-color: #8a2a8a; box-shadow: 0 0 14px rgba(160,30,160,0.18); }
 
 .ov-lord-activity-overlay {
   position: absolute;
@@ -5475,16 +4895,20 @@ body.nav-open #screen-root {
   pointer-events: none;
 }
 .ov-lord-activity-overlay--quest   { background: rgba(12, 9, 0, 0.80); }
+.ov-lord-activity-overlay--scout   { background: rgba(0, 12, 10, 0.80); }
 .ov-lord-activity-overlay--attack  { background: rgba(15, 0, 0, 0.82); }
 .ov-lord-activity-overlay--move    { background: rgba(0, 8, 18, 0.80); }
+.ov-lord-activity-overlay--raiding { background: rgba(14, 0, 14, 0.82); }
 
 .ov-lord-activity-icon {
   font-size: 1.8rem;
   line-height: 1;
 }
-.ov-lord-activity-overlay--quest  .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(200,155,20,0.65)); }
-.ov-lord-activity-overlay--attack .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(200,40,40,0.65)); }
-.ov-lord-activity-overlay--move   .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(50,130,200,0.65)); }
+.ov-lord-activity-overlay--quest   .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(200,155,20,0.65)); }
+.ov-lord-activity-overlay--scout   .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(40,180,150,0.65)); }
+.ov-lord-activity-overlay--attack  .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(200,40,40,0.65)); }
+.ov-lord-activity-overlay--move    .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(50,130,200,0.65)); }
+.ov-lord-activity-overlay--raiding .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(180,40,180,0.65)); }
 
 .ov-lord-activity-label {
   font-size: 0.68rem;
@@ -5492,9 +4916,11 @@ body.nav-open #screen-root {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.ov-lord-activity-overlay--quest  .ov-lord-activity-label { color: #c8a020; }
-.ov-lord-activity-overlay--attack .ov-lord-activity-label { color: #cc3333; }
-.ov-lord-activity-overlay--move   .ov-lord-activity-label { color: #4a9abf; }
+.ov-lord-activity-overlay--quest   .ov-lord-activity-label { color: #c8a020; }
+.ov-lord-activity-overlay--scout   .ov-lord-activity-label { color: #3ab897; }
+.ov-lord-activity-overlay--attack  .ov-lord-activity-label { color: #cc3333; }
+.ov-lord-activity-overlay--move    .ov-lord-activity-label { color: #4a9abf; }
+.ov-lord-activity-overlay--raiding .ov-lord-activity-label { color: #c040c0; }
 
 .ov-lord-activity-dest {
   font-size: 0.6rem;
@@ -5508,9 +4934,11 @@ body.nav-open #screen-root {
   font-family: 'Courier New', monospace;
   margin-top: 0.08rem;
 }
-.ov-lord-activity-overlay--quest  .ov-lord-activity-cd { color: #7a6010; }
-.ov-lord-activity-overlay--attack .ov-lord-activity-cd { color: #885555; }
-.ov-lord-activity-overlay--move   .ov-lord-activity-cd { color: #2a6a8a; }
+.ov-lord-activity-overlay--quest   .ov-lord-activity-cd { color: #7a6010; }
+.ov-lord-activity-overlay--scout   .ov-lord-activity-cd { color: #22705c; }
+.ov-lord-activity-overlay--attack  .ov-lord-activity-cd { color: #885555; }
+.ov-lord-activity-overlay--move    .ov-lord-activity-cd { color: #2a6a8a; }
+.ov-lord-activity-overlay--raiding .ov-lord-activity-cd { color: #7a2a7a; }
 
 /* Army power + stance badge in lord card */
 .ov-lc-power {
@@ -5562,6 +4990,47 @@ body.nav-open #screen-root {
   font-weight: 400;
   text-transform: none;
 }
+
+/* ── Prison section — lords the player currently holds captive ────── */
+.ov-prison-list {
+  display: flex;
+  flex-direction: column;
+}
+.ov-prison-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 0.85rem;
+}
+.ov-prison-row:last-child { border-bottom: none; }
+.ov-prison-name {
+  color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ov-prison-owner {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+.ov-prison-release-btn {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-base);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color var(--transition), color var(--transition);
+  flex: 0 0 auto;
+}
+.ov-prison-release-btn:hover { border-color: var(--border-gold); color: var(--text-gold-light); }
 
 .ov-map-btn {
   padding: 0.28rem 0.75rem;
@@ -6018,19 +5487,6 @@ body.nav-open #screen-root {
    BUILDING EFFECTS â€” shown in building cards
    ============================================= */
 
-.bld-effects {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.3rem;
-  margin-top: 0.25rem;
-}
-
-.bld-eff-label {
-  font-size: 0.67rem;
-  color: var(--text-muted);
-}
-
 .bld-eff-tag {
   display: inline-flex;
   align-items: center;
@@ -6079,32 +5535,6 @@ body.nav-open #screen-root {
   flex: 1;
   overflow-y: auto;
   min-height: 0;
-}
-
-/* =============================================
-   CITY LEFT PANEL â€” Active landmark badge
-   ============================================= */
-
-.cvl-landmark-badge-panel {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.5rem 0.9rem;
-  background: rgba(200,147,58,0.08);
-  border-top: 1px solid var(--border-accent);
-  border-bottom: 1px solid var(--border-accent);
-  margin-top: 0.25rem;
-}
-
-.cvl-lm-icon  { font-size: 1rem; }
-.cvl-lm-name  { flex: 1; font-size: 0.78rem; color: var(--text-gold); }
-.cvl-lm-level {
-  font-size: 0.68rem;
-  color: var(--text-muted);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-base);
-  border-radius: 10px;
-  padding: 0.1rem 0.4rem;
 }
 
 /* â”€â”€ Garrison section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -6690,149 +6120,6 @@ body.nav-open #screen-root {
   padding: 0.3rem 0.75rem;
 }
 
-.disc-popup-name--defeat {
-  color: #e05030;
-  text-shadow: 0 0 14px rgba(220,60,30,0.4);
-}
-
-/* â”€â”€ Category badges â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-
-.disc-cat-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.12rem 0.45rem;
-  border-radius: 10px;
-  border: 1px solid;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.dc-nothing   { color: #6a7a8a; border-color: #2a3a4a; background: rgba(50,70,90,0.15);   }
-.dc-resource  { color: #5cc85c; border-color: #2a6a2a; background: rgba(40,110,40,0.12);  }
-.dc-combat    { color: #e05030; border-color: #8a2010; background: rgba(150,40,20,0.12);  }
-.dc-event     { color: #c8b840; border-color: #6a6020; background: rgba(110,100,20,0.12); }
-.dc-trade     { color: #5aaae0; border-color: #2a6a9a; background: rgba(30,90,150,0.12); }
-.dc-quest     { color: #c060e0; border-color: #6a2a9a; background: rgba(100,40,160,0.12);}
-.dc-legendary    { color: var(--text-gold-light); border-color: var(--border-gold); background: rgba(200,147,58,0.12); }
-.dc-intelligence { color: #70b8e0; border-color: #305a7a; background: rgba(40,90,130,0.14); }
-
-/* =============================================
-   DISCOVERY POPUP â€” result overlay
-   ============================================= */
-
-.disc-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 500;
-  backdrop-filter: blur(3px);
-}
-
-.disc-overlay.hidden {
-  display: none;
-}
-
-.disc-popup {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-gold);
-  border-radius: var(--radius-lg);
-  padding: 2rem 2rem 1.75rem;
-  width: 100%;
-  max-width: 400px;
-  box-shadow:
-    0 0 0 1px var(--border-muted),
-    0 32px 80px rgba(0,0,0,0.7),
-    inset 0 1px 0 rgba(200,147,58,0.12);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.6rem;
-  text-align: center;
-  opacity: 0;
-  transform: translateY(16px) scale(0.97);
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.disc-popup--visible {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-}
-
-.disc-popup-header {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 0.5rem;
-}
-
-.disc-popup-title {
-  font-family: var(--font-display);
-  font-size: 0.82rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-gold);
-}
-
-.disc-popup-tile {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.disc-popup-icon {
-  font-size: 3.5rem;
-  line-height: 1;
-  margin: 0.25rem 0;
-}
-
-.disc-popup-icon--found   { filter: drop-shadow(0 0 12px rgba(200,147,58,0.5)); }
-.disc-popup-icon--empty   { opacity: 0.4; filter: grayscale(0.8); }
-
-.disc-popup-name {
-  font-family: var(--font-display);
-  font-size: 1.3rem;
-  color: var(--text-gold-light);
-  letter-spacing: 0.06em;
-  line-height: 1.2;
-}
-
-.disc-popup-desc {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  max-width: 320px;
-}
-
-.disc-popup-expiry {
-  font-size: 0.74rem;
-  color: var(--text-muted);
-  margin-top: 0.1rem;
-}
-
-/* Hint line in combat discovery popup */
-.disc-popup-hint {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 5px;
-  padding: 0.45rem 0.65rem;
-  line-height: 1.45;
-  max-width: 320px;
-  text-align: left;
-}
-.disc-popup-hint + .disc-popup-hint { margin-top: 0.35rem; }
-.disc-popup-hint strong { color: var(--text-gold); }
-.disc-popup-hint em { font-style: normal; color: var(--text-muted); }
-
 /* â”€â”€ Camp Preview (in pending discovery card) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .camp-preview {
@@ -6884,59 +6171,36 @@ body.nav-open #screen-root {
    BATTLE RESULT — br-* system
    ============================================= */
 
-.br-screen {
+/* ── Outcome tag + morale compare (why a side won/lost) ─────────── */
+.br-outcome-row {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  min-height: 100vh;
-  padding: 0 1rem 2rem;
-  background: #0a0a0c;
-  color: var(--text-primary);
-  gap: 1.25rem;
-}
-
-/* ── Banner ────────────────────────────────── */
-.br-banner {
-  width: 100%;
-  max-width: 720px;
-  padding: 2rem 1.5rem 1.25rem;
-  text-align: center;
-  border-bottom: 2px solid;
-}
-.br-banner--victory { border-color: #c8933a; background: linear-gradient(180deg, rgba(180,120,30,0.18) 0%, transparent 100%); }
-.br-banner--defeat  { border-color: #8a2020; background: linear-gradient(180deg, rgba(120,20,20,0.18) 0%, transparent 100%); }
-.br-banner--draw    { border-color: #5a6a7a; background: linear-gradient(180deg, rgba(60,80,100,0.18) 0%, transparent 100%); }
-.br-banner-title {
-  font-family: 'Cinzel', serif;
-  font-size: 2rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  margin-bottom: 0.3rem;
-}
-.br-banner--victory .br-banner-title { color: #c8933a; }
-.br-banner--defeat  .br-banner-title { color: #c05050; }
-.br-banner--draw    .br-banner-title { color: #7a9ab8; }
-.br-banner-reason {
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-}
-
-/* ── Summary row ───────────────────────────── */
-.br-summary-row {
-  display: flex;
-  gap: 1.5rem;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
+  gap: 1rem;
   flex-wrap: wrap;
   justify-content: center;
   max-width: 720px;
   width: 100%;
+  font-size: 0.8rem;
 }
-.br-summary-row strong { color: var(--text-primary); }
+.br-outcome-tag {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid;
+}
+.br-outcome--win  { color: #5ec47c; border-color: #4a9c5d; background: rgba(74,156,93,0.12); }
+.br-outcome--loss { color: #c05050; border-color: #8a2020; background: rgba(120,20,20,0.12); }
+.br-outcome--draw { color: #c4aa5e; border-color: #8a7a20; background: rgba(138,122,32,0.12); }
+.br-morale-compare {
+  display: flex;
+  gap: 1rem;
+  color: var(--text-secondary);
+}
+.br-morale-compare strong { color: var(--text-primary); }
 
-/* ── Armies grid ───────────────────────────── */
+/* ── Armies grid — attacker on the left, every defender participant
+   (each defending lord, plus the city garrison) stacked on the right ── */
 .br-armies {
   display: flex;
   gap: 0.75rem;
@@ -6944,14 +6208,27 @@ body.nav-open #screen-root {
   max-width: 720px;
   align-items: flex-start;
 }
+.br-armies-attacker {
+  flex: 1 1 200px;
+  min-width: 0;
+}
+.br-armies-defenders {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
 .br-army-col {
-  flex: 1;
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 8px;
   padding: 0.75rem;
   min-width: 0;
 }
+.br-army-col--mine     { border-color: rgba(94,196,124,0.35); }
+.br-army-col--enemy    { border-color: rgba(192,80,80,0.35); }
+.br-army-col--garrison { border-color: rgba(90,140,200,0.35); }
 .br-army-header {
   display: flex;
   flex-direction: column;
@@ -6972,54 +6249,8 @@ body.nav-open #screen-root {
   font-size: 0.88rem;
   color: var(--text-primary);
 }
-.br-vs-divider {
-  font-family: 'Cinzel', serif;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  padding-top: 2.5rem;
-  flex-shrink: 0;
-}
-
-/* ── Loot row ──────────────────────────────── */
-.br-loot-row {
-  display: flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-  justify-content: center;
-  max-width: 720px;
-  width: 100%;
-}
-.br-loot-chip {
-  padding: 0.3rem 0.75rem;
-  border-radius: var(--radius-pill);
-  font-size: 0.82rem;
-  font-weight: 600;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: var(--text-primary);
-}
-.br-loot-gold { background: rgba(180,120,30,0.2); border-color: rgba(200,147,58,0.4); color: #c8933a; }
-.br-loot-xp   { background: rgba(80,160,80,0.15); border-color: rgba(100,200,100,0.3); color: #9bc87a; }
 
 /* ── Timeline ──────────────────────────────── */
-.br-timeline-section {
-  width: 100%;
-  max-width: 720px;
-}
-.br-log-toggle {
-  width: 100%;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  padding: 0.6rem 1rem;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.15s;
-}
-.br-log-toggle:hover { background: rgba(255,255,255,0.07); }
-
 .br-timeline-body {
   margin-top: 0.6rem;
   background: rgba(0,0,0,0.3);
@@ -7079,6 +6310,7 @@ body.nav-open #screen-root {
 .br-tl-phase  { font-size: 0.62rem; color: var(--text-muted); min-width: 5rem; flex-shrink: 0; }
 .br-tl-actor  { color: #a8c4d8; font-weight: 600; }
 .br-tl-target { color: #d8a4a0; }
+.br-tl-count  { color: var(--text-muted); font-size: 0.68rem; font-weight: 600; }
 .br-tl-arrow  { color: var(--text-muted); flex-shrink: 0; }
 .br-tl-dmg    { color: #c8933a; font-weight: 700; font-size: 0.72rem; }
 .br-tl-heal   { color: #6ec86e; font-weight: 700; }
@@ -7087,22 +6319,18 @@ body.nav-open #screen-root {
 .br-tl-elim-tag  { background: rgba(160,30,30,0.35); color: #e05050; font-size: 0.65rem; font-weight: 700; border-radius: 3px; padding: 0.08rem 0.3rem; }
 .br-tl-rout-tag  { background: rgba(120,80,20,0.35); color: #c8933a; font-size: 0.65rem; font-weight: 700; border-radius: 3px; padding: 0.08rem 0.3rem; }
 
-/* ── Continue button ───────────────────────── */
-.br-continue-btn {
-  margin-top: 0.5rem;
-  padding: 0.75rem 2.5rem;
-  font-family: 'Cinzel', serif;
-  font-size: 0.95rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  color: #0a0a0c;
-  background: linear-gradient(135deg, #c8933a, #e0b060);
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: filter 0.15s;
-}
-.br-continue-btn:hover { filter: brightness(1.1); }
+/* Whose unit/lord this is, per event — independent of the report's fixed
+   attacker/defender roles so a defending player sees their own units
+   correctly marked "YOU" in their own battle log. */
+.br-tl-side-tag        { font-size: 0.56rem; font-weight: 800; letter-spacing: 0.03em; border-radius: 3px; padding: 0.04rem 0.28rem; flex-shrink: 0; }
+.br-tl-side-tag--mine  { background: rgba(70,140,220,0.22);  color: #7fb8f0; }
+.br-tl-side-tag--enemy { background: rgba(200,70,60,0.2);    color: #e08a80; }
+.br-tl-actor.br-tl-side--mine   { color: #7fb8f0; }
+.br-tl-actor.br-tl-side--enemy  { color: #e08a80; }
+.br-tl-target.br-tl-side--mine  { color: #7fb8f0; }
+.br-tl-target.br-tl-side--enemy { color: #e08a80; }
+.br-tl-event--morale.br-tl-side--mine  { background: rgba(70,140,220,0.12); }
+.br-tl-event--morale.br-tl-side--enemy { background: rgba(200,70,60,0.12); }
 
 /* =============================================
    CITY-VIEW OVERVIEW TAB â€” cvov-* system
@@ -7332,12 +6560,6 @@ body.nav-open #screen-root {
   border-bottom: 1px solid var(--border-muted);
 }
 
-.cvov-hero-art {
-  font-size: 2.6rem;
-  line-height: 1;
-  flex-shrink: 0;
-  filter: drop-shadow(0 2px 6px rgba(180,140,40,0.3));
-}
 
 .cvov-hero-body {
   flex: 1;
@@ -7489,6 +6711,14 @@ body.nav-open #screen-root {
 
 .cvov-lm-icon { font-size: 1rem; }
 .cvov-lm-name { flex: 1; color: var(--text-gold); font-weight: 600; }
+.cvov-lm-level {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  padding: 0.1rem 0.4rem;
+}
 
 /* â”€â”€ Stat filter (left panel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
@@ -7526,23 +6756,6 @@ body.nav-open #screen-root {
   transform: scale(1.1);
   display: inline-block;
 }
-
-.disc-popup-close {
-  margin-top: 0.75rem;
-  padding: 0.55rem 2rem;
-  background: linear-gradient(180deg, #d4993e 0%, #b87e2a 100%);
-  border: 1px solid var(--gold);
-  border-radius: var(--radius-md);
-  color: #1a0e04;
-  font-family: var(--font-display);
-  font-size: 0.82rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  cursor: pointer;
-  transition: filter var(--transition);
-}
-
-.disc-popup-close:hover { filter: brightness(1.1); }
 
 /* ── Quest log — expandable entries ─────────────────────────── */
 
@@ -7696,6 +6909,20 @@ body.nav-open #screen-root {
 }
 .qd-panel-byline strong { color: var(--text-primary); font-weight: 600; }
 
+/* Underlying discovery type, shown when a story quest supplies a custom
+   headline — keeps the mechanical identity (e.g. "Goblin Camp") visible. */
+.qd-type-tag {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+}
+
 .qd-quote {
   margin: 0;
   font-size: 0.82rem;
@@ -7706,6 +6933,15 @@ body.nav-open #screen-root {
   border-left: 2px solid var(--border-gold);
   background: rgba(200,147,58,0.05);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+/* Lore about the discovery itself (what it IS), as opposed to .qd-quote
+   which narrates the search that found it. */
+.qd-lore {
+  margin: 0.55rem 0 0;
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 /* ── Stat row (Category / Tier / Reported) ── */
@@ -7865,175 +7101,6 @@ body.nav-open #screen-root {
 .lsl-stat--hp  { border-color: rgba(60,180,60,0.35);  }
 .lsl-stat--mag { border-color: rgba(160,60,220,0.35); }
 .lsl-stat--spd { border-color: rgba(60,200,200,0.35); }
-
-/* =============================================
-   LORD SCREEN â€” Troops tab
-   ============================================= */
-
-.lt-troops {
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 2rem;
-}
-
-.lt-section {
-  padding: 1rem 1.1rem 0.75rem;
-}
-
-.lt-section-header {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.lt-section-title {
-  font-family: var(--font-display);
-  font-size: 0.78rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-gold);
-}
-
-.lt-army-count {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-}
-
-.lt-divider {
-  height: 1px;
-  background: var(--border-muted);
-  margin: 0 1.1rem;
-}
-
-.lt-army-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 1.5rem 1rem;
-  background: var(--bg-raised);
-  border: 1px dashed var(--border-muted);
-  border-radius: var(--radius-md);
-  text-align: center;
-}
-
-.lt-army-empty-icon {
-  font-size: 1.8rem;
-  opacity: 0.3;
-  filter: grayscale(1);
-}
-
-.lt-army-empty-text {
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  font-weight: 600;
-}
-
-.lt-army-empty-sub {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.lt-unit-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.lt-unit-card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-md);
-  padding: 0.85rem 1rem;
-  transition: border-color var(--transition);
-}
-
-.lt-unit-card:hover { border-color: var(--border-gold); }
-
-.lt-unit-icon {
-  font-size: 2rem;
-  line-height: 1;
-  flex-shrink: 0;
-  width: 2.4rem;
-  text-align: center;
-}
-
-.lt-unit-info {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.lt-unit-name {
-  font-family: var(--font-display);
-  font-size: 0.88rem;
-  color: var(--text-gold-light);
-  letter-spacing: 0.04em;
-}
-
-.lt-unit-desc {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
-.lt-unit-stats {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.2rem;
-  flex-wrap: wrap;
-}
-
-.lt-ustat {
-  font-size: 0.65rem;
-  font-weight: 600;
-  background: var(--bg-deep);
-  border: 1px solid var(--border-muted);
-  border-radius: 4px;
-  padding: 0.08rem 0.35rem;
-  white-space: nowrap;
-}
-
-.lt-ustat--atk { color: #e07060; }
-.lt-ustat--def { color: #6090e0; }
-.lt-ustat--hp  { color: #60c060; }
-
-.lt-unit-cost {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.15rem;
-}
-
-.lt-ucost {
-  font-size: 0.68rem;
-  color: var(--text-secondary);
-}
-
-.lt-recruit-btn {
-  flex-shrink: 0;
-  padding: 0.45rem 1.1rem;
-  background: linear-gradient(180deg, #2a4a1a 0%, #1a3010 100%);
-  border: 1px solid #3a6a2a;
-  border-radius: var(--radius-md);
-  color: #7acc60;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  cursor: pointer;
-  transition: all var(--transition);
-}
-
-.lt-recruit-btn:hover {
-  background: linear-gradient(180deg, #3a6a2a 0%, #2a4a1a 100%);
-  border-color: #5acc40;
-  color: #a0e880;
-}
 
 /* =============================================
    LORD CREATION â€” class selection (lord-view.js)
@@ -8372,12 +7439,6 @@ body.nav-open #screen-root {
   letter-spacing: 0.04em;
 }
 
-.lsh-passive-desc {
-  font-size: 0.67rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
 /* Talent points */
 .lsh-talent-available {
   font-size: 0.82rem;
@@ -8490,9 +7551,9 @@ body.nav-open #screen-root {
   border-radius: 6px;
   padding: 0.75rem 1rem;
 }
-.bh-entry.bh-victory { border-left-color: #c9973a; }
+.bh-entry.bh-victory { border-left-color: #4a9c5d; }
 .bh-entry.bh-defeat  { border-left-color: #a03030; }
-.bh-entry.bh-draw    { border-left-color: #6888aa; }
+.bh-entry.bh-draw    { border-left-color: #8a7a20; }
 
 .bh-entry-header {
   display: flex;
@@ -8511,9 +7572,9 @@ body.nav-open #screen-root {
   letter-spacing: 0.04em;
   flex-shrink: 0;
 }
-.bh-victory .bh-outcome-badge { background: rgba(201,151,58,0.2);  color: #c9973a; }
-.bh-defeat  .bh-outcome-badge { background: rgba(160,48,48,0.2);   color: #e07070; }
-.bh-draw    .bh-outcome-badge { background: rgba(104,136,170,0.2); color: #9ab4cc; }
+.bh-victory .bh-outcome-badge { background: rgba(74,156,93,0.2);  color: #5ec47c; }
+.bh-defeat  .bh-outcome-badge { background: rgba(160,48,48,0.2);  color: #e07070; }
+.bh-draw    .bh-outcome-badge { background: rgba(138,122,32,0.2); color: #c4aa5e; }
 
 .bh-camp-name {
   font-size: 0.82rem;
@@ -8538,6 +7599,9 @@ body.nav-open #screen-root {
   margin-bottom: 0.5rem;
 }
 .bh-entry-stats strong { color: var(--text-primary, #e8dcc8); }
+.bh-honor      { font-weight: 600; }
+.bh-honor--pos { color: #5db85d; }
+.bh-honor--neg { color: #c05050; }
 .bh-reason { margin-left: auto; opacity: 0.7; }
 
 .bh-log-toggle {
@@ -8589,11 +7653,7 @@ body.nav-open #screen-root {
   max-height: 260px;
 }
 
-/* â”€â”€ Activity Feed (overview-screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-
-.ov-activity-feed {
-  border-top: 1px solid rgba(255,255,255,0.06);
-}
+/* â”€â”€ Activity Feed (activity-screen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 
 .af-list {
   display: flex;
@@ -8616,9 +7676,9 @@ body.nav-open #screen-root {
 }
 .af-entry:hover { background: rgba(255,255,255,0.04); }
 
-.af-entry.af-victory { border-left-color: #c9973a; }
+.af-entry.af-victory { border-left-color: #4a9c5d; }
 .af-entry.af-defeat  { border-left-color: #a03030; }
-.af-entry.af-draw    { border-left-color: #6888aa; }
+.af-entry.af-draw    { border-left-color: #8a7a20; }
 .af-entry.af-discovery { border-left-color: #5a8a5a; }
 .af-entry.af-move    { border-left-color: #5a7aaa; }
 .af-entry.af-action  { border-left-color: #7a6a4a; }
@@ -9185,7 +8245,8 @@ body.nav-open #screen-root {
 
 .mip-enemy-lord-card .ov-lc-name { color: #e07070; }
 .mip-enemy-lord-card .ov-lc-portrait { height: 72px; }
-.mip-enemy-lord-card .mip-attack-btn {
+.mip-enemy-lord-card .mip-attack-btn,
+.mip-enemy-city-card .mip-attack-btn {
   display: block;
   width: calc(100% - 1.5rem);
   margin: 0 0.75rem 0.75rem;
@@ -9200,7 +8261,8 @@ body.nav-open #screen-root {
   letter-spacing: 0.04em;
   transition: background var(--transition), border-color var(--transition);
 }
-.mip-enemy-lord-card .mip-attack-btn:hover {
+.mip-enemy-lord-card .mip-attack-btn:hover,
+.mip-enemy-city-card .mip-attack-btn:hover {
   background: rgba(200, 50, 50, 0.4);
   border-color: rgba(220, 80, 80, 0.7);
 }
@@ -9536,44 +8598,6 @@ body.nav-open #screen-root {
   letter-spacing: 0.04em;
 }
 
-/* Stat allocation */
-.lt-points-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.lt-points-label { font-size: 0.8rem; color: var(--text-muted, #aaa); }
-.lt-points-val   { font-size: 0.95rem; font-weight: 700; color: var(--text-muted, #888); }
-.lt-points-val--active { color: #c8933a; }
-.lt-points-hint  { font-size: 0.75rem; color: var(--text-muted, #888); margin-bottom: 8px; }
-.lt-stat-list    { display: flex; flex-direction: column; gap: 6px; }
-.lt-stat-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: rgba(255,255,255,0.02);
-  border-radius: 6px;
-}
-.lt-stat-icon  { font-size: 0.9rem; width: 20px; text-align: center; flex-shrink: 0; }
-.lt-stat-name  { font-size: 0.82rem; flex: 1; }
-.lt-stat-val   { font-size: 0.9rem; font-weight: 600; min-width: 28px; text-align: right; }
-.lt-stat-btn {
-  padding: 3px 10px;
-  background: rgba(200,147,58,0.12);
-  border: 1px solid #c8933a60;
-  border-radius: 5px;
-  color: #c8933a;
-  font-size: 0.78rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.lt-stat-btn:hover:not(:disabled) { background: rgba(200,147,58,0.22); }
-.lt-stat-btn:disabled { opacity: 0.35; cursor: default; }
-
 /* ── Mount Tab (lord-screen) ───────────────────────────────────── */
 
 .lm-container { padding: 12px 16px; }
@@ -9722,20 +8746,20 @@ body.nav-open #screen-root {
 
 /* Compact variant — left panel (lord-screen sidebar) */
 .lm-slot-card--sm {
-  padding: 0.65rem 0.75rem;
-  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  gap: 0.85rem;
   border-radius: var(--radius-md);
 }
 .lm-slot-card--sm.lm-slot-card--empty,
 .lm-slot-card--sm.lm-slot-card--locked {
-  padding: 0.85rem 0.75rem;
+  padding: 1.15rem 1rem;
 }
-.lm-slot-card--sm .lm-slot-plus { font-size: 1.3rem; margin-bottom: 2px; }
-.lm-slot-card--sm .lm-slot-label { font-size: 0.7rem; }
-.lm-slot-card--sm .lm-slot-icon { width: 34px; height: 34px; border-radius: 6px; }
-.lm-slot-card--sm .lm-slot-icon-glyph { font-size: 1.3rem; }
-.lm-slot-card--sm .lm-slot-name { font-size: 0.78rem; }
-.lm-slot-card--sm .lm-stat-chip { font-size: 0.62rem; padding: 1px 6px; }
+.lm-slot-card--sm .lm-slot-plus { font-size: 1.7rem; margin-bottom: 3px; }
+.lm-slot-card--sm .lm-slot-label { font-size: 0.78rem; }
+.lm-slot-card--sm .lm-slot-icon { width: 50px; height: 50px; border-radius: 8px; }
+.lm-slot-card--sm .lm-slot-icon-glyph { font-size: 1.9rem; }
+.lm-slot-card--sm .lm-slot-name { font-size: 0.92rem; }
+.lm-slot-card--sm .lm-stat-chip { font-size: 0.7rem; padding: 2px 8px; }
 
 /* ── Recruit modal — locked (read-only) field ─────────────────── */
 
@@ -9938,6 +8962,20 @@ body.nav-open #screen-root {
 }
 .ov-mv-fill--attack {
   background: linear-gradient(90deg, #8a1010, #cc2020) !important;
+}
+
+.ov-mv-row--raiding {
+  background: rgba(90, 10, 90, 0.16);
+  border-left: 2px solid #a030a0;
+  padding-left: 0.5rem;
+  border-radius: var(--radius-sm);
+}
+.ov-mv-row--raiding .ov-mv-status {
+  color: #c060c0;
+  font-weight: 700;
+}
+.ov-mv-fill--raiding {
+  background: linear-gradient(90deg, #6a1a6a, #a030a0) !important;
 }
 
 .ov-mv-row--incoming {
@@ -10244,19 +9282,6 @@ body.nav-open #screen-root {
 .bsim-win--draw .bsim-report-winner { color: #c4aa5e; }
 .bsim-report-reason { font-size: 0.7rem; color: var(--text-muted, #888); margin-top: 0.12rem; }
 
-.bsim-report-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 0.5rem; align-items: start; }
-.bsim-report-divider { width: 1px; background: var(--border, #2a2a2a); align-self: stretch; }
-.bsim-rside { display: flex; flex-direction: column; gap: 0.22rem; }
-.bsim-rside-title { font-size: 0.73rem; font-weight: 700; color: var(--text-gold, #c9973a); }
-.bsim-rside-meta  { font-size: 0.6rem; color: var(--text-muted, #777); margin-bottom: 0.12rem; }
-.bsim-rrow { display: flex; align-items: center; gap: 0.25rem; font-size: 0.68rem; color: var(--text-base, #ccc); }
-.bsim-rrow-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bsim-rrow-cnt  { flex-shrink: 0; color: var(--text-muted, #888); font-size: 0.6rem; }
-.bsim-rbadge { font-size: 0.6rem; flex-shrink: 0; }
-.bsim-rbadge--ok   { color: #4a9c5d; }
-.bsim-rbadge--loss { color: #c4aa5e; }
-.bsim-rbadge--dead { color: #9c4a4a; }
-
 .bsim-log-btn {
   background: none; border: 1px solid var(--border, #333);
   color: var(--text-muted, #888); border-radius: 6px;
@@ -10276,21 +9301,11 @@ body.nav-open #screen-root {
 .bsim-lrow--morale { color: #9c7aaa; }
 .bsim-lrow--heal   { color: #4a9c5d; }
 
-.bsim-resim-btn {
-  padding: 0.42rem 0.75rem; background: none;
-  border: 1px solid var(--border, #444); border-radius: 6px;
-  color: var(--text-muted, #888); font-size: 0.73rem;
-  cursor: pointer; width: 100%; text-align: center;
-}
-.bsim-resim-btn:hover { border-color: var(--text-gold, #c9973a); color: var(--text-gold, #c9973a); }
-
 /* ── Mobile ──────────────────────────────────────────── */
 @media (max-width: 600px) {
   .bsim-lineup { grid-template-columns: 1fr; }
   .bsim-lineup-centre { flex-direction: row; flex-wrap: wrap; justify-content: center; padding: 0.5rem; }
   .bsim-lineup-atk { border-right: none; border-bottom: 1px solid var(--border, #2a2a2a); }
-  .bsim-report-sides { grid-template-columns: 1fr 1fr; }
-  .bsim-report-divider { display: none; }
 }
 
 /* ── Post-battle card states ─────────────────────────────────────── */
@@ -10426,8 +9441,20 @@ body.nav-open #screen-root {
   justify-content: space-between;
   padding: 0.85rem 1rem;
   background: linear-gradient(135deg, #1a1500 0%, #0e0e0e 100%);
-  border-bottom: 1px solid #2a2510;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
 }
+.rank-own-top::-webkit-details-marker { display: none; }
+.rank-own-top::marker { content: ''; }
+.rank-own-card[open] .rank-own-top { border-bottom: 1px solid #2a2510; }
+
+.rank-own-chevron {
+  font-size: 0.8rem;
+  color: var(--text-muted, #888);
+  transition: transform 0.15s;
+}
+.rank-own-card[open] .rank-own-chevron { transform: rotate(180deg); }
 
 .rank-own-name {
   font-family: 'Cinzel', serif;
@@ -10458,9 +9485,9 @@ body.nav-open #screen-root {
 
 .rank-brow {
   display: grid;
-  grid-template-columns: 1.4rem 1fr auto;
-  align-items: center;
-  gap: 0.4rem;
+  grid-template-columns: 1.4rem 1fr;
+  align-items: start;
+  gap: 0.5rem;
   padding: 0.6rem 1rem;
   border-bottom: 1px solid #1a1a1a;
   transition: background 0.12s;
@@ -10468,8 +9495,11 @@ body.nav-open #screen-root {
 .rank-brow:last-child { border-bottom: none; }
 .rank-brow:hover { background: #1a1a1a; }
 
-.rank-brow-icon   { font-size: 0.95rem; }
+.rank-brow-icon   { font-size: 0.95rem; padding-top: 0.1rem; }
+.rank-brow-body   { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.rank-brow-top    { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .rank-brow-label  { font-size: 0.8rem; font-weight: 600; color: var(--text-base, #ccc); }
+.rank-brow-sub    { font-size: 0.68rem; color: var(--text-muted, #777); }
 .rank-brow-pts    {
   font-size: 0.88rem;
   font-weight: 700;
@@ -10494,7 +9524,7 @@ body.nav-open #screen-root {
   padding: 0.1rem 0;
 }
 
-.rank-empty {
+.rank-empty, .clan-empty {
   text-align: center;
   color: var(--text-muted, #666);
   font-style: italic;
@@ -10572,28 +9602,25 @@ body.nav-open #screen-root {
 .rank-honor--neg  { color: #c05050; }
 .rank-honor--zero { color: var(--text-muted, #666); }
 
-/* Inline chip used in each leaderboard row (compact) + own card */
-.rank-honor-chip {
+/* Tiered Good/Evil crest shown inline before the username */
+.rank-honor-tag {
   display: inline-flex;
-  align-items: center;
-  gap: 0.15rem;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  padding: 0.1rem 0.45rem;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
-  white-space: nowrap;
-  flex-shrink: 0;
+  vertical-align: middle;
 }
-.rank-honor-chip.rank-honor--pos  { background: rgba(40,120,40,0.18);  border-color: rgba(93,184,93,0.35);  }
-.rank-honor-chip.rank-honor--neg  { background: rgba(120,30,30,0.18);  border-color: rgba(192,80,80,0.35);  }
-.rank-honor-chip.rank-honor--zero { color: #888; background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
 
-.rank-honor-chip--compact {
-  font-size: 0.7rem;
-  padding: 0.06rem 0.35rem;
+/* Signed honor value shown inline in parens after the username */
+.rank-honor-value {
+  font-weight: 600;
+  font-size: 0.85em;
+}
+
+/* Clan tag shown inline before the username */
+.rank-clan-tag {
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  color: var(--text-gold, #c9973a);
+  font-size: 0.85em;
+  letter-spacing: 0.03em;
 }
 
 /* Row right-side group: honor chip + score together */
@@ -10603,6 +9630,17 @@ body.nav-open #screen-root {
   gap: 0.5rem;
   flex-shrink: 0;
 }
+
+/* Rank movement over the last ~hour (see ranking.js's rank_score_1h snapshot) */
+.rank-delta {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.05rem 0.35rem;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.rank-delta--up   { color: #5db85d; background: rgba(93,184,93,0.12); }
+.rank-delta--down { color: #c05050; background: rgba(192,80,80,0.12); }
 
 /* Own score card — right side with honor + total */
 .rank-own-right {
@@ -10685,139 +9723,6 @@ body.nav-open #screen-root {
 }
 .rank-tab-content { display: flex; flex-direction: column; gap: 0.4rem; }
 
-/* ── Map panel — city card ──────────────────────────────────── */
-.mip-city-card {
-  display: flex;
-  align-items: stretch;
-  border-radius: 6px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
-  margin-top: 0.5rem;
-}
-
-.mip-city-card-art {
-  position: relative;
-  width: 72px;
-  flex-shrink: 0;
-}
-.mip-city-card-art img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-.mip-city-card-fade {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to right, transparent 50%, rgba(18,16,12,0.85));
-}
-
-.mip-city-card-body {
-  flex: 1;
-  padding: 0.45rem 0.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
-  min-width: 0;
-}
-
-.mip-city-card-top {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.mip-city-card-name {
-  font-size: 0.82rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-}
-
-.mip-city-card-sub {
-  font-size: 0.66rem;
-  color: var(--text-muted);
-}
-
-.mip-city-card-stats {
-  display: flex;
-  gap: 0.7rem;
-  font-size: 0.68rem;
-  color: var(--text-secondary);
-  margin-top: 0.1rem;
-  flex-wrap: wrap;
-}
-
-.mip-city-gold { color: #f0c040; font-weight: 600; }
-
-.mip-city-pop-growth { font-size: 0.6rem; }
-.mip-grow--up   { color: #60c060; }
-.mip-grow--down { color: #e06060; }
-.mip-grow--flat { color: var(--text-muted); }
-
-/* ── Map panel — lord card v2 ───────────────────────────────── */
-.mip-lord-card-v2 {
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.03);
-  overflow: hidden;
-  margin-top: 0.4rem;
-}
-.mip-lord-card-v2:first-child { margin-top: 0; }
-
-.mip-lord-card-main {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 0.55rem;
-}
-
-.mip-lord-portrait-v2 {
-  font-size: 1.45rem;
-  flex-shrink: 0;
-  width: 2rem;
-  text-align: center;
-}
-
-.mip-lord-body-v2 {
-  flex: 1;
-  min-width: 0;
-}
-
-.mip-lord-name-row-v2 {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-}
-
-.mip-lord-meta-v2 {
-  font-size: 0.64rem;
-  color: var(--text-muted);
-  margin-top: 0.1rem;
-}
-
-.mip-lord-lv {
-  font-size: 0.64rem;
-  color: var(--text-gold);
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.mip-lord-card-v2 .mip-lord-actions {
-  border-top: 1px solid rgba(255,255,255,0.06);
-  padding: 0.35rem 0.55rem;
-  margin-top: 0;
-}
-
-.mip-lord-card-v2 .mip-lord-status {
-  padding-left: 0;
-  margin-top: 0.15rem;
-}
-
 /* ── CP badge ───────────────────────────────────────────────── */
 .mip-lc-cp {
   font-size: 0.72rem;
@@ -10838,7 +9743,8 @@ body.nav-open #screen-root {
 /* ── Enemy city card ─────────────────────────────────────────── */
 .mip-enemy-city-card { border-color: rgba(200,60,60,0.35); }
 .mip-enemy-city-name { color: #e07070; }
-.mip-enemy-city-card .ov-cc-art { height: 60px; }
+/* Art height for this card comes from .mip-card-wide.ov-city-card .ov-cc-art
+   below — a same-specificity rule here would just silently lose to it. */
 
 /* ── Army toggle + collapsible units ────────────────────────── */
 .mip-army-toggle {
@@ -10877,3 +9783,292 @@ body.nav-open #screen-root {
 }
 .mip-card-wide:hover .ov-cc-enter,
 .mip-card-wide:hover .ov-lc-enter { opacity: 1; }
+
+/* ── Clan screen ──────────────────────────────────────────── */
+.clan-screen {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--bg-dark, #0e0e0e);
+  color: var(--text-base, #ccc);
+}
+.clan-header {
+  padding: 1.25rem 1.25rem 0.5rem;
+  border-bottom: 1px solid var(--border, #2a2a2a);
+  background: var(--bg-panel, #141414);
+}
+.clan-title {
+  font-family: 'Cinzel', serif;
+  font-size: 1.3rem;
+  color: var(--text-gold, #c9973a);
+  letter-spacing: 0.08em;
+  margin: 0;
+}
+.clan-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 1rem;
+  color: var(--text-muted, #777);
+  font-style: italic;
+}
+.clan-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 1rem 1rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+.clan-section-title {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-muted, #666);
+  text-transform: uppercase;
+  margin-bottom: 0.6rem;
+  padding-left: 0.1rem;
+}
+
+.clan-card {
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.clan-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: linear-gradient(135deg, #1a1500 0%, #0e0e0e 100%);
+  border-bottom: 1px solid #2a2510;
+}
+.clan-tag {
+  font-family: 'Cinzel', serif;
+  font-weight: 700;
+  color: var(--text-gold, #c9973a);
+  letter-spacing: 0.04em;
+}
+.clan-name {
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-base, #ddd);
+}
+.clan-member-count {
+  font-size: 0.75rem;
+  color: var(--text-muted, #888);
+  font-variant-numeric: tabular-nums;
+}
+.clan-members {
+  display: flex;
+  flex-direction: column;
+}
+.clan-member-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid #1a1a1a;
+  font-size: 0.85rem;
+}
+.clan-member-row:last-child { border-bottom: none; }
+.clan-member-row--you { background: rgba(200,147,58,0.06); }
+.clan-member-name { color: var(--text-base, #ccc); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clan-member-honor {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+.clan-honor-crest { width: 1.1em; height: 1.1em; }
+.clan-honor--pos  { color: #5db85d; }
+.clan-honor--neg  { color: #c05050; }
+.clan-honor--zero { color: var(--text-muted, #888); }
+.clan-member-score {
+  font-size: 0.72rem;
+  color: var(--text-muted, #888);
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  min-width: 4.5em;
+  text-align: right;
+}
+.clan-kick-btn {
+  padding: 0.15rem 0.55rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid #7a3a3a;
+  background: linear-gradient(180deg, #3a1a1a 0%, #241010 100%);
+  color: #e08080;
+  cursor: pointer;
+}
+.clan-kick-btn:hover { background: linear-gradient(180deg, #5a2a2a 0%, #3a1818 100%); border-color: #aa5050; }
+.clan-leave-btn {
+  width: 100%;
+  padding: 0.6rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: none;
+  border-top: 1px solid var(--border, #2a2a2a);
+  background: rgba(255,255,255,0.03);
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.clan-leave-btn:hover { background: rgba(200,80,80,0.1); color: #e08080; }
+
+.clan-create-card {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.clan-input {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-base, #ddd);
+  font-size: 0.85rem;
+}
+.clan-input--tag { flex: 0 0 90px; text-transform: uppercase; }
+.clan-error {
+  color: #e08080;
+  font-size: 0.75rem;
+  margin-top: 0.4rem;
+  min-height: 1em;
+}
+
+.clan-browse-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.clan-browse-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+}
+.clan-browse-row .clan-name { font-size: 0.88rem; }
+.clan-join-btn {
+  padding: 0.3rem 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid #7a6a2a;
+  background: linear-gradient(180deg, #3a3010 0%, #241c08 100%);
+  color: var(--text-gold, #d8b060);
+  cursor: pointer;
+}
+.clan-join-btn:hover { background: linear-gradient(180deg, #5a4a18 0%, #3a2e0c 100%); border-color: #aa9a4a; }
+.clan-join-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.clan-pending-note {
+  font-size: 0.78rem;
+  color: var(--text-gold, #c9973a);
+  margin-bottom: 0.5rem;
+}
+
+/* Applications */
+.clan-applications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.clan-application-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.5rem 0.85rem;
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+}
+.clan-application-actions { display: flex; gap: 0.4rem; }
+.clan-accept-btn, .clan-reject-btn {
+  padding: 0.25rem 0.65rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+.clan-accept-btn {
+  border: 1px solid #3a7a3a;
+  background: linear-gradient(180deg, #1a3a1a 0%, #102410 100%);
+  color: #80e080;
+}
+.clan-accept-btn:hover { background: linear-gradient(180deg, #2a5a2a 0%, #183a18 100%); border-color: #5aaa5a; }
+.clan-reject-btn {
+  border: 1px solid #7a3a3a;
+  background: linear-gradient(180deg, #3a1a1a 0%, #241010 100%);
+  color: #e08080;
+}
+.clan-reject-btn:hover { background: linear-gradient(180deg, #5a2a2a 0%, #3a1818 100%); border-color: #aa5050; }
+
+/* Clan wars */
+.clan-war-list, .clan-war-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.clan-war-history { margin-top: 0.5rem; opacity: 0.75; }
+.clan-war-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+.clan-war-row--active { border-color: #7a3a3a; }
+.clan-war-sides { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.clan-war-side { color: var(--text-muted, #888); }
+.clan-war-side b { color: var(--text-base, #ddd); font-variant-numeric: tabular-nums; }
+.clan-war-side--leading { color: var(--text-gold, #c9973a); }
+.clan-war-side--leading b { color: var(--text-gold, #c9973a); }
+.clan-war-vs { font-size: 0.7rem; color: var(--text-muted, #666); }
+.clan-war-countdown {
+  font-size: 0.72rem;
+  color: #e0a850;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.clan-war-result {
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.clan-declare-war {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.6rem;
+}
+.clan-select {
+  padding: 0.4rem 0.6rem;
+  background: var(--bg-panel, #141414);
+  border: 1px solid var(--border, #2a2a2a);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-base, #ddd);
+  font-size: 0.8rem;
+  flex: 1;
+  min-width: 130px;
+}

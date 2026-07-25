@@ -6,20 +6,24 @@
 //  changes back, and returns the fresh state so the
 //  client can hydrate localStorage in one round-trip.
 //
-//  Called once at login (App.init) and never again
-//  during a session — all mid-session writes still
-//  go through the client-side StorageService debounce.
+//  Called at login (App.init) and again on every screen
+//  navigation that shows live game state (see app.js's
+//  _SYNC_ON_ENTER) — mid-session actions still also go
+//  through the client-side StorageService debounce.
 // =============================================
 
 import { createClient }     from '@supabase/supabase-js';
 import { catchUp }           from './tick/catch-up.js';
-import { resolvePvpBattle }  from './combat-resolver.js';
+import { resolvePvpBattle, resolveArrivalCheck } from './combat-resolver.js';
 import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS } from './engine-loader.js';
 
 const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS };
 
-// Keys we load for catch-up (armies + cities + lords + player record)
-const SYNC_KEYS = ['players', 'lords', 'cities', 'armies'];
+// Keys we load for catch-up (armies + cities + lords + player record).
+// honor_points is its own key (see combat-resolver.js) so it's included here
+// too — otherwise a PvP battle's honor change only reaches the client on a
+// full page reload, never during an active session's periodic /api/sync calls.
+const SYNC_KEYS = ['players', 'lords', 'cities', 'armies', 'honor_points'];
 
 function _admin() {
   return createClient(
@@ -71,6 +75,7 @@ export async function syncPlayerState(req, res) {
         coins:        5000,
         credits:      9999,
         lordId:       null,
+        clanId:       null,
         createdAt:    Date.now(),
         passwordHash: '__supabase__',
       };
@@ -172,6 +177,37 @@ export async function syncPlayerState(req, res) {
       console.warn('[sync] pending PvP drain failed:', e.message);
     }
 
+    // ── 4c. Drain pending arrival checks ────────────────────────────
+    //  catchUp sets lord.pendingArrivalCheck on every plain (non-attack)
+    //  move completion — "is a raiding lord sitting on the tile I just
+    //  arrived at". Mirrors 4b's pattern exactly; the mover is the
+    //  attacker if a fight happens, so the same atkLords/atkArmies/
+    //  atkPlayer fields apply.
+    try {
+      for (const lord of Object.values(result.lords)) {
+        if (!lord?.pendingArrivalCheck) continue;
+        const { tileX, tileY } = lord.pendingArrivalCheck;
+        lord.pendingArrivalCheck = null; // clear in response state immediately
+        const arrivalResult = await resolveArrivalCheck(admin, playerId, lord.id, tileX, tileY);
+        if (arrivalResult.ok && arrivalResult.outcome === 'raid_combat') {
+          if (arrivalResult.atkLords)  Object.assign(result.lords,   arrivalResult.atkLords);
+          if (arrivalResult.atkArmies) Object.assign(result.armies,  arrivalResult.atkArmies);
+          if (arrivalResult.atkPlayer) result.player = arrivalResult.atkPlayer;
+          if (arrivalResult.report) {
+            result.events.push({
+              type:     'raid_combat_resolved',
+              lordId:   lord.id,
+              lordName: lord.name || '',
+              report:   arrivalResult.report,
+              terrain:  arrivalResult.terrain,
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[sync] pending arrival-check drain failed:', e.message);
+    }
+
     // ── 5. Backfill world_state with this player's city positions ──
     //  This ensures all cities show on the shared world map for every player.
     try {
@@ -181,11 +217,22 @@ export async function syncPlayerState(req, res) {
           .from('world_state').select('key, value').eq('key', 'world');
         const worldState = worldRows?.[0]?.value || { size: 20, tiles: {} };
         let changed = false;
+        const ownerUsername = result.player?.username || 'Player';
         for (const city of playerCities) {
           if (city.x != null && city.y != null) {
-            const key = `${city.x},${city.y}`;
-            if (worldState.tiles[key] !== city.id) {
-              worldState.tiles[key] = city.id;
+            const key      = `${city.x},${city.y}`;
+            const existing = worldState.tiles[key];
+            // Cities are always visible map-wide by name + owner (garrison
+            // stays hidden until scouted — see js/ui/map-view.js) — the
+            // tile entry carries that metadata directly since a regular
+            // client's RLS can't read another player's 'cities' row to
+            // look it up on demand. Self-heals name/owner drift too, not
+            // just a missing/legacy (bare cityId string) entry.
+            const needsUpdate = !existing || typeof existing === 'string'
+              || existing.cityId !== city.id || existing.name !== city.name
+              || existing.ownerId !== playerId || existing.ownerUsername !== ownerUsername;
+            if (needsUpdate) {
+              worldState.tiles[key] = { cityId: city.id, name: city.name, ownerId: playerId, ownerUsername };
               changed = true;
             }
           }
@@ -202,12 +249,16 @@ export async function syncPlayerState(req, res) {
     }
 
     // ── 6. Return fresh state to client ──────────────────────────
-    //  Client calls StorageService.hydrate(state) to overwrite localStorage.
+    //  Client calls StorageService.hydrate(state) to overwrite localStorage
+    //  (a raw replace, not a merge — see js/core/storage.js hydrate()), so
+    //  honorPoints must be stamped onto the player object here explicitly;
+    //  it lives in Supabase under its own 'honor_points' key, never inside
+    //  the players blob itself, so result.player never carries it.
     const responseState = {
       lords:   result.lords,
       cities:  result.cities,
       armies:  result.armies,
-      players: { ...players, [playerId]: result.player },
+      players: { ...players, [playerId]: { ...result.player, honorPoints: raw.honor_points ?? result.player.honorPoints ?? 0 } },
     };
 
     return res.json({ ok: true, state: responseState, events: result.events, serverTime: Date.now() });

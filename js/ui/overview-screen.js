@@ -7,19 +7,18 @@ const OverviewScreen = (() => {
   let _player          = null;
   let _root            = null;
   let _tickTimer       = null;
-  let _pollTimer       = null;
-  let _lastSeenFeedId  = null;
   let _movementsOpen   = true;
   let _citiesCollapsed = false;
   let _lordsCollapsed  = false;
   let _selectedClass   = null;
+  let _prisonList      = []; // lords the player currently holds captive — fetched async, see render()
   let _densityInitialized = false; // one-time: default Cities/Lords collapsed for returning players so the dashboard opens on Movements, not everything at once
 
   // ── Entry point ───────────────────────────────────────────────
 
   function render(root, { lord, player }) {
     _stopTicker();
-    _stopPolling();
+    _unsubscribeAlerts();
     _root   = root;
     _player = PlayerService.getById(player.id);
     _lord   = lord ? LordService.getById(lord.id) : null;
@@ -29,11 +28,30 @@ const OverviewScreen = (() => {
     root.innerHTML = _shell();
     _bindEvents();
     _startTicker();
-    _startPolling();
+    _subscribeAlerts();
     _flushSyncEvents();
+
+    // Prison list lives cross-player (who's holding whose lord), so unlike
+    // the rest of this dashboard it isn't already sitting in local storage —
+    // fetch it once and patch it in when it lands, rather than blocking the
+    // initial paint on an extra network round-trip.
+    ServerActions.getPrisonList().then(result => {
+      if (result.ok) { _prisonList = result.prisoners || []; _rerender(); }
+    });
   }
 
-  function stop() { _stopTicker(); _stopPolling(); }
+  function stop() { _stopTicker(); _unsubscribeAlerts(); }
+
+  // PvP/activity alerts are now polled globally by HUD.js (so they fire on
+  // every screen, not just this one — see hud.js's _pollActivityFeed for why).
+  // This screen just reacts by refreshing its own dashboard when notified.
+  function _onPvpAlert() {
+    _stopTicker();
+    _player = PlayerService.getById(_player.id);
+    if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
+  }
+  function _subscribeAlerts()   { EventBus.on('pvp:alert', _onPvpAlert); }
+  function _unsubscribeAlerts() { EventBus.off('pvp:alert', _onPvpAlert); }
 
   // Show any offline-progression notifications queued by App.init's /api/sync call.
   function _flushSyncEvents() {
@@ -74,10 +92,6 @@ const OverviewScreen = (() => {
     if (_tickTimer) { clearInterval(_tickTimer); _tickTimer = null; }
   }
 
-  function _stopPolling() {
-    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
-  }
-
   function _startTicker() {
     const cities     = CityService.getPlayerCities(_player.id);
     const allLords   = LordService.getByPlayer(_player.id);
@@ -86,7 +100,8 @@ const OverviewScreen = (() => {
     const feed       = ActivityService.get(_player.id);
     const hasThreats = feed.some(e => e.type === 'pvp_threat' && e.etaAt && e.etaAt > TimeService.now());
     const hasDown    = allLords.some(l => LordService.isDown(l));
-    if (!hasAction && !hasConstr && !hasThreats && !hasDown) return;
+    const hasRaiding = allLords.some(l => LordService.isStanced(l) && l.stance.id === 'raiding');
+    if (!hasAction && !hasConstr && !hasThreats && !hasDown && !hasRaiding) return;
 
     _tickTimer = setInterval(() => {
       let needsRerender = false;
@@ -117,6 +132,25 @@ const OverviewScreen = (() => {
             if (cardTimer) cardTimer.textContent = TimeService.formatDuration(LordService.actionTimeRemaining(lord));
           }
         }
+      }
+
+      // Raiding lords have no actionQueue item (it's a stance), so they're
+      // skipped by the loop above — tick their countdown separately. Actual
+      // completion (payout) is server-authoritative (see catch-up.js); this
+      // just keeps the on-screen timer honest and triggers a re-render once
+      // it hits zero so the next sync picks up the result.
+      const raidingLords = LordService.getByPlayer(_player.id).filter(l => LordService.isStanced(l) && l.stance.id === 'raiding');
+      for (const lord of raidingLords) {
+        const secs    = Math.max(0, Math.floor((lord.stance.finishAt - TimeService.now()) / 1000));
+        const totalMs = lord.stance.finishAt - lord.stance.startedAt;
+        const pct     = totalMs > 0 ? Math.min(1, (TimeService.now() - lord.stance.startedAt) / totalMs) : 0;
+        const fill  = document.getElementById(`ov-mv-fill-${lord.id}`);
+        const time  = document.getElementById(`ov-mv-time-${lord.id}`);
+        const actCd = document.getElementById(`ov-lord-act-cd-${lord.id}`);
+        if (fill)  fill.style.transform = `scaleX(${pct})`;
+        if (time)  time.textContent = TimeService.formatDuration(secs);
+        if (actCd) actCd.textContent = TimeService.formatDuration(secs);
+        if (secs <= 0) needsRerender = true;
       }
 
       // City production (gold + population) — tick all cities so income
@@ -171,119 +205,6 @@ const OverviewScreen = (() => {
         if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
       }
     }, 1000);
-  }
-
-  // ── Supabase activity_feed polling (both attacker and defender) ──
-
-  let _pollTick = 0;
-
-  function _startPolling() {
-    if (_pollTimer) return;
-    _pollTick = 0;
-    _pollTimer = setInterval(async () => {
-      _pollTick++;
-      _pollActivityFeed();
-      // Full state sync every 30 s — picks up server-resolved outcomes:
-      // PvP battle results, building completions, recruitment, lord moves.
-      // The event dispatcher writes these to Supabase; we read them here.
-      if (_pollTick % 3 === 0) {
-        try {
-          await ServerActions.syncNow();
-          // Update in-memory refs from hydrated localStorage — no re-render.
-          // The ticker re-renders naturally when it detects completed actions.
-          if (_lord)   _lord   = LordService.getById(_lord.id);
-          if (_player) _player = PlayerService.getById(_player.id);
-          HUD.refresh();
-        } catch (_) {}
-      }
-    }, 10000);
-  }
-
-  async function _pollActivityFeed() {
-    try {
-      const { data: { session } } = await SupabaseService.client.auth.getSession();
-      if (!session?.user?.id) return;
-      const pid = session.user.id;
-
-      const { data } = await SupabaseService.client
-        .from('storage')
-        .select('value')
-        .eq('player_id', pid)
-        .eq('key', 'activity_feed')
-        .maybeSingle();
-
-      const remoteEntries = (data?.value?.[pid] || []);
-      if (remoteEntries.length === 0) return;
-
-      const latestId = remoteEntries[0]?.id;
-      if (latestId === _lastSeenFeedId) return;
-      _lastSeenFeedId = latestId;
-
-      // Merge new server entries into local storage
-      const localFeed    = StorageService.get('activity_feed') || {};
-      const localEntries = localFeed[pid] || [];
-      const localIds     = new Set(localEntries.map(e => e.id));
-      const newEntries   = remoteEntries.filter(e => !localIds.has(e.id));
-      if (newEntries.length === 0) return;
-
-      localFeed[pid] = [...newEntries, ...localEntries].slice(0, 50);
-      StorageService.set('activity_feed', localFeed);
-      Nav.refreshBadge();
-
-      // Show toasts for pvp notifications and re-render
-      const pvpNew = newEntries.filter(e => e.type === 'pvp_result' || e.type === 'pvp_threat');
-      pvpNew.forEach(e => _toast(`${e.icon} ${e.title}`));
-
-      // Save battle history + sync lord HP for both sides from activity_feed entries.
-      // The server dispatcher writes the authoritative result; this just hydrates local cache.
-      newEntries.filter(e => e.type === 'pvp_result' && e.lordId && e.report).forEach(e => {
-        const alreadySaved = BattleHistoryService.getForLord(e.lordId).some(b => b.at === e.at);
-        if (!alreadySaved) {
-          BattleHistoryService.save(e.lordId, {
-            outcome:      e.outcome || 'defeat',
-            campName:     e.opponentName || 'Enemy Lord',
-            campIcon:     e.opponentType === 'city' ? '🏯' : '⚔',
-            campLevel:    null,
-            lordLevel:    e.lordLevel || null,
-            terrain:      e.terrain || null,
-            goldEarned:   e.goldEarned || 0,
-            resourceLoot: e.resourceLoot || null,
-            xpEarned:     e.xpEarned || 0,
-            modelsLost:   e.modelsLost || 0, rounds: e.rounds || 0,
-            reason: e.report?.reason || '', report: e.report,
-          });
-        }
-        // Update local lord HP from the battle report for whichever side this player was on.
-        const defStart = e.report?.defender?.unitsStart || [];
-        if (defStart.some(u => u.sourceId === e.lordId)) {
-          const lordsStorage = StorageService.get('lords') || {};
-          const lordRec      = lordsStorage[e.lordId];
-          if (lordRec) {
-            const defLordUnit = (e.report.defender.unitsSurviving || []).find(s => s.sourceId === e.lordId);
-            if (defLordUnit) {
-              lordRec.currentHp      = Math.max(1, Math.round(defLordUnit.avgHp));
-              lordRec.downtimeUntil  = null;
-              lordRec.downtimeReason = null;
-            } else {
-              lordRec.currentHp      = 0;
-              lordRec.downtimeUntil  = TimeService.now() + 3600000;
-              lordRec.downtimeReason = e.report?.winner === 'attacker' ? 'captured' : 'defeated';
-            }
-            lordsStorage[e.lordId] = lordRec;
-            StorageService.set('lords', lordsStorage);
-          }
-        }
-      });
-
-      if (pvpNew.length > 0) {
-        _stopTicker();
-        _player = PlayerService.getById(_player.id);
-        HUD.refresh();
-        if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
-      }
-    } catch (_) {
-      // Non-fatal — polling will retry next interval
-    }
   }
 
   // ── Shell ─────────────────────────────────────────────────────
@@ -348,8 +269,8 @@ const OverviewScreen = (() => {
         ${_incomingAttackBanner()}
         <div class="ov-body">
           ${showOnboarding
-            ? `${_onboardingSection(cities, lords)}${_citiesSection()}${_lordsSection()}`
-            : `${_movementsPanel()}${_citiesSection()}${_lordsSection()}`
+            ? `${_onboardingSection(cities, lords)}${_citiesSection()}${_lordsSection()}${_prisonSection()}`
+            : `${_movementsPanel()}${_citiesSection()}${_lordsSection()}${_prisonSection()}`
           }
         </div>
       </div>
@@ -487,9 +408,21 @@ const OverviewScreen = (() => {
     const rows = active.map(lord => {
       const qItem    = lord.actionQueue[0];
       const actionDef = qItem ? LORD_ACTIONS[qItem.actionId] : null;
-      const pct      = qItem ? Math.floor(LordService.actionProgress(lord) * 100) : 0;
-      const secs     = qItem ? LordService.actionTimeRemaining(lord) : 0;
-      const stanceDef = STANCE_DEFS[LordService.getStance(lord)?.id] || STANCE_DEFS.idle;
+      const stanceObj = LordService.getStance(lord);
+      const stanceDef = STANCE_DEFS[stanceObj?.id] || STANCE_DEFS.idle;
+      const isRaidingRow = !qItem && LordService.isStanced(lord) && stanceObj.id === 'raiding';
+
+      let pct, secs;
+      if (qItem) {
+        pct  = Math.floor(LordService.actionProgress(lord) * 100);
+        secs = LordService.actionTimeRemaining(lord);
+      } else if (isRaidingRow) {
+        const totalMs = stanceObj.finishAt - stanceObj.startedAt;
+        pct  = totalMs > 0 ? Math.floor(Math.min(1, (TimeService.now() - stanceObj.startedAt) / totalMs) * 100) : 0;
+        secs = Math.max(0, Math.floor((stanceObj.finishAt - TimeService.now()) / 1000));
+      } else {
+        pct = 0; secs = 0;
+      }
 
       const isAttacking = qItem?.intent === 'attack';
       let icon  = '⏸';
@@ -505,19 +438,28 @@ const OverviewScreen = (() => {
             icon  = '🚶';
             label = `Moving → (${qItem.destX}, ${qItem.destY})`;
           }
+        } else if (qItem.actionId === 'scout') {
+          icon  = '🕵';
+          label = lord.x != null ? `Scouting @ (${lord.x}, ${lord.y})` : 'Scouting';
+        } else if (qItem.actionId === 'search_area') {
+          icon  = '🔍';
+          label = lord.x != null ? `Questing @ (${lord.x}, ${lord.y})` : 'Questing';
         }
+      } else if (isRaidingRow) {
+        icon  = stanceDef.icon || '🏴';
+        label = `Raiding @ (${lord.x}, ${lord.y})`;
       } else if (LordService.isStanced(lord)) {
         icon  = stanceDef.icon || '🛡';
         label = stanceDef.name || 'Stance';
       }
 
       return `
-        <div class="ov-mv-row${isAttacking ? ' ov-mv-row--attack' : ''}">
+        <div class="ov-mv-row${isAttacking ? ' ov-mv-row--attack' : ''}${isRaidingRow ? ' ov-mv-row--raiding' : ''}">
           <span class="ov-mv-lord">${lord.name}</span>
           <span class="ov-mv-status">${icon} ${label}</span>
-          ${qItem ? `
+          ${qItem || isRaidingRow ? `
             <div class="ov-mv-bar-wrap">
-              <div class="ov-mv-bar"><div class="ov-mv-fill${isAttacking ? ' ov-mv-fill--attack' : ''}" id="ov-mv-fill-${lord.id}" style="transform:scaleX(${pct / 100})"></div></div>
+              <div class="ov-mv-bar"><div class="ov-mv-fill${isAttacking ? ' ov-mv-fill--attack' : ''}${isRaidingRow ? ' ov-mv-fill--raiding' : ''}" id="ov-mv-fill-${lord.id}" style="transform:scaleX(${pct / 100})"></div></div>
               <span class="ov-mv-time" id="ov-mv-time-${lord.id}">${TimeService.formatDuration(secs)}</span>
             </div>` : ''}
         </div>`;
@@ -657,9 +599,33 @@ const OverviewScreen = (() => {
     return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
   }
 
+  // Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult —
+  // otherwise this overvalues numerous cheap units relative to what they actually deal.
   function _lordArmyPower(lordId) {
     const army = ArmyService.get(lordId);
-    return army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * u.count, 0);
+    return Math.round(army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0));
+  }
+
+  // Lords the player currently holds captive — only rendered when non-empty,
+  // same "nothing to show, nothing to render" convention as _movementsPanel().
+  function _prisonSection() {
+    if (_prisonList.length === 0) return '';
+    return `
+      <section class="ov-section">
+        <div class="ov-section-row">
+          <div class="ov-section-title">🔒 Prison <span class="ov-limit-badge">${_prisonList.length}</span></div>
+        </div>
+        <div class="ov-prison-list">
+          ${_prisonList.map(p => `
+            <div class="ov-prison-row" data-lord-id="${p.lordId}" data-owner-id="${p.ownerId}">
+              <span class="ov-prison-name">${p.lordName}</span>
+              <span class="ov-prison-owner">Lv ${p.level} · ${p.ownerUsername}</span>
+              <button class="ov-prison-release-btn">Release</button>
+            </div>
+          `).join('')}
+        </div>
+      </section>
+    `;
   }
 
   function _lordsSection() {
@@ -726,38 +692,59 @@ const OverviewScreen = (() => {
     const stanceObj = LordService.getStance(lord);
     const stanceDef = STANCE_DEFS[stanceObj.id] || STANCE_DEFS.idle;
     const isStanced = LordService.isStanced(lord);
-    const stanceBadge = isStanced
+    const isRaiding = !lordIsDown && isStanced && stanceObj.id === 'raiding';
+    // Raiding gets the full activity-overlay treatment below (like
+    // attacking/questing/moving) instead of the small badge — showing both
+    // would be redundant, same reason those three never show the badge either.
+    const stanceBadge = isStanced && stanceObj.id !== 'raiding'
       ? `<span class="ov-lc-stance-badge">${stanceDef.icon} ${stanceDef.name}</span>`
       : '';
+    const raidSecs = isRaiding ? Math.max(0, Math.floor((stanceObj.finishAt - TimeService.now()) / 1000)) : 0;
 
     const isQuesting = !lordIsDown && queueItem?.actionId === 'search_area';
+    const isScouting = !lordIsDown && queueItem?.actionId === 'scout';
     const isMoving   = !lordIsDown && queueItem?.actionId === 'move_lord' && !isAttacking;
 
     const activityOverlay = isAttacking ? `
         <div class="ov-lord-activity-overlay ov-lord-activity-overlay--attack">
           <div class="ov-lord-activity-icon">&#9876;</div>
-          <div class="ov-lord-activity-label">Atacando</div>
+          <div class="ov-lord-activity-label">Attacking</div>
           <div class="ov-lord-activity-dest">(${queueItem.destX}, ${queueItem.destY})</div>
           <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(actionSecs)}</div>
         </div>` :
       isQuesting ? `
         <div class="ov-lord-activity-overlay ov-lord-activity-overlay--quest">
           <div class="ov-lord-activity-icon">&#128506;</div>
-          <div class="ov-lord-activity-label">En Quest</div>
+          <div class="ov-lord-activity-label">Questing</div>
+          <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(actionSecs)}</div>
+        </div>` :
+      isScouting ? `
+        <div class="ov-lord-activity-overlay ov-lord-activity-overlay--scout">
+          <div class="ov-lord-activity-icon">&#128373;</div>
+          <div class="ov-lord-activity-label">Scouting</div>
           <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(actionSecs)}</div>
         </div>` :
       isMoving ? `
         <div class="ov-lord-activity-overlay ov-lord-activity-overlay--move">
           <div class="ov-lord-activity-icon">&#128694;</div>
-          <div class="ov-lord-activity-label">Marchando</div>
+          <div class="ov-lord-activity-label">Marching</div>
           <div class="ov-lord-activity-dest">(${queueItem.destX}, ${queueItem.destY})</div>
           <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(actionSecs)}</div>
+        </div>` :
+      isRaiding ? `
+        <div class="ov-lord-activity-overlay ov-lord-activity-overlay--raiding">
+          <div class="ov-lord-activity-icon">🏴</div>
+          <div class="ov-lord-activity-label">Raiding</div>
+          <div class="ov-lord-activity-dest">(${lord.x}, ${lord.y})</div>
+          <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(raidSecs)}</div>
         </div>` : '';
 
     const cardModifier = lordIsDown   ? ' ov-lord-card--down'
       : isAttacking ? ' ov-lord-card--attacking'
       : isQuesting  ? ' ov-lord-card--questing'
+      : isScouting  ? ' ov-lord-card--scouting'
       : isMoving    ? ' ov-lord-card--marching'
+      : isRaiding   ? ' ov-lord-card--raiding'
       : '';
 
     const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || lord.portrait || race.portrait;
@@ -774,7 +761,13 @@ const OverviewScreen = (() => {
 
     return `
       <div class="ov-lord-card${cardModifier}" data-lord-id="${lord.id}">
-        ${lordIsDown ? `
+        ${lordIsDown && lord.capturedByPlayerId ? `
+          <div class="ov-lord-down-overlay">
+            <div class="ov-lord-down-icon">⛓</div>
+            <div class="ov-lord-down-label ov-lord-down-label--captured">CAPTURED</div>
+            <div class="ov-lord-captor">by ${lord.capturedByUsername || 'Unknown'}</div>
+            <button class="ov-lord-ransom-btn" data-lord-id="${lord.id}">💰 Pay Ransom (${lordRansomCost(lord.level)})</button>
+          </div>` : lordIsDown ? `
           <div class="ov-lord-down-overlay">
             <div class="ov-lord-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
             <div class="ov-lord-down-label ov-lord-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
@@ -794,7 +787,7 @@ const OverviewScreen = (() => {
             ${stanceBadge}
           </div>
           <div class="ov-lc-meta${isAttacking ? ' ov-lc-meta--attack' : ''}">
-            📍 ${location} · ${isAttacking ? `⚔ ATTACKING (${queueItem.destX},${queueItem.destY})` : activeAction ? `${activeAction.icon} ${activeAction.name}` : 'Idle'}
+            📍 ${location} · ${isAttacking ? `⚔ ATTACKING (${queueItem.destX},${queueItem.destY})` : isScouting ? '🕵 Scouting' : isQuesting ? '🔍 Questing' : activeAction ? `${activeAction.icon} ${activeAction.name}` : isRaiding ? '🏴 RAIDING' : 'Idle'}
           </div>
           ${queueItem ? `<div class="ov-lc-action-row">
             <div class="ov-lc-action-bar"><div class="ov-lc-action-fill${isAttacking ? ' ov-lc-action-fill--attack' : ''}" id="ov-lord-fill" style="width:${actionPct}%"></div></div>
@@ -816,64 +809,6 @@ const OverviewScreen = (() => {
         </div>
       </div>
     `;
-  }
-
-  function _timeAgo(ms) {
-    const secs = Math.floor(ms / 1000);
-    if (secs < 60)            return 'just now';
-    const mins = Math.floor(secs / 60);
-    if (mins < 60)            return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24)           return `${hours}h ago`;
-    return `${Math.floor(hours / 24)}d ago`;
-  }
-
-  // ── Activity feed ─────────────────────────────────────────────
-
-  function _activityFeedSection() {
-    const feed = ActivityService.get(_player.id);
-    if (feed.length === 0) return '';
-
-    const _TYPE_CSS = {
-      battle_victory: 'af-victory',
-      battle_defeat:  'af-defeat',
-      battle_draw:    'af-draw',
-      discovery:      'af-discovery',
-      lord_moved:     'af-move',
-      action_complete:'af-action',
-    };
-
-    const isBattleEntry = e => e.type === 'pvp_result' || e.type?.startsWith('battle_');
-
-    const items = feed.slice(0, 30).map(e => {
-      const css  = _TYPE_CSS[e.type] || '';
-      const date = _timeAgo(TimeService.now() - e.at);
-      const reportLordId = e.lordId
-        || LordService.getByPlayer(_player.id).find(l => l.name === e.lordName)?.id
-        || null;
-      const reportBtn = isBattleEntry(e) && reportLordId
-        ? `<button class="af-report-btn" data-lord-id="${reportLordId}" title="View battle report">📋 Report</button>`
-        : '';
-      return `
-        <div class="af-entry ${css}">
-          <span class="af-icon">${e.icon}</span>
-          <div class="af-body">
-            <span class="af-title">${e.title}</span>
-            ${e.detail ? `<span class="af-detail">${e.detail}</span>` : ''}
-            ${reportBtn}
-          </div>
-          <div class="af-meta">
-            ${e.lordName ? `<span class="af-lord">${e.lordName}</span>` : ''}
-            <span class="af-time">${date}</span>
-          </div>
-        </div>`;
-    }).join('');
-
-    return `
-      <section class="ov-section ov-activity-feed">
-        <h2 class="ov-section-title">📋 Recent Activity</h2>
-        <div class="af-list">${items}</div>
-      </section>`;
   }
 
   // ── Events ────────────────────────────────────────────────────
@@ -925,6 +860,34 @@ const OverviewScreen = (() => {
         HUD.refresh();
         _stopTicker();
         if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
+      });
+    });
+
+    document.querySelectorAll('.ov-lord-ransom-btn[data-lord-id]').forEach(btn => {
+      btn.addEventListener('click', async e => {
+        e.stopPropagation();
+        e.preventDefault();
+        btn.disabled = true;
+        const result = await ServerActions.ransomLord(btn.dataset.lordId);
+        if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
+        _toast('🔓 Ransom paid — your lord is free.');
+        _player = PlayerService.getById(_player.id);
+        HUD.refresh();
+        _stopTicker();
+        if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
+      });
+    });
+
+    document.querySelectorAll('.ov-prison-release-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('.ov-prison-row');
+        if (!row) return;
+        btn.disabled = true;
+        const result = await ServerActions.releaseLord(row.dataset.lordId, row.dataset.ownerId);
+        if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
+        _toast('🔓 Lord released.');
+        _prisonList = _prisonList.filter(p => p.lordId !== row.dataset.lordId);
+        _rerender();
       });
     });
 
@@ -999,14 +962,6 @@ const OverviewScreen = (() => {
       const nameEl = document.getElementById('rl-name');
       if (nameEl) nameEl.value = randomRaceName(raceId, 'lords');
     });
-
-    document.querySelectorAll('.af-report-btn[data-lord-id]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        _stopTicker();
-        const lord = LordService.getById(btn.dataset.lordId);
-        if (lord) App.navigate('lord-screen', { lord, player: _player, openTab: 'battles' });
-      });
-    });
   }
 
   function _openRecruitModal() {
@@ -1051,14 +1006,7 @@ const OverviewScreen = (() => {
     _rerender();
   }
 
-  function _toast(msg) {
-    const c = document.getElementById('toast-container');
-    if (!c) return;
-    const el = document.createElement('div');
-    el.className = 'toast'; el.textContent = msg;
-    c.appendChild(el);
-    setTimeout(() => el.remove(), 3200);
-  }
+  function _toast(msg) { ToastService.show(msg); }
 
   return { render, stop };
 })();

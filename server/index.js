@@ -25,10 +25,14 @@ import { handleLordCreate }        from './actions/lord-create.js';
 import { handleCityFound }         from './actions/city-found.js';
 import { handleHireMerc }          from './actions/hire-merc.js';
 import { handleLordRevive }        from './actions/lord-revive.js';
+import { handleLordRansom }        from './actions/lord-ransom.js';
+import { handleLordRelease }       from './actions/lord-release.js';
+import { handleLordPrisonList }    from './actions/lord-prison-list.js';
 import { handleArmyDisband }       from './actions/army-disband.js';
 import { handleInstantBuild }      from './actions/instant-build.js';
+import { handleInstantRecruit }    from './actions/instant-recruit.js';
 import { runRankingUpdate }        from './tick/ranking-updater.js';
-import { handlePveResult }         from './actions/pve-result.js';
+import { handlePveAttack }         from './actions/pve-attack.js';
 import { handleInstantAction }     from './actions/instant-action.js';
 import { handleSetRace }           from './actions/set-race.js';
 import { handleLordTalents }       from './actions/lord-talents.js';
@@ -36,6 +40,18 @@ import { handleLordMounts }        from './actions/lord-mounts.js';
 import { handleLordSaveXp }        from './actions/lord-save-xp.js';
 import { handleQuestResolve }      from './actions/quest-resolve.js';
 import { handleScoutResolve }      from './actions/scout-resolve.js';
+import { handleRaidStart }         from './actions/raid-start.js';
+import { handleRaidCancel }        from './actions/raid-cancel.js';
+import { handleRaidInstant }       from './actions/raid-instant.js';
+import { handleClanCreate }        from './actions/clan-create.js';
+import { handleClanApply }         from './actions/clan-apply.js';
+import { handleClanAccept }        from './actions/clan-accept.js';
+import { handleClanReject }        from './actions/clan-reject.js';
+import { handleClanLeave }         from './actions/clan-leave.js';
+import { handleClanKick }          from './actions/clan-kick.js';
+import { handleClanList }          from './actions/clan-list.js';
+import { handleClanWarDeclare }    from './actions/clan-war-declare.js';
+import { runClanWarUpdate }        from './tick/clan-war-updater.js';
 
 const app       = express();
 const PORT      = process.env.PORT || 3000;
@@ -44,6 +60,26 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // ── Middleware ────────────────────────────────────────────────
 app.use(express.json());
 app.use(express.static(join(__dirname, '..')));
+
+// Express 4 (unlike Express 5) does NOT automatically catch a rejected
+// promise thrown inside an async route handler — none of the action
+// handlers below have their own try/catch. Combined with Node's default
+// unhandled-rejection behavior (terminate the process), a single unexpected
+// error in ANY one endpoint would otherwise crash the entire server for
+// every player, not just the requesting one, and leave that one request
+// hanging forever (client sees a frozen UI, no error ever comes back).
+// Wrapping every route through this closes that off at the routing layer,
+// for all current and future handlers, without editing each action file.
+function _safe(handler) {
+  return async (req, res) => {
+    try {
+      await handler(req, res);
+    } catch (err) {
+      console.error(`[${req.method} ${req.path}] unhandled error:`, err);
+      if (!res.headersSent) res.status(500).json({ ok: false, error: 'Internal server error' });
+    }
+  };
+}
 
 // ── PvP API ───────────────────────────────────────────────────
 //
@@ -54,9 +90,9 @@ app.use(express.static(join(__dirname, '..')));
 //  Returns: { ok, report, terrain }
 //
 // POST /api/sync — offline catch-up on login
-app.post('/api/sync', syncPlayerState);
+app.post('/api/sync', _safe(syncPlayerState));
 
-app.post('/api/pvp/resolve',         resolvePvpAttack);
+app.post('/api/pvp/resolve',         _safe(resolvePvpAttack));
 
 // ── Tile scan API ─────────────────────────────────────────────
 //
@@ -72,41 +108,61 @@ app.post('/api/pvp/resolve',         resolvePvpAttack);
 //  visibility check. The client never has access to enemy army sizes
 //  (RLS prevents it), so this check must be server-side.
 //
-app.post('/api/scan/tile', scanTile);
+app.post('/api/scan/tile', _safe(scanTile));
 
 // POST /api/scan/presence — live, zero-stats "is there a lord here"
 // existence layer for the whole map. Cities have an equivalent already
 // via the global world_state table; this covers lords.
-app.post('/api/scan/presence', scanPresence);
+app.post('/api/scan/presence', _safe(scanPresence));
 
 // POST /api/attack/declare — write pvp_threat notification to defenders
-app.post('/api/attack/declare', declareAttack);
+app.post('/api/attack/declare', _safe(declareAttack));
 
 // ── Authoritative action API ──────────────────────────────────
 // POST /api/city/build    — validate + enqueue construction server-side
 // POST /api/city/recruit  — validate + enqueue unit training server-side
 // POST /api/lord/action   — validate + enqueue move/search_area server-side
-app.post('/api/city/build',    handleBuild);
-app.post('/api/city/recruit',  handleRecruit);
-app.post('/api/city/found',    handleCityFound);
-app.post('/api/lord/action',   handleLordAction);
-app.post('/api/lord/create',   handleLordCreate);
-app.post('/api/lord/hire-merc', handleHireMerc);
-app.post('/api/lord/revive',   handleLordRevive);
-app.post('/api/army/disband',        handleArmyDisband);
-app.post('/api/city/instant-build',  handleInstantBuild);
-app.post('/api/lord/pve-result',     handlePveResult);
-app.post('/api/lord/instant-action', handleInstantAction);
-app.post('/api/player/set-race',     handleSetRace);
-app.post('/api/lord/talents',        handleLordTalents);
-app.post('/api/lord/mounts',         handleLordMounts);
-app.post('/api/lord/save-xp',        handleLordSaveXp);
-app.post('/api/lord/quest-resolve',  handleQuestResolve);
-app.post('/api/lord/scout-resolve',  handleScoutResolve);
+app.post('/api/city/build',    _safe(handleBuild));
+app.post('/api/city/recruit',  _safe(handleRecruit));
+app.post('/api/city/found',    _safe(handleCityFound));
+app.post('/api/lord/action',   _safe(handleLordAction));
+app.post('/api/lord/create',   _safe(handleLordCreate));
+app.post('/api/lord/hire-merc', _safe(handleHireMerc));
+app.post('/api/lord/revive',   _safe(handleLordRevive));
+app.post('/api/lord/ransom',       _safe(handleLordRansom));
+app.post('/api/lord/release',      _safe(handleLordRelease));
+app.post('/api/lord/prison-list',  _safe(handleLordPrisonList));
+app.post('/api/army/disband',        _safe(handleArmyDisband));
+app.post('/api/city/instant-build',  _safe(handleInstantBuild));
+app.post('/api/city/instant-recruit', _safe(handleInstantRecruit));
+app.post('/api/lord/pve-attack',     _safe(handlePveAttack));
+app.post('/api/lord/instant-action', _safe(handleInstantAction));
+app.post('/api/player/set-race',     _safe(handleSetRace));
+app.post('/api/lord/talents',        _safe(handleLordTalents));
+app.post('/api/lord/mounts',         _safe(handleLordMounts));
+app.post('/api/lord/save-xp',        _safe(handleLordSaveXp));
+app.post('/api/lord/quest-resolve',  _safe(handleQuestResolve));
+app.post('/api/lord/scout-resolve',  _safe(handleScoutResolve));
+app.post('/api/lord/raid-start',     _safe(handleRaidStart));
+app.post('/api/lord/raid-cancel',    _safe(handleRaidCancel));
+app.post('/api/lord/raid-instant',   _safe(handleRaidInstant));
+app.post('/api/clan/create',         _safe(handleClanCreate));
+app.post('/api/clan/apply',          _safe(handleClanApply));
+app.post('/api/clan/accept',         _safe(handleClanAccept));
+app.post('/api/clan/reject',         _safe(handleClanReject));
+app.post('/api/clan/leave',          _safe(handleClanLeave));
+app.post('/api/clan/kick',           _safe(handleClanKick));
+app.post('/api/clan/list',           _safe(handleClanList));
+app.post('/api/clan/war-declare',    _safe(handleClanWarDeclare));
 
 // ── Lords debug ───────────────────────────────────────────────
 // GET /api/debug/lords — dumps all lords from Supabase so we can verify positions are synced
-app.get('/api/debug/lords', async (req, res) => {
+// SECURITY NOTE: this has no authentication at all — any unauthenticated
+// caller can hit it and get every player's lord IDs/names/positions. Flagged
+// in the PvP/PvE audit; left in place only because removing/gating a
+// standing debug tool is a call for whoever relies on it, not something to
+// silently delete mid-audit.
+app.get('/api/debug/lords', _safe(async (req, res) => {
   const { createClient } = await import('@supabase/supabase-js');
   const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
@@ -118,7 +174,7 @@ app.get('/api/debug/lords', async (req, res) => {
     lords: Object.values(row.value || {}).map(l => ({ id: l.id, name: l.name, x: l.x, y: l.y })),
   }));
   res.json(summary);
-});
+}));
 
 
 // ── Health check ──────────────────────────────────────────────
@@ -197,4 +253,8 @@ app.listen(PORT, () => {
   // Ranking updater — recalculate all player scores every 5 minutes
   runRankingUpdate().catch(e => console.error('[ranking-updater] boot run error:', e.message));
   setInterval(() => runRankingUpdate().catch(e => console.error('[ranking-updater] loop error:', e.message)), 5 * 60 * 1000);
+
+  // Clan war updater — end wars whose time limit has passed, every minute
+  runClanWarUpdate().catch(e => console.error('[clan-war-updater] boot run error:', e.message));
+  setInterval(() => runClanWarUpdate().catch(e => console.error('[clan-war-updater] loop error:', e.message)), 60 * 1000);
 });

@@ -10,7 +10,12 @@
 //  Queue shape on city.recruitmentQueue:
 //    [{ unitId, count, lordId, startedAt, finishAt }]
 //
-//  Only one batch trains at a time (same pattern as constructionQueue).
+//  Up to 5 batches can be queued at once; they train sequentially (batch N
+//  starts the moment batch N-1 finishes). NOTE: enqueue() below is not
+//  actually called anywhere any more — the real, authoritative enqueue path
+//  is server/actions/recruit.js via ServerActions.recruit(); this function
+//  is kept in sync with it as documentation of the intended model, in case
+//  it's ever reactivated for optimistic client-side prediction.
 //
 //  Guards enforced at enqueue():
 //    1. Gold cost (from player.coins)
@@ -79,8 +84,9 @@ const RecruitmentService = (() => {
   function enqueue(lord, city, unitId, count) {
     _migrateCity(city);
 
-    if (city.recruitmentQueue.length > 0) {
-      return { ok: false, error: 'Already training. Wait for the current batch to finish.' };
+    const MAX_QUEUE = 5;
+    if (city.recruitmentQueue.length >= MAX_QUEUE) {
+      return { ok: false, error: `Recruitment queue is full (max ${MAX_QUEUE}).` };
     }
 
     const def = UNIT_DEFS[unitId];
@@ -155,12 +161,16 @@ const RecruitmentService = (() => {
       city.freePopulation = Math.max(0, (city.freePopulation ?? 0) - popCost);
     }
 
-    const now      = TimeService.now();
-    const duration = def.recruitTime * count * 1000;
-    city.recruitmentQueue = [{
+    const now        = TimeService.now();
+    const duration   = def.recruitTime * count * 1000;
+    const lastFinish = city.recruitmentQueue.length > 0
+      ? city.recruitmentQueue[city.recruitmentQueue.length - 1].finishAt
+      : now;
+    const startedAt  = Math.max(now, lastFinish);
+    city.recruitmentQueue = [...city.recruitmentQueue, {
       unitId, count, lordId: lord.id,
-      startedAt: now,
-      finishAt:  now + duration,
+      startedAt,
+      finishAt: startedAt + duration,
     }];
     CityService.save(city);
     return { ok: true };

@@ -16,6 +16,7 @@
 //    terrain      → terrain id
 //    goldEarned   → number (0 on defeat)
 //    xpEarned     → number
+//    honorEarned  → number (signed — can be negative; 0 if no honor changed)
 //    modelsLost   → number
 //    rounds       → number
 //    reason       → 'eliminated' | 'routed' | 'retreated' | 'max_rounds'

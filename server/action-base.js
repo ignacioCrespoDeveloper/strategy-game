@@ -16,7 +16,16 @@ import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, 
 
 const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS };
 
-const STATE_KEYS = ['players', 'lords', 'cities', 'armies'];
+// honor_points is fetched on every action (not just extraKeys opt-in) and
+// merged onto the returned player object below. It lives in its own Supabase
+// key (see combat-resolver.js/pve-attack.js), separate from the 'players'
+// blob — every action handler returns { player } straight from here, and the
+// client's ServerActions wrappers do a FULL REPLACE of the local player
+// record with whatever comes back. Without this, any ordinary action (build,
+// recruit, move, ...) would silently wipe the client's cached honorPoints
+// back to undefined/0, since the player object loaded from the 'players' key
+// alone never carries it.
+const STATE_KEYS = ['players', 'lords', 'cities', 'armies', 'honor_points'];
 
 function _admin() {
   return createClient(
@@ -74,6 +83,7 @@ export async function loadAndCatchUp(req, res, extraKeys = []) {
       coins:        5000,
       credits:      9999,
       lordId:       null,
+      clanId:       null,
       rankingStats: { pvpWins: 0, conquests: 0 },
       createdAt:    Date.now(),
       passwordHash: '__supabase__',
@@ -91,6 +101,10 @@ export async function loadAndCatchUp(req, res, extraKeys = []) {
     Date.now(),
     _ENGINE,
   );
+
+  // Always stamp the authoritative honor value onto the player object that
+  // every action handler returns — see STATE_KEYS comment above.
+  result.player.honorPoints = raw.honor_points ?? result.player.honorPoints ?? 0;
 
   const extras = {};
   for (const k of extraKeys) extras[k] = raw[k] ?? null;

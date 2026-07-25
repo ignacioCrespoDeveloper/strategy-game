@@ -18,11 +18,33 @@ function _unitPower(def) {
   return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
 }
 
+// Dampened the same way combat stacks are (js/domain/battle-engine.js
+// _stackDamageMult, count^0.8) — otherwise the PWR cap overvalues numerous
+// cheap units relative to what they actually contribute in a fight, letting
+// players buy more real combat strength than intended by spreading it thin.
 function _armyPower(army) {
   return (army?.units || []).reduce((sum, stack) => {
     const def = UNIT_DEFS[stack.unitId];
-    return sum + (def ? _unitPower(def) : 0) * stack.count;
+    return sum + (def ? _unitPower(def) * Math.pow(stack.count, 0.8) : 0);
   }, 0);
+}
+
+// Army power if one more `unitId` were added. Recomputes that stack's whole
+// dampened total rather than adding a flat per-unit delta — dampening is
+// non-linear, so the marginal power of model #16 in an existing 15-stack is
+// less than model #1 of a fresh stack.
+function _projectedArmyPower(army, unitId) {
+  const def = UNIT_DEFS[unitId];
+  if (!def) return _armyPower(army);
+  const existing   = (army?.units || []).find(u => u.unitId === unitId);
+  const otherPower = (army?.units || [])
+    .filter(u => u.unitId !== unitId)
+    .reduce((sum, stack) => {
+      const d = UNIT_DEFS[stack.unitId];
+      return d ? sum + _unitPower(d) * Math.pow(stack.count, 0.8) : sum;
+    }, 0);
+  const newCount = (existing?.count || 0) + 1;
+  return otherPower + _unitPower(def) * Math.pow(newCount, 0.8);
 }
 
 function _armyPowerCap(lord) {
@@ -51,13 +73,13 @@ export async function handleHireMerc(req, res) {
 
   const army = armies[lordId] || { lordId, units: [] };
 
-  const cap        = _armyPowerCap(lord);
-  const usedPower  = _armyPower(army);
-  const addedPower = _unitPower(def);
-  if (usedPower + addedPower > cap) {
+  const cap            = _armyPowerCap(lord);
+  const usedPower      = _armyPower(army);
+  const projectedPower = _projectedArmyPower(army, unitId);
+  if (projectedPower > cap) {
     return res.status(400).json({
       ok: false,
-      error: `Not enough army power capacity. Used ${usedPower}/${cap} PWR.`,
+      error: `Not enough army power capacity. Used ${Math.round(usedPower)}/${cap} PWR.`,
     });
   }
 

@@ -18,7 +18,7 @@
 
 import { createClient }     from '@supabase/supabase-js';
 import { catchUp }          from './catch-up.js';
-import { resolvePvpBattle, resolveScout } from '../combat-resolver.js';
+import { resolvePvpBattle, resolveScout, resolveArrivalCheck } from '../combat-resolver.js';
 import {
   DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL,
   LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS,
@@ -90,20 +90,59 @@ async function _advancePlayer(admin, playerId) {
       console.warn(`[dispatcher] Scout resolve failed for lord ${lord.id}:`, e.message);
     }
   }
+
+  // Drain any pending arrival checks (offline case) — "is a raiding lord
+  // sitting on the tile I just arrived at" for every plain (non-attack) move
+  // that completed while the player was offline.
+  for (const lord of Object.values(result.lords)) {
+    if (!lord?.pendingArrivalCheck) continue;
+    const { tileX, tileY } = lord.pendingArrivalCheck;
+    try {
+      await resolveArrivalCheck(admin, playerId, lord.id, tileX, tileY);
+    } catch (e) {
+      console.warn(`[dispatcher] Arrival check failed for lord ${lord.id}:`, e.message);
+    }
+  }
 }
 
 // Recover events stuck in 'processing' after a server crash.
-// Any row processing for more than 60 s is assumed orphaned and reset to 'pending'.
+// Any row that's been PROCESSING for more than 60 s is assumed orphaned and reset to 'pending'.
+//
+// BUG THIS FIXES: this used to compare against `created_at` (row insertion
+// time), not "time since processing actually started". `created_at` is set
+// when the action is first declared, while `fire_at` (when it becomes due)
+// can be — and for pvp_attack always is (60 s minimum travel time), and often
+// is for build/recruit/search_area/scout with any real duration — MORE than
+// 60 s later. That means by the moment such an event is even claimed, its
+// created_at is already past the "stuck" threshold, so if processing took
+// even one extra 5 s dispatch tick (very plausible: PvP resolution alone
+// does a full-table scan of every player's lords with no filter, plus many
+// sequential round trips), the very next cycle would reset it back to
+// 'pending' and a second cycle would reprocess it — silently double-applying
+// honor, army losses, rewards, etc. Verified live: an attacker's honor came
+// back double-deducted (-30 instead of -15) in exactly this scenario.
+//
+// Fix: track "when THIS claim attempt started" in the row's own payload
+// (stamped at claim time below), and use that instead of created_at.
 const _PROCESSING_TIMEOUT_MS = 60_000;
 
 async function _recoverStuck(admin) {
   const cutoff = Date.now() - _PROCESSING_TIMEOUT_MS;
-  const { error } = await admin
+  const { data: rows, error } = await admin
     .from('pending_events')
-    .update({ status: 'pending' })
-    .eq('status', 'processing')
-    .lt('created_at', cutoff);
-  if (error) console.warn('[dispatcher] recovery query failed:', error.message);
+    .select('id, payload')
+    .eq('status', 'processing');
+  if (error) { console.warn('[dispatcher] recovery query failed:', error.message); return; }
+
+  for (const row of rows || []) {
+    const claimedAt = row.payload?._claimedAt;
+    // No _claimedAt on the row (shouldn't happen once every claim stamps one,
+    // but could linger on a row claimed by pre-fix code) — treat as stuck so
+    // it isn't orphaned forever.
+    if (claimedAt == null || claimedAt < cutoff) {
+      await admin.from('pending_events').update({ status: 'pending' }).eq('id', row.id).eq('status', 'processing');
+    }
+  }
 }
 
 // Poll pending_events and process all due rows.
@@ -129,9 +168,13 @@ export async function runDispatch() {
   for (const event of dueEvents) {
     // Optimistic claim: only succeeds if status is still 'pending'.
     // Prevents double-processing on server restart or concurrent instances.
+    // Stamps _claimedAt into payload so _recoverStuck can tell "been
+    // processing 60s+" apart from "was just due 60s+ after being declared"
+    // (see _recoverStuck's comment — those are very different things and
+    // conflating them caused live double-processing of PvP attacks).
     const { data: claimed } = await admin
       .from('pending_events')
-      .update({ status: 'processing' })
+      .update({ status: 'processing', payload: { ...event.payload, _claimedAt: Date.now() } })
       .eq('id', event.id)
       .eq('status', 'pending')
       .select('id');

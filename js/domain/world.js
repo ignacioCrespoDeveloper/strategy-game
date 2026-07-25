@@ -47,11 +47,18 @@ const WorldService = (() => {
   }
 
   function _createEmpty() {
-    return { size: SIZE, tiles: {} }; // tiles: { "x,y": cityId }
+    return { size: SIZE, tiles: {} }; // tiles: { "x,y": { cityId, name, ownerId, ownerUsername } }
   }
 
   function _key(x, y) {
     return `${x},${y}`;
+  }
+
+  // A tile entry is either the new object shape or (pre-migration/legacy)
+  // a bare cityId string — always extract the id defensively.
+  function _tileCityId(entry) {
+    if (!entry) return null;
+    return typeof entry === 'string' ? entry : entry.cityId;
   }
 
   // ── Public ───────────────────────────────────────────────────
@@ -64,7 +71,28 @@ const WorldService = (() => {
     const own = Object.values(cities).find(c => c.x === x && c.y === y);
     if (own) return own.id;
     // Fall back to shared world_state (contains other players' cities)
-    return _getWorld().tiles[_key(x, y)] || null;
+    return _tileCityId(_getWorld().tiles[_key(x, y)]);
+  }
+
+  // Always-visible city metadata (name + owner) for ANY city tile, own or
+  // enemy — sourced from the shared world_state tile entry, which carries
+  // this denormalized because a regular client's RLS can't look up another
+  // player's 'cities' row on demand. Garrison composition is deliberately
+  // NOT here — that stays gated behind actually scouting the tile (see
+  // IntelligenceService / js/ui/map-view.js's tile panel).
+  // Returns null if there's no city on this tile at all.
+  function getCityMeta(x, y) {
+    const cities = StorageService.get('cities') || {};
+    const own = Object.values(cities).find(c => c.x === x && c.y === y);
+    if (own) return { cityId: own.id, name: own.name, ownerId: own.playerId, isOwn: true };
+
+    const entry = _getWorld().tiles[_key(x, y)];
+    if (!entry) return null;
+    if (typeof entry === 'string') {
+      // Legacy/pre-migration entry — id only, no name/owner known yet.
+      return { cityId: entry, name: null, ownerId: null, ownerUsername: null, isOwn: false };
+    }
+    return { ...entry, isOwn: false };
   }
 
   function isOccupied(x, y) {
@@ -95,9 +123,9 @@ const WorldService = (() => {
     const worldTiles = _getWorld().tiles;
     const otherList  = Object.entries(worldTiles)
       .filter(([key]) => !ownSet.has(key))
-      .map(([key, cityId]) => {
+      .map(([key, entry]) => {
         const [wx, wy] = key.split(',').map(Number);
-        return { x: wx, y: wy, cityId };
+        return { x: wx, y: wy, cityId: _tileCityId(entry) };
       });
 
     return [...ownList, ...otherList];
@@ -110,5 +138,5 @@ const WorldService = (() => {
     return TERRAIN_TYPES[keys[h % keys.length]];
   }
 
-  return { getSize, getTile, isOccupied, isInBounds, placeCity, getOccupiedTiles, getTerrain };
+  return { getSize, getTile, getCityMeta, isOccupied, isInBounds, placeCity, getOccupiedTiles, getTerrain };
 })();

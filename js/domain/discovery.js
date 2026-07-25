@@ -348,17 +348,27 @@ const DiscoveryService = (() => {
     _saveLog(all);
   }
 
+  // Per-lord "seen since" timestamps, keyed { [playerId]: { [lordId]: ts } } —
+  // each lord's Quests tab has its own log and its own unseen badge, so a
+  // single per-player timestamp would mark lord B's entries seen just from
+  // opening lord A's tab. _seenMap tolerates the old per-player-only shape
+  // (a bare number) from before this was split per lord, treating it as
+  // "nothing seen yet" rather than throwing on the type mismatch.
   const META_KEY = 'disc_log_meta';
-  function markLogSeen(playerId) {
+  function _seenMap(meta, playerId) {
+    const v = meta[playerId];
+    return (v && typeof v === 'object') ? v : {};
+  }
+  function markLogSeen(playerId, lordId) {
     const meta = StorageService.get(META_KEY) || {};
-    meta[playerId] = TimeService.now();
+    meta[playerId] = { ..._seenMap(meta, playerId), [lordId]: TimeService.now() };
     StorageService.set(META_KEY, meta);
   }
 
-  function getUnseenCount(playerId) {
+  function getUnseenCount(playerId, lordId) {
     const meta  = StorageService.get(META_KEY) || {};
-    const since = meta[playerId] || 0;
-    return getLog(playerId).filter(e => e.loggedAt > since).length;
+    const since = _seenMap(meta, playerId)[lordId] || 0;
+    return getLog(playerId).filter(e => e.lordId === lordId && e.loggedAt > since).length;
   }
 
   // Debug helper: immediately create a bandit_camp discovery (bypasses random roll).

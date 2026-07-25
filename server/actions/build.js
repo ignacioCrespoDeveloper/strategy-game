@@ -29,16 +29,27 @@ export async function handleBuild(req, res) {
   const def = BUILDING_DEFS[buildingId];
   if (!def) return res.status(400).json({ ok: false, error: 'Unknown building' });
 
-  const currentLevel = city.buildings?.[buildingId] || 0;
-
-  if ((city.constructionQueue || []).length > 0) {
-    return res.status(400).json({ ok: false, error: 'Construction queue is full' });
+  const MAX_QUEUE = 5;
+  const queue     = city.constructionQueue || [];
+  if (queue.length >= MAX_QUEUE) {
+    return res.status(400).json({ ok: false, error: `Construction queue is full (max ${MAX_QUEUE}).` });
   }
 
-  if (currentLevel >= def.maxLevel) {
-    return res.status(400).json({ ok: false, error: 'Already at max level' });
+  // If this same building already has upgrade(s) queued, the next one picks
+  // up from whatever level it WILL be once those finish — not its current
+  // real level — otherwise queuing "upgrade Barracks" twice in a row would
+  // both target the same next level instead of stacking level+1, level+2.
+  const currentLevel  = city.buildings?.[buildingId] || 0;
+  const queuedForThis = queue.filter(q => q.buildingId === buildingId).length;
+  const effectiveLevel = currentLevel + queuedForThis;
+
+  if (effectiveLevel >= def.maxLevel) {
+    return res.status(400).json({ ok: false, error: 'Already at (or queued to reach) max level' });
   }
 
+  // Prerequisites are checked against the REAL current state only, not
+  // anything still queued — a requirement must already be built, not
+  // "queued to be built soon".
   if (def.requires) {
     for (const [reqId, reqLevel] of Object.entries(def.requires)) {
       if ((city.buildings?.[reqId] || 0) < reqLevel) {
@@ -56,7 +67,8 @@ export async function handleBuild(req, res) {
     }
   }
 
-  const cost = def.cost(currentLevel + 1);
+  const targetLevel = effectiveLevel + 1;
+  const cost = def.cost(targetLevel);
   player.resources = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
   for (const [rKey, amt] of Object.entries(cost)) {
     if (amt > 0 && Math.floor(player.resources[rKey] || 0) < amt) {
@@ -68,23 +80,23 @@ export async function handleBuild(req, res) {
   for (const [rKey, amt] of Object.entries(cost)) {
     if (amt > 0) player.resources[rKey] = (player.resources[rKey] || 0) - amt;
   }
-  const buildTime = def.buildTime(currentLevel + 1);
-  const now = Date.now();
-  city.constructionQueue = [{
-    buildingId,
-    targetLevel: currentLevel + 1,
-    startedAt:   now,
-    finishAt:    now + buildTime * 1000,
-  }];
+
+  // Batches run sequentially — a newly-queued upgrade starts once whichever
+  // is ahead of it finishes, not immediately, unless the queue is empty.
+  const buildTime  = def.buildTime(targetLevel);
+  const now        = Date.now();
+  const lastFinish = queue.length > 0 ? queue[queue.length - 1].finishAt : now;
+  const startedAt  = Math.max(now, lastFinish);
+  const newItem    = { buildingId, targetLevel, startedAt, finishAt: startedAt + buildTime * 1000 };
+  city.constructionQueue = [...queue, newItem];
 
   await saveState(admin, playerId, rawPlayers, { player, lords, cities, armies });
 
-  const queueItem = city.constructionQueue[0];
   const { error: evtErr } = await admin.from('pending_events').insert({
     player_id: playerId,
     type:      'build',
-    fire_at:   queueItem.finishAt,
-    payload:   { cityId, buildingId, targetLevel: queueItem.targetLevel },
+    fire_at:   newItem.finishAt,
+    payload:   { cityId, buildingId: newItem.buildingId, targetLevel: newItem.targetLevel },
   });
   if (evtErr) console.warn('[build] pending_events insert failed:', evtErr.message);
 

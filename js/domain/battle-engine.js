@@ -59,8 +59,29 @@ var BattleEngine = (() => {
 
   // ── Context builder ─────────────────────────────────────────────
 
+  // Effective lord stats: base + class modifiers + mount bonuses. Self-contained
+  // (doesn't call LordService) so buildContext() works identically whether
+  // BattleEngine runs in the browser or in the server's isolated VM context
+  // (engine-loader.js) — LordService is a client-only singleton (depends on
+  // StorageService/ArmyService/etc.) that is never loaded server-side, so
+  // calling it there throws a ReferenceError. This mirrors LordService.
+  // getEffectiveStats() (js/domain/lord.js) and _effectiveStats()
+  // (server/combat-resolver.js) — a third independent copy, same pattern
+  // already used elsewhere in this codebase for engine-shared formulas.
+  function _lordEffectiveStats(lord) {
+    const base  = lord.baseStats || { ...LORD_BASE_STATS };
+    const cls   = LORD_CLASSES[lord.classId];
+    const mods  = cls?.modifiers || {};
+    const mount = (typeof MOUNT_POOL !== 'undefined' && lord.mountId) ? (MOUNT_POOL[lord.mountId]?.effects || {}) : {};
+    const result = {};
+    for (const key of Object.keys(LORD_BASE_STATS)) {
+      result[key] = (base[key] ?? LORD_BASE_STATS[key]) + (mods[key] || 0) + (mount[key] || 0);
+    }
+    return result;
+  }
+
   function buildContext({ lord, army, encounter, terrain }) {
-    const stats = LordService.getEffectiveStats(lord);
+    const stats = _lordEffectiveStats(lord);
 
     // Lord as a combat unit — backline role, protected by infantry
     const lordUnit = _makeUnit('bu_lord', lord.id, {
@@ -125,12 +146,41 @@ var BattleEngine = (() => {
 
   // ── Damage calculation ─────────────────────────────────────────
 
+  // A stack's whole living count fights as one combined attack per phase per
+  // round (never per-model), so its damage must scale with how many models
+  // are still alive in it — otherwise a stack of 1 and a stack of 20 hit
+  // identically hard. Dampened (count^0.8, not linear) so a single round
+  // isn't a guaranteed full wipe once stacks get large. Lords and 1-model
+  // stacks are unaffected (count=1 → multiplier=1).
+  function _stackDamageMult(count) {
+    return Math.pow(Math.max(1, count), 0.8);
+  }
+
+  // Max-rounds tiebreak uses this — remaining combat POWER per side, dampened
+  // per stack with the same exponent as the army-power "PWR" score used for
+  // recruiting (js/ui/lord-screen.js _armyPower, etc.). Comparing raw
+  // surviving model count instead would let a swarm of nearly-irrelevant
+  // survivors out-"win" a barely-touched elite force just by having more
+  // bodies left standing, regardless of how little fight is actually left in them.
+  function _sidePower(units) {
+    return units.filter(_alive).reduce((sum, u) => {
+      return sum + (u.attack * 3 + u.defense * 2 + Math.floor(u.maxHp / 10) + u.speed) * Math.pow(u.count, 0.8);
+    }, 0);
+  }
+
+  // Returns { damage, heavyArmor }. heavyArmor flags hits where the target's
+  // defense swallowed most of the raw damage — surfaced in the report so a
+  // suspiciously low number reads as "that target is heavily armored" rather
+  // than looking like a broken engine. Armor-piercing attackers bypass most
+  // of that reduction, so they rarely (correctly) trigger this flag.
   function _computeDamage(attacker, target, phase, terrainMods) {
-    let baseDmg   = attacker.attack * _rand(0.85, 1.15);
+    let baseDmg   = attacker.attack * _stackDamageMult(attacker.count) * _rand(0.85, 1.15);
     let reduction = target.defense * 0.4;
 
     // armor_piercing nearly bypasses defense
     if (attacker.traits.includes('armor_piercing')) reduction *= 0.20;
+
+    const heavyArmor = reduction >= baseDmg * 0.55;
 
     let finalDmg = Math.max(1, baseDmg - reduction);
 
@@ -155,18 +205,22 @@ var BattleEngine = (() => {
     // fire_attack: mark target as burning (suppresses regen next end-of-round)
     if (attacker.traits.includes('fire_attack')) target._burning = true;
 
-    return Math.max(1, Math.ceil(finalDmg));
+    return { damage: Math.max(1, Math.ceil(finalDmg)), heavyArmor };
   }
 
   // Applies damage to a unit stack with model-death overflow.
+  // actorSide: 'attacker' | 'defender' — which side the acting unit belongs to,
+  // so the report renderer can label events as "yours" vs "theirs" without
+  // guessing from id prefixes.
   // Returns { modelsKilled, dodged }.
-  function _applyDamage(target, damage, round, phase, attacker, activeTrait, events) {
+  function _applyDamage(target, damage, round, phase, attacker, activeTrait, events, actorSide, heavyArmor) {
+    const targetSide = actorSide === 'attacker' ? 'defender' : 'attacker';
     // dodge: 20% miss chance
     if (target.traits.includes('dodge') && Math.random() < 0.2) {
       events.push({
         round, phase,
-        actorId: attacker.id, actorName: attacker.name,
-        targetId: target.id,  targetName: target.name,
+        actorId: attacker.id, actorName: attacker.name, actorSide, actorCount: attacker.count,
+        targetId: target.id,  targetName: target.name,  targetSide,
         trait: 'dodge', ability: null,
         damage: 0, hpBefore: target.currentHp, hpAfter: target.currentHp,
         result: 'miss',
@@ -193,8 +247,8 @@ var BattleEngine = (() => {
         const result = target.count === 0 ? 'eliminated' : 'killed';
         events.push({
           round, phase,
-          actorId: attacker.id, actorName: attacker.name,
-          targetId: target.id,  targetName: target.name,
+          actorId: attacker.id, actorName: attacker.name, actorSide, actorCount: attacker.count,
+          targetId: target.id,  targetName: target.name,  targetSide, heavyArmor,
           trait: activeTrait, ability: null,
           damage, hpBefore, hpAfter: 0,
           result,
@@ -207,8 +261,8 @@ var BattleEngine = (() => {
       } else {
         events.push({
           round, phase,
-          actorId: attacker.id, actorName: attacker.name,
-          targetId: target.id,  targetName: target.name,
+          actorId: attacker.id, actorName: attacker.name, actorSide, actorCount: attacker.count,
+          targetId: target.id,  targetName: target.name,  targetSide, heavyArmor,
           trait: activeTrait, ability: null,
           damage, hpBefore, hpAfter: target.currentHp,
           result: 'hit',
@@ -231,14 +285,15 @@ var BattleEngine = (() => {
   }
 
   // Executes a single unit's attack against the enemy side.
+  // actorSide: 'attacker' | 'defender' — which side `attacker` belongs to.
   // Returns { modelsKilled, chargeHit }.
-  function _executeAttack(attacker, enemySide, phase, terrainMods, round, events) {
+  function _executeAttack(attacker, enemySide, phase, terrainMods, round, events, actorSide) {
     const target = TargetingService.select(attacker, enemySide);
     if (!target) return { modelsKilled: 0, chargeHit: false };
 
-    const damage = _computeDamage(attacker, target, phase, terrainMods);
+    const { damage, heavyArmor } = _computeDamage(attacker, target, phase, terrainMods);
     const trait  = _activeTrait(attacker, phase);
-    const result = _applyDamage(target, damage, round, phase, attacker, trait, events);
+    const result = _applyDamage(target, damage, round, phase, attacker, trait, events, actorSide, heavyArmor);
 
     const chargeHit = phase === 'charge' && !result.dodged && attacker.traits.includes('charge');
     return { modelsKilled: result.modelsKilled, chargeHit };
@@ -247,6 +302,37 @@ var BattleEngine = (() => {
   // Sort a unit list by speed descending (fast units act first within phase).
   function _bySpeed(units) {
     return [...units].sort((a, b) => b.speed - a.speed);
+  }
+
+  // Pyroblast: round 1 only — a lord with the pyroblast trait fires a splash
+  // hitting ALL units on the opposing side, using the caster's magic stat
+  // (not attack — this is a magic attack) and suppressing their regeneration.
+  // Works for whichever side has the caster (attacker OR defender), since a
+  // defending mage lord is just as capable of casting it as an attacking one.
+  function _applyPyroblast(casterUnits, targetSide, casterSideName, targetSideName, round, events) {
+    const caster = casterUnits.find(u => _alive(u) && u.isLord && u.traits.includes('pyroblast'));
+    if (!caster) return 0;
+
+    targetSide.units.filter(_alive).forEach(target => {
+      const splash    = Math.max(1, Math.ceil((caster.magic || caster.attack) * 0.7));
+      const hpBefore  = target.currentHp;
+      target.currentHp = Math.max(0, target.currentHp - splash);
+      target._burning  = true;
+      if (target.currentHp <= 0 && target.count > 0) { target.count--; target.currentHp = target.maxHp; }
+      events.push({
+        round, phase: 'ranged',
+        actorId: caster.id, actorName: caster.name, actorSide: casterSideName,
+        targetId: target.id, targetName: target.name, targetSide: targetSideName,
+        trait: 'pyroblast', ability: null,
+        damage: splash, hpBefore, hpAfter: target.currentHp,
+        result: 'hit',
+      });
+    });
+
+    // Count models wiped out by the splash
+    let kills = 0;
+    targetSide.units.forEach(u => { if (u._burning && u.count === 0) kills++; });
+    return kills;
   }
 
   // ── Main resolve loop ───────────────────────────────────────────
@@ -276,41 +362,21 @@ var BattleEngine = (() => {
       const atkRanged = _bySpeed(ctx.attacker.units.filter(u => _alive(u) && u.traits.includes('ranged')));
       const defRanged = _bySpeed(ctx.defender.units.filter(u => _alive(u) && u.traits.includes('ranged')));
 
-      // Pyroblast: round 1 only — lord with pyroblast trait fires a splash hitting ALL defenders
+      // Pyroblast: round 1 only — checked on both sides, since a defending
+      // mage lord can cast it just as well as an attacking one.
       if (round === 1) {
-        const pyroblaster = ctx.attacker.units.find(u => _alive(u) && u.isLord && u.traits.includes('pyroblast'));
-        if (pyroblaster) {
-          ctx.defender.units.filter(_alive).forEach(target => {
-            const splash = Math.max(1, Math.ceil((pyroblaster.magic || pyroblaster.attack) * 0.7));
-            const hpBefore = target.currentHp;
-            target.currentHp = Math.max(0, target.currentHp - splash);
-            target._burning  = true;
-            if (target.currentHp <= 0 && target.count > 0) { target.count--; target.currentHp = target.maxHp; }
-            events.push({
-              round, phase: 'ranged',
-              actorId: pyroblaster.id, actorName: pyroblaster.name,
-              targetId: target.id, targetName: target.name,
-              trait: 'pyroblast', ability: null,
-              damage: splash, hpBefore, hpAfter: target.currentHp,
-              result: 'hit',
-            });
-            if (target.count > 0) defLosses += 0; // models may die from HP drain
-          });
-          // Count models wiped out by pyroblast splash
-          ctx.defender.units.forEach(u => {
-            if (u._burning && u.count === 0) defLosses++;
-          });
-        }
+        defLosses += _applyPyroblast(ctx.attacker.units, ctx.defender, 'attacker', 'defender', round, events);
+        atkLosses += _applyPyroblast(ctx.defender.units, ctx.attacker, 'defender', 'attacker', round, events);
       }
 
       for (const unit of atkRanged) {
         if (!_sideAlive(ctx.defender)) break;
-        const r = _executeAttack(unit, ctx.defender, 'ranged', terrainMods, round, events);
+        const r = _executeAttack(unit, ctx.defender, 'ranged', terrainMods, round, events, 'attacker');
         defLosses += r.modelsKilled;
       }
       for (const unit of defRanged) {
         if (!_sideAlive(ctx.attacker)) break;
-        const r = _executeAttack(unit, ctx.attacker, 'ranged', terrainMods, round, events);
+        const r = _executeAttack(unit, ctx.attacker, 'ranged', terrainMods, round, events, 'defender');
         atkLosses += r.modelsKilled;
       }
 
@@ -324,13 +390,13 @@ var BattleEngine = (() => {
 
         for (const unit of atkCharge) {
           if (!_sideAlive(ctx.defender)) break;
-          const r = _executeAttack(unit, ctx.defender, 'charge', terrainMods, round, events);
+          const r = _executeAttack(unit, ctx.defender, 'charge', terrainMods, round, events, 'attacker');
           defLosses += r.modelsKilled;
           if (r.chargeHit) chargeHitDef = true;
         }
         for (const unit of defCharge) {
           if (!_sideAlive(ctx.attacker)) break;
-          const r = _executeAttack(unit, ctx.attacker, 'charge', terrainMods, round, events);
+          const r = _executeAttack(unit, ctx.attacker, 'charge', terrainMods, round, events, 'defender');
           atkLosses += r.modelsKilled;
           if (r.chargeHit) chargeHitAtk = true;
         }
@@ -339,26 +405,28 @@ var BattleEngine = (() => {
         if (!_sideAlive(ctx.attacker)) { winner = 'defender'; reason = 'eliminated'; break; }
       }
 
-      // 4. Melee Phase (all non-routed units)
-      const atkMelee = _bySpeed(ctx.attacker.units.filter(_alive));
-      const defMelee = _bySpeed(ctx.defender.units.filter(_alive));
+      // 4. Melee Phase (all non-routed, non-ranged units — ranged units already
+      // acted this round in the Ranged phase; without this exclusion they'd
+      // get two attacks per round while melee-only units only get one)
+      const atkMelee = _bySpeed(ctx.attacker.units.filter(u => _alive(u) && !u.traits.includes('ranged')));
+      const defMelee = _bySpeed(ctx.defender.units.filter(u => _alive(u) && !u.traits.includes('ranged')));
 
       for (const unit of atkMelee) {
         if (!_sideAlive(ctx.defender)) break;
-        const r = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events);
+        const r = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events, 'attacker');
         defLosses += r.modelsKilled;
         // double_strike: 30% chance to attack a second time in melee
         if (unit.traits.includes('double_strike') && Math.random() < 0.30 && _sideAlive(ctx.defender)) {
-          const r2 = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events);
+          const r2 = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events, 'attacker');
           defLosses += r2.modelsKilled;
         }
       }
       for (const unit of defMelee) {
         if (!_sideAlive(ctx.attacker)) break;
-        const r = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events);
+        const r = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events, 'defender');
         atkLosses += r.modelsKilled;
         if (unit.traits.includes('double_strike') && Math.random() < 0.30 && _sideAlive(ctx.attacker)) {
-          const r2 = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events);
+          const r2 = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events, 'defender');
           atkLosses += r2.modelsKilled;
         }
       }
@@ -374,14 +442,14 @@ var BattleEngine = (() => {
         ctx.attacker.units.forEach(u => { u.isRouting = true; });
         winner = 'defender';
         reason = atkRouted ? 'routed' : 'retreated';
-        events.push({ round, phase: 'morale', actorId: null, actorName: 'Attacker', targetId: null, targetName: null, trait: null, ability: null, damage: 0, hpBefore: 0, hpAfter: 0, result: reason });
+        events.push({ round, phase: 'morale', actorId: null, actorName: 'Attacker', actorSide: 'attacker', targetId: null, targetName: null, trait: null, ability: null, damage: 0, hpBefore: 0, hpAfter: 0, result: reason });
         break;
       }
       if (defRouted || MoraleService.checkRetreat(ctx.defender)) {
         ctx.defender.units.forEach(u => { u.isRouting = true; });
         winner = 'attacker';
         reason = defRouted ? 'routed' : 'retreated';
-        events.push({ round, phase: 'morale', actorId: null, actorName: 'Defender', targetId: null, targetName: null, trait: null, ability: null, damage: 0, hpBefore: 0, hpAfter: 0, result: reason });
+        events.push({ round, phase: 'morale', actorId: null, actorName: 'Defender', actorSide: 'defender', targetId: null, targetName: null, trait: null, ability: null, damage: 0, hpBefore: 0, hpAfter: 0, result: reason });
         break;
       }
 
@@ -392,12 +460,13 @@ var BattleEngine = (() => {
       if (!_sideAlive(ctx.attacker)) { winner = 'defender'; reason = 'eliminated'; break; }
     }
 
-    // Max rounds: compare surviving model counts
+    // Max rounds: compare remaining combat power (dampened per stack), not
+    // raw surviving model count — see _sidePower above.
     if (!winner) {
-      const atkAlive = ctx.attacker.units.filter(_alive).reduce((s, u) => s + u.count, 0);
-      const defAlive = ctx.defender.units.filter(_alive).reduce((s, u) => s + u.count, 0);
-      if (atkAlive > defAlive)      { winner = 'attacker'; }
-      else if (defAlive > atkAlive) { winner = 'defender'; }
+      const atkPower = _sidePower(ctx.attacker.units);
+      const defPower = _sidePower(ctx.defender.units);
+      if (atkPower > defPower)      { winner = 'attacker'; }
+      else if (defPower > atkPower) { winner = 'defender'; }
       else                          { winner = 'draw'; }
     }
 
@@ -417,7 +486,9 @@ var BattleEngine = (() => {
     const modelsLost = side.units.reduce((sum, u) => sum + (u.startCount - u.count), 0);
 
     return {
-      unitsStart:     side.units.map(u => ({ sourceId: u.sourceId, name: u.name, count: u.startCount })),
+      // maxHp is included here (not just derived from UNIT_DEFS in the UI) because lord
+      // units aren't in UNIT_DEFS at all — without this their HP bar always renders at 0%.
+      unitsStart:     side.units.map(u => ({ sourceId: u.sourceId, name: u.name, count: u.startCount, maxHp: u.maxHp, isLord: u.isLord })),
       unitsSurviving: surviving,
       modelsLost:     Math.max(0, modelsLost),
       moraleEnd:      Math.round(Math.max(0, side.morale)),

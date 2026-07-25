@@ -18,9 +18,12 @@ var TraitProcessor = (() => {
   }
 
   function applyEndOfRound(ctx, round, events) {
-    const allUnits = [...ctx.attacker.units, ...ctx.defender.units];
+    const sidedUnits = [
+      ...ctx.attacker.units.map(u => ({ u, side: 'attacker' })),
+      ...ctx.defender.units.map(u => ({ u, side: 'defender' })),
+    ];
 
-    allUnits.forEach(u => {
+    sidedUnits.forEach(({ u, side }) => {
       if (u.count === 0) return;
 
       // Frenzy: +1 attack per completed round, max +4 bonus total
@@ -41,8 +44,8 @@ var TraitProcessor = (() => {
         if (u.currentHp > before) {
           events.push({
             round, phase: 'end_round',
-            actorId: u.id, actorName: u.name,
-            targetId: u.id, targetName: u.name,
+            actorId: u.id, actorName: u.name, actorSide: side, actorCount: u.count,
+            targetId: u.id, targetName: u.name, targetSide: side,
             trait: 'regeneration', ability: null,
             damage: -(u.currentHp - before),
             hpBefore: before, hpAfter: u.currentHp,

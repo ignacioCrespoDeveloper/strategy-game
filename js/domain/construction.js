@@ -3,6 +3,13 @@
 //
 //  No timers. No polling.
 //  On every open, call tick(city) to complete any finished buildings.
+//
+//  Up to 5 upgrades can be queued at once; they build sequentially (job N
+//  starts the moment job N-1 finishes). NOTE: enqueue() below is not
+//  actually called anywhere any more — the real, authoritative enqueue path
+//  is server/actions/build.js via ServerActions.build(); this function is
+//  kept in sync with it as documentation of the intended model, in case
+//  it's ever reactivated for optimistic client-side prediction.
 // =============================================
 
 const ConstructionService = (() => {
@@ -13,16 +20,24 @@ const ConstructionService = (() => {
     const def = BUILDING_DEFS[buildingId];
     if (!def) return { ok: false, error: 'Unknown building.' };
 
-    if (city.constructionQueue.length > 0) {
-      return { ok: false, error: 'Already building something. Wait for it to finish.' };
+    const MAX_QUEUE = 5;
+    if (city.constructionQueue.length >= MAX_QUEUE) {
+      return { ok: false, error: `Construction queue is full (max ${MAX_QUEUE}).` };
     }
 
-    const currentLevel = city.buildings[buildingId] || 0;
-    if (currentLevel >= def.maxLevel) {
-      return { ok: false, error: `${def.name} is already at max level.` };
+    // If this building already has upgrade(s) queued, the next one picks up
+    // from whatever level it WILL be once those finish, not its current
+    // real level — otherwise queuing the same building twice in a row would
+    // both target the same next level instead of stacking level+1, level+2.
+    const currentLevel   = city.buildings[buildingId] || 0;
+    const queuedForThis  = city.constructionQueue.filter(q => q.buildingId === buildingId).length;
+    const effectiveLevel = currentLevel + queuedForThis;
+    if (effectiveLevel >= def.maxLevel) {
+      return { ok: false, error: `${def.name} is already at (or queued to reach) max level.` };
     }
 
-    // Check prerequisites
+    // Check prerequisites — against the REAL current state only, not
+    // anything still queued.
     for (const [reqId, reqLevel] of Object.entries(def.requires)) {
       if ((city.buildings[reqId] || 0) < reqLevel) {
         const reqDef = BUILDING_DEFS[reqId];
@@ -36,7 +51,7 @@ const ConstructionService = (() => {
       return { ok: false, error: `This city already has a Landmark: ${existing?.name || city.landmark}.` };
     }
 
-    const targetLevel = currentLevel + 1;
+    const targetLevel = effectiveLevel + 1;
     const cost        = def.cost(targetLevel);
 
     // Check affordability
@@ -51,14 +66,18 @@ const ConstructionService = (() => {
       if (amount > 0) resources[res] -= amount;
     }
 
-    const now      = TimeService.now();
-    const duration = def.buildTime(targetLevel) * 1000; // ms
+    const now        = TimeService.now();
+    const duration    = def.buildTime(targetLevel) * 1000; // ms
+    const lastFinish  = city.constructionQueue.length > 0
+      ? city.constructionQueue[city.constructionQueue.length - 1].finishAt
+      : now;
+    const startedAt   = Math.max(now, lastFinish);
 
     city.constructionQueue.push({
       buildingId,
       targetLevel,
-      startedAt: now,
-      finishAt:  now + duration,
+      startedAt,
+      finishAt: startedAt + duration,
     });
 
     CityService.save(city);

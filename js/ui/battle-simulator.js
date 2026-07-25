@@ -21,14 +21,11 @@ const BattleSimulator = (() => {
   const MAX_UNITS    = 10;
   const MAX_PER_TYPE = 5;
 
-  const TERRAINS = [
-    { id: 'plains',   label: 'Plains',   icon: '🌾' },
-    { id: 'forest',   label: 'Forest',   icon: '🌲' },
-    { id: 'hills',    label: 'Hills',    icon: '⛰' },
-    { id: 'marsh',    label: 'Marsh',    icon: '🌿' },
-    { id: 'mountain', label: 'Mountain', icon: '🏔' },
-    { id: 'desert',   label: 'Desert',   icon: '🏜' },
-  ];
+  // Sourced from the canonical TERRAIN_TYPES (js/domain/world.js) rather than
+  // hand-typed, so the simulator's terrain icons can never drift out of sync
+  // with the real map's icons again.
+  const TERRAINS = ['plains', 'forest', 'hills', 'marsh', 'mountain', 'desert']
+    .map(id => ({ id, label: TERRAIN_TYPES[id].name, icon: TERRAIN_TYPES[id].icon }));
 
   // ── Entry point ────────────────────────────────────────────────
   function render(root, { player, lord }) {
@@ -531,14 +528,7 @@ const BattleSimulator = (() => {
     }
   }
 
-  function _toast(msg) {
-    const c = document.getElementById('toast-container');
-    if (!c) return;
-    const el = document.createElement('div');
-    el.className = 'toast'; el.textContent = msg;
-    c.appendChild(el);
-    setTimeout(() => el.remove(), 3000);
-  }
+  function _toast(msg) { ToastService.show(msg); }
 
   return { render };
 })();

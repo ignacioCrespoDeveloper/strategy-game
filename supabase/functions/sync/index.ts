@@ -103,10 +103,10 @@ const _UNIT_UPKEEP: Record<string, number> = {
   orc_boyz:1, orc_goblin_archers:1, boar_boyz:2, black_orcs:2, trolls:3,
   rock_lobber:2, arachnarok_spider:13,
   bandits:3, bandit_archers:4,
-  goblin_spearmen:2, pikemen:4, crossbowmen:4,
+  goblin_spearmen:2, crossbowmen:4,
   ogre_bulls:12, ironguts:18,
   goblin_rabble:0, goblin_archers:2, goblin_wolf_riders:5,
-  mercenary_spearmen:0, mercenary_crossbows:0,
+  mercenary_spearmen:4, mercenary_crossbows:0,
   forest_troll:0, ogre_warrior:0, ogre_champion:0,
   dragon_guard:0, young_dragon:0,
   city_guard:0, militia_archer:0, garrison_soldier:0,
@@ -202,10 +202,10 @@ function _degradeExcessBuildings(city: Record<string, any>): boolean {
   const usedSlots = Object.values(city.buildings ?? {}).reduce((s: number, v: any) => s + (v as number), 0);
   const pop = city.population ?? 1000;
   const maxSlots =
-    pop >= 100000 ? 320 :
-    pop >= 50000  ? 220 :
-    pop >= 25000  ? 150 :
-    pop >= 10000  ? 100 : 60;
+    pop >= 100000 ? 150 :
+    pop >= 50000  ? 100 :
+    pop >= 25000  ? 75  :
+    pop >= 10000  ? 50  : 30;
 
   let excess = usedSlots - maxSlots;
   if (excess <= 0) return false;

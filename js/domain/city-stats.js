@@ -217,11 +217,11 @@ const CityStatsService = (() => {
   // ── City level & building slots ───────────────────────────────
 
   const SLOT_TABLE = [
-    { minPop:      0, level: 1, maxSlots:  60 },
-    { minPop:  10000, level: 2, maxSlots: 100 },
-    { minPop:  25000, level: 3, maxSlots: 150 },
-    { minPop:  50000, level: 4, maxSlots: 220 },
-    { minPop: 100000, level: 5, maxSlots: 320 },
+    { minPop:      0, level: 1, maxSlots:  30 },
+    { minPop:  10000, level: 2, maxSlots:  50 },
+    { minPop:  25000, level: 3, maxSlots:  75 },
+    { minPop:  50000, level: 4, maxSlots: 100 },
+    { minPop: 100000, level: 5, maxSlots: 150 },
   ];
 
   function getCityLevel(city) {

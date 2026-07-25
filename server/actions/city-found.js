@@ -107,7 +107,11 @@ export async function handleCityFound(req, res) {
     const { data: worldRows } = await admin
       .from('world_state').select('key, value').eq('key', 'world');
     const worldState = worldRows?.[0]?.value || { size: 20, tiles: {} };
-    worldState.tiles[`${x},${y}`] = id;
+    // Cities are always visible map-wide by name + owner (garrison stays
+    // hidden until scouted) — carry that metadata directly on the tile
+    // entry since a regular client's RLS can't look up another player's
+    // 'cities' row on demand. See js/ui/map-view.js / js/domain/world.js.
+    worldState.tiles[`${x},${y}`] = { cityId: id, name: n, ownerId: playerId, ownerUsername: player.username || 'Player' };
     await admin.from('world_state').upsert(
       { key: 'world', value: worldState, updated_at: new Date().toISOString() },
       { onConflict: 'key' }

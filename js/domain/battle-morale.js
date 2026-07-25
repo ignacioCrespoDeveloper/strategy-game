@@ -39,8 +39,14 @@ var MoraleService = (() => {
     // Terrain morale modifier (can be positive in forest)
     side.morale += terrain.moraleMod;
 
-    // Models lost — soft cap at -24 per round
-    const lossPenalty = Math.min(24, modelsLostThisRound * 8);
+    // Models lost — scaled by what fraction of the side's starting force
+    // died this round, not a flat amount per model. A flat penalty let a
+    // 9-model army crack from the same single death that a 2-model warband
+    // could shrug off, even though that death was 4x more of a blow to the
+    // small side. Still soft-capped at -24 so a single round can't nuke morale.
+    const totalModels  = side.units.reduce((sum, u) => sum + u.startCount, 0);
+    const lossFraction = totalModels > 0 ? modelsLostThisRound / totalModels : 0;
+    const lossPenalty  = Math.min(24, lossFraction * 100);
     side.morale -= lossPenalty;
 
     // Cavalry charge shock

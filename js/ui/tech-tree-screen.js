@@ -12,7 +12,7 @@ const TechTreeScreen = (() => {
     { id: 'infrastructure', label: 'Infrastructure', icon: '🏛' },
     { id: 'economy',        label: 'Economy',        icon: '💰' },
     { id: 'military',       label: 'Military',       icon: '⚔' },
-    { id: 'landmarks',      label: 'Landmarks',      icon: '⭐' },
+    { id: 'landmarks',      label: 'Landmarks',      icon: '🏵' },
   ];
 
   function render(root, { player, lord }) {
@@ -157,21 +157,42 @@ const TechTreeScreen = (() => {
 
   // ── Units ─────────────────────────────────────────────────────
 
+  // Bandits pseudo-race: grouped by the camp that actually fields each unit —
+  // every entry in CAMP_DEFS (bandit_camp through dragon_cult) except the
+  // camps whose rosters are just that race's own units (orc_warcamp,
+  // dark_elf_raiders, dwarf_expedition) — those are already shown under
+  // their respective race tabs, so listing them again here would just be a
+  // duplicate. Includes both units you can hire on the spot (mercenaryRoster)
+  // and ones that only ever show up as camp defenders (defenderRosterByLevel),
+  // so this is the full roster you can run into at any true hostile/monster
+  // camp, not a generic "race-less mercenary" grab-bag.
+  const _BANDIT_TAB_EXCLUDED_CAMPS = new Set(['orc_warcamp', 'dark_elf_raiders', 'dwarf_expedition']);
+
+  function _campUnitIds(campDef) {
+    const ids = new Set(campDef.mercenaryRoster || []);
+    Object.values(campDef.defenderRosterByLevel || {}).forEach(entries => {
+      entries.forEach(e => ids.add(e.unitId));
+    });
+    return [...ids];
+  }
+
   function _unitsHtml() {
-    // Bandits pseudo-race: show mercenaries only
     if (_race === 'bandits') {
-      const mercs = Object.values(UNIT_DEFS).filter(
-        u => (u.race === null || u.category === 'mercenary') && u.goldCost > 0
-      );
-      if (!mercs.length) return `<div class="tt-empty">No mercenary units defined yet.</div>`;
-      return `
-        <section class="tt-section">
-          <div class="tt-section-title">☠ Bandits & Mercenaries</div>
-          <div class="tt-unit-grid">
-            ${mercs.map(u => _unitCard(u, null, null, 'available')).join('')}
-          </div>
-        </section>
-      `;
+      const sections = Object.values(CAMP_DEFS)
+        .filter(campDef => !_BANDIT_TAB_EXCLUDED_CAMPS.has(campDef.id))
+        .map(campDef => {
+          const units = _campUnitIds(campDef).map(uid => UNIT_DEFS[uid]).filter(Boolean);
+          if (!units.length) return '';
+          return `
+            <section class="tt-section">
+              <div class="tt-section-title">${campDef.icon} ${campDef.displayName}</div>
+              <div class="tt-unit-grid">
+                ${units.map(u => _unitCard(u, null, null, 'available')).join('')}
+              </div>
+            </section>
+          `;
+        }).join('');
+      return sections || `<div class="tt-empty">No mercenary units defined yet.</div>`;
     }
 
     const raceRoster = UNIT_ROSTER[_race] || {};
@@ -229,13 +250,20 @@ const TechTreeScreen = (() => {
       ? `<img class="tt-uc-img" src="${unit.image}" alt="${unit.name}" loading="lazy" />`
       : `<span class="tt-uc-icon">${unit.icon}</span>`;
 
+    // goldCost 0 marks camp-defender-only units (e.g. mercenary_spearmen) —
+    // they're never actually hired for free, so show that plainly instead
+    // of a misleading "💰 0".
+    const costHtml = unit.goldCost > 0
+      ? `<span class="tt-unit-cost">💰 ${unit.goldCost}</span>`
+      : `<span class="tt-unit-cost tt-unit-cost--none" title="Only encountered as a camp defender — not directly recruitable">🏕 Camp Only</span>`;
+
     return `
       <div class="tt-unit-card${lockedClass}">
         <div class="tt-uc-portrait">${portrait}</div>
         <div class="tt-uc-body">
           <div class="tt-uc-top">
             <span class="tt-unit-name">${unit.name}</span>
-            <span class="tt-unit-cost">💰 ${unit.goldCost}</span>
+            ${costHtml}
           </div>
           ${raceBadge}
           <div class="tt-unit-stats">
