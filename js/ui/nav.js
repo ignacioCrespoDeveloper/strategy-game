@@ -63,19 +63,20 @@ const Nav = (() => {
 
     const hasNotif = unseenCount > 0;
     const links = [
-      { page: 'home',             icon: '🏠', label: 'Home' },
-      { page: 'map',              icon: '🗺',  label: 'World Map' },
-      { page: 'activity',         icon: '📋', label: 'Activity', badge: unseenCount, notif: hasNotif },
-      { page: 'tech-tree',        icon: '📚', label: 'Tech Tree' },
-      { page: 'battle-simulator', icon: '⚔',  label: 'Battle Sim' },
-      { page: 'rankings',         icon: '📊', label: 'Rankings' },
-      { page: 'clan',             icon: '🛡',  label: 'Clan' },
-      { page: 'account',          icon: '⚙',  label: 'Account' },
+      { page: 'home',             icon: gi('house'), label: 'Home' },
+      { page: 'map',              icon: gi('treasure-map'),  label: 'World Map' },
+      { page: 'activity',         icon: gi('scroll-quill'), label: 'Activity', badge: unseenCount, notif: hasNotif },
+      { page: 'research',         icon: gi('open-book'), label: 'Research' },
+      { page: 'tech-tree',        icon: gi('book-pile'), label: 'Tech Tree' },
+      { page: 'battle-simulator', icon: gi('crossed-swords'),  label: 'Battle Sim' },
+      { page: 'rankings',         icon: gi('histogram'), label: 'Rankings' },
+      { page: 'clan',             icon: gi('round-shield'),  label: 'Clan' },
+      { page: 'account',          icon: gi('gears'),  label: 'Account' },
     ];
 
     return `
       <div class="nav-header">
-        <div class="nav-brand">⚔ HEXFRONT</div>
+        <div class="nav-brand">${gi('crossed-swords')} HEXFRONT</div>
         <button class="nav-close-btn" id="nav-close-btn" title="Close sidebar">✕</button>
       </div>
       <div class="nav-links">
@@ -98,7 +99,7 @@ const Nav = (() => {
       </div>
       <div class="nav-footer">
         <button class="nav-link nav-link--logout" id="nav-logout-btn">
-          <span class="nav-link-icon">🚪</span>
+          <span class="nav-link-icon">${gi('exit-door')}</span>
           <span class="nav-link-label">Logout</span>
         </button>
       </div>
@@ -126,6 +127,12 @@ const Nav = (() => {
       const player = PlayerService.getSession();
       const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
       App.navigate('activity', { player, lord });
+    });
+
+    document.querySelector('[data-nav-page="research"]')?.addEventListener('click', () => {
+      const player = PlayerService.getSession();
+      const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
+      App.navigate('research', { player, lord });
     });
 
     document.querySelector('[data-nav-page="tech-tree"]')?.addEventListener('click', () => {

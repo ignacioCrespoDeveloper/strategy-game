@@ -52,7 +52,7 @@ export async function handleLordRevive(req, res) {
   const cost    = Math.max(1, Math.ceil(remSecs / 60));
 
   if ((player.credits || 0) < cost) {
-    return res.status(400).json({ ok: false, error: `Not enough diamonds (need ${cost}💎)` });
+    return res.status(400).json({ ok: false, error: `Not enough credits (need ${cost})` });
   }
 
   player.credits    = (player.credits || 0) - cost;

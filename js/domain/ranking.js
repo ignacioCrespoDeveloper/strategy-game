@@ -48,17 +48,11 @@ const RankingService = (() => {
     return 100;
   }
 
-  // Mirrors js/ui/lord-screen.js's _unitPower/_armyPower — kept independent
-  // (not imported) since this file has no build step; must stay in sync.
-  function _unitPower(def) {
-    if (!def) return 0;
-    const s = def.combatStats || {};
-    return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
-  }
-
+  // Army points use the same PWR score as the recruit cap
+  // (EconomyCore.getArmyPower: linear per-model cost + combat-trait tax).
   function _armyPowerFor(lordId) {
     const army = ArmyService.get(lordId);
-    return Math.round(army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0));
+    return Math.round(EconomyCore.getArmyPower(army.units, UNIT_DEFS));
   }
 
   // Total XP a lord has ever earned, level-ups included — not just their

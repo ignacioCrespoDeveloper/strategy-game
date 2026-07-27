@@ -45,7 +45,7 @@ export async function handleInstantRecruit(req, res) {
   const cost     = Math.max(1, Math.ceil(secsLeft / 60));
 
   if ((player.credits || 0) < cost) {
-    return res.status(400).json({ ok: false, error: `Need ${cost} 💎 credits (have ${player.credits || 0})` });
+    return res.status(400).json({ ok: false, error: `Need ${cost} credits (have ${player.credits || 0})` });
   }
 
   player.credits = (player.credits || 0) - cost;

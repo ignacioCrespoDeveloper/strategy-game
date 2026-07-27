@@ -12,10 +12,10 @@ const BattleResultView = (() => {
 
   const _PHASE_LABELS = {
     passive:   'Passive',
-    ranged:    '🏹 Ranged',
-    charge:    '⚡ Charge',
-    melee:     '⚔ Melee',
-    morale:    '💭 Morale',
+    ranged:    gi('high-shot') + ' Ranged',
+    charge:    gi('power-lightning') + ' Charge',
+    melee:     gi('crossed-swords') + ' Melee',
+    morale:    gi('psychic-waves') + ' Morale',
     end_round: 'Round End',
   };
 
@@ -124,7 +124,7 @@ const BattleResultView = (() => {
           const whoseArmy = actorMine === null ? '' : actorMine ? 'Your army ' : 'Enemy army ';
           return `<div class="${cls} br-tl-event--morale${actorCls}">
             <span class="br-tl-phase">${phase}</span>
-            <span class="br-tl-desc">💥 ${whoseArmy}${e.result === 'routed' ? 'Routed' : 'Retreat'}</span>
+            <span class="br-tl-desc">${gi('cannon')} ${whoseArmy}${e.result === 'routed' ? 'Routed' : 'Retreat'}</span>
           </div>`;
         }
         const actorCountStr = e.actorCount > 1 ? ` <span class="br-tl-count">×${e.actorCount}</span>` : '';
@@ -134,17 +134,17 @@ const BattleResultView = (() => {
             <span class="br-tl-phase">${phase}</span>
             ${_sideTag(actorMine)}
             <span class="br-tl-actor${actorCls}">${e.actorName}</span>${actorCountStr}
-            <span class="br-tl-arrow">✚</span>
+            <span class="br-tl-arrow">${gi('health-normal')}</span>
             <span class="br-tl-heal">+${-e.damage} healed</span>
           </div>`;
         }
 
-        const dmgStr   = e.damage > 0 ? `<span class="br-tl-dmg">⚔${e.damage}</span>` : '';
+        const dmgStr   = e.damage > 0 ? `<span class="br-tl-dmg">${gi('crossed-swords')}${e.damage}</span>` : '';
         const traitStr = e.trait ? `<span class="br-tl-trait">[${e.trait}]</span>` : '';
         const armorStr = e.heavyArmor ? '<span class="br-tl-trait" title="Target\'s armor absorbed most of this hit">[heavy armor]</span>' : '';
-        const killStr  = isKilled ? '<span class="br-tl-kill-tag">💀 KILL</span>'
-                       : isEliminated ? '<span class="br-tl-elim-tag">☠ ELIM</span>'
-                       : isRouted ? '<span class="br-tl-rout-tag">💥 ROUT</span>'
+        const killStr  = isKilled ? '<span class="br-tl-kill-tag">' + gi('death-skull') + ' KILL</span>'
+                       : isEliminated ? '<span class="br-tl-elim-tag">' + gi('skull-crossed-bones') + ' ELIM</span>'
+                       : isRouted ? '<span class="br-tl-rout-tag">' + gi('cannon') + ' ROUT</span>'
                        : '';
 
         return `<div class="${cls}">
@@ -226,7 +226,7 @@ const BattleResultView = (() => {
         } else if (lordPortrait) {
           img = lordPortrait;
         }
-        const icon = isLord ? '⚔' : (UNIT_DEFS[rawId]?.icon || '⚔');
+        const icon = isLord ? gi('crossed-swords') : (UNIT_DEFS[rawId]?.icon || gi('crossed-swords'));
         const name = s.name || (UNIT_DEFS[rawId]?.name) || rawId;
         const tier = isLord ? '' : _cardTierClass(UNIT_DEFS[rawId]?.category);
 
@@ -237,8 +237,8 @@ const BattleResultView = (() => {
             ? `<img src="${img}" class="la-uc-img" alt="${name}" loading="lazy">`
             : `<div class="la-uc-img la-uc-img--fallback">${icon}</div>`;
           const stateBadge = !isAlive
-            ? `<div class="bsim-dmg-badge">☠</div>`
-            : isRoutedType ? `<div class="bsim-dmg-badge">🏃</div>` : '';
+            ? `<div class="bsim-dmg-badge">${gi('skull-crossed-bones')}</div>`
+            : isRoutedType ? `<div class="bsim-dmg-badge">${gi('run')}</div>` : '';
           const statusWord = !isAlive ? 'Dead' : isRoutedType ? 'Routed' : (hpPct < 0.85 ? 'Wounded' : 'Alive');
           const statusColor = !isAlive ? '#e07070' : isRoutedType ? '#c8933a' : 'var(--text-secondary)';
 
@@ -254,8 +254,8 @@ const BattleResultView = (() => {
               <div class="la-uc-tooltip">
                 <div class="la-tt-name">${name}</div>
                 <div class="la-tt-stats">
-                  <span>❤ ${isAlive ? Math.round(avgHp) : 0}${maxHp ? `/${maxHp}` : ''}</span>
-                  ${!isLord ? `<span>⚔ ${UNIT_DEFS[rawId]?.combatStats?.attack ?? '—'}</span><span>🛡 ${UNIT_DEFS[rawId]?.combatStats?.defense ?? '—'}</span>` : ''}
+                  <span>${gi('hearts')} ${isAlive ? Math.round(avgHp) : 0}${maxHp ? `/${maxHp}` : ''}</span>
+                  ${!isLord ? `<span>${gi('crossed-swords')} ${UNIT_DEFS[rawId]?.combatStats?.attack ?? '—'}</span><span>${gi('round-shield')} ${UNIT_DEFS[rawId]?.combatStats?.defense ?? '—'}</span>` : ''}
                 </div>
                 <div class="la-tt-row" style="color:${statusColor}">${statusWord}</div>
               </div>
@@ -330,7 +330,7 @@ const BattleResultView = (() => {
 
     function participantColHtml(g) {
       const colCls = g.isGarrison ? 'br-army-col--garrison' : (g.isMine ? 'br-army-col--mine' : 'br-army-col--enemy');
-      const badge  = g.isGarrison ? '🏯 Garrison' : (g.isMine ? '⚔ Your Army' : '💀 Enemy');
+      const badge  = g.isGarrison ? gi('guarded-tower') + ' Garrison' : (g.isMine ? gi('crossed-swords') + ' Your Army' : gi('death-skull') + ' Enemy');
       return `
         <div class="br-army-col ${colCls}">
           <div class="br-army-header">
@@ -360,7 +360,7 @@ const BattleResultView = (() => {
           <div class="br-armies-defenders">${defenderGroups.map(participantColHtml).join('')}</div>
         </div>
         <div class="br-inline-timeline">
-          <div class="br-tl-section-label">📜 Round-by-Round Report</div>
+          <div class="br-tl-section-label">${gi('scroll-unfurled')} Round-by-Round Report</div>
           ${_timelineHtml(report.events, viewerIsDefenderSide)}
         </div>
       </div>`;

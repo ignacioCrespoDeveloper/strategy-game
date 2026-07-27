@@ -17,7 +17,7 @@
 // =============================================
 
 import { createClient } from '@supabase/supabase-js';
-import { UNIT_DEFS }     from '../engine-loader.js';
+import { UNIT_DEFS, EconomyCore } from '../engine-loader.js';
 
 // Quest scoring map (mirrors js/data/discoveries.js's categories/tiers) —
 // tier 1 = 9pts, tier 2+ = 18pts, legendary = 27pts.
@@ -55,15 +55,11 @@ function _cityTierBonus(buildings) {
   return 100;
 }
 
-function _unitPower(def) {
-  if (!def) return 0;
-  const s = def.combatStats || {};
-  return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
-}
-
+// Army points use the same PWR score as the recruit cap
+// (EconomyCore.getArmyPower: linear per-model cost + combat-trait tax).
 function _armyPowerFor(army) {
   if (!army) return 0;
-  return Math.round((army.units || []).reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0));
+  return Math.round(EconomyCore.getArmyPower(army.units, UNIT_DEFS));
 }
 
 // Cumulative XP to REACH level N is 50×(N²−1) (see js/domain/lord.js's

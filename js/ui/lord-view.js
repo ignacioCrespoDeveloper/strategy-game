@@ -18,7 +18,7 @@ const LordView = (() => {
 
         <div class="lord-card lord-card--wide">
           <div class="lord-card-header">
-            <div class="auth-logo">⚔</div>
+            <div class="auth-logo">${gi('crossed-swords')}</div>
             <h1 class="auth-title">Choose your Race</h1>
             <p class="auth-tagline">Your race shapes your lords and your cities.</p>
           </div>

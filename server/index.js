@@ -14,11 +14,13 @@ import 'dotenv/config';
 import express              from 'express';
 import { fileURLToPath }    from 'url';
 import { dirname, join }    from 'path';
-import { resolvePvpAttack, scanTile, scanPresence, declareAttack } from './combat-resolver.js';
+import { resolvePvpAttack, scanTile, scanPresence, scanIncomingAttacks } from './combat-resolver.js';
 import { runDispatch } from './tick/event-dispatcher.js';
 import { BattleEngine, UNIT_DEFS } from './engine-loader.js';
 import { syncPlayerState }         from './sync.js';
 import { handleBuild }             from './actions/build.js';
+import { handleDemolish }          from './actions/demolish.js';
+import { handleResearchStart, handleResearchInstant } from './actions/research.js';
 import { handleRecruit }           from './actions/recruit.js';
 import { handleLordAction }        from './actions/lord-action.js';
 import { handleLordCreate }        from './actions/lord-create.js';
@@ -115,14 +117,18 @@ app.post('/api/scan/tile', _safe(scanTile));
 // via the global world_state table; this covers lords.
 app.post('/api/scan/presence', _safe(scanPresence));
 
-// POST /api/attack/declare — write pvp_threat notification to defenders
-app.post('/api/attack/declare', _safe(declareAttack));
+// POST /api/attack/incoming — derived list of enemy attack-marches heading
+// at the caller's tiles. Powers the Overview red alert; never touches feeds.
+app.post('/api/attack/incoming', _safe(scanIncomingAttacks));
 
 // ── Authoritative action API ──────────────────────────────────
 // POST /api/city/build    — validate + enqueue construction server-side
 // POST /api/city/recruit  — validate + enqueue unit training server-side
 // POST /api/lord/action   — validate + enqueue move/search_area server-side
 app.post('/api/city/build',    _safe(handleBuild));
+app.post('/api/city/demolish', _safe(handleDemolish));
+app.post('/api/research/start',   _safe(handleResearchStart));
+app.post('/api/research/instant', _safe(handleResearchInstant));
 app.post('/api/city/recruit',  _safe(handleRecruit));
 app.post('/api/city/found',    _safe(handleCityFound));
 app.post('/api/lord/action',   _safe(handleLordAction));

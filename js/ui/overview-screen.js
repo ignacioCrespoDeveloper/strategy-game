@@ -12,6 +12,8 @@ const OverviewScreen = (() => {
   let _lordsCollapsed  = false;
   let _selectedClass   = null;
   let _prisonList      = []; // lords the player currently holds captive — fetched async, see render()
+  let _incoming        = []; // enemy attack-marches heading at our tiles — fetched async + every 30s, see render()
+  let _incomingTimer   = null;
   let _densityInitialized = false; // one-time: default Cities/Lords collapsed for returning players so the dashboard opens on Movements, not everything at once
 
   // ── Entry point ───────────────────────────────────────────────
@@ -38,9 +40,31 @@ const OverviewScreen = (() => {
     ServerActions.getPrisonList().then(result => {
       if (result.ok) { _prisonList = result.prisoners || []; _rerender(); }
     });
+
+    // Incoming attacks are DERIVED cross-player state (enemy attack-marches
+    // aimed at our tiles) — same async-patch pattern, refreshed every 30s
+    // while this screen is mounted. Deliberately never in the Activity tab.
+    _fetchIncoming();
+    if (_incomingTimer) clearInterval(_incomingTimer);
+    _incomingTimer = setInterval(_fetchIncoming, 30000);
   }
 
-  function stop() { _stopTicker(); _unsubscribeAlerts(); }
+  function stop() {
+    _stopTicker();
+    _unsubscribeAlerts();
+    if (_incomingTimer) { clearInterval(_incomingTimer); _incomingTimer = null; }
+  }
+
+  async function _fetchIncoming() {
+    try {
+      const result = await ServerActions.checkIncomingAttacks();
+      if (!result.ok) return;
+      const list    = result.incoming || [];
+      const changed = JSON.stringify(list) !== JSON.stringify(_incoming);
+      _incoming = list;
+      if (changed) _rerender();
+    } catch (_) { /* non-fatal — retried on the next interval */ }
+  }
 
   // PvP/activity alerts are now polled globally by HUD.js (so they fire on
   // every screen, not just this one — see hud.js's _pollActivityFeed for why).
@@ -60,12 +84,12 @@ const OverviewScreen = (() => {
     window._pendingSyncEvents = null;
 
     const LABEL = {
-      building_completed:    e => `🏛 ${e.cityName}: ${e.buildingId.replace(/_/g, ' ')} completed`,
-      recruitment_completed: e => `⚔ ${e.cityName}: ${e.count}× ${e.unitId.replace(/_/g, ' ')} ready`,
-      lord_recovered:        e => `💚 ${e.lordName} has recovered`,
-      lord_action_done:      e => e.destX != null ? `🗺 ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
+      building_completed:    e => `${gi('capitol')} ${e.cityName}: ${e.buildingId.replace(/_/g, ' ')} completed`,
+      recruitment_completed: e => `${gi('crossed-swords')} ${e.cityName}: ${e.count}× ${e.unitId.replace(/_/g, ' ')} ready`,
+      lord_recovered:        e => `${gi('health-increase')} ${e.lordName} has recovered`,
+      lord_action_done:      e => e.destX != null ? `${gi('treasure-map')} ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
       pvp_resolved:          e => {
-        const icon = e.report?.winner === 'attacker' ? '⚔' : e.report?.winner === 'draw' ? '🤝' : '☠';
+        const icon = e.report?.winner === 'attacker' ? gi('crossed-swords') : e.report?.winner === 'draw' ? gi('shaking-hands') : gi('skull-crossed-bones');
         const lbl  = e.report?.winner === 'attacker' ? 'PvP Victory' : e.report?.winner === 'draw' ? 'PvP Draw' : 'PvP Defeat';
         return `${icon} ${lbl} while offline — see Activity`;
       },
@@ -97,11 +121,10 @@ const OverviewScreen = (() => {
     const allLords   = LordService.getByPlayer(_player.id);
     const hasAction  = allLords.some(l => l.actionQueue.length > 0);
     const hasConstr  = cities.some(c => c.constructionQueue.length > 0);
-    const feed       = ActivityService.get(_player.id);
-    const hasThreats = feed.some(e => e.type === 'pvp_threat' && e.etaAt && e.etaAt > TimeService.now());
     const hasDown    = allLords.some(l => LordService.isDown(l));
     const hasRaiding = allLords.some(l => LordService.isStanced(l) && l.stance.id === 'raiding');
-    if (!hasAction && !hasConstr && !hasThreats && !hasDown && !hasRaiding) return;
+    const hasThreats = _incoming.length > 0;
+    if (!hasAction && !hasConstr && !hasDown && !hasRaiding && !hasThreats) return;
 
     _tickTimer = setInterval(() => {
       let needsRerender = false;
@@ -183,21 +206,23 @@ const OverviewScreen = (() => {
         }
       });
 
-      // Update threat countdown timers in-place (banner + movements panel rows)
-      const threats = ActivityService.get(_player.id).filter(e => e.type === 'pvp_threat' && e.etaAt);
-      threats.forEach((t, i) => {
-        const now2      = TimeService.now();
-        const remaining = Math.max(0, Math.ceil((t.etaAt - now2) / 1000));
-        if (remaining === 0) { needsRerender = true; return; }
-        const pct       = t.at ? Math.min(100, Math.floor(((now2 - t.at) / (t.etaAt - t.at)) * 100)) : 0;
-        const formatted = TimeService.formatDuration(remaining);
-        const bannerEl  = document.getElementById(`ov-threat-eta-${i}`);
-        if (bannerEl) bannerEl.textContent = formatted;
-        const incTime = document.getElementById(`ov-inc-time-${i}`);
-        if (incTime) incTime.textContent = formatted;
-        const incFill = document.getElementById(`ov-inc-fill-${i}`);
-        if (incFill) incFill.style.transform = `scaleX(${pct / 100})`;
-      });
+      // Incoming-attack countdowns: patch in place; when one reaches zero
+      // the battle is resolving — drop it and re-scan (the result itself
+      // arrives via the HUD's pvp:alert poll).
+      if (_incoming.length > 0) {
+        const now2   = TimeService.now();
+        const before = _incoming.length;
+        _incoming = _incoming.filter(t => t.finishAt > now2);
+        if (_incoming.length !== before) {
+          needsRerender = true;
+          _fetchIncoming();
+        } else {
+          _incoming.forEach((t, i) => {
+            const el = document.getElementById(`ov-threat-eta-${i}`);
+            if (el) el.textContent = TimeService.formatDuration(Math.max(0, Math.ceil((t.finishAt - now2) / 1000)));
+          });
+        }
+      }
 
       if (needsRerender) {
         _stopTicker();
@@ -209,41 +234,27 @@ const OverviewScreen = (() => {
 
   // ── Shell ─────────────────────────────────────────────────────
 
+  // Live red alert for enemy attack-marches (derived from _incoming —
+  // no dismiss: it disappears on its own when the attack resolves).
   function _incomingAttackBanner() {
-    const feed = ActivityService.get(_player.id);
-    const now  = TimeService.now();
-    const threats = feed.filter(e => e.type === 'pvp_threat' && !e.dismissed);
-    if (threats.length === 0) return '';
-    return threats.map((t, i) => {
-      const remaining = t.etaAt ? Math.max(0, Math.ceil((t.etaAt - now) / 1000)) : null;
-      const etaHtml   = remaining !== null
-        ? `Arrives in: <span class="ov-iab-countdown" id="ov-threat-eta-${i}">${TimeService.formatDuration(remaining)}</span>`
-        : (t.detail || '');
+    if (_incoming.length === 0) return '';
+    const now = TimeService.now();
+    return _incoming.map((t, i) => {
+      const remaining = Math.max(0, Math.ceil((t.finishAt - now) / 1000));
       return `
         <div class="ov-incoming-attack-banner">
-          <span class="ov-iab-icon">⚔</span>
+          <span class="ov-iab-icon">${gi('crossed-swords')}</span>
           <div class="ov-iab-text">
-            <div class="ov-iab-title">${t.title}</div>
-            <div class="ov-iab-detail">${etaHtml}</div>
+            <div class="ov-iab-title">Incoming attack from ${t.attackerName} (Lv ${t.attackerLevel})!</div>
+            <div class="ov-iab-detail">Target: ${t.targetType === 'city' ? gi('guarded-tower') : gi('person')} ${t.targetName} at (${t.tileX}, ${t.tileY}) · arrives in
+              <span class="ov-iab-countdown" id="ov-threat-eta-${i}">${TimeService.formatDuration(remaining)}</span></div>
           </div>
-          <button class="ov-iab-dismiss" data-threat-id="${t.id}" title="Descartar">✕</button>
         </div>`;
     }).join('');
   }
 
-  function _dismissThreat(entryId) {
-    const pid       = _player.id;
-    const localFeed = StorageService.get('activity_feed') || {};
-    const entries   = localFeed[pid] || [];
-    const entry     = entries.find(e => e.id === entryId);
-    if (entry) {
-      entry.dismissed = true;
-      StorageService.set('activity_feed', localFeed);
-      // StorageService.set writes localStorage synchronously and debounces Supabase —
-      // no need for a separate Supabase upsert here. The poll only ever ADDS new entries
-      // (never updates existing ones), so the dismissed flag cannot be overwritten by polling.
-    }
-    _rerender();
+  function _underThreat(x, y) {
+    return _incoming.some(t => t.tileX === x && t.tileY === y);
   }
 
   function _shell() {
@@ -287,7 +298,7 @@ const OverviewScreen = (() => {
 
     return `
       <section class="ov-section ov-onboarding">
-        <div class="ov-onboarding-title">⚔ Getting Started</div>
+        <div class="ov-onboarding-title">${gi('crossed-swords')} Getting Started</div>
         <div class="ov-onboarding-steps">
 
           <div class="ov-step ${step1Done ? 'ov-step--done' : 'ov-step--active'}">
@@ -295,7 +306,7 @@ const OverviewScreen = (() => {
             <div class="ov-step-body">
               <div class="ov-step-label">Found your first city</div>
               <div class="ov-step-desc">Choose a location on the world map to establish your settlement.</div>
-              ${!step1Done ? `<button class="btn-primary ov-step-btn" id="ov-onboard-city-btn">🗺 Open World Map</button>` : ''}
+              ${!step1Done ? `<button class="btn-primary ov-step-btn" id="ov-onboard-city-btn">${gi('treasure-map')} Open World Map</button>` : ''}
             </div>
           </div>
 
@@ -304,7 +315,7 @@ const OverviewScreen = (() => {
             <div class="ov-step-body">
               <div class="ov-step-label">Recruit your first Lord</div>
               <div class="ov-step-desc">A lord commands your armies and explores the world on your behalf.</div>
-              ${step1Done && !step2Done ? `<button class="btn-primary ov-step-btn" id="ov-onboard-lord-btn">🎖 Recruit Lord</button>` : ''}
+              ${step1Done && !step2Done ? `<button class="btn-primary ov-step-btn" id="ov-onboard-lord-btn">${gi('achievement')} Recruit Lord</button>` : ''}
             </div>
           </div>
 
@@ -352,7 +363,7 @@ const OverviewScreen = (() => {
             <label class="form-label">Name</label>
             <div class="lc-name-row">
               <input class="form-input" type="text" id="rl-name" placeholder="Lord's name" maxlength="30" autocomplete="off" />
-              <button class="btn-dice" id="rl-name-dice" type="button" title="Random name">🎲</button>
+              <button class="btn-dice" id="rl-name-dice" type="button" title="Random name">${gi('perspective-dice-six-faces-random')}</button>
             </div>
           </div>
           <div class="form-group">
@@ -385,25 +396,7 @@ const OverviewScreen = (() => {
   function _movementsPanel() {
     const lords   = LordService.getByPlayer(_player.id);
     const active  = lords.filter(l => l.actionQueue.length > 0 || LordService.isStanced(l));
-    const now     = TimeService.now();
-    const threats = ActivityService.get(_player.id).filter(e => e.type === 'pvp_threat' && (!e.etaAt || e.etaAt > now));
-    if (active.length === 0 && threats.length === 0) return '';
-
-    // Incoming attacks (defender view) — mirrored row for each pvp_threat
-    const incomingRows = threats.map((t, i) => {
-      const remaining = t.etaAt ? Math.max(0, Math.ceil((t.etaAt - now) / 1000)) : null;
-      const pct       = t.etaAt && t.at ? Math.min(100, Math.floor(((now - t.at) / (t.etaAt - t.at)) * 100)) : 0;
-      return `
-        <div class="ov-mv-row ov-mv-row--incoming">
-          <span class="ov-mv-lord">${t.lordName || '?'}</span>
-          <span class="ov-mv-status">⚔ INCOMING ATTACK</span>
-          ${remaining !== null ? `
-            <div class="ov-mv-bar-wrap">
-              <div class="ov-mv-bar"><div class="ov-mv-fill ov-mv-fill--incoming" id="ov-inc-fill-${i}" style="transform:scaleX(${pct / 100})"></div></div>
-              <span class="ov-mv-time" id="ov-inc-time-${i}">${TimeService.formatDuration(remaining)}</span>
-            </div>` : `<span class="ov-mv-time">${t.detail || ''}</span>`}
-        </div>`;
-    }).join('');
+    if (active.length === 0) return '';
 
     const rows = active.map(lord => {
       const qItem    = lord.actionQueue[0];
@@ -425,31 +418,31 @@ const OverviewScreen = (() => {
       }
 
       const isAttacking = qItem?.intent === 'attack';
-      let icon  = '⏸';
+      let icon  = gi('pause-button');
       let label = 'Idle';
       if (qItem && actionDef) {
-        icon  = actionDef.icon || '⏳';
+        icon  = actionDef.icon || gi('hourglass');
         label = actionDef.name;
         if (qItem.actionId === 'move_lord' && qItem.destX != null) {
           if (isAttacking) {
-            icon  = '⚔';
+            icon  = gi('crossed-swords');
             label = `ATTACKING → (${qItem.destX}, ${qItem.destY})`;
           } else {
-            icon  = '🚶';
+            icon  = gi('walking-boot');
             label = `Moving → (${qItem.destX}, ${qItem.destY})`;
           }
         } else if (qItem.actionId === 'scout') {
-          icon  = '🕵';
+          icon  = gi('spy');
           label = lord.x != null ? `Scouting @ (${lord.x}, ${lord.y})` : 'Scouting';
         } else if (qItem.actionId === 'search_area') {
-          icon  = '🔍';
+          icon  = gi('magnifying-glass');
           label = lord.x != null ? `Questing @ (${lord.x}, ${lord.y})` : 'Questing';
         }
       } else if (isRaidingRow) {
-        icon  = stanceDef.icon || '🏴';
+        icon  = stanceDef.icon || gi('black-flag');
         label = `Raiding @ (${lord.x}, ${lord.y})`;
       } else if (LordService.isStanced(lord)) {
-        icon  = stanceDef.icon || '🛡';
+        icon  = stanceDef.icon || gi('round-shield');
         label = stanceDef.name || 'Stance';
       }
 
@@ -468,10 +461,10 @@ const OverviewScreen = (() => {
     return `
       <section class="ov-section ov-mv-section">
         <div class="ov-section-row">
-          <div class="ov-section-title">🗺 Active Movements</div>
+          <div class="ov-section-title">${gi('treasure-map')} Active Movements</div>
           <button class="ov-section-toggle" id="ov-toggle-movements">${_movementsOpen ? '▲' : '▼'}</button>
         </div>
-        ${_movementsOpen ? `<div class="ov-mv-list">${incomingRows}${rows}</div>` : ''}
+        ${_movementsOpen ? `<div class="ov-mv-list">${rows}</div>` : ''}
       </section>`;
   }
 
@@ -493,7 +486,8 @@ const OverviewScreen = (() => {
     const foundCost  = CityService.getFoundCost(cities.length);
     const coins      = PlayerService.getById(_player.id)?.coins || 0;
     const canAfford  = foundCost === 0 || coins >= foundCost;
-    const costLabel  = foundCost === 0 ? 'Free' : `💰 ${foundCost.toLocaleString()}`;
+    const costLabel  = foundCost === 0 ? 'Free' : `${gi('two-coins')} ${foundCost.toLocaleString()}`;
+    const costText   = foundCost === 0 ? 'free' : `${foundCost.toLocaleString()} gold`; // plain text — title attrs can't hold markup
 
     return `
       <section class="ov-section">
@@ -510,7 +504,7 @@ const OverviewScreen = (() => {
             ${cards}
             ${!atLimit ? `
               <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-found-city-btn"
-                   data-cost="${foundCost}" title="Found a new city — costs ${costLabel}">
+                   data-cost="${foundCost}" title="Found a new city — costs ${costText}">
                 <span class="ov-add-cost">${costLabel}</span>
                 <span class="ov-add-icon">+</span>
                 <span class="ov-add-label">Found City</span>
@@ -541,7 +535,7 @@ const OverviewScreen = (() => {
     const growthLabel  = growth !== 0 ? ` ${growth > 0 ? '+' : ''}${growth}/hr` : '';
 
     return `
-      <div class="ov-city-card" data-city-id="${city.id}">
+      <div class="ov-city-card${_underThreat(city.x, city.y) ? ' ov-card--threat' : ''}" data-city-id="${city.id}">
         <div class="ov-cc-art">
           <img class="ov-cc-art-img" src="${tierImg}" alt="City" loading="lazy" />
           <div class="ov-cc-art-fade"></div>
@@ -575,17 +569,16 @@ const OverviewScreen = (() => {
             </div>
             <div class="ov-cc-stat">
               <span class="ov-cc-stat-label">Gold/hr</span>
-              <span class="ov-cc-stat-value ov-cc-gold-rate">+${goldRate}💰</span>
+              <span class="ov-cc-stat-value ov-cc-gold-rate">+${goldRate}${gi('two-coins')}</span>
             </div>
           </div>
           ${buildItem ? `<div class="ov-cc-construction">
             <div class="ov-cc-constr-label">
-              <span>🔨 ${buildDef?.name || buildItem.buildingId} → Lv ${buildItem.targetLevel}</span>
+              <span>${gi('claw-hammer')} ${buildDef?.name || buildItem.buildingId} → Lv ${buildItem.targetLevel}</span>
               <span class="ov-cc-constr-time" id="ov-city-timer-${city.id}">${TimeService.formatDuration(buildSecs)}</span>
             </div>
             <div class="ov-cc-constr-bar"><div class="ov-cc-constr-fill" id="ov-city-fill-${city.id}" style="width:${buildPct}%"></div></div>
           </div>` : ''}
-          <div class="ov-cc-enter">Enter City →</div>
         </div>
       </div>
     `;
@@ -593,17 +586,11 @@ const OverviewScreen = (() => {
 
   // ── Lords section ─────────────────────────────────────────────
 
-  function _unitPower(def) {
-    if (!def) return 0;
-    const s = def.combatStats || {};
-    return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
-  }
-
-  // Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult —
-  // otherwise this overvalues numerous cheap units relative to what they actually deal.
+  // Same PWR score as the recruit cap (EconomyCore.getArmyPower: linear
+  // per-model cost + combat-trait tax).
   function _lordArmyPower(lordId) {
     const army = ArmyService.get(lordId);
-    return Math.round(army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0));
+    return Math.round(EconomyCore.getArmyPower(army.units, UNIT_DEFS));
   }
 
   // Lords the player currently holds captive — only rendered when non-empty,
@@ -613,7 +600,7 @@ const OverviewScreen = (() => {
     return `
       <section class="ov-section">
         <div class="ov-section-row">
-          <div class="ov-section-title">🔒 Prison <span class="ov-limit-badge">${_prisonList.length}</span></div>
+          <div class="ov-section-title">${gi('padlock')} Prison <span class="ov-limit-badge">${_prisonList.length}</span></div>
         </div>
         <div class="ov-prison-list">
           ${_prisonList.map(p => `
@@ -634,7 +621,8 @@ const OverviewScreen = (() => {
     const recruitCost = LordService.getRecruitCost(lords.length);
     const coins       = PlayerService.getById(_player.id)?.coins || 0;
     const canAfford   = coins >= recruitCost;
-    const costLabel   = `💰 ${recruitCost.toLocaleString()}`;
+    const costLabel   = `${gi('two-coins')} ${recruitCost.toLocaleString()}`;
+    const costText    = `${recruitCost.toLocaleString()} gold`; // plain text — title attrs can't hold markup
 
     return `
       <section class="ov-section">
@@ -651,7 +639,7 @@ const OverviewScreen = (() => {
             ${lords.map(_lordCard).join('')}
             ${!atLimit ? `
               <div class="ov-add-card${canAfford ? '' : ' ov-add-card--locked'}" id="ov-recruit-lord-btn"
-                   data-cost="${recruitCost}" title="Recruit a new lord — costs ${costLabel}">
+                   data-cost="${recruitCost}" title="Recruit a new lord — costs ${costText}">
                 <span class="ov-add-cost">${costLabel}</span>
                 <span class="ov-add-icon">+</span>
                 <span class="ov-add-label">Recruit Lord</span>
@@ -733,7 +721,7 @@ const OverviewScreen = (() => {
         </div>` :
       isRaiding ? `
         <div class="ov-lord-activity-overlay ov-lord-activity-overlay--raiding">
-          <div class="ov-lord-activity-icon">🏴</div>
+          <div class="ov-lord-activity-icon">${gi('black-flag')}</div>
           <div class="ov-lord-activity-label">Raiding</div>
           <div class="ov-lord-activity-dest">(${lord.x}, ${lord.y})</div>
           <div class="ov-lord-activity-cd" id="ov-lord-act-cd-${lord.id}">${TimeService.formatDuration(raidSecs)}</div>
@@ -752,34 +740,34 @@ const OverviewScreen = (() => {
       ? `<div class="ov-lc-portrait">
            <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" loading="lazy" />
            <div class="ov-lc-portrait-fade"></div>
-           <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+           <div class="ov-lc-portrait-level" title="Level ${lord.level || 1}">${lord.level || 1}</div>
          </div>`
       : `<div class="ov-lc-portrait ov-lc-portrait--icon">
-           <span>${race.icon || '👤'}</span>
-           <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+           <span>${race.icon || gi('person')}</span>
+           <div class="ov-lc-portrait-level" title="Level ${lord.level || 1}">${lord.level || 1}</div>
          </div>`;
 
     return `
-      <div class="ov-lord-card${cardModifier}" data-lord-id="${lord.id}">
+      <div class="ov-lord-card${cardModifier}${_underThreat(lord.x, lord.y) ? ' ov-card--threat' : ''}" data-lord-id="${lord.id}">
         ${lordIsDown && lord.capturedByPlayerId ? `
           <div class="ov-lord-down-overlay">
-            <div class="ov-lord-down-icon">⛓</div>
+            <div class="ov-lord-down-icon">${gi('manacles')}</div>
             <div class="ov-lord-down-label ov-lord-down-label--captured">CAPTURED</div>
             <div class="ov-lord-captor">by ${lord.capturedByUsername || 'Unknown'}</div>
-            <button class="ov-lord-ransom-btn" data-lord-id="${lord.id}">💰 Pay Ransom (${lordRansomCost(lord.level)})</button>
+            <button class="ov-lord-ransom-btn" data-lord-id="${lord.id}">${gi('two-coins')} Pay Ransom (${lordRansomCost(lord.level)})</button>
           </div>` : lordIsDown ? `
           <div class="ov-lord-down-overlay">
-            <div class="ov-lord-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
+            <div class="ov-lord-down-icon">${downReason === 'captured' ? gi('manacles') : gi('death-skull')}</div>
             <div class="ov-lord-down-label ov-lord-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
             <div class="ov-lord-down-cd" id="ov-lord-down-cd-${lord.id}">${TimeService.formatDuration(downRemSecs)}</div>
-            <button class="ov-lord-revive-btn" data-lord-id="${lord.id}">⚡ ${Math.max(1, Math.ceil(downRemSecs / 60))}💎 Revive</button>
+            <button class="ov-lord-revive-btn" data-lord-id="${lord.id}">${gi('power-lightning')} ${Math.max(1, Math.ceil(downRemSecs / 60))}${gi('cut-diamond')} Revive</button>
           </div>` : ''}
         ${activityOverlay}
         ${portraitHtml}
         <div class="ov-lc-body">
           <div class="ov-lc-top">
             <span class="ov-lc-name">${lord.name}</span>
-            ${power > 0 ? `<span class="ov-lc-power">⚔ ${power}</span>` : ''}
+            ${power > 0 ? `<span class="ov-lc-power">${gi('crossed-swords')} ${power}</span>` : ''}
           </div>
           <div class="ov-lc-badges">
             <span class="ov-lc-race">${race.name || ''}</span>
@@ -787,7 +775,7 @@ const OverviewScreen = (() => {
             ${stanceBadge}
           </div>
           <div class="ov-lc-meta${isAttacking ? ' ov-lc-meta--attack' : ''}">
-            📍 ${location} · ${isAttacking ? `⚔ ATTACKING (${queueItem.destX},${queueItem.destY})` : isScouting ? '🕵 Scouting' : isQuesting ? '🔍 Questing' : activeAction ? `${activeAction.icon} ${activeAction.name}` : isRaiding ? '🏴 RAIDING' : 'Idle'}
+            ${gi('position-marker')} ${location} · ${isAttacking ? `${gi('crossed-swords')} ATTACKING (${queueItem.destX},${queueItem.destY})` : isScouting ? gi('spy') + ' Scouting' : isQuesting ? gi('magnifying-glass') + ' Questing' : activeAction ? `${activeAction.icon} ${activeAction.name}` : isRaiding ? gi('black-flag') + ' RAIDING' : 'Idle'}
           </div>
           ${queueItem ? `<div class="ov-lc-action-row">
             <div class="ov-lc-action-bar"><div class="ov-lc-action-fill${isAttacking ? ' ov-lc-action-fill--attack' : ''}" id="ov-lord-fill" style="width:${actionPct}%"></div></div>
@@ -805,7 +793,6 @@ const OverviewScreen = (() => {
               <span class="ov-lc-bar-val">${xp}/${xpNext}</span>
             </div>
           </div>
-          <div class="ov-lc-enter">Manage →</div>
         </div>
       </div>
     `;
@@ -819,11 +806,6 @@ const OverviewScreen = (() => {
   }
 
   function _bindEvents() {
-    // Threat dismiss buttons
-    document.querySelectorAll('.ov-iab-dismiss[data-threat-id]').forEach(btn => {
-      btn.addEventListener('click', () => _dismissThreat(btn.dataset.threatId));
-    });
-
     // Section collapse toggles
     document.getElementById('ov-toggle-movements')?.addEventListener('click', () => {
       _movementsOpen = !_movementsOpen;
@@ -870,7 +852,7 @@ const OverviewScreen = (() => {
         btn.disabled = true;
         const result = await ServerActions.ransomLord(btn.dataset.lordId);
         if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
-        _toast('🔓 Ransom paid — your lord is free.');
+        _toast('Ransom paid — your lord is free.');
         _player = PlayerService.getById(_player.id);
         HUD.refresh();
         _stopTicker();
@@ -885,7 +867,7 @@ const OverviewScreen = (() => {
         btn.disabled = true;
         const result = await ServerActions.releaseLord(row.dataset.lordId, row.dataset.ownerId);
         if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
-        _toast('🔓 Lord released.');
+        _toast('Lord released.');
         _prisonList = _prisonList.filter(p => p.lordId !== row.dataset.lordId);
         _rerender();
       });
@@ -904,7 +886,7 @@ const OverviewScreen = (() => {
       const cost  = parseInt(e.currentTarget.dataset.cost || '0', 10);
       const coins = PlayerService.getById(_player.id)?.coins || 0;
       if (cost > 0 && coins < cost) {
-        _toast(`Not enough gold — founding this city costs 💰 ${cost.toLocaleString()}.`);
+        _toast(`Not enough gold — founding this city costs ${cost.toLocaleString()}.`);
         return;
       }
       _stopTicker();
@@ -926,7 +908,7 @@ const OverviewScreen = (() => {
       const cost  = parseInt(e.currentTarget.dataset.cost || '0', 10);
       const coins = PlayerService.getById(_player.id)?.coins || 0;
       if (cost > 0 && coins < cost) {
-        _toast(`Not enough gold — recruiting a lord costs 💰 ${cost.toLocaleString()}.`);
+        _toast(`Not enough gold — recruiting a lord costs ${cost.toLocaleString()}.`);
         return;
       }
       _openRecruitModal();

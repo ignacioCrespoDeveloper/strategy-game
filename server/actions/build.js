@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { BUILDING_DEFS }             from '../engine-loader.js';
+import { BUILDING_DEFS, RACES, EconomyCore } from '../engine-loader.js';
 
 export async function handleBuild(req, res) {
   const { cityId, buildingId } = req.body || {};
@@ -69,7 +69,7 @@ export async function handleBuild(req, res) {
 
   const targetLevel = effectiveLevel + 1;
   const cost = def.cost(targetLevel);
-  player.resources = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
+  player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
   for (const [rKey, amt] of Object.entries(cost)) {
     if (amt > 0 && Math.floor(player.resources[rKey] || 0) < amt) {
       return res.status(400).json({ ok: false, error: `Not enough ${rKey} (need ${amt}, have ${Math.floor(player.resources[rKey] || 0)})` });
@@ -83,7 +83,14 @@ export async function handleBuild(req, res) {
 
   // Batches run sequentially — a newly-queued upgrade starts once whichever
   // is ahead of it finishes, not immediately, unless the queue is empty.
-  const buildTime  = def.buildTime(targetLevel);
+  // Build time applies race construction_speed + Engineering Tomes research
+  // + this city's Town Hall (constructionSpeed building field).
+  const buildTime = EconomyCore.getBuildTime(
+    def, targetLevel,
+    RACES[player.race]?.bonuses,
+    EconomyCore.getResearchEffects(player.research),
+    city.buildings,
+  );
   const now        = Date.now();
   const lastFinish = queue.length > 0 ? queue[queue.length - 1].finishAt : now;
   const startedAt  = Math.max(now, lastFinish);

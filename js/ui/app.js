@@ -28,7 +28,7 @@ const App = (() => {
     _root().innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;height:100vh;
                   color:#b8963c;font-size:1rem;letter-spacing:0.15em;font-family:inherit;">
-        ⚔ &nbsp; CONNECTING…
+        ${gi('crossed-swords')} &nbsp; CONNECTING…
       </div>`;
 
     try {
@@ -136,7 +136,7 @@ const App = (() => {
   // that landed 5 seconds ago until the next unrelated action or poll tick.
   const _SYNC_ON_ENTER = new Set([
     'map', 'city', 'lord-screen', 'overview', 'activity',
-    'tech-tree', 'attack-confirm', 'rankings', 'clan',
+    'tech-tree', 'attack-confirm', 'rankings', 'clan', 'research',
   ]);
 
   async function _goto(screen, data) {
@@ -149,7 +149,7 @@ const App = (() => {
       root.innerHTML = `
         <div style="display:flex;align-items:center;justify-content:center;height:100vh;
                     color:#b8963c;font-size:1rem;letter-spacing:0.15em;font-family:inherit;">
-          ⚔ &nbsp; SYNCING…
+          ${gi('crossed-swords')} &nbsp; SYNCING…
         </div>`;
       await ServerActions.syncNow();
       // Re-read from the just-refreshed local cache instead of trusting
@@ -203,6 +203,12 @@ const App = (() => {
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'tech-tree');
         TechTreeScreen.render(root, data);
+        break;
+      case 'research':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'research');
+        ResearchScreen.render(root, data);
+        _currentStop = ResearchScreen.stop;
         break;
       case 'attack-confirm':
         HUD.show(data.player, data.lord);

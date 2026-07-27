@@ -2,7 +2,8 @@
 //  city.js — City domain service
 //
 //  A city belongs to a player and sits on a world tile.
-//  Resources and buildings are stored per city.
+//  Buildings are stored per city; resources live in the
+//  empire-wide player.resources pool.
 // =============================================
 
 const CityService = (() => {
@@ -56,15 +57,13 @@ const CityService = (() => {
     const cost = getFoundCost(existing.length);
     if (cost > 0) {
       const spend = PlayerService.spendCoins(playerId, cost);
-      if (!spend.ok) return { ok: false, error: `Founding costs ${cost.toLocaleString()} 💰 gold. ${spend.error}` };
+      if (!spend.ok) return { ok: false, error: `Founding costs ${cost.toLocaleString()} gold. ${spend.error}` };
     }
 
     const cities = _getAll();
     const id     = _generateId();
     const now    = TimeService.now();
 
-    // First city gets starter resources; subsequent cities start lean.
-    const isFirst = existing.length === 0;
     const city = {
       id,
       playerId,
@@ -74,9 +73,6 @@ const CityService = (() => {
       population:           1000,
       freePopulation:       3,
       buildings:            { town_hall: 1 },
-      resources:            isFirst
-        ? { food: 300, wood: 250, stone: 150, iron: 50 }
-        : { food: 100, wood: 100, stone: 50,  iron: 20 },
       lastResourceUpdate:   now,
       lastPopulationUpdate: now,
       constructionQueue:    [],

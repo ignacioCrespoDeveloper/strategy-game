@@ -11,6 +11,7 @@
 
 const ClanService = (() => {
   let _map     = null; // playerId -> { clanId, tag, name }
+  let _wars    = [];   // active clan_wars rows ({ clanAId, clanBId, ... }), cached alongside _map
   let _fetchedAt = 0;
   const _TTL = 30000;
 
@@ -25,6 +26,7 @@ const ClanService = (() => {
           map[m.playerId] = { clanId: c.id, tag: c.tag, name: c.name };
         });
       });
+      _wars = (result.wars || []).filter(w => w.status === 'active');
     }
     _map       = map;
     _fetchedAt = Date.now();
@@ -38,5 +40,15 @@ const ClanService = (() => {
     return _map ? (_map[playerId] || null) : null;
   }
 
-  return { getPlayerClanMap, peek };
+  // Whether these two clans have an ACTIVE war between them. Same sync-read
+  // caveat as peek(): reflects the last getPlayerClanMap() fetch. Returns
+  // false if either side is clanless.
+  function isAtWar(clanIdA, clanIdB) {
+    if (!clanIdA || !clanIdB || clanIdA === clanIdB) return false;
+    return _wars.some(w =>
+      (w.clanAId === clanIdA && w.clanBId === clanIdB) ||
+      (w.clanAId === clanIdB && w.clanBId === clanIdA));
+  }
+
+  return { getPlayerClanMap, peek, isAtWar };
 })();

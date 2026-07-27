@@ -25,7 +25,7 @@ const EventService = (() => {
         const loss = Math.max(50, Math.floor((city.population || 1000) * 0.08));
         city.population = Math.max(100, (city.population || 1000) - loss);
         _addModifier(city, 'happiness', -12, 'event:disease_outbreak', 6 * 3600);
-        return `🦠 Disease swept through ${city.name}! ${loss} people died.`;
+        return `Disease swept through ${city.name}! ${loss} people died.`;
       },
     },
     {
@@ -34,7 +34,7 @@ const EventService = (() => {
       condition: (city, stats) => stats.happiness >= 75 && (city.buildings.farm || 0) >= 3,
       trigger: (city) => {
         _addModifier(city, 'happiness', 10, 'event:harvest_festival', 3 * 3600);
-        return `🎉 Harvest Festival in ${city.name}! Morale soars.`;
+        return `Harvest Festival in ${city.name}! Morale soars.`;
       },
     },
     {
@@ -44,7 +44,7 @@ const EventService = (() => {
       trigger: (city) => {
         const gain = Math.max(100, Math.floor((city.population || 1000) * 0.12));
         city.population = (city.population || 1000) + gain;
-        return `👥 Prosperity draws settlers to ${city.name}! +${gain} people.`;
+        return `Prosperity draws settlers to ${city.name}! +${gain} people.`;
       },
     },
     {
@@ -62,7 +62,7 @@ const EventService = (() => {
           PlayerService.update(player.id, { resources: player.resources });
         }
         _addModifier(city, 'happiness', -18, 'event:corruption_scandal', 4 * 3600);
-        return `💸 Corruption scandal in ${city.name}! Officials embezzled resources.`;
+        return `Corruption scandal in ${city.name}! Officials embezzled resources.`;
       },
     },
   ];

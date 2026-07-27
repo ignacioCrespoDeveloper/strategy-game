@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hexfront — Army Matchups</title>
+<style>
+  :root { --bg:#14100c; --panel:#1e1811; --line:#3a2f1f; --gold:#c9a227; --text:#d8cdb8; --dim:#8d8270; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); font:15px/1.5 Georgia,'Times New Roman',serif; padding:2rem clamp(1rem,4vw,3rem); }
+  h1 { color:var(--gold); font-size:1.9rem; letter-spacing:.04em; }
+  .sub { color:var(--dim); margin:.3rem 0 2rem; font-style:italic; }
+  h2 { color:var(--gold); border-bottom:1px solid var(--line); padding-bottom:.3rem; margin:2.2rem 0 .7rem; font-size:1.35rem; }
+  .stage-meta { color:var(--dim); font-size:.8rem; font-weight:normal; font-style:italic; margin-left:.6rem; }
+  .note { color:var(--dim); font-size:.85rem; margin:.3rem 0 1rem; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; background:var(--panel); }
+  th { color:var(--dim); font-weight:normal; font-size:.78rem; text-transform:uppercase; letter-spacing:.07em; padding:.5rem .8rem; border-bottom:1px solid var(--line); text-align:left; }
+  td { padding:.5rem .8rem; border-bottom:1px solid #2a2216; }
+  tr:last-child td { border-bottom:none; }
+  .matrix th, .matrix td { text-align:center; }
+  .matrix .rowhead { text-align:left; color:#efe6d0; font-weight:bold; font-size:.95rem; text-transform:none; letter-spacing:0; border-bottom:1px solid #2a2216; }
+  .cell { font-family:Consolas,monospace; font-size:.95rem; min-width:5.2rem; }
+  .c-strong { color:#7fdf7f; font-weight:bold; }
+  .c-good   { color:#a8cf8a; }
+  .c-even   { color:#c9bfa8; }
+  .c-bad    { color:#cf9a8a; }
+  .c-weak   { color:#e07060; font-weight:bold; }
+  .mirror   { opacity:.55; }
+  .total    { border-left:1px solid var(--line); color:var(--gold); font-weight:bold; }
+  .rank { color:var(--gold); font-weight:bold; font-size:1.1rem; text-align:center; }
+  .a-name { color:#efe6d0; font-weight:bold; white-space:nowrap; }
+  .a-sub { color:var(--dim); font-weight:normal; font-size:.75rem; }
+  .a-gold, .a-pwr { white-space:nowrap; font-family:Consolas,monospace; }
+  .winrate { color:#7fdf7f; font-weight:bold; font-family:Consolas,monospace; }
+  .roster { font-size:.85rem; color:#b8ab90; }
+  .legend { color:var(--dim); font-size:.8rem; margin-top:.5rem; }
+</style>
+</head>
+<body>
+  <h1>⚔ Hexfront — Army Matchups</h1>
+  <p class="sub">Simulated through the real battle engine: every race × strategy archetype at the same PWR cap (1000), 96 fights per pairing per side. Generated 27/07/2026, 18:50:33 — regenerate with <code>node scripts/test-balance.js</code> then <code>node scripts/generate-army-guide.js</code>.</p>
+
+  <p class="note">Each cell: the ROW race's win rate against the COLUMN race (all strategies pooled, both attack directions). Diagonal = mirror matches between that race's own strategies. Last column: overall win rate vs the whole field. Stages limit armies to the units whose war buildings realistically exist at that point (Start: Barracks/Archery/Stables 1–3 · Midgame: + workshops and level 4–7 · Endgame: full roster incl. Monster Pit and Dragon Lair).</p>
+  <p class="legend">Green — the row race wins the matchup · Red — it loses it · Faded — mirror.</p>
+  
+  <h2>Start matchups <span class="stage-meta">lord level 3 · PWR cap 440</span></h2>
+  <div class="tablewrap">
+  <table class="matrix">
+    <thead><tr><th></th><th>Dwarf</th><th>Dark Elf</th><th>High Elf</th><th>Human</th><th>Orc</th><th>Overall</th></tr></thead>
+    <tbody>
+  <tr>
+    <th class="rowhead">Dwarf</th>
+    <td class="cell c-even mirror">50.0%</td><td class="cell c-good">58.6%</td><td class="cell c-strong">84.2%</td><td class="cell c-strong">84.5%</td><td class="cell c-strong">83.0%</td>
+    <td class="cell total">73.6%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Dark Elf</th>
+    <td class="cell c-bad">41.4%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-good">57.1%</td><td class="cell c-even">48.5%</td><td class="cell c-good">58.7%</td>
+    <td class="cell total">51.2%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">High Elf</th>
+    <td class="cell c-weak">15.8%</td><td class="cell c-bad">42.9%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-weak">38.4%</td><td class="cell c-even">49.8%</td>
+    <td class="cell total">38.6%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Human</th>
+    <td class="cell c-weak">15.5%</td><td class="cell c-even">51.5%</td><td class="cell c-strong">61.6%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-strong">72.0%</td>
+    <td class="cell total">50.1%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Orc</th>
+    <td class="cell c-weak">17.0%</td><td class="cell c-bad">41.3%</td><td class="cell c-even">50.2%</td><td class="cell c-weak">28.0%</td><td class="cell c-even mirror">50.0%</td>
+    <td class="cell total">36.4%</td>
+  </tr></tbody>
+  </table>
+  </div>
+  <h2>Midgame matchups <span class="stage-meta">lord level 6 · PWR cap 680</span></h2>
+  <div class="tablewrap">
+  <table class="matrix">
+    <thead><tr><th></th><th>Dwarf</th><th>Dark Elf</th><th>High Elf</th><th>Human</th><th>Orc</th><th>Overall</th></tr></thead>
+    <tbody>
+  <tr>
+    <th class="rowhead">Dwarf</th>
+    <td class="cell c-even mirror">50.0%</td><td class="cell c-weak">35.5%</td><td class="cell c-strong">70.7%</td><td class="cell c-strong">60.5%</td><td class="cell c-weak">31.5%</td>
+    <td class="cell total">49.6%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Dark Elf</th>
+    <td class="cell c-strong">64.5%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-strong">61.5%</td><td class="cell c-strong">65.0%</td><td class="cell c-bad">42.4%</td>
+    <td class="cell total">57.1%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">High Elf</th>
+    <td class="cell c-weak">29.3%</td><td class="cell c-weak">38.5%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-weak">38.8%</td><td class="cell c-weak">8.9%</td>
+    <td class="cell total">31.9%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Human</th>
+    <td class="cell c-weak">39.5%</td><td class="cell c-weak">35.0%</td><td class="cell c-strong">61.2%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-weak">16.8%</td>
+    <td class="cell total">39.8%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Orc</th>
+    <td class="cell c-strong">68.5%</td><td class="cell c-good">57.6%</td><td class="cell c-strong">91.1%</td><td class="cell c-strong">83.2%</td><td class="cell c-even mirror">50.0%</td>
+    <td class="cell total">71.5%</td>
+  </tr></tbody>
+  </table>
+  </div>
+  <h2>Endgame matchups <span class="stage-meta">lord level 10 · PWR cap 1000</span></h2>
+  <div class="tablewrap">
+  <table class="matrix">
+    <thead><tr><th></th><th>Dwarf</th><th>Dark Elf</th><th>High Elf</th><th>Human</th><th>Orc</th><th>Overall</th></tr></thead>
+    <tbody>
+  <tr>
+    <th class="rowhead">Dwarf</th>
+    <td class="cell c-even mirror">50.0%</td><td class="cell c-bad">44.0%</td><td class="cell c-bad">44.0%</td><td class="cell c-bad">40.3%</td><td class="cell c-bad">41.0%</td>
+    <td class="cell total">43.4%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Dark Elf</th>
+    <td class="cell c-good">56.0%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-weak">34.5%</td><td class="cell c-even">48.3%</td><td class="cell c-bad">44.5%</td>
+    <td class="cell total">46.4%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">High Elf</th>
+    <td class="cell c-good">56.0%</td><td class="cell c-strong">65.5%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-even">51.1%</td><td class="cell c-strong">63.6%</td>
+    <td class="cell total">57.8%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Human</th>
+    <td class="cell c-good">59.7%</td><td class="cell c-even">51.7%</td><td class="cell c-even">48.9%</td><td class="cell c-even mirror">50.0%</td><td class="cell c-even">48.4%</td>
+    <td class="cell total">51.9%</td>
+  </tr>
+  <tr>
+    <th class="rowhead">Orc</th>
+    <td class="cell c-good">59.0%</td><td class="cell c-good">55.5%</td><td class="cell c-weak">36.4%</td><td class="cell c-even">51.6%</td><td class="cell c-even mirror">50.0%</td>
+    <td class="cell total">50.5%</td>
+  </tr></tbody>
+  </table>
+  </div>
+
+  <h2>Top 5 army compositions <span class="stage-meta">endgame</span></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>#</th><th>Army</th><th>Cost</th><th>PWR</th><th>Win rate</th><th>Composition</th></tr></thead>
+    <tbody>
+  <tr>
+    <td class="rank">1</td>
+    <td class="a-name">The Silver Host<div class="a-sub">High Elf — balanced</div></td>
+    <td class="a-gold">5900 gold</td>
+    <td class="a-pwr">984 PWR</td>
+    <td class="winrate">67.1%</td>
+    <td class="roster">2× Spearmen, 2× Phoenix Guard, 2× Eagle Thrower, 2× Dragon Princes, 2× Sun Dragon</td>
+  </tr>
+  <tr>
+    <td class="rank">2</td>
+    <td class="a-name">Imperial Steel<div class="a-sub">Human — elite</div></td>
+    <td class="a-gold">4955 gold</td>
+    <td class="a-pwr">999 PWR</td>
+    <td class="winrate">63.1%</td>
+    <td class="roster">1× Steam Tank, 1× Demigryph Knights, 1× Great Cannon, 1× Greatswords, 1× Reiksguard, 1× War Wagons, 1× Empire Knights, 2× Outriders, 1× Halberdiers, 1× Handgunners, 1× Spearmen, 1× Swordsmen</td>
+  </tr>
+  <tr>
+    <td class="rank">3</td>
+    <td class="a-name">The Empire Muster<div class="a-sub">Human — swarm</div></td>
+    <td class="a-gold">4900 gold</td>
+    <td class="a-pwr">983 PWR</td>
+    <td class="winrate">58.6%</td>
+    <td class="roster">2× Spearmen, 1× Swordsmen, 1× Handgunners, 1× Halberdiers, 1× Outriders, 1× War Wagons, 1× Empire Knights, 1× Reiksguard, 1× Greatswords, 1× Demigryph Knights, 1× Great Cannon, 1× Steam Tank</td>
+  </tr>
+  <tr>
+    <td class="rank">4</td>
+    <td class="a-name">The Dragon Host<div class="a-sub">High Elf — elite</div></td>
+    <td class="a-gold">5720 gold</td>
+    <td class="a-pwr">992 PWR</td>
+    <td class="winrate">56.0%</td>
+    <td class="roster">1× Sun Dragon, 1× Frostheart Phoenix, 1× Dragon Princes, 1× Phoenix Guard, 1× White Lions, 1× Swordmasters, 1× Eagle Thrower, 1× Sisters of Avelorn, 1× Silver Helms, 1× Lothern Sea Guard</td>
+  </tr>
+  <tr>
+    <td class="rank">5</td>
+    <td class="a-name">Da Waaagh!<div class="a-sub">Orc — swarm</div></td>
+    <td class="a-gold">6315 gold</td>
+    <td class="a-pwr">999 PWR</td>
+    <td class="winrate">55.3%</td>
+    <td class="roster">1× Goblins, 1× Goblin Archers, 1× Savage Orc Arrers, 1× Orc Boyz, 1× Goblin Wolf Riders, 1× Orc Big 'Uns, 1× Pump Wagons, 1× Boar Boyz, 1× Savage Orc Boars, 1× Rock Lobber, 1× Black Orcs, 1× Trolls, 1× Giant, 1× Arachnarok Spider</td>
+  </tr></tbody>
+  </table>
+  </div>
+</body>
+</html>

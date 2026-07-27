@@ -30,7 +30,7 @@ const AttackConfirmView = (() => {
     return `
       <div class="ac-unit-slot">
         <div class="ac-unit-portrait-wrap${tierClass ? ` ${tierClass}` : ''}">
-          ${portrait}${fallback}
+          ${portrait}${fallback}${giUnitType(def.category)}
         </div>
         <div class="ac-unit-name">${def.name}</div>
         <div class="ac-unit-count-label">×${count}</div>
@@ -61,14 +61,14 @@ const AttackConfirmView = (() => {
     const garrisonHtml = data.garrisonUnits?.length > 0
       ? data.garrisonUnits.map(r => {
           const def = UNIT_DEFS[r.unitId];
-          return `<div class="mip-enemy-unit-chip">${def?.icon || '⚔'} ${def?.name || r.unitId} ×${r.count}</div>`;
+          return `<div class="mip-enemy-unit-chip">${def?.icon || gi('crossed-swords')} ${def?.name || r.unitId} ×${r.count}</div>`;
         }).join('')
-      : (data.forceSize ? `<div class="mip-enemy-unit-chip">🏯 Garrison: ${data.forceSize}</div>` : '');
+      : (data.forceSize ? `<div class="mip-enemy-unit-chip">${gi('guarded-tower')} Garrison: ${data.forceSize}</div>` : '');
 
     return `
       <div class="ac-enemy-card ac-city-card">
         <div class="ac-enemy-top">
-          <div class="ac-enemy-portrait"><div class="ac-enemy-portrait-icon">🏯</div></div>
+          <div class="ac-enemy-portrait"><div class="ac-enemy-portrait-icon">${gi('guarded-tower')}</div></div>
           <div class="ac-enemy-info">
             <div class="ac-enemy-name">${hasName ? data.name : 'Unknown City'}</div>
             <div class="ac-enemy-meta">${hasName ? 'Enemy City' : 'Never scouted — attacking anyway'}</div>
@@ -92,12 +92,12 @@ const AttackConfirmView = (() => {
     const portraitSrc  = pickLordPortrait(data.lordRace, data.lordClass, data.lordId) || race.portrait;
     const portraitHtml = portraitSrc
       ? `<img src="${portraitSrc}" class="ac-enemy-portrait-img" alt="" onerror="this.style.display='none'">`
-      : `<div class="ac-enemy-portrait-icon">${race.icon || '⚔'}</div>`;
+      : `<div class="ac-enemy-portrait-icon">${race.icon || gi('crossed-swords')}</div>`;
 
     const units = data.units || [];
     const unitsHtml = units.map(u => {
       const def = UNIT_DEFS[u.unitId] || {};
-      return `<div class="mip-enemy-unit-chip">${def.icon || '⚔'} ${def.name || u.unitId} ×${u.count}</div>`;
+      return `<div class="mip-enemy-unit-chip">${def.icon || gi('crossed-swords')} ${def.name || u.unitId} ×${u.count}</div>`;
     }).join('');
 
     return `
@@ -111,8 +111,8 @@ const AttackConfirmView = (() => {
               ${data.lordLevel ? ` · Lv ${data.lordLevel}` : ''}
               ${cls ? ` · ${cls.icon} ${cls.name}` : ''}
             </div>
-            ${data.playerUsername ? `<div class="ac-enemy-stance">👤 ${data.playerUsername}</div>` : ''}
-            ${data.armyCapacity != null ? `<div class="ac-enemy-stance">⚔ ${data.armyCapacity} army pts</div>` : ''}
+            ${data.playerUsername ? `<div class="ac-enemy-stance">${gi('person')} ${data.playerUsername}</div>` : ''}
+            ${data.armyCapacity != null ? `<div class="ac-enemy-stance">${gi('crossed-swords')} ${data.armyCapacity} army pts</div>` : ''}
           </div>
         </div>
         ${unitsHtml ? `<div class="ac-enemy-units">${unitsHtml}</div>` : ''}
@@ -129,7 +129,7 @@ const AttackConfirmView = (() => {
     const secs  = dist > 0 ? Math.round(dist * 20 * (5 / speed)) : 0;
     const eta   = secs > 0 ? TimeService.formatDuration(secs) : 'Immediate';
     const race  = RACES[lord.race] || {};
-    return `<option value="${lord.id}">${race.icon || ''} ${lord.name} · ${eta}</option>`;
+    return `<option value="${lord.id}">${lord.name} · ${eta}</option>`;
   }
 
   // ── Attacker info card ─────────────────────────────────────────
@@ -140,7 +140,7 @@ const AttackConfirmView = (() => {
     const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || race.portrait;
     const portraitHtml = portraitSrc
       ? `<img src="${portraitSrc}" class="ac-atk-portrait-img" alt="${lord.name}" onerror="this.style.display='none'">`
-      : `<div class="ac-atk-portrait-icon">${race.icon || '⚔'}</div>`;
+      : `<div class="ac-atk-portrait-icon">${race.icon || gi('crossed-swords')}</div>`;
     const stats  = LordService.getEffectiveStats(lord);
     const fromX  = lord.x ?? _targetX;
     const fromY  = lord.y ?? _targetY;
@@ -156,7 +156,7 @@ const AttackConfirmView = (() => {
           <div class="ac-atk-info">
             <div class="ac-atk-name">${lord.name}</div>
             <div class="ac-atk-meta">${race.name || ''} · ${cls ? `${cls.icon} ${cls.name}` : ''} · Lv ${lord.level || 1}</div>
-            <div class="ac-atk-pos">📍 (${fromX}, ${fromY})</div>
+            <div class="ac-atk-pos">${gi('position-marker')} (${fromX}, ${fromY})</div>
           </div>
         </div>
         <div class="ac-route-bar">
@@ -164,13 +164,13 @@ const AttackConfirmView = (() => {
           <div class="ac-route-mid">
             <div class="ac-route-line-dot"></div>
             <div class="ac-route-dash-line"></div>
-            <div class="ac-route-time">⏱ ${eta}</div>
+            <div class="ac-route-time">${gi('stopwatch')} ${eta}</div>
             <div class="ac-route-dash-line"></div>
             <div class="ac-route-line-dot ac-route-line-dot--red"></div>
           </div>
           <div class="ac-route-to">${terrain.icon} (${_targetX}, ${_targetY})</div>
         </div>
-        ${dist === 0 ? `<div class="ac-instant-note">⚡ Immediate resolution</div>` : ''}
+        ${dist === 0 ? `<div class="ac-instant-note">${gi('power-lightning')} Immediate resolution</div>` : ''}
       </div>
       <div class="ac-army-label">Your army</div>
       ${_armyHtml(lord.id)}`;
@@ -219,7 +219,7 @@ const AttackConfirmView = (() => {
 
             <!-- Left: your lord + army -->
             <div class="ac-col ac-col--atk">
-              <div class="ac-col-label">⚔ YOUR FORCES</div>
+              <div class="ac-col-label">${gi('crossed-swords')} YOUR FORCES</div>
               <select class="ac-lord-sel" id="ac-lord-sel">
                 ${_lords.map(_lordOptionHtml).join('')}
               </select>
@@ -230,7 +230,7 @@ const AttackConfirmView = (() => {
 
             <!-- Right: enemy -->
             <div class="ac-col ac-col--enemy">
-              <div class="ac-col-label">🎯 TARGET</div>
+              <div class="ac-col-label">${gi('cloak-dagger')} TARGET</div>
               ${_cityCardHtml()}
               ${_enemyCardHtml()}
             </div>
@@ -240,12 +240,29 @@ const AttackConfirmView = (() => {
         </div>
 
         <div class="ac-footer">
+          <span class="ac-march-cost" id="ac-march-cost"></span>
           <button class="ac-cancel-btn" id="ac-cancel">Cancel</button>
-          <button class="ac-confirm-btn" id="ac-confirm">⚔ Confirm Attack</button>
+          <button class="ac-confirm-btn" id="ac-confirm">${gi('crossed-swords')} Confirm Attack</button>
         </div>
 
       </div>
     `;
+
+    // March food cost for the selected lord — mirrors the server's
+    // EconomyCore.getMarchFoodCost check in lord-action.js.
+    const _updateMarchCost = lord => {
+      const el = document.getElementById('ac-march-cost');
+      if (!el || !lord) return;
+      const dist     = Math.max(Math.abs(targetX - (lord.x ?? targetX)), Math.abs(targetY - (lord.y ?? targetY)));
+      const foodCost = EconomyCore.getMarchFoodCost(dist, ArmyService.get(lord.id).units,
+        EconomyCore.getResearchEffects(PlayerService.getById(player.id)?.research));
+      if (foodCost <= 0) { el.textContent = ''; return; }
+      const have  = Math.floor(PlayerService.getById(player.id)?.resources?.food || 0);
+      const short = have < foodCost;
+      el.classList.toggle('ac-march-cost--short', short);
+      el.textContent = `🌾 March cost: ${foodCost.toLocaleString()} food${short ? ` (have ${have.toLocaleString()})` : ''}`;
+    };
+    _updateMarchCost(_lords[0]);
 
     // Lord selector change
     document.getElementById('ac-lord-sel')?.addEventListener('change', e => {
@@ -253,6 +270,7 @@ const AttackConfirmView = (() => {
       if (!lord) return;
       const detail = document.getElementById('ac-atk-detail');
       if (detail) detail.innerHTML = _attackerCardHtml(lord);
+      _updateMarchCost(lord);
     });
 
     document.getElementById('ac-back')?.addEventListener('click', () => {
@@ -271,32 +289,14 @@ const AttackConfirmView = (() => {
       btn.disabled    = true;
       btn.textContent = 'Sending...';
 
-      // 1 — Notify defender server-side
-      try {
-        const { data: { session } } = await SupabaseService.client.auth.getSession();
-        const token = session?.access_token || null;
-        // Calculate ETA from the enqueue (speed-based), used for defender's warning message
-        const speed   = LordService.getEffectiveStats(lord).speed;
-        const fromX   = lord.x ?? targetX;
-        const fromY   = lord.y ?? targetY;
-        const dist    = Math.max(Math.abs(targetX - fromX), Math.abs(targetY - fromY));
-        const etaSecs = Math.max(60, dist > 0 ? Math.round(dist * 20 * (5 / speed)) : 60);
-        if (token) {
-          await fetch('/api/attack/declare', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body:    JSON.stringify({ attackerLordId: lord.id, targetTileX: targetX, targetTileY: targetY, etaSecs }),
-          });
-        }
-      } catch (_) {
-        // Non-fatal — continue with local enqueue even if server is down
-      }
-
-      // 2 — Enqueue move with attack intent (server-validated)
+      // 1 — Enqueue move with attack intent (server-validated).
+      // Defenders are NOT pre-warned — they find out via the pvp_result /
+      // lord_captured feed entries once the battle resolves (design call:
+      // no "incoming attack" notification).
       const result = await ServerActions.lordMove(lord.id, targetX, targetY, { intent: 'attack' });
       if (!result.ok) {
         btn.disabled    = false;
-        btn.textContent = '⚔ Confirm Attack';
+        btn.innerHTML = `${gi('crossed-swords')} Confirm Attack`;
         const footer = document.querySelector('.ac-footer');
         let err = footer.querySelector('.ac-err');
         if (!err) { err = document.createElement('div'); err.className = 'ac-err'; footer.prepend(err); }
@@ -304,7 +304,7 @@ const AttackConfirmView = (() => {
         return;
       }
 
-      // 3 — Navigate to overview
+      // 2 — Navigate to overview
       const refreshedPlayer = PlayerService.getById(player.id);
       App.navigate('overview', { player: refreshedPlayer, lord: LordService.getById(lord.id) });
     });

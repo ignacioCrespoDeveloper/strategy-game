@@ -1,26 +1,24 @@
 // =============================================
 //  world.js — World grid and city placement
 //
-//  The world is a flat square grid of SIZE × SIZE tiles.
+//  The world is a flat grid of WIDTH × HEIGHT tiles.
 //  Each tile is identified by "x,y" and holds at most one city id.
 // =============================================
 
 const TERRAIN_TYPES = {
-  forest:   { id: 'forest',   name: 'Forest',   icon: '🌲', desc: 'Dense ancient woodland',      canvasBg: '#0d1a08', canvasBorder: '#1a3010', image: 'assets/terrain/woods.jpg',    searchHint: 'Rich in timber and game. Outlaw camps are common among the trees.'              },
-  plains:   { id: 'plains',   name: 'Plains',   icon: '🌿', desc: 'Fertile open flatlands',       canvasBg: '#161a08', canvasBorder: '#24280a', image: 'assets/terrain/plains.jpg',  searchHint: 'Open roads attract merchants. Good hunting grounds and occasional lost treasure.' },
-  hills:    { id: 'hills',    name: 'Hills',    icon: '🪨', desc: 'Rolling rocky hills',           canvasBg: '#18140e', canvasBorder: '#28200e', image: null,                         searchHint: 'Stone and iron veins run through the rock. Outlaws use the ridges as hideouts.' },
-  marsh:    { id: 'marsh',    name: 'Swamp',    icon: '💧', desc: 'Murky boggy wetlands',          canvasBg: '#0a1416', canvasBorder: '#0f2024', image: 'assets/terrain/swamp.jpg',   searchHint: 'Rare bog crystals form in the depths. Timber is plentiful but the land is hostile.' },
-  mountain: { id: 'mountain', name: 'Mountain', icon: '⛰',  desc: 'Impassable rocky peaks',       canvasBg: '#141418', canvasBorder: '#20202a', image: 'assets/terrain/montain.webp',searchHint: 'Mountains hide iron mines, stone quarries, ancient ruins and powerful relics.'    },
-  desert:   { id: 'desert',   name: 'Desert',   icon: '🏜', desc: 'Arid and hostile wasteland',   canvasBg: '#1a1608', canvasBorder: '#2a2210', image: null,                         searchHint: 'Buried ruins and lost treasures lie beneath the sands. Few things survive here.' },
+  forest:   { id: 'forest',   name: 'Forest',   icon: gi('pine-tree'), desc: 'Dense ancient woodland',      canvasBg: '#0d1a08', canvasBorder: '#1a3010', image: 'assets/terrain/woods.jpg',    searchHint: 'Rich in timber and game. Outlaw camps are common among the trees.'              },
+  plains:   { id: 'plains',   name: 'Plains',   icon: gi('grass'), desc: 'Fertile open flatlands',       canvasBg: '#161a08', canvasBorder: '#24280a', image: 'assets/terrain/plains.jpg',  searchHint: 'Open roads attract merchants. Good hunting grounds and occasional lost treasure.' },
+  marsh:    { id: 'marsh',    name: 'Swamp',    icon: gi('swamp'), desc: 'Murky boggy wetlands',          canvasBg: '#0a1416', canvasBorder: '#0f2024', image: 'assets/terrain/swamp.jpg',   searchHint: 'Rare bog crystals form in the depths. Timber is plentiful but the land is hostile.' },
+  mountain: { id: 'mountain', name: 'Mountain', icon: gi('mountains'),  desc: 'Impassable rocky peaks',       canvasBg: '#141418', canvasBorder: '#20202a', image: 'assets/terrain/montain.webp',searchHint: 'Mountains hide stone quarries, ancient ruins and powerful relics.'    },
+  desert:   { id: 'desert',   name: 'Desert',   icon: gi('desert'), desc: 'Arid and hostile wasteland',   canvasBg: '#1a1608', canvasBorder: '#2a2210', image: 'assets/terrain/desert.webp',  searchHint: 'Buried ruins and lost treasures lie beneath the sands. Few things survive here.' },
 };
 
 // Resource production multipliers per terrain. 1.0 = no change.
 var TERRAIN_RESOURCE_MODS = {
   forest:   { wood:  1.25 },
   plains:   { food:  1.25 },
-  hills:    { stone: 1.15, iron: 1.10 },
-  mountain: { stone: 1.30, iron: 1.25 },
-  marsh:    { food:  0.95, wood: 0.95, stone: 0.95, iron: 0.95 },
+  mountain: { stone: 1.30 },
+  marsh:    { food:  0.95, wood: 0.95, stone: 0.95 },
   desert:   { food:  0.70, wood: 0.75 },
 };
 
@@ -34,7 +32,8 @@ var TERRAIN_STAT_MODS = {
 
 const WorldService = (() => {
   const WORLD_KEY = 'world';
-  const SIZE      = 20;
+  const WIDTH     = 20;
+  const HEIGHT    = 10;
 
   // ── Private ──────────────────────────────────────────────────
 
@@ -47,7 +46,7 @@ const WorldService = (() => {
   }
 
   function _createEmpty() {
-    return { size: SIZE, tiles: {} }; // tiles: { "x,y": { cityId, name, ownerId, ownerUsername } }
+    return { width: WIDTH, height: HEIGHT, tiles: {} }; // tiles: { "x,y": { cityId, name, ownerId, ownerUsername } }
   }
 
   function _key(x, y) {
@@ -63,7 +62,8 @@ const WorldService = (() => {
 
   // ── Public ───────────────────────────────────────────────────
 
-  function getSize() { return SIZE; }
+  function getWidth()  { return WIDTH; }
+  function getHeight() { return HEIGHT; }
 
   function getTile(x, y) {
     // Player's own cities are always authoritative (updated after every action)
@@ -100,7 +100,7 @@ const WorldService = (() => {
   }
 
   function isInBounds(x, y) {
-    return x >= 0 && x < SIZE && y >= 0 && y < SIZE;
+    return x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT;
   }
 
   // Place a city on a tile. Returns false if already occupied or out of bounds.
@@ -134,9 +134,9 @@ const WorldService = (() => {
   // Deterministic terrain from tile coordinates — no storage needed.
   function getTerrain(x, y) {
     const h = (((x * 1664525 + 1013904223) ^ (y * 214013 + 2531011)) >>> 0);
-    const keys = ['forest','forest','plains','plains','plains','hills','hills','marsh','mountain','desert'];
+    const keys = ['forest','forest','plains','plains','plains','mountain','mountain','marsh','mountain','desert'];
     return TERRAIN_TYPES[keys[h % keys.length]];
   }
 
-  return { getSize, getTile, getCityMeta, isOccupied, isInBounds, placeCity, getOccupiedTiles, getTerrain };
+  return { getWidth, getHeight, getTile, getCityMeta, isOccupied, isInBounds, placeCity, getOccupiedTiles, getTerrain };
 })();

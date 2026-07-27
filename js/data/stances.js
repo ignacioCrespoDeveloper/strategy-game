@@ -17,7 +17,7 @@ var STANCE_DEFS = {
   idle: {
     id:              'idle',
     name:            'Idle',
-    icon:            '⏳',
+    icon:            gi('hourglass'),
     description:     'No active stance. Lord is available for all orders.',
     durations:       null,           // no timer — permanent until changed
     restrictions:    [],             // nothing blocked
@@ -28,7 +28,7 @@ var STANCE_DEFS = {
   ambush: {
     id:              'ambush',
     name:            'Ambush',
-    icon:            '🎯',
+    icon:            gi('cloak-dagger'),
     description:     'Lord lies in wait, concealed. Dramatically reduces visibility. Cannot move, recruit, explore or perform any other action while active.',
     durations:       [3600, 7200, 14400], // 1h / 2h / 4h in seconds
     restrictions:    ['move', 'recruit', 'explore', 'action'],
@@ -51,7 +51,7 @@ var STANCE_DEFS = {
   raiding: {
     id:              'raiding',
     name:            'Raiding',
-    icon:            '🏴',
+    icon:            gi('black-flag'),
     description:     'Lord pillages a wild tile for gold, resources, and full HP regen over time. Locked for the duration — any other lord with an army that arrives here triggers an automatic fight. Losing forfeits the stance and everything earned so far.',
     durations:       [3600, 14400, 28800, 86400], // 1h / 4h / 8h / 24h
     restrictions:    ['move', 'recruit', 'explore', 'action'],

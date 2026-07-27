@@ -11,19 +11,10 @@
 //    [{ unitId, count, lordId, startedAt, finishAt }]
 //
 //  Up to 5 batches can be queued at once; they train sequentially (batch N
-//  starts the moment batch N-1 finishes). NOTE: enqueue() below is not
-//  actually called anywhere any more — the real, authoritative enqueue path
-//  is server/actions/recruit.js via ServerActions.recruit(); this function
-//  is kept in sync with it as documentation of the intended model, in case
-//  it's ever reactivated for optimistic client-side prediction.
-//
-//  Guards enforced at enqueue():
-//    1. Gold cost (from player.coins)
-//    2. Resource cost (from city.resources: iron/wood/food per unit × count)
-//    3. Population cost (from city.freePopulation; 0 for mercenaries)
-//    4. Army slot limit (max 10 units)
-//    5. Army weight limit (sum of armyWeight ≤ lord command capacity)
-//    6. Legendary gate: armyWeight 12 requires lord level ≥ 12
+//  starts the moment batch N-1 finishes). The authoritative enqueue path
+//  (costs, Army Power cap) is server/actions/recruit.js via
+//  ServerActions.recruit() — this module only completes finished batches
+//  locally and lists what a city can train.
 // =============================================
 
 const RecruitmentService = (() => {
@@ -70,112 +61,6 @@ const RecruitmentService = (() => {
       .filter(r => CAMP_DEFS[r.definitionId]?.mercenaryRoster?.length > 0);
   }
 
-  // Current total armyWeight for a lord's army.
-  function _totalWeight(lordId) {
-    const army = ArmyService.get(lordId);
-    return army.units.reduce((sum, stack) => {
-      const def = UNIT_DEFS[stack.unitId];
-      return sum + (def?.armyWeight || 1) * stack.count;
-    }, 0);
-  }
-
-  // Enqueue a unit training batch at a city. Deducts gold + resources immediately.
-  // Returns { ok, error? }.
-  function enqueue(lord, city, unitId, count) {
-    _migrateCity(city);
-
-    const MAX_QUEUE = 5;
-    if (city.recruitmentQueue.length >= MAX_QUEUE) {
-      return { ok: false, error: `Recruitment queue is full (max ${MAX_QUEUE}).` };
-    }
-
-    const def = UNIT_DEFS[unitId];
-    if (!def) return { ok: false, error: 'Unknown unit.' };
-
-    // ── Slot limit ────────────────────────────────────────────────
-    const ARMY_LIMIT  = 10;
-    const currentSize = ArmyService.totalUnits(lord.id);
-    if (currentSize + count > ARMY_LIMIT) {
-      return { ok: false, error: `Army is full (${currentSize}/${ARMY_LIMIT}). Dismiss units first.` };
-    }
-
-    // ── Legendary gate: lord must be level ≥ 12 ──────────────────
-    if ((def.armyWeight || 1) >= 12 && (lord.level || 1) < 12) {
-      return { ok: false, error: `Only a lord of level 12 or higher can command a ${def.name}.` };
-    }
-
-    // ── Army weight limit ─────────────────────────────────────────
-    const capacity    = LordService.getCommandCapacity(lord);
-    const usedWeight  = _totalWeight(lord.id);
-    const addedWeight = (def.armyWeight || 1) * count;
-    if (usedWeight + addedWeight > capacity) {
-      return {
-        ok: false,
-        error: `Not enough command capacity. Used ${usedWeight}/${capacity} pts. ${def.name} costs ${def.armyWeight || 1} pts each.`,
-      };
-    }
-
-    // ── Gold cost ─────────────────────────────────────────────────
-    const totalGold = def.goldCost * count;
-    const player    = PlayerService.getById(lord.playerId);
-    if ((player.coins || 0) < totalGold) {
-      return { ok: false, error: `Need ${totalGold}💰, have ${player.coins || 0}💰.` };
-    }
-
-    // ── Resource cost (empire-wide pool) ─────────────────────────
-    const rc = def.resourceCost || {};
-    const empireRes = player.resources || {};
-    const resShortages = [];
-    Object.entries(rc).forEach(([res, perUnit]) => {
-      const needed  = perUnit * count;
-      const have    = Math.floor(empireRes[res] || 0);
-      if (have < needed) resShortages.push(`${needed} ${res} (have ${have})`);
-    });
-    if (resShortages.length > 0) {
-      return { ok: false, error: `Not enough resources: ${resShortages.join(', ')}.` };
-    }
-
-    // ── Population cost (skip for mercenaries: race null) ─────────
-    const popCost = (def.populationCost || 0) * count;
-    if (popCost > 0 && def.race !== null) {
-      const freePop = Math.floor(city.freePopulation ?? 0);
-      if (freePop < popCost) {
-        return {
-          ok: false,
-          error: `Not enough free population (need ${popCost}, have ${freePop}). Hire mercenaries instead — they require no population.`,
-        };
-      }
-    }
-
-    // ── Deduct gold ───────────────────────────────────────────────
-    PlayerService.update(lord.playerId, { coins: player.coins - totalGold });
-
-    // ── Deduct resources from empire pool ────────────────────────
-    Object.entries(rc).forEach(([res, perUnit]) => {
-      player.resources[res] = (player.resources[res] || 0) - perUnit * count;
-    });
-    PlayerService.update(player.id, { resources: player.resources });
-
-    // ── Deduct population ─────────────────────────────────────────
-    if (popCost > 0 && def.race !== null) {
-      city.freePopulation = Math.max(0, (city.freePopulation ?? 0) - popCost);
-    }
-
-    const now        = TimeService.now();
-    const duration   = def.recruitTime * count * 1000;
-    const lastFinish = city.recruitmentQueue.length > 0
-      ? city.recruitmentQueue[city.recruitmentQueue.length - 1].finishAt
-      : now;
-    const startedAt  = Math.max(now, lastFinish);
-    city.recruitmentQueue = [...city.recruitmentQueue, {
-      unitId, count, lordId: lord.id,
-      startedAt,
-      finishAt: startedAt + duration,
-    }];
-    CityService.save(city);
-    return { ok: true };
-  }
-
   // Complete any finished batches. Adds units to the lord's army.
   function tick(city) {
     _migrateCity(city);
@@ -212,6 +97,6 @@ const RecruitmentService = (() => {
 
   return {
     getAvailableFromCity, getAvailableFromDiscoveries,
-    enqueue, tick, timeRemaining, progress,
+    tick, timeRemaining, progress,
   };
 })();

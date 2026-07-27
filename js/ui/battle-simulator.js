@@ -24,7 +24,7 @@ const BattleSimulator = (() => {
   // Sourced from the canonical TERRAIN_TYPES (js/domain/world.js) rather than
   // hand-typed, so the simulator's terrain icons can never drift out of sync
   // with the real map's icons again.
-  const TERRAINS = ['plains', 'forest', 'hills', 'marsh', 'mountain', 'desert']
+  const TERRAINS = ['plains', 'forest', 'marsh', 'mountain', 'desert']
     .map(id => ({ id, label: TERRAIN_TYPES[id].name, icon: TERRAIN_TYPES[id].icon }));
 
   // ── Entry point ────────────────────────────────────────────────
@@ -110,12 +110,13 @@ const BattleSimulator = (() => {
             <div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%;background:#4caf50"></div></div>
           </div>
           ${portrait}
+          ${giUnitType(def.category)}
         </div>
         <div class="la-uc-tooltip">
           <div class="la-tt-name">${def.name}</div>
           <div class="la-tt-stats">
-            <span>⚔ ${s.attack}</span><span>🛡 ${s.defense}</span>
-            <span>❤ ${s.hp}</span><span>💨 ${s.speed}</span>
+            <span>${gi('crossed-swords')} ${s.attack}</span><span>${gi('round-shield')} ${s.defense}</span>
+            <span>${gi('hearts')} ${s.hp}</span><span>${gi('wingfoot')} ${s.speed}</span>
           </div>
           ${traitsHtml ? `<div class="la-tt-section">${traitsHtml}</div>` : ''}
         </div>
@@ -133,7 +134,7 @@ const BattleSimulator = (() => {
       : `<div class="la-uc-img la-uc-img--fallback">${def.icon}</div>`;
 
     const dmgBadge = dmg > 0
-      ? `<div class="bsim-dmg-badge">⚔ ${dmg}</div>`
+      ? `<div class="bsim-dmg-badge">${gi('crossed-swords')} ${dmg}</div>`
       : '';
 
     return `
@@ -145,14 +146,15 @@ const BattleSimulator = (() => {
             </div>
           </div>
           ${portrait}
+          ${giUnitType(def.category)}
           ${dmgBadge}
         </div>
         <div class="la-uc-tooltip">
-          <div class="la-tt-name">${def.name}${!isAlive ? ' ☠' : ''}</div>
+          <div class="la-tt-name">${def.name}${!isAlive ? ' ' + gi('skull-crossed-bones') : ''}</div>
           <div class="la-tt-stats">
-            <span>❤ ${isAlive ? Math.round(hpCur) : 0}/${hpMax}</span>
-            <span>⚔ ${def.combatStats?.attack}</span>
-            <span>🛡 ${def.combatStats?.defense}</span>
+            <span>${gi('hearts')} ${isAlive ? Math.round(hpCur) : 0}/${hpMax}</span>
+            <span>${gi('crossed-swords')} ${def.combatStats?.attack}</span>
+            <span>${gi('round-shield')} ${def.combatStats?.defense}</span>
           </div>
           ${dmg > 0 ? `<div class="la-tt-row" style="color:#e07050">Total dmg dealt: ${dmg}</div>` : ''}
         </div>
@@ -203,7 +205,7 @@ const BattleSimulator = (() => {
       <div class="bsim-army-panel">
         <div class="bsim-army-label">
           Your Army — ${total}/${MAX_UNITS} units
-          <span class="bsim-pts-badge">💰 ${_fmtPts(pts)} pts</span>
+          <span class="bsim-pts-badge">${gi('two-coins')} ${_fmtPts(pts)} pts</span>
         </div>
         <div class="la-unit-cards bsim-army-cards">${_armyCards(counts)}</div>
       </div>`;
@@ -212,9 +214,9 @@ const BattleSimulator = (() => {
   // ── Progress bar ───────────────────────────────────────────────
   function _progressBar() {
     const steps  = [
-      { id: 'attacker', label: '⚔ Attacker' },
-      { id: 'defender', label: '🛡 Defender' },
-      { id: 'battle',   label: '⚔ Battle'   },
+      { id: 'attacker', label: gi('crossed-swords') + ' Attacker' },
+      { id: 'defender', label: gi('round-shield') + ' Defender' },
+      { id: 'battle',   label: gi('crossed-swords') + ' Battle'   },
     ];
     const ai = steps.findIndex(s => s.id === _step);
     return `
@@ -253,15 +255,16 @@ const BattleSimulator = (() => {
       <div class="tt-unit-card bsim-selectable${cnt > 0 ? ' bsim-selectable--on' : ''}" data-uid="${uid}">
         <div class="tt-uc-portrait">
           ${portrait}
+          ${giUnitType(def.category)}
           ${cnt > 0 ? `<span class="bsim-count-badge">${cnt}</span>` : ''}
         </div>
         <div class="tt-uc-body">
           <div class="tt-uc-top"><span class="tt-unit-name">${def.name}</span></div>
           <div class="tt-unit-stats">
-            <span class="tt-stat">⚔ ${s.attack ?? '—'}</span>
-            <span class="tt-stat">🛡 ${s.defense ?? '—'}</span>
-            <span class="tt-stat">❤ ${s.hp ?? '—'}</span>
-            <span class="tt-stat">💨 ${s.speed ?? '—'}</span>
+            <span class="tt-stat">${gi('crossed-swords')} ${s.attack ?? '—'}</span>
+            <span class="tt-stat">${gi('round-shield')} ${s.defense ?? '—'}</span>
+            <span class="tt-stat">${gi('hearts')} ${s.hp ?? '—'}</span>
+            <span class="tt-stat">${gi('wingfoot')} ${s.speed ?? '—'}</span>
           </div>
           ${traitLabels.length ? `<div class="tt-traits">${traitLabels.slice(0, 4).map(t => `<span class="tt-trait">${t}</span>`).join('')}</div>` : ''}
         </div>
@@ -302,14 +305,14 @@ const BattleSimulator = (() => {
       <div class="bsim-screen">
         <div class="bsim-header">
           <button class="bsim-back" id="bsim-back">←</button>
-          <span class="bsim-title">${isAtk ? '⚔ Attacker Army' : '🛡 Defender Army'}</span>
+          <span class="bsim-title">${isAtk ? gi('crossed-swords') + ' Attacker Army' : gi('round-shield') + ' Defender Army'}</span>
           ${_progressBar()}
         </div>
         ${raceBar}
         <div class="bsim-body">${bodyHtml}</div>
         ${_armyPanel(counts)}
         <div class="bsim-footer">
-          <div class="bsim-footer-info">${total}/${MAX_UNITS} units · max ${MAX_PER_TYPE} per type · <span class="bsim-pts-inline">💰 ${_fmtPts(_armyPoints(counts))} pts</span></div>
+          <div class="bsim-footer-info">${total}/${MAX_UNITS} units · max ${MAX_PER_TYPE} per type · <span class="bsim-pts-inline">${gi('two-coins')} ${_fmtPts(_armyPoints(counts))} pts</span></div>
           <button class="bsim-next-btn${total > 0 ? '' : ' bsim-next-btn--off'}" id="bsim-next">
             ${isAtk ? 'Next: Defender →' : 'Next: Battle →'}
           </button>
@@ -322,7 +325,7 @@ const BattleSimulator = (() => {
     const atkRaceInfo = RACES[_atkRace] || {};
     const defRaceInfo = RACES[_defRace] || {};
     const terrainOpts = TERRAINS.map(t =>
-      `<option value="${t.id}" ${_terrain === t.id ? 'selected' : ''}>${t.icon} ${t.label}</option>`
+      `<option value="${t.id}" ${_terrain === t.id ? 'selected' : ''}>${t.label}</option>`
     ).join('');
 
     // Cards: pre-battle (full HP) or post-battle (actual HP + dmg badges)
@@ -337,7 +340,7 @@ const BattleSimulator = (() => {
       <div class="bsim-screen">
         <div class="bsim-header">
           <button class="bsim-back" id="bsim-back">←</button>
-          <span class="bsim-title">⚔ Battle${_report ? ' — Results' : ' Preview'}</span>
+          <span class="bsim-title">${gi('crossed-swords')} Battle${_report ? ' — Results' : ' Preview'}</span>
           ${_progressBar()}
         </div>
 
@@ -347,8 +350,8 @@ const BattleSimulator = (() => {
             <div class="bsim-lineup-side bsim-lineup-atk">
               <div class="bsim-lineup-label">
                 <span class="bsim-lineup-race">${atkRaceInfo.icon || ''} ${atkRaceInfo.name || ''}</span>
-                ⚔ Attacker
-                <span class="bsim-pts-badge">💰 ${_fmtPts(_armyPoints(_atkCounts))} pts</span>
+                ${gi('crossed-swords')} Attacker
+                <span class="bsim-pts-badge">${gi('two-coins')} ${_fmtPts(_armyPoints(_atkCounts))} pts</span>
               </div>
               <div class="la-unit-cards bsim-lineup-cards">${atkCardHtml}</div>
             </div>
@@ -356,19 +359,19 @@ const BattleSimulator = (() => {
             <div class="bsim-lineup-centre">
               <div class="bsim-vs">VS</div>
               <div class="bsim-terrain-block">
-                <label class="bsim-terrain-label" for="bsim-terrain">🗺 Terrain</label>
+                <label class="bsim-terrain-label" for="bsim-terrain">${gi('treasure-map')} Terrain</label>
                 <select class="bsim-terrain-sel" id="bsim-terrain">${terrainOpts}</select>
               </div>
               <button class="bsim-sim-btn" id="bsim-simulate">
-                ${_report ? '⟳ Re-run' : '⚔ Simulate'}
+                ${_report ? '⟳ Re-run' : gi('crossed-swords') + ' Simulate'}
               </button>
             </div>
 
             <div class="bsim-lineup-side bsim-lineup-def">
               <div class="bsim-lineup-label">
-                🛡 Defender
+                ${gi('round-shield')} Defender
                 <span class="bsim-lineup-race">${defRaceInfo.icon || ''} ${defRaceInfo.name || ''}</span>
-                <span class="bsim-pts-badge">💰 ${_fmtPts(_armyPoints(_defCounts))} pts</span>
+                <span class="bsim-pts-badge">${gi('two-coins')} ${_fmtPts(_armyPoints(_defCounts))} pts</span>
               </div>
               <div class="la-unit-cards bsim-lineup-cards">${defCardHtml}</div>
             </div>
@@ -384,9 +387,9 @@ const BattleSimulator = (() => {
   function _reportHtml() {
     const r = _report;
     const WINNER = {
-      attacker: { label: '⚔ Attacker Wins!', cls: 'bsim-win--atk'  },
-      defender: { label: '🛡 Defender Wins!', cls: 'bsim-win--def'  },
-      draw:     { label: '⚖ Draw',            cls: 'bsim-win--draw' },
+      attacker: { label: gi('crossed-swords') + ' Attacker Wins!', cls: 'bsim-win--atk'  },
+      defender: { label: gi('round-shield') + ' Defender Wins!', cls: 'bsim-win--def'  },
+      draw:     { label: gi('scales') + ' Draw',            cls: 'bsim-win--draw' },
     };
     const REASONS = {
       eliminated: 'Enemy wiped out', routed: 'Enemy routed',
@@ -403,7 +406,7 @@ const BattleSimulator = (() => {
       const tr = e.trait ? ` [${e.trait.replace(/_/g,' ')}]` : '';
       if (e.result === 'healed') return `<div class="bsim-lrow bsim-lrow--heal">[R${e.round} ${ph}] ${e.actorName} — healed</div>`;
       if (e.damage === 0)        return `<div class="bsim-lrow bsim-lrow--morale">[R${e.round} ${ph}] ${e.actorName || ''} — ${rs}</div>`;
-      return `<div class="bsim-lrow">[R${e.round} ${ph}] ${e.actorName} → ${e.targetName}${tr} ⚔${e.damage} — <em>${rs}</em></div>`;
+      return `<div class="bsim-lrow">[R${e.round} ${ph}] ${e.actorName} → ${e.targetName}${tr} ${gi('crossed-swords')}${e.damage} — <em>${rs}</em></div>`;
     }).join('');
 
     return `

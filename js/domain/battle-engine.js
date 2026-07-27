@@ -80,8 +80,11 @@ var BattleEngine = (() => {
     return result;
   }
 
-  function buildContext({ lord, army, encounter, terrain }) {
+  // veterancy (optional): unitId => pct — training-building buff applied to
+  // the player's army units (+pct attack/defense). See EconomyCore.getVeterancyPct.
+  function buildContext({ lord, army, encounter, terrain, veterancy }) {
     const stats = _lordEffectiveStats(lord);
+    const vetFn = veterancy || (() => 0);
 
     // Lord as a combat unit — backline role, protected by infantry
     const lordUnit = _makeUnit('bu_lord', lord.id, {
@@ -106,7 +109,13 @@ var BattleEngine = (() => {
       .map((stack, i) => {
         const def = UNIT_DEFS[stack.unitId];
         if (!def) return null;
-        return _makeUnit('bu_' + i, stack.unitId, def, stack.count, { currentHp: stack.currentHp });
+        const unit = _makeUnit('bu_' + i, stack.unitId, def, stack.count, { currentHp: stack.currentHp });
+        const pct  = vetFn(stack.unitId) || 0;
+        if (pct) {
+          unit.attack  = Math.round(unit.attack  * (1 + pct));
+          unit.defense = Math.round(unit.defense * (1 + pct));
+        }
+        return unit;
       })
       .filter(Boolean);
 
@@ -149,22 +158,35 @@ var BattleEngine = (() => {
   // A stack's whole living count fights as one combined attack per phase per
   // round (never per-model), so its damage must scale with how many models
   // are still alive in it — otherwise a stack of 1 and a stack of 20 hit
-  // identically hard. Dampened (count^0.8, not linear) so a single round
-  // isn't a guaranteed full wipe once stacks get large. Lords and 1-model
-  // stacks are unaffected (count=1 → multiplier=1).
+  // identically hard. LINEAR since 2026-07-27: this used to be count^0.8,
+  // which was fine while the PWR recruit cap was also dampened — but once
+  // the cap went linear, the mismatch made ten 1-stacks deal ~37% more
+  // damage than one 10-stack of the same unit at identical PWR price, and
+  // "hire exactly one of everything" became the dominant meta (balance
+  // suite: 86.7% top combo, 7.3% bottom). Linear damage + linear pricing
+  // makes army SHAPE cost-neutral; composition is about roles and traits.
   function _stackDamageMult(count) {
-    return Math.pow(Math.max(1, count), 0.8);
+    return Math.max(1, count);
   }
 
-  // Max-rounds tiebreak uses this — remaining combat POWER per side, dampened
-  // per stack with the same exponent as the army-power "PWR" score used for
-  // recruiting (js/ui/lord-screen.js _armyPower, etc.). Comparing raw
-  // surviving model count instead would let a swarm of nearly-irrelevant
-  // survivors out-"win" a barely-touched elite force just by having more
-  // bodies left standing, regardless of how little fight is actually left in them.
+  // Remaining combat POWER per side — drives round-by-round morale loss
+  // and the max-rounds tiebreak. Scaled linearly per stack like the
+  // army-power "PWR" score used for recruiting (EconomyCore.getArmyPower),
+  // and HP-AWARE: the active model counts at its currentHp fraction, so a
+  // wounded dragon reads as partially lost power. Without that, a big
+  // single model counted at full strength until the instant it died and
+  // then cliffed the side's morale by its entire value in one round —
+  // dragon-heavy armies routed off a single death.
+  // Speed at ×0.5 — the SAME weighting as EconomyCore.getUnitPower. At
+  // full weight, slow rosters bought more tiebreak-power per PWR-cap
+  // point by construction, so any fight that reached max rounds went to
+  // the slowest army automatically (early-game dwarfs won long grinds
+  // 99.9% off this alone).
   function _sidePower(units) {
     return units.filter(_alive).reduce((sum, u) => {
-      return sum + (u.attack * 3 + u.defense * 2 + Math.floor(u.maxHp / 10) + u.speed) * Math.pow(u.count, 0.8);
+      const perModel = u.attack * 3 + u.defense * 2 + Math.floor(u.maxHp / 10) + u.speed * 0.5;
+      const hpFrac   = u.maxHp > 0 ? Math.max(0, Math.min(1, u.currentHp / u.maxHp)) : 1;
+      return sum + perModel * (u.count - 1 + hpFrac);
     }, 0);
   }
 
@@ -184,14 +206,56 @@ var BattleEngine = (() => {
 
     let finalDmg = Math.max(1, baseDmg - reduction);
 
-    // charge phase: flat multiplier then terrain
+    // charge phase: flat multiplier then terrain. ×1.4 since 2026-07-27 —
+    // the old ×2.0 was tuned when stack damage was dampened (count^0.8);
+    // with linear stack damage a 2-model knight charge became the hardest
+    // single hit in the game and cavalry-rich rosters ran the table (the
+    // suite's top three combos were all cavalry-heavy at ×1.5 too).
     if (phase === 'charge' && attacker.traits.includes('charge')) {
-      finalDmg *= 2.0 * terrainMods.chargeMult;
+      finalDmg *= 1.4 * terrainMods.chargeMult;
     }
 
     // anti_large: bonus vs large enemies
     if (attacker.traits.includes('anti_large') && target.traits.includes('large')) {
       finalDmg *= 1.4;
+    }
+
+    // anti_infantry: bonus vs massed ranks (2026-07-27 — Irondrakes'
+    // drakefire; the line-melter mirror of anti_large)
+    if (attacker.traits.includes('anti_infantry') && target.role === 'infantry') {
+      finalDmg *= 1.4;
+    }
+
+    // accurate: every arrow placed with elven precision — +30% damage in
+    // the ranged phase (2026-07-27; was flavor-only while the high elf
+    // "quality" identity starved for bodies in a morale-driven engine.
+    // ×1.2 lifted their start but left midgame at 21% — the trait is
+    // high-elf-exclusive, so it can safely carry more of their identity)
+    if (phase === 'ranged' && attacker.traits.includes('accurate')) {
+      finalDmg *= 1.3;
+    }
+
+    // stubborn: an unyielding formation is harder to kill, not just harder
+    // to rout (2026-07-27 — the dwarf line's survivability identity).
+    // MELEE/CHARGE ONLY: a locked shield line stops blades and cavalry,
+    // not crossbow bolts — applied to ranged fire too, the early-game
+    // warrior wall had no counter at all (dwarf start win rate hit 91%).
+    if (target.traits.includes('stubborn') && (phase === 'melee' || phase === 'charge')) {
+      finalDmg *= 0.9;
+    }
+
+    // monster: a single model the size of a barn hits like one (2026-07-27).
+    // Without this a 255-PWR dragon swung once per round for less than the
+    // same PWR of crossbowmen — monster armies were strictly bad buys.
+    if (attacker.traits.includes('monster')) finalDmg *= 1.3;
+
+    // heavy_armor: plate turns aside a quarter of any hit. Armor_piercing
+    // HALVES that protection rather than ignoring it (2026-07-27 v2 —
+    // full bypass meant the AP-saturated rosters simply deleted the
+    // armor identity, and dwarfs lost every cross-race matchup).
+    // Monsters hit hard → armor resists → AP cuts through, partially.
+    if (target.traits.includes('heavy_armor')) {
+      finalDmg *= attacker.traits.includes('armor_piercing') ? 0.875 : 0.75;
     }
 
     // bloodlust: bonus vs wounded targets
@@ -215,8 +279,23 @@ var BattleEngine = (() => {
   // Returns { modelsKilled, dodged }.
   function _applyDamage(target, damage, round, phase, attacker, activeTrait, events, actorSide, heavyArmor) {
     const targetSide = actorSide === 'attacker' ? 'defender' : 'attacker';
-    // dodge: 20% miss chance
-    if (target.traits.includes('dodge') && Math.random() < 0.2) {
+    // duelist: a blade-master parries — 25% chance to turn aside a MELEE
+    // hit (2026-07-27; ranged fire can't be parried). Swordmasters' trait.
+    if (phase === 'melee' && target.traits.includes('duelist') && Math.random() < 0.25) {
+      events.push({
+        round, phase,
+        actorId: attacker.id, actorName: attacker.name, actorSide, actorCount: attacker.count,
+        targetId: target.id,  targetName: target.name,  targetSide,
+        trait: 'duelist', ability: null,
+        damage: 0, hpBefore: target.currentHp, hpAfter: target.currentHp,
+        result: 'miss',
+      });
+      return { modelsKilled: 0, dodged: true };
+    }
+
+    // dodge: 30% miss chance (raised from 20% on 2026-07-27 — dodge units
+    // are the dancers of the roster and were dying before they mattered)
+    if (target.traits.includes('dodge') && Math.random() < 0.3) {
       events.push({
         round, phase,
         actorId: attacker.id, actorName: attacker.name, actorSide, actorCount: attacker.count,
@@ -228,8 +307,13 @@ var BattleEngine = (() => {
       return { modelsKilled: 0, dodged: true };
     }
 
-    // shield_wall: -20% damage when target is frontline infantry in melee
-    if (phase === 'melee' && target.traits.includes('shield_wall') && target.role === 'infantry') {
+    // shield_wall: -20% damage when target is frontline infantry in melee.
+    // Does NOT stack with heavy_armor — the plate already turned the blow
+    // aside (heavy_armor now always applies at least partially, see
+    // _computeDamage), so the shields add nothing on top. Stacked, an
+    // Ironbreaker wall took ×0.75×0.8 from everything and hit 90% win
+    // rate (2026-07-27).
+    if (phase === 'melee' && target.traits.includes('shield_wall') && target.role === 'infantry' && !target.traits.includes('heavy_armor')) {
       damage = Math.max(1, Math.ceil(damage * 0.8));
     }
 
@@ -255,8 +339,6 @@ var BattleEngine = (() => {
         });
         if (target.count > 0) {
           target.currentHp = target.maxHp; // next model starts fresh
-        } else {
-          remaining = 0;
         }
       } else {
         events.push({
@@ -271,7 +353,9 @@ var BattleEngine = (() => {
       }
     }
 
-    return { modelsKilled, dodged: false };
+    // Whatever damage is left after the stack died spills to the caller —
+    // _executeAttack carries it into the next target stack.
+    return { modelsKilled, dodged: false, overkill: target.count === 0 ? remaining : 0 };
   }
 
   // Picks the active trait label to surface in the event log.
@@ -287,16 +371,44 @@ var BattleEngine = (() => {
   // Executes a single unit's attack against the enemy side.
   // actorSide: 'attacker' | 'defender' — which side `attacker` belongs to.
   // Returns { modelsKilled, chargeHit }.
+  //
+  // SPILLOVER (2026-07-27): if the attack wipes its target stack, the
+  // leftover damage carries into the next target, and so on. Without this,
+  // one huge attack into a 1-model stack killed exactly one model and the
+  // rest evaporated — armies of many tiny stacks soaked overkill for free,
+  // and "hire exactly one of everything" beat every concentrated build by
+  // 40+ points in the balance suite. Target-specific bonuses (anti_large,
+  // bloodlust, fragile) are baked into the original damage roll and spill
+  // as-is — the sword doesn't get lighter mid-swing; per-target rerolls
+  // aren't worth the complexity.
   function _executeAttack(attacker, enemySide, phase, terrainMods, round, events, actorSide) {
-    const target = TargetingService.select(attacker, enemySide);
+    const target = TargetingService.select(attacker, enemySide, round);
     if (!target) return { modelsKilled: 0, chargeHit: false };
 
     const { damage, heavyArmor } = _computeDamage(attacker, target, phase, terrainMods);
     const trait  = _activeTrait(attacker, phase);
     const result = _applyDamage(target, damage, round, phase, attacker, trait, events, actorSide, heavyArmor);
 
+    let modelsKilled = result.modelsKilled;
+    // Overkill spills into the next target in CONTACT phases only (melee,
+    // charge) — a sword keeps swinging, a monster keeps trampling, but a
+    // cannonball that killed its target is spent. Unrestricted, massed
+    // artillery volleys cleaved three stacks a round from behind an
+    // infantry wall (the 80%+ "castle" builds in the balance suite).
+    // Each hop carries HALF the leftover force — the swing loses momentum.
+    // At full carry, one monster attack chain-deleted 2-3 single-model
+    // stacks per round and one-of-each armies melted.
+    let spill = (phase === 'melee' || phase === 'charge') ? Math.floor((result.overkill || 0) * 0.5) : 0;
+    for (let hops = 0; spill > 0 && hops < 8; hops++) {
+      const next = TargetingService.select(attacker, enemySide, round);
+      if (!next) break;
+      const spillResult = _applyDamage(next, spill, round, phase, attacker, trait, events, actorSide, heavyArmor);
+      modelsKilled += spillResult.modelsKilled;
+      spill         = Math.floor((spillResult.overkill || 0) * 0.5);
+    }
+
     const chargeHit = phase === 'charge' && !result.dodged && attacker.traits.includes('charge');
-    return { modelsKilled: result.modelsKilled, chargeHit };
+    return { modelsKilled, chargeHit };
   }
 
   // Sort a unit list by speed descending (fast units act first within phase).
@@ -347,13 +459,26 @@ var BattleEngine = (() => {
     // Pre-battle: terror / fear / monster morale penalties
     MoraleService.applyPreBattle(ctx);
 
-    for (let round = 1; round <= 10; round++) {
+    // 15 rounds (was 10, raised 2026-07-27): early-game armies are low
+    // damage vs deep HP pools, so most starter fights never finished and
+    // fell to the max-rounds tiebreak — which is deterministic for a
+    // given pair of armies, so grindy matchups resolved 100/0 on a
+    // static stat comparison instead of actual fighting.
+    for (let round = 1; round <= 15; round++) {
       rounds = round;
 
       let atkLosses      = 0;
       let defLosses      = 0;
       let chargeHitAtk   = false;
       let chargeHitDef   = false;
+
+      // Morale measures the fraction of combat POWER lost this round, not
+      // the fraction of heads (2026-07-27). Head-counting made every big
+      // single-model unit a morale liability — a 2-dragon army lost 11%
+      // morale per chaff death and crumbled, while cheap-swarm armies were
+      // morale-tanks for free. Power lost is what the army actually FELT.
+      const atkPowerStart = _sidePower(ctx.attacker.units);
+      const defPowerStart = _sidePower(ctx.defender.units);
 
       // 1. Passive Phase
       TraitProcessor.applyPassive(ctx, round, events);
@@ -434,9 +559,12 @@ var BattleEngine = (() => {
       if (!_sideAlive(ctx.defender)) { winner = 'attacker'; reason = 'eliminated'; break; }
       if (!_sideAlive(ctx.attacker)) { winner = 'defender'; reason = 'eliminated'; break; }
 
-      // 5. Morale Phase
-      const atkRouted = MoraleService.update(ctx.attacker, atkLosses, chargeHitAtk, ctx.terrain);
-      const defRouted = MoraleService.update(ctx.defender, defLosses, chargeHitDef, ctx.terrain);
+      // 5. Morale Phase — driven by the share of combat power each side
+      // lost this round (see atkPowerStart above).
+      const atkLossFrac = atkPowerStart > 0 ? Math.max(0, (atkPowerStart - _sidePower(ctx.attacker.units)) / atkPowerStart) : 0;
+      const defLossFrac = defPowerStart > 0 ? Math.max(0, (defPowerStart - _sidePower(ctx.defender.units)) / defPowerStart) : 0;
+      const atkRouted = MoraleService.update(ctx.attacker, atkLossFrac, chargeHitAtk, ctx.terrain);
+      const defRouted = MoraleService.update(ctx.defender, defLossFrac, chargeHitDef, ctx.terrain);
 
       if (atkRouted || MoraleService.checkRetreat(ctx.attacker)) {
         ctx.attacker.units.forEach(u => { u.isRouting = true; });
@@ -465,9 +593,14 @@ var BattleEngine = (() => {
     if (!winner) {
       const atkPower = _sidePower(ctx.attacker.units);
       const defPower = _sidePower(ctx.defender.units);
-      if (atkPower > defPower)      { winner = 'attacker'; }
-      else if (defPower > atkPower) { winner = 'defender'; }
-      else                          { winner = 'draw'; }
+      // Within 10% of each other = an honest stalemate, not a win. The
+      // exact-equality check almost never fired, so any grind that hit
+      // max rounds went 100% to whichever army had the marginally higher
+      // static power — same two armies, same "winner", every time.
+      const margin = Math.max(atkPower, defPower) * 0.10;
+      if (atkPower > defPower + margin)      { winner = 'attacker'; }
+      else if (defPower > atkPower + margin) { winner = 'defender'; }
+      else                                   { winner = 'draw'; }
     }
 
     return _buildReport(ctx, winner, reason, rounds, events);
@@ -496,7 +629,7 @@ var BattleEngine = (() => {
     };
   }
 
-  const _LOOT_RES_TYPES = ['food', 'wood', 'stone', 'iron'];
+  const _LOOT_RES_TYPES = ['food', 'wood', 'stone'];
 
   function _buildReport(ctx, winner, reason, rounds, events) {
     // ctx.encounter is absent when called from the battle simulator (no PvE encounter)

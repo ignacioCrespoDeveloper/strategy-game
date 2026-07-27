@@ -45,6 +45,7 @@ import {
   STANCE_DEFS,
   MOUNT_POOL,
   TALENT_POOL,
+  EconomyCore,
 } from './engine-loader.js';
 
 // ── Supabase clients ──────────────────────────────────────────
@@ -206,32 +207,6 @@ export async function _findCityAtTile(admin, tileX, tileY, excludePlayerId) {
   return null;
 }
 
-// Removes any lingering 'pvp_threat' entry naming this attacker from every
-// player's activity_feed. Normally the threat entry is replaced by a
-// 'pvp_result' entry for whichever defenders were actually found on arrival
-// (see the defPlayerIds.forEach loop below) — but if the target evaded
-// before the attacker arrived (no lord, no city on the tile anymore), that
-// replacement never runs and the "Incoming attack!" warning is left
-// dangling forever. A lord can only have one attack in flight at a time,
-// so matching on attacker name alone is safe — there's nothing else it
-// could belong to.
-async function _clearStaleThreats(admin, attackerName) {
-  const { data: rows } = await admin.from('storage').select('player_id, value').eq('key', 'activity_feed');
-  const writes = [];
-  for (const row of (rows || [])) {
-    const feed = row.value?.[row.player_id];
-    if (!Array.isArray(feed)) continue;
-    const filtered = feed.filter(e => !(e.type === 'pvp_threat' && e.lordName === attackerName));
-    if (filtered.length !== feed.length) {
-      writes.push(admin.from('storage').upsert(
-        { player_id: row.player_id, key: 'activity_feed', value: { ...row.value, [row.player_id]: filtered } },
-        { onConflict: 'player_id,key' }
-      ));
-    }
-  }
-  if (writes.length > 0) await Promise.all(writes);
-}
-
 // ── PvP rewards ────────────────────────────────────────────────
 //
 // Gold: attacker-only, on victory — scaled by the value of what was beaten
@@ -266,18 +241,11 @@ const _MIN_CITY_VICTORY_GOLD = 50;
 const _MIN_CITY_XP           = 30;
 const _RESOURCE_LOOT_PCT = 0.05;  // fraction of the city owner's resource pool looted
 
-// Sum of unit "power" for a battle-army stack list — mirrors the combat
-// power formula already used client-side (lord-screen.js, map-view.js) and
-// server-side in catch-up.js's own copy of the same formula. Dampened per
-// stack (count^0.8) to match battle-engine.js's _stackDamageMult — otherwise
-// this overvalues numerous cheap units relative to what they actually deal.
+// Sum of unit "power" for a battle-army stack list — the same PWR score
+// shown everywhere else (EconomyCore.getArmyPower: linear per-model cost +
+// combat-trait tax). Used for the honor system's power comparison.
 function _armyPower(units) {
-  return (units || []).reduce((sum, u) => {
-    const def = UNIT_DEFS[u.unitId];
-    if (!def) return sum;
-    const s = def.combatStats || {};
-    return sum + ((s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0)) * Math.pow(u.count, 0.8);
-  }, 0);
+  return EconomyCore.getArmyPower(units, UNIT_DEFS);
 }
 
 // A lord's own combat contribution, scored with the same per-model formula
@@ -322,12 +290,11 @@ function _sidePowerLost(sideReport, lordIds) {
     else if (sourceId.startsWith('garrison_')) unitId = sourceId.slice('garrison_'.length);
     const def = UNIT_DEFS[unitId];
     if (!def) return;
-    const s     = def.combatStats || {};
-    const power = (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
-    before += power * Math.pow(count, 0.8);
+    const power = EconomyCore.getUnitPower(def);
+    before += power * count;
     const surv      = sideReport.unitsSurviving.find(u => u.sourceId === sourceId);
     const survCount = surv?.count ?? 0;
-    if (survCount > 0) after += power * Math.pow(survCount, 0.8);
+    if (survCount > 0) after += power * survCount;
   });
   return Math.max(0, before - after);
 }
@@ -351,8 +318,11 @@ async function _accrueClanWarScore(admin, clanId1, powerDestroyedBy1, clanId2, p
   if (!war) return;
 
   const isClan1A = war.clan_a_id === clanId1;
-  const scoreA = Number(war.score_a) + (isClan1A ? powerDestroyedBy1 : powerDestroyedBy2);
-  const scoreB = Number(war.score_b) + (isClan1A ? powerDestroyedBy2 : powerDestroyedBy1);
+  // Rounded — powerDestroyed is fractional (count^0.8), and adding raw
+  // floats onto a stored score every fight compounds into ugly long
+  // decimals by the time a player sees it (e.g. "338.548945").
+  const scoreA = Math.round(Number(war.score_a) + (isClan1A ? powerDestroyedBy1 : powerDestroyedBy2));
+  const scoreB = Math.round(Number(war.score_b) + (isClan1A ? powerDestroyedBy2 : powerDestroyedBy1));
 
   await admin.from('clan_wars').update({ score_a: scoreA, score_b: scoreB }).eq('id', war.id);
 }
@@ -398,7 +368,7 @@ function _lootResources(defenderPlayer, attackerPlayer) {
   const loot   = {};
   const defRes = defenderPlayer.resources || {};
   attackerPlayer.resources = attackerPlayer.resources || {};
-  ['food', 'wood', 'stone', 'iron'].forEach(r => {
+  ['food', 'wood', 'stone'].forEach(r => {
     const avail  = defRes[r] || 0;
     const amount = Math.floor(avail * _RESOURCE_LOOT_PCT);
     if (amount <= 0) return;
@@ -447,7 +417,7 @@ function _computeRewards({ winner, defenders, garrisonUnits, cityHit }) {
 
 function _terrain(x, y) {
   const h = (((x * 1664525 + 1013904223) ^ (y * 214013 + 2531011)) >>> 0);
-  const keys = ['forest','forest','plains','plains','plains','hills','hills','marsh','mountain','desert'];
+  const keys = ['forest','forest','plains','plains','plains','mountain','mountain','marsh','mountain','desert'];
   return keys[h % keys.length];
 }
 
@@ -509,9 +479,12 @@ function _makeLordUnit(lord, stats, prefix) {
 // Attacker: sourceId = stack.unitId (no prefix) so client cache update works.
 // Defenders: sourceId = `${prefix}_${stack.unitId}` (unique per-defender) so
 //   multi-defender loss application can route losses back to the right army.
-function _makeStack(stack, prefix, idx, usePrefix) {
+// vetPct: veterancy buff (EconomyCore.getVeterancyPct) — +N% attack/defense
+// from the owner's training buildings, summed across their cities.
+function _makeStack(stack, prefix, idx, usePrefix, vetPct = 0) {
   const def = UNIT_DEFS[stack.unitId];
   if (!def) return null;
+  const vet = 1 + (vetPct || 0);
   return {
     id:          `${prefix}_${idx}`,
     sourceId:    usePrefix ? `${prefix}_${stack.unitId}` : stack.unitId,
@@ -521,8 +494,8 @@ function _makeStack(stack, prefix, idx, usePrefix) {
     abilities:   [...(def.abilities || [])],
     maxHp:       def.combatStats?.hp      ?? 100,
     currentHp:   stack.currentHp          ?? (def.combatStats?.hp ?? 100),
-    attack:      def.combatStats?.attack  ?? 5,
-    defense:     def.combatStats?.defense ?? 5,
+    attack:      Math.round((def.combatStats?.attack  ?? 5) * vet),
+    defense:     Math.round((def.combatStats?.defense ?? 5) * vet),
     speed:       def.combatStats?.speed   ?? 5,
     leadership:  0,
     count:       stack.count,
@@ -547,22 +520,26 @@ function _makeStack(stack, prefix, idx, usePrefix) {
 // 'd{idx}_' prefixes) naturally never writes losses back for it. Garrison
 // is recomputed fresh from building levels every fight (static/renewable),
 // so nothing needs to persist here.
-function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain) {
+// vet (optional): { attacker: unitId=>pct, defenders: [unitId=>pct per index],
+// garrison: pct } — veterancy buffs from each side's training buildings.
+function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain, vet) {
   const atkStats = _effectiveStats(atkLord);
+  const vetAtk   = vet?.attacker || (() => 0);
 
   const defUnits = [];
   defenders.forEach(({ lord, army }, dIdx) => {
     const stats  = _effectiveStats(lord);
     const prefix = `d${dIdx}`;
+    const vetDef = vet?.defenders?.[dIdx] || (() => 0);
     defUnits.push(_makeLordUnit(lord, stats, prefix));
     (army?.units || []).forEach((stack, sIdx) => {
-      const u = _makeStack(stack, prefix, sIdx, true); // usePrefix = true for defenders
+      const u = _makeStack(stack, prefix, sIdx, true, vetDef(stack.unitId)); // usePrefix = true for defenders
       if (u) defUnits.push(u);
     });
   });
 
   (garrisonUnits || []).forEach((stack, gIdx) => {
-    const u = _makeStack(stack, 'garrison', gIdx, true);
+    const u = _makeStack(stack, 'garrison', gIdx, true, vet?.garrison || 0);
     if (u) defUnits.push(u);
   });
 
@@ -576,7 +553,7 @@ function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain)
       id:    atkLord.playerId,
       units: [
         _makeLordUnit(atkLord, atkStats, 'a'),
-        ...(atkArmy?.units || []).map((s, i) => _makeStack(s, 'a', i, false)).filter(Boolean),
+        ...(atkArmy?.units || []).map((s, i) => _makeStack(s, 'a', i, false, vetAtk(s.unitId))).filter(Boolean),
       ],
       morale: Math.min(100, 75 + atkStats.leadership * 1.5),
     },
@@ -860,88 +837,73 @@ export async function scanPresence(req, res) {
   return res.json({ ok: true, lords: presence });
 }
 
-// ── Attack declaration ────────────────────────────────────────
+// ── Incoming attack scan ──────────────────────────────────────
 //
-//  POST /api/attack/declare
-//  Called when the attacker confirms the attack order (before travel begins).
-//  Writes a pvp_threat notification to every defender on the target tile
-//  so they see the incoming attack immediately.
+//  POST /api/attack/incoming
+//  Returns every enemy attack-march currently heading at any tile the
+//  caller occupies (own cities + own lords). DERIVED from the attackers'
+//  actionQueues — nothing is stored and nothing is written to activity
+//  feeds (design call: the Activity tab never shows incoming attacks;
+//  only the Overview's live red alert does).
 //
-//  Body: { attackerLordId, targetTileX, targetTileY, etaSecs }
-//  Response: { ok }
+//  Response: { ok, incoming: [{ attackerName, attackerLevel, tileX, tileY,
+//              finishAt, targetType: 'city'|'lord', targetName }], serverTime }
+//  (Named scanIncomingAttacks — checkIncomingAttacks below is the legacy,
+//  unrouted battle-resolution endpoint slated for the cleanup pass.)
 
-export async function declareAttack(req, res) {
+export async function scanIncomingAttacks(req, res) {
   const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-  if (!token) return res.status(401).json({ error: 'Missing Authorization header' });
+  if (!token) return res.status(401).json({ ok: false, error: 'Missing Authorization header' });
 
   let authClient, admin;
   try { authClient = _authClient(); admin = _adminClient(); }
-  catch (e) { return res.status(500).json({ error: e.message }); }
+  catch (e) { return res.status(500).json({ ok: false, error: e.message }); }
 
   const { data: { user }, error: authErr } = await authClient.auth.getUser(token);
-  if (authErr || !user) return res.status(401).json({ error: 'Invalid or expired token' });
+  if (authErr || !user) return res.status(401).json({ ok: false, error: 'Invalid or expired token' });
 
   const callerId = user.id;
-  const { attackerLordId, targetTileX, targetTileY, etaSecs } = req.body || {};
-  const tX = Number(targetTileX), tY = Number(targetTileY);
-  if (!attackerLordId || !Number.isFinite(tX) || !Number.isFinite(tY)) {
-    return res.status(400).json({ error: 'Required: attackerLordId, targetTileX, targetTileY' });
-  }
+  const nowMs    = Date.now();
 
-  // Get attacker lord name
-  const { data: atkRows } = await admin.from('storage')
-    .select('value').eq('player_id', callerId).eq('key', 'lords').single();
-  const atkLords = atkRows?.value || {};
-  const atkLord  = atkLords[attackerLordId];
-  const atkName  = atkLord?.name || 'Lord enemigo';
-
-  // Find all defenders on that tile
-  const [lordResult, feedResult] = await Promise.all([
+  const [mineResult, lordsResult] = await Promise.all([
+    admin.from('storage').select('key, value').eq('player_id', callerId).in('key', ['cities', 'lords']),
     admin.from('storage').select('player_id, value').eq('key', 'lords'),
-    admin.from('storage').select('player_id, value').eq('key', 'activity_feed'),
   ]);
 
-  const feedByPlayer = {};
-  (feedResult.data || []).forEach(r => { feedByPlayer[r.player_id] = r.value || {}; });
+  const mine = Object.fromEntries((mineResult.data || []).map(r => [r.key, r.value || {}]));
 
-  const MAX_FEED = 50;
-  const defPlayerIds = new Set();
-  for (const row of (lordResult.data || [])) {
+  // Tiles the caller occupies. A lord garrisoned on their own city tile
+  // reports the city as the target (the more meaningful label).
+  const tiles = new Map(); // "x,y" → { targetType, targetName }
+  for (const lord of Object.values(mine.lords || {})) {
+    if (lord?.x != null) tiles.set(`${lord.x},${lord.y}`, { targetType: 'lord', targetName: lord.name || 'Your lord' });
+  }
+  for (const city of Object.values(mine.cities || {})) {
+    if (city?.x != null) tiles.set(`${city.x},${city.y}`, { targetType: 'city', targetName: city.name || 'Your city' });
+  }
+
+  const incoming = [];
+  for (const row of (lordsResult.data || [])) {
     if (row.player_id === callerId) continue;
-    const lords = Object.values(row.value || {});
-    if (lords.some(l => l.x === tX && l.y === tY)) {
-      defPlayerIds.add(row.player_id);
+    for (const lord of Object.values(row.value || {})) {
+      for (const item of (lord?.actionQueue || [])) {
+        if (item.intent !== 'attack' || item.destX == null) continue;
+        if (!item.finishAt || item.finishAt <= nowMs) continue; // arrived — resolution imminent
+        const target = tiles.get(`${item.destX},${item.destY}`);
+        if (!target) continue;
+        incoming.push({
+          attackerName:  lord.name || 'Enemy Lord',
+          attackerLevel: lord.level || 1,
+          tileX: item.destX, tileY: item.destY,
+          finishAt: item.finishAt,
+          ...target,
+        });
+      }
     }
   }
+  incoming.sort((a, b) => a.finishAt - b.finishAt);
 
-  const etaStr = etaSecs > 0
-    ? `ETA ${Math.ceil(etaSecs / 60)} min`
-    : 'inmediato';
-
-  const writes = [];
-  for (const defId of defPlayerIds) {
-    const feed = feedByPlayer[defId] || {};
-    if (!feed[defId]) feed[defId] = [];
-    const entry = {
-      id:       'act_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5),
-      at:       Date.now(),
-      etaAt:    Date.now() + (Number(etaSecs) || 0) * 1000,
-      type:     'pvp_threat',
-      icon:     '⚔',
-      title:    `Incoming attack from ${atkName}!`,
-      detail:   `Arriving at (${tX}, ${tY}) · ${etaStr}`,
-      lordName: atkName,
-    };
-    feed[defId].unshift(entry);
-    if (feed[defId].length > MAX_FEED) feed[defId] = feed[defId].slice(0, MAX_FEED);
-    writes.push(admin.from('storage').upsert(
-      { player_id: defId, key: 'activity_feed', value: feed },
-      { onConflict: 'player_id,key' }
-    ));
-  }
-
-  if (writes.length > 0) await Promise.all(writes);
-  return res.json({ ok: true, notified: defPlayerIds.size });
+  return res.json({ ok: true, incoming, serverTime: nowMs });
 }
 
 // ── Core resolution logic (no HTTP dependency) ───────────────
@@ -958,7 +920,7 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   const { data: atkRows, error: atkErr } = await admin.from('storage')
     .select('key, value')
     .eq('player_id', attackerPlayerId)
-    .in('key', ['lords', 'armies', 'players', 'honor_points']);
+    .in('key', ['lords', 'armies', 'players', 'honor_points', 'cities']);
   if (atkErr) return { ok: false, error: 'Failed to load attacker data: ' + atkErr.message };
 
   const atkData      = Object.fromEntries((atkRows || []).map(r => [r.key, r.value]));
@@ -1023,10 +985,7 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
         { onConflict: 'player_id,key' }
       );
     }
-    // The target evaded before arrival — nobody to write a pvp_result for,
-    // but whoever got the original "Incoming attack!" warning still needs
-    // it cleared, or it lingers in their Activity tab forever.
-    await _clearStaleThreats(admin, attackerLord.name);
+    // The target evaded before arrival — nobody to write a pvp_result for.
     return { ok: true, noDefenders: true, atkLords, atkArmies, atkPlayer: atkPlayers[attackerPlayerId] || null };
   }
 
@@ -1041,7 +1000,7 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
     admin.from('storage')
       .select('player_id, key, value')
       .in('player_id', defPlayerIds)
-      .in('key', ['armies', 'lords', 'activity_feed', 'players', 'honor_points']),
+      .in('key', ['armies', 'lords', 'activity_feed', 'players', 'honor_points', 'cities']),
     admin.from('storage')
       .select('value')
       .eq('player_id', attackerPlayerId)
@@ -1055,12 +1014,14 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   const defActivityByPlayer = {};
   const defPlayersByPlayer  = {}; // flattened to the player object itself, not the {[pid]: obj} storage shape
   const defHonorByPlayer    = {};
+  const defCitiesByPlayer   = {}; // for veterancy: training-building levels
   for (const row of (defResult.data || [])) {
     if (row.key === 'armies')        defArmiesByPlayer[row.player_id]   = row.value || {};
     if (row.key === 'lords')         defLordsByPlayer[row.player_id]    = row.value || {};
     if (row.key === 'activity_feed') defActivityByPlayer[row.player_id] = row.value || {};
     if (row.key === 'players')       defPlayersByPlayer[row.player_id]  = (row.value || {})[row.player_id] || {};
     if (row.key === 'honor_points')  defHonorByPlayer[row.player_id]    = row.value ?? 0;
+    if (row.key === 'cities')        defCitiesByPlayer[row.player_id]   = row.value || {};
   }
 
   // Ally check: an ally is strictly a fellow clan member — nothing broader.
@@ -1101,9 +1062,20 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
     return { ok: false, error: 'All defenders are undetectable (visibility score 0)', hidden: true };
   }
 
-  // 7. Build context and resolve.
+  // 7. Build context and resolve — with veterancy buffs from each side's
+  // training buildings (summed across all their cities; garrison keys off
+  // the defending city's Guard Post + Fortress).
   const terrain = _terrain(tileX, tileY);
-  const ctx     = _buildMultiContext(attackerLord, atkArmies[attackerLord.id], defenders, garrisonUnits, terrain);
+  const atkCityBuildings = Object.values(atkData.cities || {}).map(c => c?.buildings).filter(Boolean);
+  const vet = {
+    attacker: unitId => EconomyCore.getVeterancyPct(attackerLord.race, unitId, atkCityBuildings),
+    defenders: defenders.map(({ playerId, lord }) => {
+      const cityBuildings = Object.values(defCitiesByPlayer[playerId] || {}).map(c => c?.buildings).filter(Boolean);
+      return unitId => EconomyCore.getVeterancyPct(lord.race, unitId, cityBuildings);
+    }),
+    garrison: cityHit ? EconomyCore.getGarrisonVeterancyPct(cityHit.city?.buildings) : 0,
+  };
+  const ctx     = _buildMultiContext(attackerLord, atkArmies[attackerLord.id], defenders, garrisonUnits, terrain, vet);
   const report  = BattleEngine.resolve(ctx);
 
   // Per-participant identity for the client to render one report column per
@@ -1280,6 +1252,33 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
     report, terrain, rounds: report.rounds, modelsLost: report.attacker.modelsLost,
     xpEarned: rewards.atkXp, goldEarned: rewards.atkGold, resourceLoot, honorEarned: atkHonorDelta,
   });
+
+  // Follow-up entry when the attacking lord went down this battle — the
+  // battle result and the lord's fate arrive as two separate notifications.
+  // (An attacking lord is never captured, only fallen — see _applyLordHp.)
+  if ((atkLords[attackerLordId]?.currentHp || 0) === 0) {
+    atkActivityFeed[attackerPlayerId].unshift({
+      id: `act_lord_fallen_${now}_${rndTag()}`, at: now, type: 'lord_fallen',
+      icon: '💀', title: `${attackerLord.name} has fallen in battle`,
+      detail: `Defeated at (${tileX},${tileY}) · recovering for 1h — revive instantly with 💎`,
+      lordName: attackerLord.name, lordId: attackerLordId,
+    });
+  }
+
+  // Attacker-side mirror of the capture: one entry per enemy lord taken
+  // prisoner this battle, on top of the attacker's battle-report entry.
+  defenders.forEach(({ lord, playerId }) => {
+    const rec = (defLordsByPlayer[playerId] || {})[lord.id];
+    if (rec && (rec.currentHp || 0) === 0 && rec.downtimeReason === 'captured') {
+      atkActivityFeed[attackerPlayerId].unshift({
+        id: `act_lord_prisoner_${now}_${rndTag()}`, at: now, type: 'lord_captured',
+        icon: '⛓', title: `You captured ${rec.name || lord.name}!`,
+        detail: `${rec.name || lord.name} is now your prisoner — release or await ransom from the Prison panel on the Overview`,
+        lordName: attackerLord.name, lordId: attackerLordId,
+      });
+    }
+  });
+
   atkActivityFeed[attackerPlayerId] = atkActivityFeed[attackerPlayerId].slice(0, 50);
 
   defPlayerIds.forEach(pid => {
@@ -1305,6 +1304,26 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
       xpEarned: defLordEntry ? rewards.defXp : 0, // no lord present (garrison-only) → nobody to award XP to
       honorEarned: defHonorDeltaByPlayer[pid] || 0,
     });
+
+    // Follow-up entry when this player's lord went down: captured (lost
+    // while defending, taken by the attacker) vs fallen (any other loss).
+    // Sits on top of the battle-result entry so the player reads
+    // "Defeat — lord attacked" and then "lord captured/fallen".
+    const downedRec = defLordId ? (defLordsByPlayer[pid] || {})[defLordId] : null;
+    if (downedRec && (downedRec.currentHp || 0) === 0) {
+      const captured = downedRec.downtimeReason === 'captured';
+      feed[pid].unshift({
+        id: `act_lord_${captured ? 'captured' : 'fallen'}_${now}_${rndTag()}`, at: now,
+        type: captured ? 'lord_captured' : 'lord_fallen',
+        icon: captured ? '⛓' : '💀',
+        title: captured ? `${defLordName} has been captured!` : `${defLordName} has fallen in battle`,
+        detail: captured
+          ? `Held prisoner by ${attackerLord.name} — pay the ransom to free your lord`
+          : 'Recovering for 1h — revive instantly with 💎',
+        lordName: defLordName, lordId: defLordId,
+      });
+    }
+
     feed[pid] = feed[pid].slice(0, 50);
     defActivityByPlayer[pid] = feed;
   });

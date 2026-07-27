@@ -14,7 +14,6 @@
 var TERRAIN_BATTLE_MODS = {
   plains:   { chargeMult: 1.2,  defenseMult: 1.0,  moraleMod:   0 },
   forest:   { chargeMult: 0.5,  defenseMult: 1.2,  moraleMod:   5 },
-  hills:    { chargeMult: 0.8,  defenseMult: 1.15, moraleMod:   0 },
   marsh:    { chargeMult: 0.3,  defenseMult: 0.9,  moraleMod: -10 },
   mountain: { chargeMult: 0.4,  defenseMult: 1.3,  moraleMod:  -5 },
   desert:   { chargeMult: 1.0,  defenseMult: 0.9,  moraleMod:  -8 },
@@ -23,7 +22,7 @@ var TERRAIN_BATTLE_MODS = {
 
 // ── Base loot by level — scaled by each camp's rewardMultiplier ──────
 //
-// resMin/resMax: a single random resource type (food/wood/stone/iron) in
+// resMin/resMax: a single random resource type (food/wood/stone) in
 // this range is granted alongside gold on victory — camps are assumed to
 // hold plundered goods, same flavor as the coin_cache-style discoveries.
 
@@ -60,7 +59,7 @@ var CAMP_DEFS = {
   bandit_camp: {
     id:               'bandit_camp',
     displayName:      'Bandit Camp',
-    icon:             '🏕',
+    icon:             gi('campfire'),
     morale:           55,
     rewardMultiplier: 1.0,
     levelRange:       [1, 3],
@@ -75,7 +74,7 @@ var CAMP_DEFS = {
   goblin_camp: {
     id:               'goblin_camp',
     displayName:      'Goblin Camp',
-    icon:             '👺',
+    icon:             gi('goblin-head'),
     morale:           40,
     rewardMultiplier: 0.9,
     levelRange:       [1, 3],
@@ -92,7 +91,7 @@ var CAMP_DEFS = {
   mercenary_company: {
     id:               'mercenary_company',
     displayName:      'Mercenary Company',
-    icon:             '⚔',
+    icon:             gi('crossed-swords'),
     morale:           70,
     rewardMultiplier: 1.5,
     levelRange:       [2, 4],
@@ -107,7 +106,7 @@ var CAMP_DEFS = {
   wolf_rider_camp: {
     id:               'wolf_rider_camp',
     displayName:      'Wolf Rider Camp',
-    icon:             '🐺',
+    icon:             gi('wolf-head'),
     morale:           50,
     rewardMultiplier: 1.4,
     levelRange:       [2, 4],
@@ -124,7 +123,7 @@ var CAMP_DEFS = {
   ogre_camp: {
     id:               'ogre_camp',
     displayName:      'Ogre Camp',
-    icon:             '💀',
+    icon:             gi('death-skull'),
     morale:           80,
     rewardMultiplier: 2.0,
     levelRange:       [3, 5],
@@ -139,7 +138,7 @@ var CAMP_DEFS = {
   orc_warcamp: {
     id:               'orc_warcamp',
     displayName:      'Orc Warcamp',
-    icon:             '🪓',
+    icon:             gi('battle-axe'),
     morale:           65,
     rewardMultiplier: 2.0,
     levelRange:       [3, 5],
@@ -156,7 +155,7 @@ var CAMP_DEFS = {
   dark_elf_raiders: {
     id:               'dark_elf_raiders',
     displayName:      'Dark Elf Raiders',
-    icon:             '🌑',
+    icon:             gi('evil-moon'),
     morale:           75,
     rewardMultiplier: 2.5,
     levelRange:       [3, 5],
@@ -171,7 +170,7 @@ var CAMP_DEFS = {
   dwarf_expedition: {
     id:               'dwarf_expedition',
     displayName:      'Dwarf Expedition',
-    icon:             '⛏',
+    icon:             gi('war-pick'),
     morale:           85,
     rewardMultiplier: 2.5,
     levelRange:       [3, 5],
@@ -188,7 +187,7 @@ var CAMP_DEFS = {
   beast_lair: {
     id:               'beast_lair',
     displayName:      'Beast Lair',
-    icon:             '🦴',
+    icon:             gi('bone-gnawer'),
     morale:           90,
     rewardMultiplier: 3.5,
     levelRange:       [4, 5],
@@ -202,7 +201,7 @@ var CAMP_DEFS = {
   dragon_cult: {
     id:               'dragon_cult',
     displayName:      'Dragon Cult',
-    icon:             '🐲',
+    icon:             gi('dragon-head'),
     morale:           95,
     rewardMultiplier: 3.5,
     levelRange:       [4, 5],

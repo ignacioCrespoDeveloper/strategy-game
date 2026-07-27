@@ -26,6 +26,8 @@ const ActivityScreen = (() => {
       battle_victory: 'af-victory',
       battle_defeat:  'af-defeat',
       battle_draw:    'af-draw',
+      lord_captured:  'af-defeat',
+      lord_fallen:    'af-defeat',
       discovery:      'af-discovery',
       scout_result:   'af-discovery',
       lord_moved:     'af-move',
@@ -34,7 +36,7 @@ const ActivityScreen = (() => {
 
     const content = feed.length === 0
       ? `<div class="act-empty">
-           <div class="act-empty-icon">📋</div>
+           <div class="act-empty-icon">${gi('scroll-quill')}</div>
            <div class="act-empty-text">No recent activity</div>
            <div class="act-empty-sub">Explore the map, fight battles, and manage your cities to see activity here.</div>
          </div>`
@@ -45,7 +47,7 @@ const ActivityScreen = (() => {
             || LordService.getByPlayer(_player.id).find(l => l.name === e.lordName)?.id
             || null;
           const reportBtn = _isBattleEntry(e) && reportLordId
-            ? `<button class="af-report-btn" data-lord-id="${reportLordId}" title="View battle report">📋 Report</button>`
+            ? `<button class="af-report-btn" data-lord-id="${reportLordId}" title="View battle report">${gi('scroll-quill')} Report</button>`
             : '';
           return `
             <div class="af-entry ${css}" data-entry-id="${e.id}">
@@ -66,7 +68,7 @@ const ActivityScreen = (() => {
     return `
       <div class="act-screen">
         <div class="act-header">
-          <h1 class="act-title">📋 Recent Activity</h1>
+          <h1 class="act-title">${gi('scroll-quill')} Recent Activity</h1>
           ${feed.length > 0 ? `<span class="act-count">${feed.length} event${feed.length !== 1 ? 's' : ''}</span>` : ''}
           ${feed.length > 0 ? `<button class="act-clear-btn" id="act-clear-all">Clear all</button>` : ''}
         </div>

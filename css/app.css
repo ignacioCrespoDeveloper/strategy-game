@@ -100,6 +100,66 @@ button {
   font: inherit;
 }
 
+/* ── Game icons (game-icons.net sprite, see js/core/icons.js) ── */
+.gi {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  vertical-align: -0.125em;
+  fill: currentColor;
+  flex-shrink: 0;
+}
+.gi--gold   { color: #c8a659; }
+.gi--silver { color: #b8bcc4; }
+.gi--bronze { color: #b08050; }
+
+/* Troop-type medallion on unit cards (see giUnitType in js/core/icons.js) —
+   TWW3-style: dark coin with a metallic ring, bottom-left of the portrait. */
+.uc-type-badge {
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #3d301a 0%, #120e08 72%);
+  border: 1px solid #b08b4e;
+  box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(255,230,170,0.28), 0 1px 2px rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #e6cd92;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Tier-tinted medallions — match the card's rarity frame color.
+   Tier classes live on .la-unit-card OR .ac-unit-portrait-wrap (attack view). */
+.la-unit-card--elite .uc-type-badge {
+  background: radial-gradient(circle at 35% 28%, #1c3350 0%, #0a1420 72%);
+  border-color: #5f92c4;
+  color: #a6cdf0;
+  box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(180,220,255,0.28), 0 1px 2px rgba(0,0,0,0.8);
+}
+.la-unit-card--monster .uc-type-badge {
+  background: radial-gradient(circle at 35% 28%, #3c1a5e 0%, #150826 72%);
+  border-color: #a55ede;
+  color: #d2a6f4;
+  box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(220,180,255,0.28), 0 1px 2px rgba(0,0,0,0.8);
+}
+.la-unit-card--legendary .uc-type-badge {
+  background: radial-gradient(circle at 35% 28%, #58207f 0%, #1e0a30 72%);
+  border-color: #dd7fff;
+  color: #eec6ff;
+  box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(235,190,255,0.32), 0 1px 2px rgba(0,0,0,0.8);
+}
+.la-unit-card--merc .uc-type-badge {
+  background: radial-gradient(circle at 35% 28%, #38260f 0%, #140c04 72%);
+  border-color: #96662f;
+  color: #d8a868;
+}
+
 input {
   font: inherit;
   color: inherit;
@@ -404,17 +464,50 @@ body.nav-open #screen-root {
   background: var(--bg-surface);
   border: 1px solid var(--border-base);
   border-radius: var(--radius-md);
-  padding: 0.65rem 0.8rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tt-bld-art {
+  position: relative;
+  width: 100%;
+  height: 84px;
+  overflow: hidden;
+  background: #05020a;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.tt-bld-art-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  filter: saturate(0.9);
+}
+.tt-bld-art-icon {
+  font-size: 2rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+}
+.tt-bld-art-fade {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 55%;
+  background: linear-gradient(to bottom, transparent 0%, var(--bg-surface) 100%);
+  pointer-events: none;
+}
+.tt-bld-body {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+  padding: 0.45rem 0.8rem 0.65rem;
 }
-.tt-bld-head {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.tt-bld-icon { font-size: 1.2rem; }
 .tt-bld-name {
   font-family: var(--font-display);
   font-size: 0.78rem;
@@ -466,6 +559,7 @@ body.nav-open #screen-root {
 
 /* Portrait â€” left column */
 .tt-uc-portrait {
+  position: relative; /* anchors .uc-type-badge */
   flex-shrink: 0;
   width: 62px;
   background: rgba(0,0,0,0.35);
@@ -533,9 +627,11 @@ body.nav-open #screen-root {
 }
 .tt-unit-stats {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.45rem;
 }
 .tt-stat { font-size: 0.63rem; color: var(--text-secondary); }
+.tt-stat--pwr { color: var(--accent-gold, #c9a227); font-weight: 600; }
 .tt-traits {
   display: flex;
   flex-wrap: wrap;
@@ -581,6 +677,7 @@ body.nav-open #screen-root {
   position: absolute;
   top: 0.35rem;
   right: 0.45rem;
+  z-index: 2;
   font-size: 0.7rem;
   font-weight: 700;
   color: #5cdd5c;
@@ -881,6 +978,16 @@ body.nav-open #screen-root {
   margin-top: 0.3rem;
   margin-bottom: 1.8rem;
 }
+
+/* game-icons.net CC BY 3.0 attribution — required, keep visible */
+.auth-credits {
+  margin-top: 14px;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  text-align: center;
+}
+.auth-credits a { color: inherit; text-decoration: underline; }
 
 /* Divider line */
 .auth-card::before {
@@ -2167,12 +2274,130 @@ body.nav-open #screen-root {
   overflow-y: auto;
 }
 
+/* ── Map left side panel (cities + lords quick list) ── */
+.map-side-panel {
+  flex: 0 0 250px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-muted);
+  overflow-y: auto;
+  padding: 0.85rem 0.6rem;
+}
+
+.msp-section + .msp-section { margin-top: 1.1rem; }
+
+.msp-section-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.45rem;
+  padding: 0 0.3rem;
+}
+
+.msp-count {
+  margin-left: auto;
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 0.05rem 0.45rem;
+}
+
+.msp-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.msp-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--border-muted);
+}
+
+.msp-row--active {
+  background: rgba(58, 106, 154, 0.18);
+  border-color: #3a6a9a;
+}
+
+.msp-row-icon {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  font-size: 1.05rem;
+  color: var(--gold-light);
+}
+
+.msp-row-img {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border-muted);
+}
+
+.msp-row-img--lord {
+  border-radius: 50%;
+}
+
+.msp-row-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.msp-row-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msp-row-sub {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.msp-row-coords {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  color: var(--gold-light);
+  font-variant-numeric: tabular-nums;
+}
+
+.msp-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.3rem 0.5rem;
+}
+
 /* Below this width the fixed 460px panel no longer fits beside the canvas
    at all (it alone exceeds most phone viewports) — stack map above panel
-   instead of forcing a horizontal squeeze/overflow. */
+   instead of forcing a horizontal squeeze/overflow. The left cities/lords
+   list becomes a compact top strip above the canvas. */
 @media (max-width: 760px) {
   .map-body {
     flex-direction: column;
+  }
+  .map-side-panel {
+    flex: 0 0 auto;
+    width: 100%;
+    max-height: 22vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border-muted);
   }
   .map-area {
     flex: 1 1 auto;
@@ -2657,10 +2882,7 @@ body.nav-open #screen-root {
 
 .ov-section {
   padding: 1rem 1.25rem 0.5rem;
-  border-bottom: 1px solid var(--border-muted);
 }
-
-.ov-section:last-child { border-bottom: none; }
 
 .ov-section-title {
   font-size: 0.62rem;
@@ -2936,17 +3158,22 @@ body.nav-open #screen-root {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
+  width: 1.9rem;
+  height: 1.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(0,0,0,0.72);
   border: 1px solid var(--border-gold);
-  border-radius: 4px;
-  padding: 0.15rem 0.45rem;
+  border-radius: 50%;
+  padding: 0;
   font-family: var(--font-display);
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-gold-light);
   backdrop-filter: blur(4px);
   z-index: 3;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 /* Name plate overlaid on the bottom of the portrait */
@@ -3312,64 +3539,77 @@ body.nav-open #screen-root {
   overflow: visible;
 }
 
+/* TWW3-style frame: bronze gradient border (border-image needs square
+   corners), black seam + inner bevel via ::after, portrait vignette. */
 .la-unit-card {
   position: relative;
   width: 3.6rem;
-  border-radius: 4px;
   overflow: hidden;
-  border: 2px solid #28252e;
-  background: #1a0d28;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.7);
+  border: 2px solid transparent;
+  border-image: linear-gradient(165deg, #d8b168 0%, #8a6a30 28%, #55401a 52%, #9c7838 78%, #64491c 100%) 1;
+  background: #100c14;
+  box-shadow: 0 0 0 1px #050403, 0 2px 5px rgba(0,0,0,0.65);
   cursor: default;
-  transition: border-color 0.15s, box-shadow 0.15s;
+  transition: box-shadow 0.15s;
+}
+.la-unit-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(180deg, rgba(0,0,0,0.16) 0%, rgba(0,0,0,0) 16%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.42) 100%);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.85), inset 0 1px 0 rgba(255,236,190,0.10);
 }
 .la-unit-card:hover {
-  border-color: #3a3545;
+  box-shadow: 0 0 0 1px #050403, 0 0 9px rgba(228,178,90,0.55);
 }
 
-/* Mercenary â€” worn brown */
+/* Mercenary â€” worn bronze */
 .la-unit-card--merc {
-  border-color: #4a3018;
+  border-image: linear-gradient(165deg, #a87c48 0%, #6b4a24 30%, #3c2810 55%, #7a5528 80%, #4a3014 100%) 1;
 }
 .la-unit-card--merc:hover {
-  border-color: #8a5828;
+  box-shadow: 0 0 0 1px #050403, 0 0 9px rgba(190,130,60,0.5);
 }
 
 /* Elite / Cavalry â€” steel blue */
 .la-unit-card--elite {
-  border-color: #2a4a6a;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.7), 0 0 5px rgba(60,120,200,0.3);
+  border-image: linear-gradient(165deg, #8fb8dc 0%, #3a6288 28%, #1c3450 52%, #4a7aaa 78%, #223c58 100%) 1;
+  box-shadow: 0 0 0 1px #050403, 0 0 6px rgba(70,130,200,0.4);
 }
 .la-unit-card--elite:hover {
-  border-color: #4a7aaa;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.7), 0 0 8px rgba(80,150,220,0.45);
+  box-shadow: 0 0 0 1px #050403, 0 0 10px rgba(90,160,230,0.6);
 }
 
 /* Monster (Hydra) â€” deep purple */
 .la-unit-card--monster {
-  border-color: #6a2a9a;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.7);
+  border-image: linear-gradient(165deg, #b47ade 0%, #66308f 28%, #351454 52%, #8a4ec0 78%, #47206a 100%) 1;
+  box-shadow: 0 0 0 1px #050403, 0 0 6px rgba(140,70,200,0.4);
 }
 .la-unit-card--monster:hover {
-  border-color: #9a50d0;
+  box-shadow: 0 0 0 1px #050403, 0 0 10px rgba(170,100,230,0.6);
 }
 
 /* Legendary (Black Dragon) â€” bright vivid purple */
 .la-unit-card--legendary {
-  border-color: #c040ff;
-  box-shadow: 0 0 0 1px rgba(0,0,0,0.7);
+  border-image: linear-gradient(165deg, #eab0ff 0%, #a040d8 28%, #5c1690 52%, #c060f0 78%, #6e20a8 100%) 1;
+  box-shadow: 0 0 0 1px #050403, 0 0 8px rgba(200,90,255,0.55);
 }
 .la-unit-card--legendary:hover {
-  border-color: #d870ff;
+  box-shadow: 0 0 0 1px #050403, 0 0 12px rgba(220,130,255,0.75);
 }
 
-/* HP / strength bar at top */
+/* HP / strength bar at top â€” recessed groove, TWW campaign style */
 .la-uc-top {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   gap: 0.2rem;
-  padding: 0.18rem 0.25rem 0.12rem;
-  background: rgba(0,0,0,0.55);
+  padding: 0.2rem 0.22rem 0.16rem;
+  background: linear-gradient(180deg, #0b0f07 0%, #131a0c 100%);
+  border-bottom: 1px solid rgba(0,0,0,0.9);
 }
 .la-uc-count {
   font-size: 0.62rem;
@@ -3382,16 +3622,16 @@ body.nav-open #screen-root {
 }
 .la-uc-hpbar {
   flex: 1;
-  height: 4px;
-  background: rgba(255,255,255,0.12);
-  border-radius: 2px;
+  height: 6px;
+  background: #060903;
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.9), 0 1px 0 rgba(255,255,255,0.05);
 }
 .la-uc-hpfill {
   height: 100%;
   width: 100%;
-  background: linear-gradient(90deg, #2ecc40 0%, #27ae34 100%);
-  border-radius: 2px;
+  background: linear-gradient(180deg, #b2e455 0%, #6cb026 50%, #47821a 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35);
 }
 
 /* Portrait image */
@@ -3408,7 +3648,8 @@ body.nav-open #screen-root {
   justify-content: center;
   height: 5.2rem;
   font-size: 2rem;
-  background: rgba(80, 40, 120, 0.3);
+  color: #c8a659;
+  background: radial-gradient(circle at 50% 35%, #241c2e 0%, #120c18 80%);
 }
 
 /* Dismiss Ã— button â€” top right, visible on hover */
@@ -3416,6 +3657,7 @@ body.nav-open #screen-root {
   position: absolute;
   top: 0.12rem;
   right: 0.12rem;
+  z-index: 3; /* above the ::after bevel overlay */
   width: 1rem;
   height: 1rem;
   background: rgba(180,30,30,0.0);
@@ -4417,7 +4659,7 @@ body.nav-open #screen-root {
 .ov-cc-art {
   position: relative;
   width: 100%;
-  height: 78px;
+  height: 100px; /* absorbed the removed "Enter City →" row — card height unchanged */
   overflow: hidden;
   background: #05020a;
   flex-shrink: 0;
@@ -4495,7 +4737,10 @@ body.nav-open #screen-root {
 .mip-owner-badge {
   font-size: 0.95rem;
   font-weight: 700;
-  color: var(--text-gold-light, #e0c080);
+  color: #e8ecf4; /* neutral white — red is reserved for clans we're at war with */
+}
+.mip-owner-badge--war {
+  color: #e06a6a;
 }
 .mip-owner-badge--unknown {
   color: var(--text-muted);
@@ -4557,16 +4802,6 @@ body.nav-open #screen-root {
 .ov-cc-grow--stable{ color: var(--text-muted); }
 .ov-cc-gold-rate { color: #f0c040; font-weight: 700; }
 
-.ov-cc-enter {
-  margin-top: 0.35rem;
-  text-align: right;
-  font-size: 0.68rem;
-  color: var(--text-gold);
-  opacity: 0.7;
-  transition: opacity var(--transition);
-}
-.ov-city-card:hover .ov-cc-enter { opacity: 1; }
-
 .ov-cc-construction {
   margin-top: 0.28rem;
 }
@@ -4617,7 +4852,7 @@ body.nav-open #screen-root {
 .ov-lc-portrait {
   position: relative;
   width: 100%;
-  height: 90px;
+  height: 110px; /* absorbed the removed "Manage →" row — card height unchanged */
   overflow: hidden;
   background: #05020a;
   flex-shrink: 0;
@@ -4647,17 +4882,22 @@ body.nav-open #screen-root {
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: rgba(0,0,0,0.72);
   border: 1px solid var(--border-gold);
-  border-radius: 4px;
-  padding: 0.1rem 0.38rem;
+  border-radius: 50%;
+  padding: 0;
   font-family: var(--font-display);
-  font-size: 0.65rem;
+  font-size: 0.72rem;
   font-weight: 700;
   color: var(--text-gold-light);
   backdrop-filter: blur(4px);
   z-index: 2;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .ov-lc-portrait-owner {
@@ -4765,16 +5005,6 @@ body.nav-open #screen-root {
   min-width: 38px;
   text-align: right;
 }
-.ov-lc-enter {
-  margin-top: 0.25rem;
-  text-align: right;
-  font-size: 0.68rem;
-  color: var(--text-gold);
-  opacity: 0.7;
-  transition: opacity var(--transition);
-}
-.ov-lord-card:hover .ov-lc-enter { opacity: 1; }
-
 /* ── Downed / captured lord state ───────────────────────────── */
 .ov-lord-card { position: relative; }
 
@@ -5538,25 +5768,9 @@ body.nav-open #screen-root {
 }
 
 /* â”€â”€ Garrison section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-.cvl-garrison { display: flex; flex-direction: column; gap: 0.2rem; }
+/* Garrison shown as TWW-style unit cards (shares .la-unit-cards family) */
+.cvl-garrison-cards { margin-top: 0.3rem; }
 
-.cvl-garrison-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.18rem 0;
-  font-size: 0.76rem;
-}
-.cvl-garrison-icon  { font-size: 0.9rem; width: 1.2rem; text-align: center; }
-.cvl-garrison-name  { flex: 1; color: var(--text-secondary); }
-.cvl-garrison-count {
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  background: var(--bg-raised);
-  border: 1px solid var(--border-base);
-  border-radius: 8px;
-  padding: 0.05rem 0.35rem;
-}
 .cvl-garrison-empty {
   font-size: 0.72rem;
   color: var(--text-muted);
@@ -6774,6 +6988,26 @@ body.nav-open #screen-root {
   color: var(--text-muted);
   padding: 0.4rem 0.1rem 0.35rem;
 }
+.disc-section-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.disc-section-row .disc-section-label { padding-bottom: 0; }
+.disc-clear-all-btn {
+  flex-shrink: 0;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid rgba(200,80,80,0.3);
+  background: rgba(200,80,80,0.06);
+  color: #c07070;
+  cursor: pointer;
+  transition: background var(--transition, 0.15s), border-color var(--transition, 0.15s);
+}
+.disc-clear-all-btn:hover { background: rgba(200,80,80,0.14); border-color: rgba(200,80,80,0.5); color: #e08080; }
 .disc-section-divider {
   border: none;
   border-top: 1px solid rgba(255,255,255,0.07);
@@ -6944,33 +7178,35 @@ body.nav-open #screen-root {
   color: var(--text-secondary);
 }
 
-/* ── Stat row (Category / Tier / Reported) ── */
+/* ── Stat row (Category / Tier / Reported) — outlined chips, same grammar
+   as the FOUND/Victory pill above rather than a grid of filled boxes. ── */
 .qd-stats {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
 }
 .qd-stat {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.5rem 0.4rem;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-base);
-  background: var(--bg-raised);
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-gold);
+  background: transparent;
 }
 .qd-stat-label {
   font-family: var(--font-display);
-  font-size: 0.68rem;
-  letter-spacing: 0.08em;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--text-secondary);
+  color: var(--text-muted);
 }
 .qd-stat-value {
-  font-size: 0.94rem;
+  font-family: var(--font-display);
+  font-size: 0.74rem;
   font-weight: 700;
-  color: var(--text-primary);
+  letter-spacing: 0.02em;
+  color: var(--text-gold-light);
 }
 
 /* ── Outcome banner (combat / nothing found) ── */
@@ -7012,7 +7248,9 @@ body.nav-open #screen-root {
   font-style: italic;
 }
 
-/* ── Spoils list — itemised rewards, replaces the old chip row ── */
+/* ── Spoils list — a ledger, not a stack of boxes. Rows separated by a
+   hairline gold-tinted rule instead of each being its own bordered/filled
+   card nested inside the report card. ── */
 .qd-spoils { display: flex; flex-direction: column; gap: 0.45rem; }
 .qd-spoils-label {
   font-family: var(--font-display);
@@ -7021,15 +7259,17 @@ body.nav-open #screen-root {
   text-transform: uppercase;
   color: var(--text-gold);
 }
-.qd-spoils-list { display: flex; flex-direction: column; gap: 0.35rem; }
+.qd-spoils-list {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid rgba(200,147,58,0.15);
+}
 .qd-spoils-row {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.4rem 0.65rem;
-  border: 1px solid var(--border-base);
-  border-radius: var(--radius-sm);
-  background: var(--bg-raised);
+  padding: 0.5rem 0.1rem;
+  border-bottom: 1px solid rgba(200,147,58,0.15);
 }
 .qd-spoils-icon { font-size: 1rem; flex-shrink: 0; }
 .qd-spoils-name {
@@ -7039,7 +7279,12 @@ body.nav-open #screen-root {
   text-transform: uppercase;
   color: var(--text-secondary);
 }
-.qd-spoils-value { font-size: 0.9rem; font-weight: 700; color: var(--text-gold-light); }
+.qd-spoils-value {
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text-gold-light);
+}
 
 .qd-battle-link {
   align-self: flex-start;
@@ -7536,6 +7781,12 @@ body.nav-open #screen-root {
 .bh-empty-icon { font-size: 2.5rem; opacity: 0.4; }
 .bh-empty-msg  { font-size: 0.85rem; }
 .bh-empty-hint { font-size: 0.72rem; opacity: 0.7; }
+
+.bh-section-row {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.75rem 1rem 0;
+}
 
 .bh-list {
   display: flex;
@@ -8144,6 +8395,7 @@ body.nav-open #screen-root {
   width: 64px;
 }
 .ac-unit-portrait-wrap {
+  position: relative; /* anchors .uc-type-badge */
   width: 56px;
   height: 56px;
   border-radius: 5px;
@@ -9314,6 +9566,7 @@ body.nav-open #screen-root {
 .la-unit-card.bsim-card--dead {
   filter: grayscale(0.85) brightness(0.55);
   border-color: #333 !important;
+  border-image: none !important; /* kill the bronze frame on dead cards */
   box-shadow: none !important;
 }
 
@@ -9367,29 +9620,8 @@ body.nav-open #screen-root {
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
-  background: var(--bg-dark, #0e0e0e);
-  color: var(--text-base, #ccc);
-}
-
-
-/* ── Header ──────────────────────────────────────────── */
-.rank-header {
-  padding: 1.25rem 1.25rem 0.5rem;
-  border-bottom: 1px solid var(--border, #2a2a2a);
-  background: var(--bg-panel, #141414);
-}
-
-.rank-title {
-  font-family: 'Cinzel', serif;
-  font-size: 1.3rem;
-  color: var(--text-gold, #c9973a);
-  letter-spacing: 0.08em;
-  margin: 0 0 0.2rem;
-}
-
-.rank-subtitle {
-  font-size: 0.75rem;
-  color: var(--text-muted, #888);
+  background: var(--bg-deep);
+  color: var(--text-primary);
 }
 
 .rank-loading {
@@ -9401,112 +9633,309 @@ body.nav-open #screen-root {
   font-style: italic;
 }
 
-/* ── Content ─────────────────────────────────────────── */
-.rank-content {
+/* ── Split body — mirrors the city view's cv-body/cv-left/cv-right ── */
+.rkv-body {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  max-width: 700px;
-  margin: 0 auto;
-  padding: 1rem 1rem 3rem;
   display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  width: 100%;
-}
-
-.rank-section {}
-
-.rank-section-title {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--text-muted, #666);
-  text-transform: uppercase;
-  margin-bottom: 0.6rem;
-  padding-left: 0.1rem;
-}
-
-/* ── Own score card ──────────────────────────────────── */
-.rank-own-card {
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 10px;
   overflow: hidden;
 }
 
-.rank-own-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 0.85rem 1rem;
-  background: linear-gradient(135deg, #1a1500 0%, #0e0e0e 100%);
-  cursor: pointer;
-  list-style: none;
-  user-select: none;
-}
-.rank-own-top::-webkit-details-marker { display: none; }
-.rank-own-top::marker { content: ''; }
-.rank-own-card[open] .rank-own-top { border-bottom: 1px solid #2a2510; }
-
-.rank-own-chevron {
-  font-size: 0.8rem;
-  color: var(--text-muted, #888);
-  transition: transform 0.15s;
-}
-.rank-own-card[open] .rank-own-chevron { transform: rotate(180deg); }
-
-.rank-own-name {
-  font-family: 'Cinzel', serif;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-gold, #c9973a);
-  letter-spacing: 0.06em;
-}
-
-.rank-own-total {
-  font-size: 1.5rem;
-  font-weight: 800;
-  color: #fff;
-  letter-spacing: -0.01em;
-}
-
-.rank-pts-unit {
-  font-size: 0.75rem;
-  color: var(--text-muted, #888);
-  font-weight: 400;
-}
-
-/* ── Score breakdown rows ────────────────────────────── */
-.rank-breakdown {
+.rkv-left {
+  flex: 0 0 264px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-muted);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
 
-.rank-brow {
-  display: grid;
-  grid-template-columns: 1.4rem 1fr;
-  align-items: start;
-  gap: 0.5rem;
-  padding: 0.6rem 1rem;
-  border-bottom: 1px solid #1a1a1a;
-  transition: background 0.12s;
+.rkv-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
-.rank-brow:last-child { border-bottom: none; }
-.rank-brow:hover { background: #1a1a1a; }
 
-.rank-brow-icon   { font-size: 0.95rem; padding-top: 0.1rem; }
-.rank-brow-body   { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.rank-brow-top    { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
-.rank-brow-label  { font-size: 0.8rem; font-weight: 600; color: var(--text-base, #ccc); }
-.rank-brow-sub    { font-size: 0.68rem; color: var(--text-muted, #777); }
-.rank-brow-pts    {
-  font-size: 0.88rem;
+/* ── Left panel: portrait artwork ────────────────────── */
+.rkv-portrait {
+  position: relative;
+  width: 100%;
+  height: 185px;
+  background: #05020a;
+  border-bottom: 1px solid var(--border-muted);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.rkv-portrait-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 20%;
+}
+
+.rkv-portrait-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 3rem;
+  color: var(--text-muted);
+  opacity: 0.35;
+}
+
+.rkv-portrait-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 55%, rgba(8,12,24,0.85) 100%);
+  pointer-events: none;
+}
+
+.rkv-portrait-rank {
+  position: absolute;
+  left: 0.6rem;
+  bottom: 0.55rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.18rem 0.6rem;
+  background: rgba(8,12,24,0.78);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-pill);
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--text-gold-light);
+}
+
+/* ── Left panel: identity ────────────────────────────── */
+.rkv-id { padding: 0.75rem 0.9rem 0.65rem; }
+
+.rkv-name {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--text-gold-light);
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.rkv-id-sub {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+}
+
+.rkv-divider {
+  height: 1px;
+  background: var(--border-muted);
+  margin: 0 0.9rem;
+}
+
+/* ── Left panel: total score (doubles as the Overall switcher) ── */
+.rkv-total {
+  display: block;
+  width: calc(100% - 1.5rem);
+  margin: 0.75rem auto;
+  padding: 0.65rem 0.8rem;
+  text-align: left;
+  background: linear-gradient(135deg, rgba(200,147,58,0.1) 0%, rgba(200,147,58,0.02) 100%);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  color: inherit;
+  cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.rkv-total:hover { border-color: var(--border-gold); }
+.rkv-total--active {
+  border-color: var(--border-gold);
+  box-shadow: 0 2px 14px rgba(200,147,58,0.18);
+}
+
+.rkv-total-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-display);
+  font-size: 0.64rem;
   font-weight: 700;
-  color: var(--text-gold, #c9973a);
-  min-width: 4rem;
-  text-align: right;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 
+.rkv-total-value {
+  margin-top: 0.2rem;
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+.rkv-total-unit { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); }
+
+.rkv-total-sub {
+  margin-top: 0.15rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* ── Left panel: category breakdown (rows switch tabs too) ── */
+.rkv-cats-header {
+  padding: 0.7rem 0.9rem 0.3rem;
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.rkv-cats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0 0.6rem 1rem;
+}
+
+.rkv-cat {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem 0.45rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.rkv-cat:hover { background: var(--bg-raised); }
+.rkv-cat--active {
+  background: rgba(200,147,58,0.07);
+  border-color: var(--border-accent);
+}
+
+.rkv-cat-icon { font-size: 0.95rem; text-align: center; }
+
+.rkv-cat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.rkv-cat-label {
+  font-family: var(--font-display);
+  font-size: 0.76rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+.rkv-cat--active .rkv-cat-label { color: var(--text-gold-light); }
+
+.rkv-cat-sub { font-size: 0.63rem; color: var(--text-muted); }
+
+.rkv-cat-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+.rkv-cat-pts { font-size: 0.82rem; font-weight: 700; color: var(--text-gold); }
+
+.rkv-cat-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.62rem;
+  color: var(--text-muted);
+}
+
+/* ── Right pane: underline tab bar (same grammar as bld2-tabs) ── */
+.rkv-tabs {
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-muted);
+  flex-shrink: 0;
+  padding: 0 0.5rem;
+}
+
+.rkv-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition), border-color var(--transition);
+}
+.rkv-tab:hover   { color: var(--text-secondary); }
+.rkv-tab--active { color: var(--text-gold); border-bottom-color: var(--gold); }
+
+.rkv-pos {
+  margin-left: auto;
+  padding: 0 0.9rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+/* ── Right pane: scrollable leaderboard area ─────────── */
+.rkv-list-area {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1rem 1.25rem 3rem;
+}
+.rkv-list-area .rank-list,
+.rkv-list-area .rank-empty {
+  max-width: 860px;
+  margin: 0 auto;
+}
+.rkv-list-area .rank-list { animation: rkv-list-in 0.25s ease-out; }
+
+@keyframes rkv-list-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rkv-list-area .rank-list { animation: none; }
+}
+
+/* ── Stacked layout on narrow screens ────────────────── */
+@media (max-width: 760px) {
+  .rkv-body { flex-direction: column; overflow-y: auto; }
+  .rkv-left {
+    flex: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border-muted);
+    overflow: visible;
+  }
+  .rkv-portrait { height: 130px; }
+  .rkv-right { flex: none; overflow: visible; }
+  .rkv-tabs { overflow-x: auto; position: sticky; top: 0; z-index: 2; }
+  .rkv-pos { display: none; }
+  .rkv-list-area { overflow: visible; padding: 0.75rem 0.75rem 3rem; }
 }
 
 /* ── Leaderboard ─────────────────────────────────────── */
@@ -9655,49 +10084,7 @@ body.nav-open #screen-root {
   color: var(--text-muted, #888);
 }
 
-/* Progress bar showing relative score */
-.rank-row-bar {
-  height: 3px;
-  background: #1e1e1e;
-  border-radius: 2px;
-  overflow: hidden;
-}
-.rank-row-bar-fill {
-  height: 100%;
-  background: var(--text-gold, #c9973a);
-  border-radius: 2px;
-  opacity: 0.6;
-  transition: width 0.4s ease;
-}
-.rank-row--own .rank-row-bar-fill { opacity: 1; }
-
-/* Breakdown chips on each leaderboard row */
-.rank-row-breakdown {
-  display: flex;
-  gap: 0.6rem;
-  flex-wrap: wrap;
-}
-.rank-row-breakdown span {
-  font-size: 0.62rem;
-  color: var(--text-muted, #666);
-}
-
-/* Sub-label row */
-.rank-row-sub {
-  font-size: 0.7rem;
-  color: var(--text-muted, #777);
-}
-
-/* Lord badge in leaderboard */
-.rank-lord-badge {
-  font-size: 0.7rem;
-  color: var(--text-muted, #aaa);
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-}
-
-/* ── Ranking sub-tabs ───────────────────────────────────────── */
+/* ── Ranking sub-tabs (still used by the Clan screen) ───────── */
 .rank-tabs-row {
   display: flex;
   gap: 4px;
@@ -9771,18 +10158,10 @@ body.nav-open #screen-root {
   margin-top: 0.5rem;
   box-sizing: border-box;
 }
-.mip-card-wide.ov-city-card .ov-cc-art { height: 64px; }
-.mip-card-wide.ov-lord-card .ov-lc-portrait { height: 72px; }
-.ov-cc-enter, .ov-lc-enter {
-  font-size: 0.72rem;
-  color: var(--text-gold);
-  opacity: 0;
-  text-align: right;
-  padding: 0.25rem 0.75rem 0.5rem;
-  transition: opacity var(--transition);
-}
-.mip-card-wide:hover .ov-cc-enter,
-.mip-card-wide:hover .ov-lc-enter { opacity: 1; }
+/* Art heights absorbed the removed "Enter City →"/"Manage →" rows —
+   card footprint unchanged */
+.mip-card-wide.ov-city-card .ov-cc-art { height: 88px; }
+.mip-card-wide.ov-lord-card .ov-lc-portrait { height: 94px; }
 
 /* ── Clan screen ──────────────────────────────────────────── */
 .clan-screen {
@@ -9927,6 +10306,44 @@ body.nav-open #screen-root {
 }
 .clan-leave-btn:hover { background: rgba(200,80,80,0.1); color: #e08080; }
 
+/* ── Clan Rankings tab ─────────────────────────────────────────── */
+.clan-rankings-list { display: flex; flex-direction: column; }
+.clan-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid #1a1a1a;
+  font-size: 0.85rem;
+}
+.clan-rank-row:last-child { border-bottom: none; }
+.clan-rank-pos {
+  color: var(--text-muted, #888);
+  font-variant-numeric: tabular-nums;
+  min-width: 2em;
+  flex: 0 0 auto;
+}
+.clan-rank-points {
+  color: var(--text-gold, #c9973a);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+}
+.clan-rank-count {
+  color: var(--text-muted, #888);
+  font-size: 0.72rem;
+  flex: 0 0 auto;
+  min-width: 5em;
+  text-align: right;
+}
+.clan-rank-war {
+  color: #c05050;
+  font-size: 0.72rem;
+  flex: 0 0 auto;
+  min-width: 5em;
+  text-align: right;
+}
+
 .clan-create-card {
   display: flex;
   gap: 0.5rem;
@@ -10042,6 +10459,13 @@ body.nav-open #screen-root {
 .clan-war-sides { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .clan-war-side { color: var(--text-muted, #888); }
 .clan-war-side b { color: var(--text-base, #ddd); font-variant-numeric: tabular-nums; }
+/* Same green/red pair as .clan-honor--pos/--neg elsewhere in this file. */
+.clan-war-side--mine    { color: #5db85d; }
+.clan-war-side--mine b  { color: #5db85d; }
+.clan-war-side--enemy   { color: #c05050; }
+.clan-war-side--enemy b { color: #c05050; }
+/* Declared after --mine/--enemy (same specificity, later wins): whichever
+   side is currently ahead still reads gold regardless of mine/enemy. */
 .clan-war-side--leading { color: var(--text-gold, #c9973a); }
 .clan-war-side--leading b { color: var(--text-gold, #c9973a); }
 .clan-war-vs { font-size: 0.7rem; color: var(--text-muted, #666); }
@@ -10071,4 +10495,391 @@ body.nav-open #screen-root {
   font-size: 0.8rem;
   flex: 1;
   min-width: 130px;
+}
+
+/* =============================================================
+   OGame-style city building UI (Resources / Infrastructure /
+   Military tabs): thumbnail grid + detail panel.
+   ============================================================= */
+
+/* -- Building card grid — same grammar as .ov-city-card/.ov-lord-card:
+      art with bottom fade on top, name row below, 200px grid,
+      radius-lg card with gold border+glow on hover. ----------------- */
+.bld3-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.9rem;
+  margin: 0.9rem 1rem 0;
+  padding-bottom: 1.5rem;
+}
+.bld3-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: border-color var(--transition), box-shadow var(--transition);
+  color: var(--text-primary);
+  font: inherit;
+}
+.bld3-tile:hover {
+  border-color: var(--border-gold);
+  box-shadow: 0 0 14px rgba(200, 147, 58, 0.15);
+}
+.bld3-tile--selected,
+.bld3-tile--selected:hover {
+  border-color: var(--gold);
+  box-shadow: 0 0 14px rgba(200, 147, 58, 0.3), 0 0 0 1px var(--gold-dark);
+}
+.bld3-tile-art {
+  position: relative;
+  width: 100%;
+  height: 150px; /* generous art strip — show the building illustrations properly */
+  overflow: hidden;
+  background: #05020a;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.bld3-tile-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  filter: saturate(0.9);
+  transition: filter var(--transition);
+}
+.bld3-tile:hover .bld3-tile-img,
+.bld3-tile--selected .bld3-tile-img { filter: saturate(1.05); }
+.bld3-tile--locked .bld3-tile-img { filter: grayscale(0.8) brightness(0.6); }
+.bld3-tile-art-fade {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 55%;
+  background: linear-gradient(to bottom, transparent 0%, var(--bg-surface) 100%);
+  pointer-events: none;
+}
+.bld3-tile-icon {
+  font-size: 2.2rem;
+  line-height: 1;
+  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+}
+.bld3-tile-info {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.45rem 0.85rem 0.55rem;
+}
+.bld3-tile-name {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  color: var(--text-gold-light, var(--gold-light));
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bld3-tile-level {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.bld3-tile--selected .bld3-tile-level { color: var(--gold-light); }
+/* Busy overlay — mirrors the lord cards' activity overlays */
+.bld3-tile-busy {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.18rem;
+  background: rgba(8, 12, 24, 0.78);
+  pointer-events: none;
+}
+.bld3-tile-busy-icon { font-size: 1.35rem; filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8)); }
+.bld3-tile-busy-label {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.bld3-tile-busy-cd {
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+/* Can't-afford state — same diagonal-stripe treatment as the locked
+   "Found City"/"Recruit Lord" add-cards. Costs live in the detail panel. */
+.bld3-tile--cant {
+  position: relative;
+  opacity: 0.6;
+}
+.bld3-tile--cant::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 6px,
+    rgba(0, 0, 0, 0.28) 6px,
+    rgba(0, 0, 0, 0.28) 10px
+  );
+}
+.bld3-tile--cant .bld3-tile-name { color: var(--text-muted); }
+
+.bld3-tile-lm {
+  position: absolute;
+  right: 0.5rem;
+  top: 0.45rem;
+  z-index: 1;
+  font-size: 0.9rem;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.9));
+}
+.bld3-tile--maxed .bld3-tile-level { color: var(--text-success); }
+.bld3-tile--inqueue { border-color: var(--border-accent); }
+.bld3-tile--locked  { opacity: 0.45; }
+.bld3-tile--stat-pos   { border-color: var(--text-success); }
+.bld3-tile--stat-neg   { border-color: var(--text-danger); }
+.bld3-tile--stat-muted { opacity: 0.4; }
+
+/* -- Detail panel (above the grid) ------------------------------ */
+.bld3-detail {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  margin: 0 1rem 0.9rem;
+  overflow: hidden;
+  animation: bld3-detail-in 160ms ease;
+}
+@keyframes bld3-detail-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: none; }
+}
+.bld3-detail--landmark { border-color: var(--border-gold); }
+.bld3-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg-raised);
+  border-bottom: 1px solid var(--border-base);
+}
+.bld3-detail-name {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  font-size: 0.95rem;
+  color: var(--gold);
+}
+.bld3-detail-level {
+  margin-left: auto;
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+.bld3-detail-queued { color: var(--gold-light); }
+.bld3-detail-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0.15rem 0.3rem;
+  border-radius: var(--radius-sm);
+  transition: color var(--transition);
+}
+.bld3-detail-close:hover { color: var(--text-primary); }
+.bld3-detail-body {
+  display: flex;
+  gap: 1rem;
+  padding: 0.9rem;
+  align-items: flex-start;
+}
+.bld3-detail-icon {
+  flex: 0 0 auto;
+  width: 84px;
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.6rem;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
+}
+.bld3-detail-img {
+  flex: 0 0 auto;
+  width: 224px;
+  height: 150px; /* same art height as the grid cards */
+  object-fit: cover;
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+.bld3-detail-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.bld3-detail-desc { font-size: 0.8rem; color: var(--text-secondary); line-height: 1.45; }
+.bld3-detail-req-title {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+.bld3-detail-actions {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.45rem;
+  min-width: 130px;
+}
+.bld3-teardown-btn {
+  padding: 0.35rem 0.6rem;
+  background: none;
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: color var(--transition), border-color var(--transition);
+}
+.bld3-teardown-btn:hover {
+  color: var(--text-danger);
+  border-color: var(--text-danger);
+}
+
+@media (max-width: 720px) {
+  .bld3-detail-body { flex-direction: column; }
+  .bld3-detail-actions { flex-direction: row; align-items: center; }
+  .bld3-detail-img { width: 100%; height: 150px; }
+}
+
+/* -- Under-threat state for Overview city/lord cards ------------ */
+.ov-card--threat,
+.ov-card--threat:hover {
+  border-color: rgba(220, 60, 60, 0.75);
+  box-shadow: 0 0 14px rgba(200, 40, 40, 0.3);
+  animation: ov-card-threat-pulse 2s ease-in-out infinite;
+}
+@keyframes ov-card-threat-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(200, 40, 40, 0.2); }
+  50%      { box-shadow: 0 0 18px rgba(200, 40, 40, 0.45); }
+}
+
+/* -- March food cost rows (map move panel + attack confirm) ----- */
+.mip-value--danger { color: var(--text-danger); }
+.ac-march-cost {
+  margin-right: auto;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.ac-march-cost--short { color: var(--text-danger); }
+
+/* -- Research screen (Library books / Temple blessings) -------- */
+.rs-screen {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  overflow: hidden;
+}
+.rs-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-top: 0.9rem;
+}
+.rs-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0 1rem 0.9rem;
+  padding: 0.55rem 0.9rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+.rs-status b { color: var(--gold-light); }
+.rs-status-sep { color: var(--text-muted); }
+.rs-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 4rem 1rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+.rs-empty-icon { font-size: 2.2rem; color: var(--gold); }
+.rs-empty-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1rem;
+  letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+.rs-empty-sub { font-size: 0.8rem; max-width: 380px; }
+.rs-hint {
+  border-top: 1px solid var(--border-base);
+  padding: 0.55rem 0.9rem;
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
+.rs-hint b { color: var(--gold-light); }
+
+/* Active-research countdown + instant-finish (Research screen detail) */
+.rsch-active { display: flex; align-items: center; gap: 0.4rem; }
+.rsch-cd {
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: var(--gold-light);
+}
+.rsch-instant-btn {
+  padding: 0.25rem 0.55rem;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-sm);
+  color: var(--gold-light);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: filter var(--transition);
+}
+.rsch-instant-btn:hover { filter: brightness(1.2); }
+
+/* -- Veterancy badge on recruit cards -------------------------- */
+.la-vet-badge {
+  display: inline-block;
+  margin-left: 0.25rem;
+  padding: 0 0.3rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #7ac47a;
+  background: rgba(58, 138, 58, 0.12);
+  border: 1px solid rgba(58, 138, 58, 0.4);
+  border-radius: 999px;
+  vertical-align: middle;
 }

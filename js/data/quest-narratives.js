@@ -14,11 +14,6 @@ var QUEST_NOTHING_NARRATIVES = {
     "Three days of sweeping the flatlands yielded no discovery of note. A merchant had passed this way recently — judging by the wheel ruts — but was long gone. The land lay quiet and unremarkable.",
     "Your scouts combed the fields methodically, quadrant by quadrant. Whatever riches or dangers might once have lived here, they have moved on. The plains gave nothing.",
   ],
-  hills: [
-    "Your men climbed every ridge and descended into every gully, their boots worn raw by the end of it. The hills were empty — old stone walls overgrown with moss, a dry well, and the wind. Nothing of use.",
-    "A thorough search of the high ground turned up a few rusted arrowheads and the bones of a horse, but nothing worth reporting. The hills keep their secrets well.",
-    "Your scouts picked their way through the rocky terrain for two days, finding only the tracks of mountain goats and an abandoned shepherd's hut stripped of everything useful.",
-  ],
   marsh: [
     "Your scouts waded through hours of bog and briar, their legs black with mud by midday. The swamp concealed nothing — or perhaps concealed everything. They returned feverish and empty-handed.",
     "The marsh is a treacherous place to search. Every step sounded like a footfall, and every shadow might be anything. In the end, your men found only bad water and biting insects.",
@@ -94,8 +89,8 @@ var QUEST_DEF_NARRATIVES = {
     "The surface of the bog gave no sign of what lay beneath. Sheer luck — one man's boot breaking through a patch of frozen mud — revealed it. A cluster of bog crystals, old as the swamp itself.",
   ],
   iron_vein: [
-    "Following a dry gully inland, your scouts found exposed rock faces stripped bare by old flooding. The rust-red streaks running through the grey stone told their own story — iron, and plenty of it.",
-    "Your men found a natural vein of iron ore exposed along a hillside, untouched and unworked. Rich enough to be worth the effort of extraction.",
+    "Following a dry gully inland, your scouts found exposed rock faces stripped bare by old flooding. The clean seams running through the grey stone told their own story — good building rock, and plenty of it.",
+    "Your men found a natural vein of workable stone exposed along a hillside, untouched and unworked. Rich enough to be worth the effort of extraction.",
   ],
   fertile_fields: [
     "Past the main road and off the beaten path, your scouts stumbled on a stretch of land that clearly used to be farmed. Deep soil, good drainage, and signs that grain once grew here in abundance. With some work, it could again.",

@@ -20,12 +20,21 @@ const ClanScreen = (() => {
   let _player     = null;
   let _clans      = [];
   let _myClan     = null;
+  let _wars       = []; // every clan_wars row in the game, named absolutely (clanA/clanB) — see clan-list.js
   let _honorByPid = {};
   let _scoreByPid = {};
+  let _activeTab  = 'mine';
+
+  const _TABS = [
+    { id: 'mine',     label: gi('round-shield') + ' My Clan' },
+    { id: 'wars',     label: gi('crossed-swords') + ' All Wars' },
+    { id: 'rankings', label: gi('trophy') + ' Rankings' },
+  ];
 
   async function render(root, { player }) {
-    _root   = root;
-    _player = player;
+    _root      = root;
+    _player    = player;
+    _activeTab = 'mine';
     root.innerHTML = _loadingHtml();
 
     const [clanResult, leaderboard] = await Promise.all([
@@ -33,6 +42,7 @@ const ClanScreen = (() => {
       RankingService.fetchLeaderboard(),
     ]);
     _clans  = clanResult.ok ? clanResult.clans : [];
+    _wars   = clanResult.ok ? (clanResult.wars || []) : [];
     _myClan = _clans.find(c => c.id === _player.clanId) || null;
 
     _honorByPid = {};
@@ -47,19 +57,37 @@ const ClanScreen = (() => {
 
   function _renderFull() {
     _root.innerHTML = _html();
+    _renderTabContent();
     _bindEvents();
   }
 
   function _html() {
+    const tabsHtml = _TABS.map(t => `
+      <button class="rank-tab ${_activeTab === t.id ? 'rank-tab--active' : ''}" data-clan-tab="${t.id}">${t.label}</button>
+    `).join('');
+
     return `
       <div class="clan-screen">
         <div class="clan-header">
-          <h2 class="clan-title">🛡 Clan</h2>
+          <h2 class="clan-title">${gi('round-shield')} Clan</h2>
         </div>
         <div class="clan-content">
-          ${_myClan ? _myClanHtml() : _noClanHtml()}
+          <div class="rank-tabs-row">${tabsHtml}</div>
+          <div class="rank-tab-content" id="clan-tab-content"></div>
         </div>
       </div>`;
+  }
+
+  function _renderTabContent() {
+    const el = document.getElementById('clan-tab-content');
+    if (!el) return;
+    el.innerHTML = _tabHtml(_activeTab);
+  }
+
+  function _tabHtml(tab) {
+    if (tab === 'wars')     return _allWarsHtml();
+    if (tab === 'rankings') return _clanRankingsHtml();
+    return _myClan ? _myClanHtml() : _noClanHtml();
   }
 
   // ── In a clan ─────────────────────────────────────────────────
@@ -68,8 +96,8 @@ const ClanScreen = (() => {
     const isLeader   = _myClan.leaderId === _player.id;
     const soleMember = _myClan.memberCount === 1;
     const leaveLabel = isLeader
-      ? (soleMember ? '🗑 Disband Clan' : '🚪 Leave (passes leadership on)')
-      : '🚪 Leave Clan';
+      ? (soleMember ? gi('trash-can') + ' Disband Clan' : gi('exit-door') + ' Leave (passes leadership on)')
+      : gi('exit-door') + ' Leave Clan';
 
     return `
       <section class="clan-section">
@@ -97,7 +125,7 @@ const ClanScreen = (() => {
     const honorCls = honor > 0 ? 'clan-honor--pos' : honor < 0 ? 'clan-honor--neg' : 'clan-honor--zero';
     return `
       <div class="clan-member-row${m.playerId === _player.id ? ' clan-member-row--you' : ''}">
-        <span class="clan-member-name">${m.playerId === _myClan.leaderId ? '👑 ' : ''}${m.username}${m.playerId === _player.id ? ' (you)' : ''}</span>
+        <span class="clan-member-name">${m.playerId === _myClan.leaderId ? gi('crown') + ' ' : ''}${m.username}${m.playerId === _player.id ? ' (you)' : ''}</span>
         <span class="clan-member-honor">${tier ? honorCrestHtml(tier, 'clan-honor-crest') : ''}<span class="${honorCls}">${sign}${Math.abs(honor)}</span></span>
         <span class="clan-member-score">${score.toLocaleString()} pts</span>
         ${isLeader && m.playerId !== _player.id
@@ -146,19 +174,87 @@ const ClanScreen = (() => {
   }
 
   function _warRowHtml(w) {
-    const leading = w.myScore === w.opponentScore ? 'even' : (w.myScore > w.opponentScore ? 'me' : 'opponent');
+    const myScore  = Math.round(w.myScore);
+    const oppScore = Math.round(w.opponentScore);
+    const leading = myScore === oppScore ? 'even' : (myScore > oppScore ? 'me' : 'opponent');
     const statusHtml = w.status === 'active'
       ? `<span class="clan-war-countdown">${_countdown(w.endsAt)}</span>`
       : `<span class="clan-war-result">${w.isWinner === null ? 'Draw' : w.isWinner ? 'Victory' : 'Defeat'}</span>`;
     return `
       <div class="clan-war-row clan-war-row--${w.status}">
         <div class="clan-war-sides">
-          <span class="clan-war-side clan-war-side--mine${leading === 'me' ? ' clan-war-side--leading' : ''}">${_myClan.tag} <b>${w.myScore.toLocaleString()}</b></span>
+          <span class="clan-war-side clan-war-side--mine${leading === 'me' ? ' clan-war-side--leading' : ''}">${_myClan.tag} <b>${myScore.toLocaleString()}</b></span>
           <span class="clan-war-vs">vs</span>
-          <span class="clan-war-side${leading === 'opponent' ? ' clan-war-side--leading' : ''}">[${w.opponentTag}] ${w.opponentName} <b>${w.opponentScore.toLocaleString()}</b></span>
+          <span class="clan-war-side clan-war-side--enemy${leading === 'opponent' ? ' clan-war-side--leading' : ''}">[${w.opponentTag}] ${w.opponentName} <b>${oppScore.toLocaleString()}</b></span>
         </div>
         ${statusHtml}
       </div>`;
+  }
+
+  // "All Wars" tab — every clan war in the game (not just the player's own),
+  // named absolutely (clanA/clanB) since neither side is "mine" here. Same
+  // row shape/classes as _warRowHtml, just without a fixed "mine" side —
+  // both sides get --enemy-toned styling and only the leading one goes gold.
+  function _allWarsHtml() {
+    if (_wars.length === 0) return '<p class="clan-empty">No clan wars yet.</p>';
+    const active = _wars.filter(w => w.status === 'active');
+    const ended  = _wars.filter(w => w.status === 'ended').slice(0, 20);
+    return `
+      <section class="clan-section">
+        <div class="clan-section-title">Active Wars${active.length ? ` (${active.length})` : ''}</div>
+        ${active.length === 0
+          ? '<p class="clan-empty">No active wars right now.</p>'
+          : `<div class="clan-war-list">${active.map(_globalWarRowHtml).join('')}</div>`}
+        ${ended.length > 0 ? `
+          <div class="clan-section-title" style="margin-top:1rem">Recently Ended</div>
+          <div class="clan-war-history">${ended.map(_globalWarRowHtml).join('')}</div>` : ''}
+      </section>`;
+  }
+
+  function _globalWarRowHtml(w) {
+    const scoreA = Math.round(w.scoreA);
+    const scoreB = Math.round(w.scoreB);
+    const leading = scoreA === scoreB ? 'even' : (scoreA > scoreB ? 'a' : 'b');
+    const statusHtml = w.status === 'active'
+      ? `<span class="clan-war-countdown">${_countdown(w.endsAt)}</span>`
+      : `<span class="clan-war-result">${w.winnerClanId ? `[${w.winnerClanId === w.clanAId ? w.clanATag : w.clanBTag}] wins` : 'Draw'}</span>`;
+    return `
+      <div class="clan-war-row clan-war-row--${w.status}">
+        <div class="clan-war-sides">
+          <span class="clan-war-side clan-war-side--mine${leading === 'a' ? ' clan-war-side--leading' : ''}">[${w.clanATag}] ${w.clanAName} <b>${scoreA.toLocaleString()}</b></span>
+          <span class="clan-war-vs">vs</span>
+          <span class="clan-war-side clan-war-side--enemy${leading === 'b' ? ' clan-war-side--leading' : ''}">[${w.clanBTag}] ${w.clanBName} <b>${scoreB.toLocaleString()}</b></span>
+        </div>
+        ${statusHtml}
+      </div>`;
+  }
+
+  // "Rankings" tab — every clan ranked by the sum of its members' ranking
+  // score, using data already fetched for this screen (_clans' member
+  // lists, _scoreByPid from the leaderboard) — no extra server call.
+  function _clanRankingsHtml() {
+    if (_clans.length === 0) return '<p class="clan-empty">No clans yet.</p>';
+    const ranked = _clans.map(c => {
+      const totalPoints = (c.members || []).reduce((sum, m) => sum + (_scoreByPid[m.playerId] || 0), 0);
+      const activeWar = (c.wars || []).find(w => w.status === 'active') || null;
+      return { clan: c, totalPoints, playerCount: (c.members || []).length, activeWar };
+    }).sort((a, b) => b.totalPoints - a.totalPoints);
+
+    return `
+      <section class="clan-section">
+        <div class="clan-section-title">Clans by Total Points</div>
+        <div class="clan-rankings-list">
+          ${ranked.map((r, i) => `
+            <div class="clan-rank-row${r.clan.id === _myClan?.id ? ' clan-member-row--you' : ''}">
+              <span class="clan-rank-pos">#${i + 1}</span>
+              <span class="clan-tag">[${r.clan.tag}]</span>
+              <span class="clan-name">${r.clan.name}</span>
+              <span class="clan-rank-points">${Math.round(r.totalPoints).toLocaleString()} pts</span>
+              <span class="clan-rank-count">${r.playerCount} player${r.playerCount === 1 ? '' : 's'}</span>
+              <span class="clan-rank-war">${r.activeWar ? `${gi('crossed-swords')} vs [${r.activeWar.opponentTag}]` : ''}</span>
+            </div>`).join('')}
+        </div>
+      </section>`;
   }
 
   function _declareWarHtml(otherClans) {
@@ -175,7 +271,7 @@ const ClanScreen = (() => {
           <option value="259200">3 days</option>
           <option value="604800">7 days</option>
         </select>
-        <button class="btn-primary" id="clan-war-declare-btn">⚔ Declare War</button>
+        <button class="btn-primary" id="clan-war-declare-btn">${gi('crossed-swords')} Declare War</button>
       </div>
       <p class="clan-error" id="clan-war-error"></p>`;
   }
@@ -208,7 +304,7 @@ const ClanScreen = (() => {
       </section>
       <section class="clan-section">
         <div class="clan-section-title">Join a Clan</div>
-        ${myPendingClan ? `<p class="clan-pending-note">⏳ Application pending — waiting for [${myPendingClan.tag}] ${myPendingClan.name}'s leader to respond.</p>` : ''}
+        ${myPendingClan ? `<p class="clan-pending-note">${gi('hourglass')} Application pending — waiting for [${myPendingClan.tag}] ${myPendingClan.name}'s leader to respond.</p>` : ''}
         ${browsable.length === 0
           ? '<p class="clan-empty">No joinable clans yet — be the first to create one!</p>'
           : `<div class="clan-browse-list">
@@ -229,7 +325,28 @@ const ClanScreen = (() => {
 
   // ── Events ────────────────────────────────────────────────────
 
+  // Tab buttons are only ever created once (in _html(), on the initial
+  // full render) — switching tabs just swaps #clan-tab-content's innerHTML,
+  // so only the content-specific listeners below need rebinding each time.
   function _bindEvents() {
+    document.querySelectorAll('.rank-tab[data-clan-tab]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _activeTab = btn.dataset.clanTab;
+        document.querySelectorAll('.rank-tab[data-clan-tab]').forEach(b => b.classList.remove('rank-tab--active'));
+        btn.classList.add('rank-tab--active');
+        _renderTabContent();
+        _bindContentEvents();
+      });
+    });
+    _bindContentEvents();
+  }
+
+  // Rebinds everything interactive inside #clan-tab-content — needed both
+  // on the initial render and every time a tab switch replaces that
+  // element's innerHTML with fresh DOM (old listeners went with the old
+  // nodes). Harmless no-op for tabs with nothing interactive (All Wars,
+  // Rankings) since every selector below just matches zero elements there.
+  function _bindContentEvents() {
     document.getElementById('clan-create-btn')?.addEventListener('click', async () => {
       const btn   = document.getElementById('clan-create-btn');
       const name  = document.getElementById('clan-name-input')?.value || '';
@@ -327,7 +444,7 @@ const ClanScreen = (() => {
   function _loadingHtml() {
     return `
       <div class="clan-screen">
-        <div class="clan-header"><h2 class="clan-title">🛡 Clan</h2></div>
+        <div class="clan-header"><h2 class="clan-title">${gi('round-shield')} Clan</h2></div>
         <div class="clan-loading">Loading clan info…</div>
       </div>`;
   }

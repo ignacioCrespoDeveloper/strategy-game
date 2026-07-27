@@ -44,5 +44,12 @@ const BattleHistoryService = (() => {
     return _getAll()[lordId] || [];
   }
 
-  return { save, getForLord };
+  function clearForLord(lordId) {
+    const all = _getAll();
+    if (!all[lordId]) return;
+    delete all[lordId];
+    _saveAll(all);
+  }
+
+  return { save, getForLord, clearForLord };
 })();

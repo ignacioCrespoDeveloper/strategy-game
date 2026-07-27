@@ -9,6 +9,11 @@
 //  matching player.clanId against the returned ids). The 'clans' table is
 //  small enough at this scale that returning everything in one call is
 //  simpler than separate "my clan" / "my wars" endpoints.
+//
+//  Also returns `wars`: every clan_wars row in the game, named absolutely
+//  (clanA/clanB) rather than relative to one clan — used for an "all wars"
+//  browse view, since each clan's own `wars[]` above is expressed as
+//  "me vs opponent" and can't drive a global list on its own.
 // =============================================
 
 import { loadAndCatchUp } from '../action-base.js';
@@ -46,8 +51,11 @@ export async function handleClanList(req, res) {
           opponentClanId: opponentId,
           opponentName: nameByClanId[opponentId] || 'Unknown Clan',
           opponentTag: tagByClanId[opponentId] || '???',
-          myScore: isA ? Number(w.score_a) : Number(w.score_b),
-          opponentScore: isA ? Number(w.score_b) : Number(w.score_a),
+          // Rounded — older wars accrued before scores were rounded at the
+          // write site can still carry long decimals in the DB; rounding
+          // on this read path fixes their display immediately too.
+          myScore: Math.round(isA ? Number(w.score_a) : Number(w.score_b)),
+          opponentScore: Math.round(isA ? Number(w.score_b) : Number(w.score_a)),
           endsAt: w.ends_at,
           status: w.status,
           winnerClanId: w.winner_clan_id,
@@ -63,5 +71,17 @@ export async function handleClanList(req, res) {
     };
   });
 
-  return res.json({ ok: true, clans: shaped });
+  // Flat, clan-relative-free view of every war in the game (both sides named
+  // absolutely as A/B) — the per-clan `wars` above only ever expresses a war
+  // from that one clan's "me vs opponent" perspective, which is fine for My
+  // Clan but can't drive a global "browse every war" list.
+  const globalWars = (wars || []).map(w => ({
+    id: w.id,
+    clanAId: w.clan_a_id, clanAName: nameByClanId[w.clan_a_id] || 'Unknown Clan', clanATag: tagByClanId[w.clan_a_id] || '???',
+    clanBId: w.clan_b_id, clanBName: nameByClanId[w.clan_b_id] || 'Unknown Clan', clanBTag: tagByClanId[w.clan_b_id] || '???',
+    scoreA: Math.round(Number(w.score_a)), scoreB: Math.round(Number(w.score_b)),
+    endsAt: w.ends_at, status: w.status, winnerClanId: w.winner_clan_id,
+  }));
+
+  return res.json({ ok: true, clans: shaped, wars: globalWars });
 }

@@ -11,7 +11,7 @@ const LORD_ACTIONS = {
   search_area: {
     id:               'search_area',
     name:             'Search Area',
-    icon:             '🔍',
+    icon:             gi('magnifying-glass'),
     desc:             'Search the current tile for hidden opportunities.',
     duration:         300,
     xpReward:         8,
@@ -20,7 +20,7 @@ const LORD_ACTIONS = {
   scout: {
     id:               'scout',
     name:             'Scout',
-    icon:             '🕵',
+    icon:             gi('spy'),
     desc:             "Gather intelligence on this tile's enemy lord and city. Faster with higher speed. Scouting with an army risks an ambush by an enemy lord in Ambush or Raid stance here — scouting without an army is always safe.",
     duration:         _SCOUT_BASE_SECS, // overridden per-lord by getActionDuration
     xpReward:         0,
@@ -29,7 +29,7 @@ const LORD_ACTIONS = {
   move_lord: {
     id:       'move_lord',
     name:     'Traveling',
-    icon:     '🗺',
+    icon:     gi('treasure-map'),
     desc:     'Moving to a new location.',
     duration: 0, // calculated dynamically per distance + speed
     xpReward: 0,
@@ -105,11 +105,6 @@ const LordService = (() => {
     return 10000 * Math.pow(2, existingLordCount - 1);
   }
 
-  // Gold/hour upkeep for a lord: 5 base + 1 per level.
-  function getUpkeepPerHour(lord) {
-    return 5 + (lord.level || 1);
-  }
-
   // Command capacity: max army points this lord can field.
   function getCommandCapacity(lord) {
     return 6 + 2 * (lord.level || 1) + (getTalentEffects(lord).commandCapacityBonus || 0);
@@ -131,7 +126,7 @@ const LordService = (() => {
 
     const cost = getRecruitCost(playerLords.length);
     const spend = PlayerService.spendCoins(playerId, cost);
-    if (!spend.ok) return { ok: false, error: `Recruiting costs ${cost.toLocaleString()} 💰 gold. ${spend.error}` };
+    if (!spend.ok) return { ok: false, error: `Recruiting costs ${cost.toLocaleString()} gold. ${spend.error}` };
 
     const id  = _generateId();
     const lord = {
@@ -417,7 +412,7 @@ const LordService = (() => {
 
   return {
     create, getById, getByPlayer, getAll, save, setPosition,
-    getRecruitCost, getUpkeepPerHour, getCommandCapacity,
+    getRecruitCost, getCommandCapacity,
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
     getEffectiveStats, getActionDuration, getTalentEffects, getMountEffects,

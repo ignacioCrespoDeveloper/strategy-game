@@ -33,6 +33,59 @@ const MapView = (() => {
   const _CITY_ICON_FILL   = '#e8c878';
   const _CITY_ICON_STROKE = '#2a1a08';
 
+  // City tier (index = level 0-5) → the same overview-card art, reused on
+  // the canvas tiles and the side panel so every surface shows one image.
+  const _CITY_TIER_IMGS = ['assets/city/tier1.webp','assets/city/tier1.webp','assets/city/tier2.jpg','assets/city/tier3.jpg','assets/city/tier4.jpg','assets/city/tier4.jpg'];
+
+  // Canvas image cache — drawImage needs a loaded HTMLImageElement, so each
+  // src loads once and triggers one redraw when ready. Returns null until
+  // the image is usable; callers fall back to the vector/glyph icon.
+  const _imgCache = new Map();
+  function _getImg(src) {
+    if (!src) return null;
+    let img = _imgCache.get(src);
+    if (!img) {
+      img = new Image();
+      img.onload = () => _draw();
+      img.src = src;
+      _imgCache.set(src, img);
+    }
+    return (img.complete && img.naturalWidth > 0) ? img : null;
+  }
+
+  // City tier (1-5) → icon name from the game-icons sprite, escalating like
+  // the old hand-drawn silhouettes did (hut → village → walled town → castle).
+  function _cityIconName(level) {
+    return level <= 1 ? 'house' : level === 2 ? 'village' : level === 3 ? 'guarded-tower' : 'castle';
+  }
+
+  // Rasterize a sprite symbol (js/core/icons.js) into a tinted Image the
+  // canvas can drawImage() — gi() markup itself only works in HTML. Cached
+  // per name+color; same load-once-redraw-once contract as _getImg.
+  function _giImg(name, color) {
+    const key = `gi:${name}:${color}`;
+    let img = _imgCache.get(key);
+    if (!img) {
+      const sym = document.getElementById(`gi-${name}`);
+      if (!sym) return null;
+      const vb  = sym.getAttribute('viewBox') || '0 0 512 512';
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" fill="${color}">${sym.innerHTML}</svg>`;
+      img = new Image();
+      img.onload = () => _draw();
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      _imgCache.set(key, img);
+    }
+    return (img.complete && img.naturalWidth > 0) ? img : null;
+  }
+
+  // object-fit: cover, for drawImage
+  function _drawImageCover(img, dx, dy, dw, dh) {
+    const scale = Math.max(dw / img.naturalWidth, dh / img.naturalHeight);
+    const sw = dw / scale;
+    const sh = dh / scale;
+    _ctx.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, dx, dy, dw, dh);
+  }
+
   function _drawHouse(cx, baseY, w, h, roofH) {
     _ctx.beginPath();
     _ctx.rect(cx - w / 2, baseY - h, w, h);
@@ -120,7 +173,8 @@ const MapView = (() => {
   let _ctx           = null;
   let _lord          = null;
   let _player        = null;
-  let _size          = 0;
+  let _w             = 0;
+  let _h             = 0;
   let _offset        = { x: 0, y: 0 };
   let _pendingTile   = null;
   let _selectedTile  = null;
@@ -155,6 +209,14 @@ const MapView = (() => {
   function _isAlly(ownerId) {
     if (!ownerId || !_player?.clanId) return false;
     return _clanByPid[ownerId]?.clanId === _player.clanId;
+  }
+
+  // At war = my clan has an ACTIVE clan war against this owner's clan.
+  // Clanless players (either side) are never "at war" — they render as
+  // neutral grey on the map and white in the tile panel.
+  function _isAtWar(ownerId) {
+    if (!ownerId || !_player?.clanId) return false;
+    return ClanService.isAtWar(_player.clanId, _clanByPid[ownerId]?.clanId);
   }
 
   function _clanTagHtml(ownerId) {
@@ -198,8 +260,9 @@ const MapView = (() => {
     if (ownerId) _ensureOwnerHonor(ownerId, { x, y });
     const cached = ownerId ? _honorCache.get(ownerId) : undefined;
     const honorHtml = (typeof cached === 'number') ? _honorInlineHtml(cached) : '';
-    const allyHtml = _isAlly(ownerId) ? '<span class="mip-ally-badge">🤝 Ally</span>' : '';
-    return `<span class="mip-owner-badge">👤 ${_clanTagHtml(ownerId)}${ownerUsername}</span> ${allyHtml} ${honorHtml}`;
+    const allyHtml = _isAlly(ownerId) ? '<span class="mip-ally-badge">' + gi('shaking-hands') + ' Ally</span>' : '';
+    const warCls   = _isAtWar(ownerId) ? ' mip-owner-badge--war' : '';
+    return `<span class="mip-owner-badge${warCls}">${gi('person')} ${_clanTagHtml(ownerId)}${ownerUsername}</span> ${allyHtml} ${honorHtml}`;
   }
 
   // ── Entry point ───────────────────────────────────────────────
@@ -207,21 +270,25 @@ const MapView = (() => {
   function render(root, { player, lord, mode }) {
     _player       = player;
     _lord         = lord;
-    _size         = WorldService.getSize();
+    _w            = WorldService.getWidth();
+    _h            = WorldService.getHeight();
     _selectedTile = null;
     _moveTarget   = null;
     _movingLord   = mode === 'move-lord' ? lord : null;
-    _keyCursor    = { x: lord?.x ?? Math.floor(_size / 2), y: lord?.y ?? Math.floor(_size / 2) };
+    _keyCursor    = { x: lord?.x ?? Math.floor(_w / 2), y: lord?.y ?? Math.floor(_h / 2) };
 
     root.innerHTML = `
       <div class="map-screen">
 
         <div class="map-move-bar${_movingLord ? '' : ' hidden'}" id="map-move-bar">
-          <span class="map-move-msg" id="map-move-msg">${_movingLord ? `📍 Select a destination for <b>${_movingLord.name}</b>` : ''}</span>
+          <span class="map-move-msg" id="map-move-msg">${_movingLord ? `${gi('position-marker')} Select a destination for <b>${_movingLord.name}</b>` : ''}</span>
           <button class="map-cancel-move-btn" id="map-cancel-move">✕ Cancel</button>
         </div>
 
         <div class="map-body">
+          <aside class="map-side-panel" id="map-side-panel" aria-label="Your cities and lords">
+            ${_sidePanelHtml()}
+          </aside>
           <div class="map-area" id="map-area">
             <canvas id="world-canvas" tabindex="0" role="application" aria-label="World map. Use arrow keys to move the cursor, Enter to select a tile."></canvas>
             <div class="map-prompt" id="map-prompt"></div>
@@ -241,7 +308,7 @@ const MapView = (() => {
               <div class="lc-name-row">
                 <input class="form-input" type="text" id="city-name-input"
                        placeholder="Name your city" maxlength="30" autocomplete="off" />
-                <button class="btn-dice" id="city-name-modal-dice" type="button" title="Random city name">🎲</button>
+                <button class="btn-dice" id="city-name-modal-dice" type="button" title="Random city name">${gi('perspective-dice-six-faces-random')}</button>
               </div>
             </div>
             <p class="form-error" id="found-error"></p>
@@ -274,8 +341,8 @@ const MapView = (() => {
     const resize = () => {
       _canvas.width  = area.clientWidth;
       _canvas.height = area.clientHeight;
-      const gridW = _size * STEP;
-      const gridH = _size * STEP;
+      const gridW = _w * STEP;
+      const gridH = _h * STEP;
       // RULER_MARGIN reserves room for the coordinate ruler drawn in _draw()
       // — without it, a grid that fills/overflows the viewport would push
       // offset to 0 and leave no space for the axis numbers.
@@ -325,6 +392,9 @@ const MapView = (() => {
     const allyLordTiles  = new Set(
       enemyLordIntel.filter(r => _isAlly(r.data?.playerId)).map(r => `${r.tileX},${r.tileY}`)
     );
+    const warLordTiles   = new Set(
+      enemyLordIntel.filter(r => !_isAlly(r.data?.playerId) && _isAtWar(r.data?.playerId)).map(r => `${r.tileX},${r.tileY}`)
+    );
     const presenceOnlyTiles = new Set([..._presence].filter(k => !intelLordTiles.has(k)));
 
     const banditTiles = _player
@@ -342,8 +412,8 @@ const MapView = (() => {
     });
 
     // ── Base tiles ────────────────────────────────────────────
-    for (let y = 0; y < _size; y++) {
-      for (let x = 0; x < _size; x++) {
+    for (let y = 0; y < _h; y++) {
+      for (let x = 0; x < _w; x++) {
         const px = _offset.x + x * STEP;
         const py = _offset.y + y * STEP;
         if (px + TILE < 0 || px > W || py + TILE < 0 || py > H) continue;
@@ -351,16 +421,19 @@ const MapView = (() => {
         const isSelected   = _selectedTile?.x === x && _selectedTile?.y === y;
         let cityLevel = 1;
         let isAllyCity = false;
+        let isWarCity  = false;
         if (rawCityId) {
           if (myCityIds.has(rawCityId)) {
             const ownCity = CityService.getById(rawCityId);
             cityLevel = ownCity ? CityStatsService.getCityLevel(ownCity) : 1;
           } else {
             cityLevel = enemyCityTierByKey[`${x},${y}`] || 1;
-            isAllyCity = _isAlly(WorldService.getCityMeta(x, y)?.ownerId);
+            const ownerId = WorldService.getCityMeta(x, y)?.ownerId;
+            isAllyCity = _isAlly(ownerId);
+            isWarCity  = !isAllyCity && _isAtWar(ownerId);
           }
         }
-        _drawTile(px, py, x, y, rawCityId, myCityIds, isSelected, cityLevel, isAllyCity);
+        _drawTile(px, py, x, y, rawCityId, myCityIds, isSelected, cityLevel, isAllyCity, isWarCity);
       }
     }
 
@@ -392,7 +465,9 @@ const MapView = (() => {
       const py = _offset.y + ey * STEP;
       if (px + TILE < 0 || px > W || py + TILE < 0 || py > H) return;
       const isAllyTile = allyLordTiles.has(key);
-      _ctx.strokeStyle = isAllyTile ? 'rgba(70,130,220,0.9)' : 'rgba(200,40,40,0.85)';
+      _ctx.strokeStyle = isAllyTile ? 'rgba(70,130,220,0.9)'
+        : warLordTiles.has(key)     ? 'rgba(200,40,40,0.85)'
+        : 'rgba(150,150,160,0.8)';
       _ctx.lineWidth   = 1.5;
       _roundRect(px + 1, py + 1, TILE - 2, TILE - 2, 2);
       _ctx.stroke();
@@ -433,8 +508,10 @@ const MapView = (() => {
       const isMovingThis = _movingLord && lord.id === _movingLord.id;
       const onCity  = !!cityMap[`${lord.x},${lord.y}`];
 
+      const portraitImg = _getImg(pickLordPortrait(lord.race, lord.classId, lord.id) || race?.portrait);
+
       if (onCity) {
-        // Badge in top-right corner of the city tile
+        // Portrait badge in top-right corner of the city tile
         const bx = px + TILE - 10;
         const by = py + 10;
         const br = isCurr ? 10 : 8;
@@ -444,17 +521,27 @@ const MapView = (() => {
           ? (isMovingThis ? '#ddb830' : '#c8933a')
           : '#2a7a2a';
         _ctx.fill();
+        if (portraitImg) {
+          _ctx.save();
+          _ctx.beginPath();
+          _ctx.arc(bx, by, br, 0, Math.PI * 2);
+          _ctx.clip();
+          _drawImageCover(portraitImg, bx - br, by - br, br * 2, br * 2);
+          _ctx.restore();
+        }
+        _ctx.beginPath();
+        _ctx.arc(bx, by, br, 0, Math.PI * 2);
         _ctx.strokeStyle = isCurr ? '#fff8e0' : '#88dd88';
         _ctx.lineWidth   = isCurr ? 2 : 1.5;
         _ctx.stroke();
-        if (race) {
+        if (!portraitImg && race) {
           _ctx.font         = `${isCurr ? 10 : 8}px serif`;
           _ctx.textAlign    = 'center';
           _ctx.textBaseline = 'middle';
-          _ctx.fillText(race.icon, bx, by);
+          _ctx.fillText(race.glyph, bx, by);
         }
       } else {
-        // Filled tile with bright border for lords on open terrain
+        // Portrait tile with bright border for lords on open terrain
         const fillColor   = isCurr ? 'rgba(40,30,8,0.92)' : 'rgba(8,28,8,0.88)';
         const borderColor = isCurr
           ? (isMovingThis ? 'rgba(255,220,60,1)' : 'rgba(220,160,50,1)')
@@ -462,15 +549,22 @@ const MapView = (() => {
         _roundRect(px, py, TILE, TILE, 3);
         _ctx.fillStyle = fillColor;
         _ctx.fill();
-        _ctx.strokeStyle = borderColor;
-        _ctx.lineWidth   = isCurr ? 2.5 : 2;
-        _ctx.stroke();
-        if (race) {
+        if (portraitImg) {
+          _ctx.save();
+          _roundRect(px + 1, py + 1, TILE - 2, TILE - 2, 3);
+          _ctx.clip();
+          _drawImageCover(portraitImg, px + 1, py + 1, TILE - 2, TILE - 2);
+          _ctx.restore();
+        } else if (race) {
           _ctx.font         = `${Math.floor(TILE * 0.52)}px serif`;
           _ctx.textAlign    = 'center';
           _ctx.textBaseline = 'middle';
-          _ctx.fillText(race.icon, px + TILE / 2, py + TILE / 2 - 1);
+          _ctx.fillText(race.glyph, px + TILE / 2, py + TILE / 2 - 1);
         }
+        _roundRect(px, py, TILE, TILE, 3);
+        _ctx.strokeStyle = borderColor;
+        _ctx.lineWidth   = isCurr ? 2.5 : 2;
+        _ctx.stroke();
       }
     });
 
@@ -596,20 +690,20 @@ const MapView = (() => {
     _ctx.fillStyle    = 'rgba(180,190,210,0.55)';
     _ctx.textBaseline = 'middle';
     _ctx.textAlign    = 'center';
-    for (let gx = 0; gx < _size; gx++) {
+    for (let gx = 0; gx < _w; gx++) {
       const px = _offset.x + gx * STEP + TILE / 2;
       if (px < 0 || px > W) continue;
       _ctx.fillText(String(gx), px, _offset.y - 10);
     }
     _ctx.textAlign = 'right';
-    for (let gy = 0; gy < _size; gy++) {
+    for (let gy = 0; gy < _h; gy++) {
       const py = _offset.y + gy * STEP + TILE / 2;
       if (py < 0 || py > H) continue;
       _ctx.fillText(String(gy), _offset.x - 6, py);
     }
   }
 
-  function _drawTile(px, py, x, y, cityId, myCityIds, isSelected, cityLevel, isAllyCity) {
+  function _drawTile(px, py, x, y, cityId, myCityIds, isSelected, cityLevel, isAllyCity, isWarCity) {
     // Terrain is always the base layer, city or not — a city no longer
     // paints over it with a solid color, so forest/plains/desert etc. stay
     // visible even on an occupied tile. Selection highlight still takes
@@ -631,18 +725,27 @@ const MapView = (() => {
     }
 
     if (cityId) {
-      // Ownership is a colored ring overlay (green = own, blue = allied clan,
-      // red = enemy) — not a fill — so the terrain drawn above stays
-      // visible. The city itself is a hand-drawn vector icon (see
-      // _drawCityTierIcon), not a downscaled photo or a default emoji glyph.
+      // Ownership is a colored ring overlay (green = own, blue = allied
+      // clan, red = at war with that clan, grey = everyone else/neutral) —
+      // not a fill — so the terrain drawn above stays visible. The city
+      // itself is a tier-scaled icon from the game-icons sprite (see
+      // _cityIconName), not a downscaled photo or a default emoji glyph.
       const isOwn = myCityIds.has(cityId);
       const ringColor = isOwn
         ? (isSelected ? '#6ae06a' : '#4a8a4a')
         : isAllyCity
           ? (isSelected ? '#6ab0e0' : '#4a80c0')
-          : (isSelected ? '#e06a6a' : '#c05050');
+          : isWarCity
+            ? (isSelected ? '#e06a6a' : '#c05050')
+            : (isSelected ? '#b8bcc6' : '#82868f');
 
-      _drawCityTierIcon(px, py, TILE * 0.66, cityLevel);
+      const iconImg  = _giImg(_cityIconName(cityLevel), _CITY_ICON_FILL);
+      const iconSize = TILE * 0.62;
+      if (iconImg) {
+        _ctx.drawImage(iconImg, px + (TILE - iconSize) / 2, py + (TILE - iconSize) / 2, iconSize, iconSize);
+      } else {
+        _drawCityTierIcon(px, py, TILE * 0.66, cityLevel);
+      }
 
       _roundRect(px + 1.5, py + 1.5, TILE - 3, TILE - 3, 3);
       _ctx.strokeStyle = ringColor;
@@ -669,12 +772,72 @@ const MapView = (() => {
     _ctx.closePath();
   }
 
+  // ── Left side panel (cities + lords quick list) ───────────────
+  // Clicking a row selects that tile on the map — same path as a canvas
+  // click, so the tile highlight + right info panel both react.
+
+  function _sidePanelHtml() {
+    const cities = _player ? CityService.getPlayerCities(_player.id) : [];
+    const lords  = _player ? LordService.getByPlayer(_player.id).filter(l => l.x != null) : [];
+
+    const cityRows = cities.map(c => {
+      const lvl = CityStatsService.getCityLevel(c);
+      const img = _CITY_TIER_IMGS[Math.min(lvl, _CITY_TIER_IMGS.length - 1)];
+      return `
+      <button class="msp-row" data-x="${c.x}" data-y="${c.y}" title="Show ${c.name} on the map">
+        <img class="msp-row-img" src="${img}" alt="" loading="lazy" />
+        <span class="msp-row-body">
+          <span class="msp-row-name">${c.name}</span>
+          <span class="msp-row-sub">Pop ${Math.floor(c.population).toLocaleString()}</span>
+        </span>
+        <span class="msp-row-coords">(${c.x}, ${c.y})</span>
+      </button>`;
+    }).join('');
+
+    const lordRows = lords.map(l => {
+      const race = RACES[l.race] || {};
+      const cls  = LORD_CLASSES[l.classId];
+      const q    = l.actionQueue && l.actionQueue[0];
+      const sub  = (q?.actionId === 'move_lord' && q.destX != null)
+        ? `${q.intent === 'attack' ? gi('crossed-swords') : gi('compass')} → (${q.destX}, ${q.destY})`
+        : `Lv ${l.level || 1}${cls ? ` · ${cls.name}` : ''}`;
+      const psrc = pickLordPortrait(l.race, l.classId, l.id) || race.portrait;
+      return `
+      <button class="msp-row" data-x="${l.x}" data-y="${l.y}" title="Show ${l.name} on the map">
+        ${psrc
+          ? `<img class="msp-row-img msp-row-img--lord" src="${psrc}" alt="" loading="lazy" />`
+          : `<span class="msp-row-icon">${race.icon || gi('person')}</span>`}
+        <span class="msp-row-body">
+          <span class="msp-row-name">${l.name}</span>
+          <span class="msp-row-sub">${sub}</span>
+        </span>
+        <span class="msp-row-coords">(${l.x}, ${l.y})</span>
+      </button>`;
+    }).join('');
+
+    return `
+      <div class="msp-section">
+        <div class="msp-section-label">${gi('village')} Cities <span class="msp-count">${cities.length}</span></div>
+        ${cityRows || '<div class="msp-empty">No cities yet</div>'}
+      </div>
+      <div class="msp-section">
+        <div class="msp-section-label">${gi('person')} Lords <span class="msp-count">${lords.length}</span></div>
+        ${lordRows || '<div class="msp-empty">No lords on the map</div>'}
+      </div>`;
+  }
+
+  function _updateSideActive(x, y) {
+    document.querySelectorAll('#map-side-panel .msp-row').forEach(r => {
+      r.classList.toggle('msp-row--active', Number(r.dataset.x) === x && Number(r.dataset.y) === y);
+    });
+  }
+
   // ── Info panel HTML builders ──────────────────────────────────
 
   function _emptyPanelHtml() {
     return `
       <div class="mip-empty">
-        <div class="mip-empty-icon">🗺</div>
+        <div class="mip-empty-icon">${gi('treasure-map')}</div>
         <div class="mip-empty-text">Tap any tile</div>
       </div>
     `;
@@ -683,7 +846,7 @@ const MapView = (() => {
   function _selectDestHtml() {
     return `
       <div class="mip-empty">
-        <div class="mip-empty-icon">📍</div>
+        <div class="mip-empty-icon">${gi('position-marker')}</div>
         <div class="mip-empty-text">Select a destination</div>
         <div class="mip-empty-sub">Tap the destination tile to see travel time</div>
       </div>
@@ -703,9 +866,9 @@ const MapView = (() => {
 
     return `
       <div class="mip-section">
-        <div class="mip-section-label">🧭 Move Lord</div>
+        <div class="mip-section-label">${gi('compass')} Move Lord</div>
         <div class="mip-tile-header">
-          <div class="mip-tile-icon">${race.icon || '👤'}</div>
+          <div class="mip-tile-icon">${race.icon || gi('person')}</div>
           <div>
             <div class="mip-tile-name">${lord.name}</div>
             <div class="mip-tile-coords">${race.name || ''} · Lv ${lord.level || 1}${cls ? ` · ${cls.icon} ${cls.name}` : ''}</div>
@@ -728,8 +891,22 @@ const MapView = (() => {
         </div>
         <div class="mip-stat-row">
           <span class="mip-label">Time</span>
-          <span class="mip-value mip-value--gold">⏱ ${TimeService.formatDuration(secs)}</span>
+          <span class="mip-value mip-value--gold">${gi('stopwatch')} ${TimeService.formatDuration(secs)}</span>
         </div>
+        ${(() => {
+          // March food cost — mirrors the server's EconomyCore.getMarchFoodCost
+          // check in lord-action.js (same shared formula, incl. Cartography).
+          const foodCost = EconomyCore.getMarchFoodCost(dist, ArmyService.get(lord.id).units,
+            EconomyCore.getResearchEffects(PlayerService.getById(_player.id)?.research));
+          if (foodCost <= 0) return '';
+          const have  = Math.floor(PlayerService.getById(_player.id)?.resources?.food || 0);
+          const short = have < foodCost;
+          return `
+            <div class="mip-stat-row">
+              <span class="mip-label">Food</span>
+              <span class="mip-value ${short ? 'mip-value--danger' : ''}">🌾 ${foodCost.toLocaleString()}${short ? ` (have ${have.toLocaleString()})` : ''}</span>
+            </div>`;
+        })()}
       </div>
       <div class="mip-divider"></div>
       <div class="mip-section">
@@ -802,13 +979,13 @@ const MapView = (() => {
           const cost      = playerCities.length === 0 ? 0 : 5000 * Math.pow(2, playerCities.length - 1);
           const coins     = freshPlayer?.coins ?? 0;
           const canAfford = cost === 0 || coins >= cost;
-          const costLabel = cost === 0 ? 'Free' : `💰 ${cost.toLocaleString()}`;
+          const costLabel = cost === 0 ? 'Free' : `${gi('two-coins')} ${cost.toLocaleString()}`;
           foundBtnHtml = `
             <button class="btn-primary mip-found-city-btn"
                     id="mip-found-btn"
                     style="width:100%;margin-top:0.75rem"
                     ${canAfford ? '' : 'disabled title="Not enough gold"'}>
-              🏙 Found City Here${cost > 0 ? ` — ${costLabel}` : ''}
+              ${gi('village')} Found City Here${cost > 0 ? ` — ${costLabel}` : ''}
             </button>`;
         }
       }
@@ -817,7 +994,7 @@ const MapView = (() => {
         <div class="mip-section">
           <div class="mip-stat-row">
             <span class="mip-label">Status</span>
-            <span class="mip-value mip-value--muted">${isBandit ? '⚔ Bandit Camp' : 'Unoccupied'}</span>
+            <span class="mip-value mip-value--muted">${isBandit ? gi('crossed-swords') + ' Bandit Camp' : 'Unoccupied'}</span>
           </div>
           ${foundBtnHtml}
         </div>
@@ -825,8 +1002,7 @@ const MapView = (() => {
     } else if (isOwnCity) {
       // Own city — exact same card as homepage
       const _level     = CityStatsService.getCityLevel(rawCity);
-      const _tierImgs  = ['assets/city/tier1.webp','assets/city/tier1.webp','assets/city/tier2.jpg','assets/city/tier3.jpg','assets/city/tier4.jpg','assets/city/tier4.jpg'];
-      const _tierImg   = _tierImgs[Math.min(_level, _tierImgs.length - 1)];
+      const _tierImg   = _CITY_TIER_IMGS[Math.min(_level, _CITY_TIER_IMGS.length - 1)];
       const _stats     = CityStatsService.getStats(rawCity);
       const _status    = CityStatsService.getCityStatus(_stats);
       const _slots     = CityStatsService.getSlotInfo(rawCity);
@@ -874,17 +1050,16 @@ const MapView = (() => {
               </div>
               <div class="ov-cc-stat">
                 <span class="ov-cc-stat-label">Gold/hr</span>
-                <span class="ov-cc-stat-value ov-cc-gold-rate">+${_goldRate}💰</span>
+                <span class="ov-cc-stat-value ov-cc-gold-rate">+${_goldRate}${gi('two-coins')}</span>
               </div>
             </div>
             ${_buildItem ? `<div class="ov-cc-construction">
               <div class="ov-cc-constr-label">
-                <span>🔨 ${_buildDef?.name || _buildItem.buildingId} → Lv ${_buildItem.targetLevel}</span>
+                <span>${gi('claw-hammer')} ${_buildDef?.name || _buildItem.buildingId} → Lv ${_buildItem.targetLevel}</span>
                 <span class="ov-cc-constr-time">${TimeService.formatDuration(_buildSecs)}</span>
               </div>
               <div class="ov-cc-constr-bar"><div class="ov-cc-constr-fill" style="width:${_buildPct}%"></div></div>
             </div>` : ''}
-            <div class="ov-cc-enter">Enter City →</div>
           </div>
         </div>
         </div>
@@ -901,8 +1076,7 @@ const MapView = (() => {
         : (idata?.playerUsername ? _ownerBadgeHtml(null, idata.playerUsername, x, y) : '<span class="mip-owner-badge mip-owner-badge--unknown">Enemy</span>');
       const knownPop   = intelTier === 'precise' && idata?.population ? idata.population : null;
       const cityLevel  = knownPop ? _cityLevelFromPopulation(knownPop) : null;
-      const _tierImgs  = ['assets/city/tier1.webp','assets/city/tier1.webp','assets/city/tier2.jpg','assets/city/tier3.jpg','assets/city/tier4.jpg','assets/city/tier4.jpg'];
-      const _tierImg   = _tierImgs[Math.min(cityLevel || 1, _tierImgs.length - 1)];
+      const _tierImg   = _CITY_TIER_IMGS[Math.min(cityLevel || 1, _CITY_TIER_IMGS.length - 1)];
       // vague only ever reveals a bucketed force-size label, never an exact
       // garrison count (same rule as enemy lords) — clear/precise show the
       // real composition once actually scouted that far. Same collapsible
@@ -925,11 +1099,12 @@ const MapView = (() => {
             : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
           const portrait = def.image
             ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || r.unitId}" loading="lazy">`
-            : `<div class="la-uc-img la-uc-img--fallback">${def.icon || '⚔'}</div>`;
+            : `<div class="la-uc-img la-uc-img--fallback">${def.icon || gi('crossed-swords')}</div>`;
           return Array.from({ length: r.count }, () => `
             <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || r.unitId}">
               <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
               ${portrait}
+              ${giUnitType(def.category)}
             </div>`);
         }).join('');
         garrisonToggleHtml = `
@@ -953,7 +1128,7 @@ const MapView = (() => {
           <div class="ov-cc-inner">
             <div class="ov-cc-name-row">
               <span class="ov-cc-name mip-enemy-city-name">${cityName}</span>
-              ${intelTier ? `<span class="mip-intel-badge" style="color:${_TIER_COLORS[intelTier]}">👁 ${_TIER_LABELS[intelTier]}</span>` : ''}
+              ${intelTier ? `<span class="mip-intel-badge" style="color:${_TIER_COLORS[intelTier]}">${gi('eyeball')} ${_TIER_LABELS[intelTier]}</span>` : ''}
             </div>
             <div class="ov-cc-owner-row">${ownerLabel}</div>
             <div class="ov-cc-divider"></div>
@@ -971,8 +1146,8 @@ const MapView = (() => {
             ${garrisonToggleHtml}
           </div>
           ${_isAlly(cityMeta?.ownerId)
-            ? '<div class="mip-ally-notice mip-card-wide">🤝 Allied clan — cannot attack</div>'
-            : '<button class="mip-city-attack-btn mip-attack-btn mip-card-wide">⚔ Attack City</button>'}
+            ? '<div class="mip-ally-notice mip-card-wide">' + gi('shaking-hands') + ' Allied clan — cannot attack</div>'
+            : '<button class="mip-city-attack-btn mip-attack-btn mip-card-wide">' + gi('crossed-swords') + ' Attack City</button>'}
         </div>
         </div>
       `;
@@ -1047,7 +1222,7 @@ const MapView = (() => {
             </div>` :
           isRaiding ? `
             <div class="ov-lord-activity-overlay ov-lord-activity-overlay--raiding">
-              <div class="ov-lord-activity-icon">🏴</div>
+              <div class="ov-lord-activity-icon">${gi('black-flag')}</div>
               <div class="ov-lord-activity-label">Raiding</div>
               <div class="ov-lord-activity-dest">(${lord.x}, ${lord.y})</div>
               <div class="ov-lord-activity-cd" id="map-act-cd-${lord.id}">${TimeService.formatDuration(raidSecs)}</div>
@@ -1062,17 +1237,17 @@ const MapView = (() => {
             : '';
 
           const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || lord.portrait || race.portrait;
-          const ownerBadge   = `<div class="ov-lc-portrait-owner">👤 ${_player?.username || 'You'}</div>`;
+          const ownerBadge   = `<div class="ov-lc-portrait-owner">${gi('person')} ${_player?.username || 'You'}</div>`;
           const portraitHtml = portraitSrc
             ? `<div class="ov-lc-portrait">
                  <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" loading="lazy" />
                  <div class="ov-lc-portrait-fade"></div>
-                 <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+                 <div class="ov-lc-portrait-level" title="Level ${lord.level || 1}">${lord.level || 1}</div>
                  ${ownerBadge}
                </div>`
             : `<div class="ov-lc-portrait ov-lc-portrait--icon">
-                 <span>${race.icon || '👤'}</span>
-                 <div class="ov-lc-portrait-level">Lv ${lord.level || 1}</div>
+                 <span>${race.icon || gi('person')}</span>
+                 <div class="ov-lc-portrait-level" title="Level ${lord.level || 1}">${lord.level || 1}</div>
                  ${ownerBadge}
                </div>`;
 
@@ -1084,13 +1259,8 @@ const MapView = (() => {
           // CP + army units
           const army      = ArmyService.get(lord.id);
           const ownUnits  = army?.units || [];
-          // Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult.
-          const cp        = Math.round(ownUnits.reduce((sum, u) => {
-            const def = UNIT_DEFS[u.unitId];
-            if (!def) return sum;
-            const s = def.combatStats || {};
-            return sum + ((s.attack||0)*3 + (s.defense||0)*2 + Math.floor((s.hp||0)/10) + (s.speed||0)) * Math.pow(u.count, 0.8);
-          }, 0));
+          // Same PWR score as the recruit cap (EconomyCore.getArmyPower).
+          const cp        = Math.round(EconomyCore.getArmyPower(ownUnits, UNIT_DEFS));
           const armyUnitCards = ownUnits.length > 0
             ? ownUnits.flatMap(u => {
                 const def = UNIT_DEFS[u.unitId] || {};
@@ -1100,11 +1270,12 @@ const MapView = (() => {
                   : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
                 const portrait = def.image
                   ? `<img src="${def.image}" class="la-uc-img" alt="${def.name||u.unitId}" loading="lazy">`
-                  : `<div class="la-uc-img la-uc-img--fallback">${def.icon||'⚔'}</div>`;
+                  : `<div class="la-uc-img la-uc-img--fallback">${def.icon||gi('crossed-swords')}</div>`;
                 return Array.from({ length: u.count }, () => `
                   <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name||u.unitId}">
                     <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
                     ${portrait}
+                    ${giUnitType(def.category)}
                   </div>`);
               }).join('')
             : '<span class="mip-note">No units</span>';
@@ -1112,9 +1283,9 @@ const MapView = (() => {
 
           const actionsHtml = !busy ? `
             <div class="mip-lord-actions">
-              <button class="mip-lord-search-btn mip-action-btn-sm" data-lord-id="${lord.id}">🔍 Quest</button>
-              <button class="mip-lord-scout-btn mip-action-btn-sm" data-lord-id="${lord.id}" title="Gather intel on this tile's enemy lord and city. Safe without an army; risks an ambush if scouting with one.">🕵 Scout</button>
-              <button class="mip-lord-move-btn mip-action-btn-sm" data-lord-id="${lord.id}">🧭 Move</button>
+              <button class="mip-lord-search-btn mip-action-btn-sm" data-lord-id="${lord.id}">${gi('magnifying-glass')} Quest</button>
+              <button class="mip-lord-scout-btn mip-action-btn-sm" data-lord-id="${lord.id}" title="Gather intel on this tile's enemy lord and city. Safe without an army; risks an ambush if scouting with one.">${gi('spy')} Scout</button>
+              <button class="mip-lord-move-btn mip-action-btn-sm" data-lord-id="${lord.id}">${gi('compass')} Move</button>
             </div>
           ` : '';
 
@@ -1122,12 +1293,12 @@ const MapView = (() => {
             <div class="ov-lord-card mip-card-wide${cardModifier}" data-lord-id="${lord.id}" style="cursor:pointer">
               ${lordIsDown && lord.capturedByPlayerId ? `
                 <div class="ov-lord-down-overlay">
-                  <div class="ov-lord-down-icon">⛓</div>
+                  <div class="ov-lord-down-icon">${gi('manacles')}</div>
                   <div class="ov-lord-down-label ov-lord-down-label--captured">CAPTURED</div>
                   <div class="ov-lord-captor">by ${lord.capturedByUsername || 'Unknown'}</div>
                 </div>` : lordIsDown ? `
                 <div class="ov-lord-down-overlay">
-                  <div class="ov-lord-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
+                  <div class="ov-lord-down-icon">${downReason === 'captured' ? gi('manacles') : gi('death-skull')}</div>
                   <div class="ov-lord-down-label ov-lord-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
                   <div class="ov-lord-down-cd">${TimeService.formatDuration(downRemSecs)}</div>
                 </div>` : ''}
@@ -1136,7 +1307,7 @@ const MapView = (() => {
               <div class="ov-lc-body">
                 <div class="ov-lc-top">
                   <span class="ov-lc-name">${lord.name}</span>
-                  ${cp > 0 ? `<span class="mip-lc-cp">⚔ ${cp}</span>` : ''}
+                  ${cp > 0 ? `<span class="mip-lc-cp">${gi('crossed-swords')} ${cp}</span>` : ''}
                 </div>
                 <div class="ov-lc-badges">
                   <span class="ov-lc-race">${race.name || ''}</span>
@@ -1144,7 +1315,7 @@ const MapView = (() => {
                   ${stanceBadge}
                 </div>
                 <div class="ov-lc-meta${isAttacking ? ' ov-lc-meta--attack' : ''}">
-                  📍 ${locationLabel} · ${isAttacking ? `⚔ ATTACKING (${queueItem.destX},${queueItem.destY})` : queueItem?.actionId === 'scout' ? '🕵 Scouting' : queueItem?.actionId === 'search_area' ? '🔍 Questing' : activeAction ? `${activeAction.icon} ${activeAction.name}` : 'Idle'}
+                  ${gi('position-marker')} ${locationLabel} · ${isAttacking ? `${gi('crossed-swords')} ATTACKING (${queueItem.destX},${queueItem.destY})` : queueItem?.actionId === 'scout' ? gi('spy') + ' Scouting' : queueItem?.actionId === 'search_area' ? gi('magnifying-glass') + ' Questing' : activeAction ? `${activeAction.icon} ${activeAction.name}` : 'Idle'}
                 </div>
                 ${queueItem ? `<div class="ov-lc-action-row">
                   <div class="ov-lc-action-bar"><div class="ov-lc-action-fill${isAttacking ? ' ov-lc-action-fill--attack' : ''}" id="map-act-fill-${lord.id}" style="width:${actionPct}%"></div></div>
@@ -1167,7 +1338,6 @@ const MapView = (() => {
                   <div class="mip-enemy-unit-cards">${armyUnitCards}</div>
                 </div>
                 ${actionsHtml}
-                <div class="ov-lc-enter">Manage →</div>
               </div>
             </div>
           `;
@@ -1184,13 +1354,8 @@ const MapView = (() => {
       const expiry    = DiscoveryService.formatExpiry(r);
       const mercs     = (r.mercenaryUnits || []).map(id => UNIT_DEFS[id]?.name || id).join(', ');
 
-      // Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult.
-      const cp = Math.round(defenders.reduce((sum, u) => {
-        const ud = UNIT_DEFS[u.unitId];
-        if (!ud) return sum;
-        const s = ud.combatStats || {};
-        return sum + ((s.attack||0)*3 + (s.defense||0)*2 + Math.floor((s.hp||0)/10) + (s.speed||0)) * Math.pow(u.count, 0.8);
-      }, 0));
+      // Same PWR score as the recruit cap (EconomyCore.getArmyPower).
+      const cp = Math.round(EconomyCore.getArmyPower(defenders, UNIT_DEFS));
 
       const unitCardsInner = defenders.length > 0
         ? defenders.flatMap(u => {
@@ -1201,11 +1366,12 @@ const MapView = (() => {
               : ud.category === 'legendary' ? ' la-unit-card--legendary' : '';
             const portrait = ud.image
               ? `<img src="${ud.image}" class="la-uc-img" alt="${ud.name || u.unitId}" loading="lazy">`
-              : `<div class="la-uc-img la-uc-img--fallback">${ud.icon || '⚔'}</div>`;
+              : `<div class="la-uc-img la-uc-img--fallback">${ud.icon || gi('crossed-swords')}</div>`;
             return Array.from({ length: u.count }, () => `
               <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${ud.name || u.unitId}">
                 <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
                 ${portrait}
+                ${giUnitType(ud.category)}
               </div>`);
           }).join('')
         : '<span class="mip-note">No units</span>';
@@ -1214,23 +1380,23 @@ const MapView = (() => {
       const totalUnits    = defenders.reduce((s, u) => s + u.count, 0);
 
       const attackBtn = lordForAttack
-        ? `<button class="mip-bandit-attack-btn mip-attack-btn mip-card-wide" data-record-id="${r.id}" data-lord-id="${lordForAttack.id}">⚔ Attack</button>`
+        ? `<button class="mip-bandit-attack-btn mip-attack-btn mip-card-wide" data-record-id="${r.id}" data-lord-id="${lordForAttack.id}">${gi('crossed-swords')} Attack</button>`
         : `<p class="mip-note mip-note--warn">Move a lord here to attack</p>`;
 
       return `
         <div class="mip-enemy-lord-card mip-card-wide">
           <div class="ov-lc-portrait ov-lc-portrait--icon">
-            <span style="font-size:2rem">${def.icon || '⚔'}</span>
+            <span style="font-size:2rem">${def.icon || gi('crossed-swords')}</span>
             <div class="ov-lc-portrait-fade"></div>
-            <div class="ov-lc-portrait-level">Lv ${level}</div>
-            <div class="ov-lc-portrait-owner">⏱ ${expiry}</div>
+            <div class="ov-lc-portrait-level" title="Level ${level}">${level}</div>
+            <div class="ov-lc-portrait-owner">${gi('stopwatch')} ${expiry}</div>
           </div>
           <div class="ov-lc-body">
             <div class="ov-lc-top">
               <span class="ov-lc-name">${def.name || 'Enemy Camp'}</span>
-              ${cp > 0 ? `<span class="mip-lc-cp mip-lc-cp--enemy">⚔ ${cp}</span>` : ''}
+              ${cp > 0 ? `<span class="mip-lc-cp mip-lc-cp--enemy">${gi('crossed-swords')} ${cp}</span>` : ''}
             </div>
-            ${mercs ? `<div class="ov-lc-badges"><span class="ov-lc-race mip-value--gold">🤝 ${mercs}</span></div>` : ''}
+            ${mercs ? `<div class="ov-lc-badges"><span class="ov-lc-race mip-value--gold">${gi('shaking-hands')} ${mercs}</span></div>` : ''}
             <button class="mip-army-toggle mip-army-toggle--enemy" data-target="${armyToggleId}">▶ Army (${totalUnits})</button>
             <div class="mip-army-units mip-army-hidden" id="${armyToggleId}">
               <div class="mip-enemy-unit-cards">${unitCardsInner}</div>
@@ -1243,7 +1409,7 @@ const MapView = (() => {
     const banditsSection = banditsHere.length > 0 ? `
       <div class="mip-divider"></div>
       <div class="mip-section">
-        <div class="mip-section-label">🏕 Enemy Camp${banditsHere.length > 1 ? 's' : ''}</div>
+        <div class="mip-section-label">${gi('campfire')} Enemy Camp${banditsHere.length > 1 ? 's' : ''}</div>
         ${banditCampCards}
       </div>
     ` : '';
@@ -1271,16 +1437,11 @@ const MapView = (() => {
           : null;
         const portraitInner = portraitSrc
           ? `<img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${data.lordName || ''}" loading="lazy" />`
-          : `<span style="font-size:2rem">${race.icon || '❔'}</span>`;
+          : `<span style="font-size:2rem">${race.icon || gi('uncertainty')}</span>`;
 
         const units = data.units || [];
-        // Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult.
-        const cp    = Math.round(units.reduce((sum, u) => {
-          const def = UNIT_DEFS[u.unitId];
-          if (!def) return sum;
-          const s = def.combatStats || {};
-          return sum + ((s.attack||0)*3 + (s.defense||0)*2 + Math.floor((s.hp||0)/10) + (s.speed||0)) * Math.pow(u.count, 0.8);
-        }, 0));
+        // Same PWR score as the recruit cap (EconomyCore.getArmyPower).
+        const cp    = Math.round(EconomyCore.getArmyPower(units, UNIT_DEFS));
         const totalUnits = units.length > 0 ? units.reduce((s, u) => s + u.count, 0) : null;
 
         const unitCardsInner = units.flatMap(u => {
@@ -1291,11 +1452,12 @@ const MapView = (() => {
             : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
           const portrait = def.image
             ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || u.unitId}" loading="lazy">`
-            : `<div class="la-uc-img la-uc-img--fallback">${def.icon || '⚔'}</div>`;
+            : `<div class="la-uc-img la-uc-img--fallback">${def.icon || gi('crossed-swords')}</div>`;
           return Array.from({ length: u.count }, () => `
             <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || u.unitId}">
               <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
               ${portrait}
+              ${giUnitType(def.category)}
             </div>`);
         }).join('');
         const armyToggleId = `mip-army-enemy-${idx}`;
@@ -1306,9 +1468,9 @@ const MapView = (() => {
         // enforced in combat-resolver.js) — show a notice instead.
         const isAllyLord = _isAlly(data.playerId);
         const attackBtn = isAllyLord
-          ? '<div class="mip-ally-notice mip-card-wide">🤝 Allied clan — cannot attack</div>'
+          ? '<div class="mip-ally-notice mip-card-wide">' + gi('shaking-hands') + ' Allied clan — cannot attack</div>'
           : myLordsIdle.length > 0
-            ? `<button class="mip-attack-btn mip-card-wide" data-lord-record-idx="${idx}">⚔ Attack</button>`
+            ? `<button class="mip-attack-btn mip-card-wide" data-lord-record-idx="${idx}">${gi('crossed-swords')} Attack</button>`
             : `<p class="mip-note mip-note--warn">No lord available to attack</p>`;
 
         return `
@@ -1316,14 +1478,14 @@ const MapView = (() => {
             <div class="ov-lc-portrait${portraitSrc ? '' : ' ov-lc-portrait--icon'}">
               ${portraitInner}
               <div class="ov-lc-portrait-fade"></div>
-              ${data.lordLevel ? `<div class="ov-lc-portrait-level">Lv ${data.lordLevel}</div>` : ''}
-              ${data.playerUsername ? `<div class="ov-lc-portrait-owner">👤 ${_clanTagHtml(data.playerId)}${data.playerUsername}</div>` : ''}
+              ${data.lordLevel ? `<div class="ov-lc-portrait-level" title="Level ${data.lordLevel}">${data.lordLevel}</div>` : ''}
+              ${data.playerUsername ? `<div class="ov-lc-portrait-owner">${gi('person')} ${_clanTagHtml(data.playerId)}${data.playerUsername}</div>` : ''}
             </div>
             <div class="ov-lc-body">
               <div class="ov-lc-top">
                 <span class="ov-lc-name">${data.lordName || 'Unknown Lord'}</span>
-                <span class="mip-intel-badge" style="color:${_TIER_COLORS[intelTier]}">👁 ${_TIER_LABELS[intelTier]}</span>
-                ${cp > 0 ? `<span class="mip-lc-cp mip-lc-cp--enemy">⚔ ${cp}</span>` : ''}
+                <span class="mip-intel-badge" style="color:${_TIER_COLORS[intelTier]}">${gi('eyeball')} ${_TIER_LABELS[intelTier]}</span>
+                ${cp > 0 ? `<span class="mip-lc-cp mip-lc-cp--enemy">${gi('crossed-swords')} ${cp}</span>` : ''}
               </div>
               <div class="ov-lc-badges">
                 ${race.name ? `<span class="ov-lc-race">${race.name}</span>` : ''}
@@ -1343,7 +1505,7 @@ const MapView = (() => {
       enemyLordSection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
-          <div class="mip-section-label">⚔ Enemy Lord${lordIntelRecords.length > 1 ? 's' : ''}</div>
+          <div class="mip-section-label">${gi('crossed-swords')} Enemy Lord${lordIntelRecords.length > 1 ? 's' : ''}</div>
           ${enemyCards}
         </div>`;
     } else if (hasLordPresence) {
@@ -1351,15 +1513,15 @@ const MapView = (() => {
       enemyLordSection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
-          <div class="mip-section-label">⚔ Unknown Force</div>
+          <div class="mip-section-label">${gi('crossed-swords')} Unknown Force</div>
           <div class="mip-enemy-lord-card mip-card-wide">
-            <div class="ov-lc-portrait ov-lc-portrait--icon"><span style="font-size:2rem">❔</span></div>
+            <div class="ov-lc-portrait ov-lc-portrait--icon"><span style="font-size:2rem">${gi('uncertainty')}</span></div>
             <div class="ov-lc-body">
               <div class="ov-lc-top"><span class="ov-lc-name">Unknown Force</span></div>
               <div class="mip-note mip-note--muted">Scout this area for intelligence</div>
             </div>
             ${myLordsIdle.length > 0
-              ? `<button class="mip-attack-btn mip-card-wide" data-attack-unknown-lord="1">⚔ Attack</button>`
+              ? `<button class="mip-attack-btn mip-card-wide" data-attack-unknown-lord="1">${gi('crossed-swords')} Attack</button>`
               : `<p class="mip-note mip-note--warn">No lord available to attack</p>`}
           </div>
         </div>`;
@@ -1626,7 +1788,7 @@ const MapView = (() => {
     if (!bar) return;
     if (_movingLord) {
       bar.classList.remove('hidden');
-      if (msg) msg.innerHTML = `📍 Select a destination for <b>${_movingLord.name}</b>`;
+      if (msg) msg.innerHTML = `${gi('position-marker')} Select a destination for <b>${_movingLord.name}</b>`;
     } else {
       bar.classList.add('hidden');
       if (msg) msg.innerHTML = '';
@@ -1730,8 +1892,8 @@ const MapView = (() => {
       if (moves[e.key]) {
         e.preventDefault();
         const [dx, dy] = moves[e.key];
-        const nx = Math.min(_size - 1, Math.max(0, _keyCursor.x + dx));
-        const ny = Math.min(_size - 1, Math.max(0, _keyCursor.y + dy));
+        const nx = Math.min(_w - 1, Math.max(0, _keyCursor.x + dx));
+        const ny = Math.min(_h - 1, Math.max(0, _keyCursor.y + dy));
         _keyCursor = { x: nx, y: ny };
         _updateCanvasAriaLabel();
         _draw();
@@ -1739,6 +1901,16 @@ const MapView = (() => {
         e.preventDefault();
         _onTileClick(_keyCursor.x, _keyCursor.y);
       }
+    });
+
+    // Left side panel — click a city/lord row to select its tile
+    document.getElementById('map-side-panel')?.addEventListener('click', e => {
+      const row = e.target.closest('.msp-row');
+      if (!row) return;
+      const x = Number(row.dataset.x);
+      const y = Number(row.dataset.y);
+      _keyCursor = { x, y };
+      _onTileClick(x, y);
     });
 
     // Banner cancel button (also re-bound dynamically in _updateMoveBanner)
@@ -1775,6 +1947,7 @@ const MapView = (() => {
     _selectedTile = { x, y };
     _draw();
     _updatePanel(x, y);
+    _updateSideActive(x, y);
     _fetchPresence(); // refresh-on-tile-select, per the plan's cadence
   }
 

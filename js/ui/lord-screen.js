@@ -44,7 +44,7 @@ const LordScreen = (() => {
           _resolveScout();
         } else if (c.actionId === 'move_lord') {
           if (c.intent === 'attack') {
-            _toast('⚔ Attack dispatched — resolving on server…');
+            _toast('Attack dispatched — resolving on server…');
             // Server dispatcher resolves the battle within ~5 s.
             // Pull fresh state after that so the Battles tab shows the result.
             setTimeout(async () => {
@@ -53,9 +53,9 @@ const LordScreen = (() => {
               _renderTab();
             }, 6000);
           } else {
-            _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
+            _toast(`Arrived at (${c.destX}, ${c.destY}).`);
             ActivityService.log(_player.id, {
-              type: 'lord_moved', icon: '📍',
+              type: 'lord_moved', icon: gi('position-marker'),
               title: `${_lord.name} arrived at (${c.destX}, ${c.destY})`,
               detail: '', lordName: _lord.name,
             });
@@ -63,7 +63,7 @@ const LordScreen = (() => {
         } else {
           _toast(`✓ ${c.name} completed!`);
         }
-        if (c.leveled > 0) _toast(`⭐ Level Up! Now Level ${_lord.level}.`);
+        if (c.leveled > 0) _toast(`Level Up! Now Level ${_lord.level}.`);
       });
     }
 
@@ -127,12 +127,12 @@ const LordScreen = (() => {
 
           <div class="ls-right">
             <nav class="ls-tabs">
-              <button class="ls-tab ${_activeTab === 'overview'  ? 'ls-tab--active' : ''}" data-tab="overview">📍 Overview</button>
-              <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>⚔ Army</button>
-              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>🔍 Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id, _lord.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
-              <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>✨ Talents${(_lord.level || 1) >= 5 && !_lord.talentId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
-              <button class="ls-tab ${_activeTab === 'mount'     ? 'ls-tab--active' : ''}" data-tab="mount" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>🐎 Mount${(_lord.level || 1) >= 5 && !_lord.mountId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
-              <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">🗡 Battles${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
+              <button class="ls-tab ${_activeTab === 'overview'  ? 'ls-tab--active' : ''}" data-tab="overview">${gi('position-marker')} Overview</button>
+              <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>${gi('crossed-swords')} Army</button>
+              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>${gi('magnifying-glass')} Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id, _lord.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
+              <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>${gi('magic-swirl')} Talents${(_lord.level || 1) >= 5 && !_lord.talentId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
+              <button class="ls-tab ${_activeTab === 'mount'     ? 'ls-tab--active' : ''}" data-tab="mount" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>${gi('horse-head')} Mount${(_lord.level || 1) >= 5 && !_lord.mountId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
+              <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">${gi('plain-dagger')} Battles${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
             </nav>
             <div class="ls-content" id="ls-content"></div>
           </div>
@@ -166,16 +166,16 @@ const LordScreen = (() => {
     const downReviveCost = lordIsDown ? _creditCost(downRemSecs) : 0;
     const downOverlay    = lordIsDown && _lord.capturedByPlayerId ? `
       <div class="lsl-portrait-down-overlay">
-        <div class="lsl-portrait-down-icon">⛓</div>
+        <div class="lsl-portrait-down-icon">${gi('manacles')}</div>
         <div class="lsl-portrait-down-label lsl-portrait-down-label--captured">CAPTURED</div>
         <div class="lsl-captor">by ${_lord.capturedByUsername || 'Unknown'}</div>
-        <button class="ls-finish-btn ls-ransom-btn" id="ls-ransom-now">💰 Pay Ransom (${lordRansomCost(_lord.level)})</button>
+        <button class="ls-finish-btn ls-ransom-btn" id="ls-ransom-now">${gi('two-coins')} Pay Ransom (${lordRansomCost(_lord.level)})</button>
       </div>` : lordIsDown ? `
       <div class="lsl-portrait-down-overlay">
-        <div class="lsl-portrait-down-icon">${downReason === 'captured' ? '⛓' : '💀'}</div>
+        <div class="lsl-portrait-down-icon">${downReason === 'captured' ? gi('manacles') : gi('death-skull')}</div>
         <div class="lsl-portrait-down-label lsl-portrait-down-label--${downReason}">${downReason === 'captured' ? 'CAPTURED' : 'FALLEN'}</div>
         <div class="lsl-portrait-down-cd" id="ls-lord-down-cd">${TimeService.formatDuration(downRemSecs)}</div>
-        <button class="ls-finish-btn ls-revive-btn" id="ls-revive-now">⚡ ${downReviveCost}💎 Revive</button>
+        <button class="ls-finish-btn ls-revive-btn" id="ls-revive-now">${gi('power-lightning')} ${downReviveCost}${gi('cut-diamond')} Revive</button>
       </div>` : '';
 
     const lsQueueItem  = _lord.actionQueue?.[0] ?? null;
@@ -219,7 +219,7 @@ const LordScreen = (() => {
            <div class="lsl-portrait-fade"></div>
            <div class="lsl-portrait-glow" style="background:radial-gradient(ellipse at 50% 80%, ${race.portraitGlow || 'rgba(200,147,58,0.25)'} 0%, transparent 70%)"></div>
            ${downOverlay}${activityOverlay}
-           <div class="lsl-portrait-level">Lv ${level}</div>
+           <div class="lsl-portrait-level" title="Level ${level}">${level}</div>
            <div class="lsl-portrait-nameplate">
              <span class="lsl-portrait-lord-name">${_lord.name}</span>
              <div class="lsl-portrait-badges">
@@ -229,9 +229,9 @@ const LordScreen = (() => {
            </div>
          </div>`
       : `<div class="lsl-portrait-area${lordIsDown ? ' lsl-portrait-area--down' : ''}">
-           <div class="lsl-portrait">${race.icon || '👤'}</div>
+           <div class="lsl-portrait">${race.icon || gi('person')}</div>
            ${downOverlay}${activityOverlay}
-           <div class="lsl-portrait-level">Lv ${level}</div>
+           <div class="lsl-portrait-level" title="Level ${level}">${level}</div>
          </div>`;
 
     // Stat bars
@@ -282,7 +282,7 @@ const LordScreen = (() => {
     const mountSlotHtml = !mountUnlocked ? `
       <div class="lm-slot-card lm-slot-card--locked lm-slot-card--sm">
         <div class="lm-slot-plus">+</div>
-        <div class="lm-slot-label">🔒 Unlocks at level 5</div>
+        <div class="lm-slot-label">${gi('padlock')} Unlocks at level 5</div>
       </div>`
       : chosenMount ? `
       <div class="lm-slot-card lm-slot-card--filled lm-slot-card--sm" style="border-color:${chosenMount.color}50" data-action="open-mount-tab">
@@ -319,19 +319,17 @@ const LordScreen = (() => {
           <div class="lsl-hp-fill" style="width:${hpPct}%"></div>
         </div>
         <div class="lsl-bar-label-row">
-          <span class="lsl-bar-label-icon">❤</span>
+          <span class="lsl-bar-label-icon">${gi('hearts')}</span>
           <span class="lsl-bar-label-val">${curHp} / ${maxHp}</span>
         </div>
         <div class="lsl-xp-bar">
           <div class="lsl-xp-fill" style="width:${xpPct}%"></div>
         </div>
         <div class="lsl-bar-label-row">
-          <span class="lsl-bar-label-icon">⭐</span>
+          <span class="lsl-bar-label-icon">${gi('round-star')}</span>
           <span class="lsl-bar-label-val">${xp} / ${xpNext} XP</span>
         </div>
       </div>
-
-      ${_positionHtml()}
 
       <div class="cvl-divider"></div>
       <div class="lsh-section">
@@ -345,34 +343,6 @@ const LordScreen = (() => {
       ${passiveHtml}
       ${mountHtml}
 
-    `;
-  }
-
-  function _positionHtml() {
-    if (_lord.x == null) {
-      return `
-        <div class="cvl-divider"></div>
-        <div class="lsl-pos-row lsl-pos--unknown">
-          <span class="lsl-pos-icon">📍</span>
-          <span class="lsl-pos-label">No Position</span>
-        </div>
-      `;
-    }
-    const terrain = WorldService.getTerrain(_lord.x, _lord.y);
-    const active  = DiscoveryService.getActive(_player.id)
-      .filter(r => r.tileX === _lord.x && r.tileY === _lord.y);
-    return `
-      <div class="cvl-divider"></div>
-      <div class="lsl-pos-row">
-        <span class="lsl-pos-icon">📍</span>
-        <div class="lsl-pos-body">
-          <div class="lsl-pos-coords">(${_lord.x}, ${_lord.y})</div>
-          <div class="lsl-pos-terrain">${terrain.icon} ${terrain.name}</div>
-        </div>
-        ${active.length > 0
-          ? `<span class="lsl-pos-disc-count" title="${active.length} discovery here">🔍 ${active.length}</span>`
-          : ''}
-      </div>
     `;
   }
 
@@ -497,7 +467,7 @@ const LordScreen = (() => {
           btn.disabled = true;
           const result = await ServerActions.raidInstant(_lord.id);
           if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
-          _toast(`Raid complete: +${result.goldEarned || 0}💰`);
+          _toast(`Raid complete: +${result.goldEarned || 0} gold`);
           _lord = LordService.getById(_lord.id);
           _renderTab();
           _startCountdown();
@@ -531,19 +501,18 @@ const LordScreen = (() => {
 
   // ── Helpers ───────────────────────────────────────────────────
 
+  // PWR comes from EconomyCore.getUnitPower/getArmyPower — the single
+  // source of truth shared with the server's recruit/hire gates (linear
+  // per-model cost + combat-trait tax). Rounded here (not just at display
+  // time) so every caller — display, the recruit-button pre-check, etc. —
+  // sees the same whole-number PWR value.
   function _unitPower(def) {
-    if (!def) return 0;
-    const s = def.combatStats || {};
-    return (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0);
+    return EconomyCore.getUnitPower(def);
   }
 
-  // Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult —
-  // otherwise this overvalues numerous cheap units relative to what they actually deal.
-  // Rounded here (not just at display time) so every caller — display, the
-  // recruit-button pre-check, etc. — sees the same whole-number PWR value.
   function _armyPower(lordId) {
     const army = ArmyService.get(lordId);
-    return Math.round(army.units.reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0));
+    return Math.round(EconomyCore.getArmyPower(army.units, UNIT_DEFS));
   }
 
   // Display-only mirror of server/tick/catch-up.js's _raidHourlyRewards —
@@ -553,26 +522,16 @@ const LordScreen = (() => {
     const lvl  = lord.level || 1;
     const gold = Math.round(25 + lvl * 5);
     const res  = Math.round(15 + lvl * 3);
-    return { gold, food: res, wood: res, stone: res, iron: res };
+    return { gold, food: res, wood: res, stone: res };
   }
 
   // Army power if `addCount` more of `unitId` were added to this lord's army.
-  // Recomputes that stack's whole dampened total rather than adding a flat
-  // per-unit delta — dampening is non-linear, so the marginal power of the
-  // 16th model in an existing 15-stack is less than the 1st in a fresh stack.
-  // Mirrors server/actions/recruit.js's _projectedArmyPower — must match
-  // exactly, since the server is the authoritative gate and this is only the
-  // client-side pre-check that disables the Recruit/Hire button.
+  // Mirrors server/actions/recruit.js's _projectedArmyPower via the same
+  // EconomyCore helper — the server is the authoritative gate and this is
+  // only the client-side pre-check that disables the Recruit/Hire button.
   function _projectedArmyPower(lordId, unitId, addCount) {
-    const army     = ArmyService.get(lordId);
-    const def      = UNIT_DEFS[unitId];
-    if (!def) return _armyPower(lordId);
-    const existing   = army.units.find(u => u.unitId === unitId);
-    const otherPower = army.units
-      .filter(u => u.unitId !== unitId)
-      .reduce((sum, u) => sum + _unitPower(UNIT_DEFS[u.unitId]) * Math.pow(u.count, 0.8), 0);
-    const newCount = (existing?.count || 0) + addCount;
-    return otherPower + _unitPower(def) * Math.pow(newCount, 0.8);
+    const army = ArmyService.get(lordId);
+    return EconomyCore.getProjectedArmyPower(army.units, UNIT_DEFS, unitId, addCount);
   }
 
   // Applies a discoveries[] response (from either /api/scan/tile or
@@ -659,38 +618,38 @@ const LordScreen = (() => {
         </div>
       `;
     } else if (!busy) {
-      statusHtml = `<div class="lov-status lov-status--idle">⏳ Idle — no active task</div>`;
+      statusHtml = `<div class="lov-status lov-status--idle">${gi('hourglass')} Idle — no active task</div>`;
     } else if (queueItem.actionId === 'move_lord') {
       const isAttacking = queueItem.intent === 'attack';
       const cost = _creditCost(secs);
       statusHtml = `
         <div class="lov-status ${isAttacking ? 'lov-status--attacking' : 'lov-status--traveling'}">
-          ${isAttacking ? '⚔ ATTACKING — arriving at ('+queueItem.destX+', '+queueItem.destY+')' : '🧭 Traveling to ('+queueItem.destX+', '+queueItem.destY+')'}
+          ${isAttacking ? gi('crossed-swords') + ' ATTACKING — arriving at ('+queueItem.destX+', '+queueItem.destY+')' : gi('compass') + ' Traveling to ('+queueItem.destX+', '+queueItem.destY+')'}
         </div>
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill${isAttacking ? ' lov-fill--attack' : ''}" id="lov-fill" style="width:${pct}%"></div></div>
           <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
-          ${isAttacking ? '' : `<button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>`}
+          ${isAttacking ? '' : `<button class="ls-finish-btn" id="lov-finish-lord">${gi('power-lightning')} ${cost}${gi('cut-diamond')}</button>`}
         </div>
       `;
     } else if (queueItem.actionId === 'search_area') {
       const cost = _creditCost(secs);
       statusHtml = `
-        <div class="lov-status lov-status--searching">🔍 Quest in progress…</div>
+        <div class="lov-status lov-status--searching">${gi('magnifying-glass')} Quest in progress…</div>
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill" id="lov-fill" style="width:${pct}%"></div></div>
           <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
-          <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>
+          <button class="ls-finish-btn" id="lov-finish-lord">${gi('power-lightning')} ${cost}${gi('cut-diamond')}</button>
         </div>
       `;
     } else if (queueItem.actionId === 'scout') {
       const cost = _creditCost(secs);
       statusHtml = `
-        <div class="lov-status lov-status--scouting">🕵 Scouting in progress…</div>
+        <div class="lov-status lov-status--scouting">${gi('spy')} Scouting in progress…</div>
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill" id="lov-fill" style="width:${pct}%"></div></div>
           <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
-          <button class="ls-finish-btn" id="lov-finish-lord">⚡ ${cost}💎</button>
+          <button class="ls-finish-btn" id="lov-finish-lord">${gi('power-lightning')} ${cost}${gi('cut-diamond')}</button>
         </div>
       `;
     }
@@ -709,21 +668,21 @@ const LordScreen = (() => {
       const tileDiscs = DiscoveryService.getActive(_player.id)
         .filter(r => r.tileX === _lord.x && r.tileY === _lord.y);
       const discCountHtml = tileDiscs.length > 0
-        ? `<div class="lov-lc-disc">🔍 ${tileDiscs.length} pending quest${tileDiscs.length > 1 ? 's' : ''} on this tile</div>`
-        : `<div class="lov-lc-disc lov-lc-disc--none">🔍 No quests here yet</div>`;
+        ? `<div class="lov-lc-disc">${gi('magnifying-glass')} ${tileDiscs.length} pending quest${tileDiscs.length > 1 ? 's' : ''} on this tile</div>`
+        : `<div class="lov-lc-disc lov-lc-disc--none">${gi('magnifying-glass')} No quests here yet</div>`;
 
       // Search action
       let searchHtml;
       if (isSearching) {
-        searchHtml = `<span class="lov-lc-busy">🔍 Quest in progress on this tile…</span>`;
+        searchHtml = `<span class="lov-lc-busy">${gi('magnifying-glass')} Quest in progress on this tile…</span>`;
       } else if (isScouting) {
-        searchHtml = `<span class="lov-lc-busy">🕵 Scouting this tile…</span>`;
+        searchHtml = `<span class="lov-lc-busy">${gi('spy')} Scouting this tile…</span>`;
       } else if (!busy) {
         searchHtml = `
           <div class="lov-lc-btns">
-            <button class="lov-search-btn" id="lov-search-btn">🔍 Send on Quest</button>
-            <button class="lov-scout-btn" id="lov-scout-btn" title="Gather intel on this tile's enemy lord and city. Safe without an army; risks an ambush if scouting with one.">🕵 Scout</button>
-            <button class="lov-move-btn" id="lov-move-btn">🗺 Go to Map</button>
+            <button class="lov-search-btn" id="lov-search-btn">${gi('magnifying-glass')} Send on Quest</button>
+            <button class="lov-scout-btn" id="lov-scout-btn" title="Gather intel on this tile's enemy lord and city. Safe without an army; risks an ambush if scouting with one.">${gi('spy')} Scout</button>
+            <button class="lov-move-btn" id="lov-move-btn">${gi('treasure-map')} Go to Map</button>
           </div>`;
       } else {
         searchHtml = isTraveling
@@ -742,7 +701,7 @@ const LordScreen = (() => {
           <div class="lov-lc-body">
             <div class="lov-lc-header">
               <div class="lov-lc-name">${terrain.icon} ${terrain.name}</div>
-              <div class="lov-lc-coords">📍 (${_lord.x}, ${_lord.y})${isTraveling ? ` → (${queueItem.destX}, ${queueItem.destY})` : ''}</div>
+              <div class="lov-lc-coords">${gi('position-marker')} (${_lord.x}, ${_lord.y})${isTraveling ? ` → (${queueItem.destX}, ${queueItem.destY})` : ''}</div>
             </div>
             <div class="lov-lc-hint">${terrain.searchHint}</div>
             ${discCountHtml}
@@ -777,12 +736,12 @@ const LordScreen = (() => {
           <span class="lov-timer" id="lov-stance-timer">${TimeService.formatDuration(sRemain)}</span>
         </div>
         <div class="lov-raid-earnings">
-          Earned so far (paid only when the raid ends): <b>+${goldSoFar}💰</b> · <b>+${resSoFar}</b> of each resource
+          Earned so far (paid only when the raid ends): <b>+${goldSoFar}${gi('two-coins')}</b> · <b>+${resSoFar}</b> of each resource
         </div>
-        <div class="lov-raid-warn">⚠ Any enemy lord with an army that arrives here will trigger an automatic fight. Losing forfeits the raid and everything earned.</div>
+        <div class="lov-raid-warn">${gi('hazard-sign')} Any enemy lord with an army that arrives here will trigger an automatic fight. Losing forfeits the raid and everything earned.</div>
         <div class="lov-raid-btn-row">
           <button class="lov-raid-cancel-btn" id="lov-raid-cancel-btn">✕ Cancel (forfeit)</button>
-          <button class="lov-raid-finish-btn" id="lov-raid-finish-btn">💎 Finish Now — ${finishCost}</button>
+          <button class="lov-raid-finish-btn" id="lov-raid-finish-btn">${gi('cut-diamond')} Finish Now — ${finishCost}</button>
         </div>
       `;
     } else if (isInStance) {
@@ -821,18 +780,12 @@ const LordScreen = (() => {
     // limit" any more — two differently-scaled numbers the UI could never
     // keep in sync with was exactly the confusion this replaces.
     const army         = ArmyService.get(_lord.id);
-    const totalUpkeep  = army.units.reduce((s, u) => s + (UNIT_DEFS[u.unitId]?.upkeep || 0) * u.count, 0);
     const totalPower   = _armyPower(_lord.id);
     const maxPower     = LordService.getArmyPowerCap(_lord);
     const overPower    = totalPower > maxPower;
     const armyHtml    = army.units.length === 0
       ? `<p class="lov-pos-none">No troops mustered — recruit from the Army tab.</p>`
-      : `
-        <div class="la-unit-cards">${_armyCardsHtml(army, { removable: false })}</div>
-        <div class="la-army-total">
-          <span class="la-army-upkeep">💸 ${totalUpkeep}/24h upkeep</span>
-        </div>
-      `;
+      : `<div class="la-unit-cards">${_armyCardsHtml(army, { removable: false })}</div>`;
 
     return `
       <div class="lov-tab">
@@ -849,7 +802,7 @@ const LordScreen = (() => {
         <div class="lov-section">
           <div class="lov-section-row">
             <div class="lov-section-title">Army</div>
-            <span class="lov-army-power${overPower ? ' lov-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">⚔ ${totalPower} / ${maxPower} PWR</span>
+            <span class="lov-army-power${overPower ? ' lov-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">${gi('crossed-swords')} ${totalPower} / ${maxPower} PWR</span>
           </div>
           ${armyHtml}
         </div>
@@ -949,17 +902,18 @@ const LordScreen = (() => {
             <div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:${hpPct}%;background:${hpColor}"></div></div>
           </div>
           ${portrait}
+          ${giUnitType(def.category)}
           ${removeBtn}
         </div>
         <div class="la-uc-tooltip">
           <div class="la-tt-name">${def.name}${def.category === 'mercenary' ? ' <span class="la-merc-badge">Merc</span>' : ''}</div>
           <div class="la-tt-stats">
-            <span title="Attack">⚔ ${def.combatStats.attack}</span>
-            <span title="Defense">🛡 ${def.combatStats.defense}</span>
-            <span title="HP">❤ ${def.combatStats.hp}</span>
-            <span title="Speed">💨 ${def.combatStats.speed}</span>
+            <span title="Attack">${gi('crossed-swords')} ${def.combatStats.attack}</span>
+            <span title="Defense">${gi('round-shield')} ${def.combatStats.defense}</span>
+            <span title="HP">${gi('hearts')} ${def.combatStats.hp}</span>
+            <span title="Speed">${gi('wingfoot')} ${def.combatStats.speed}</span>
           </div>
-          <div class="la-tt-cost">💰${def.goldCost} · 💸${def.upkeep}/24h</div>
+          <div class="la-tt-cost">${gi('two-coins')}${def.goldCost}</div>
           ${traitsHtml ? `<div class="la-tt-section">${traitsHtml}</div>` : ''}
           ${abilitiesHtml ? `<div class="la-tt-section">${abilitiesHtml}</div>` : ''}
           ${tagsHtml ? `<div class="la-tt-tags">${tagsHtml}</div>` : ''}
@@ -1000,19 +954,13 @@ const LordScreen = (() => {
     if (army.units.length === 0) {
       armyListHtml = `
         <div class="la-placeholder" style="padding:1rem 0">
-          <div class="la-placeholder-icon">⚔</div>
+          <div class="la-placeholder-icon">${gi('crossed-swords')}</div>
           <div class="la-placeholder-text">No troops mustered</div>
           <div class="la-placeholder-sub">Recruit from your city or hire mercenaries in the field.</div>
         </div>
       `;
     } else {
-      const totalUpkeep = army.units.reduce((s, u) => s + (UNIT_DEFS[u.unitId]?.upkeep || 0) * u.count, 0);
-      armyListHtml = `
-        <div class="la-unit-cards">${_armyCardsHtml(army, { removable: true })}</div>
-        <div class="la-army-total">
-          <span class="la-army-upkeep">💸 ${totalUpkeep}/24h upkeep</span>
-        </div>
-      `;
+      armyListHtml = `<div class="la-unit-cards">${_armyCardsHtml(army, { removable: true })}</div>`;
     }
 
     // ── Recruitment (city-based) ───────────────────────────────
@@ -1044,7 +992,7 @@ const LordScreen = (() => {
           return `
             <div class="la-recruit-queue-item">
               <span class="la-recruit-queue-pos">#${i + 2}</span>
-              <span class="la-recruit-queue-icon">${qDef?.icon || '⚔'}</span>
+              <span class="la-recruit-queue-icon">${qDef?.icon || gi('crossed-swords')}</span>
               <span class="la-recruit-queue-name">${qDef?.name || q.unitId} ×${q.count}</span>
               <span class="la-recruit-queue-eta">${TimeService.formatDuration(etaSecs)}</span>
             </div>`;
@@ -1052,11 +1000,11 @@ const LordScreen = (() => {
 
         queueHtml = `
           <div class="la-recruit-queue">
-            <div class="la-recruit-queue-label">${uDef?.icon || '⚔'} Training ${uDef?.name || job.unitId} ×${job.count}</div>
+            <div class="la-recruit-queue-label">${uDef?.icon || gi('crossed-swords')} Training ${uDef?.name || job.unitId} ×${job.count}</div>
             <div class="la-progress-row">
               <div class="la-bar"><div class="la-fill" id="la-recruit-fill" style="transform:scaleX(${pct / 100})"></div></div>
               <span class="la-timer" id="la-recruit-timer">${TimeService.formatDuration(secs)}</span>
-              <button class="ls-finish-btn" id="la-finish-recruit">⚡ ${recruitCost}💎</button>
+              <button class="ls-finish-btn" id="la-finish-recruit">${gi('power-lightning')} ${recruitCost}${gi('cut-diamond')}</button>
             </div>
             ${upcomingHtml ? `<div class="la-recruit-queue-upcoming">${upcomingHtml}</div>` : ''}
             <div class="la-recruit-queue-slots">${queue.length}/${MAX_QUEUE} queue slots used</div>
@@ -1075,15 +1023,30 @@ const LordScreen = (() => {
           const canAfford  = (player.coins || 0) >= def.goldCost;
           const wouldExceedPower = _projectedArmyPower(_lord.id, unitId, 1) > maxPower;
           const disabled   = queueFull || !canAfford || wouldExceedPower;
-          const btnLabel   = queueFull ? 'Queue Full' : wouldExceedPower ? '⚠ Power Limit' : canAfford ? 'Recruit' : 'No gold';
+          const btnLabel   = queueFull ? 'Queue Full' : wouldExceedPower ? gi('hazard-sign') + ' Power Limit' : canAfford ? 'Recruit' : 'No gold';
+          // Displayed time mirrors the server: hangar divisor from this
+          // city's training-building level + Drill Manuals research.
+          const training   = EconomyCore.getUnitTraining(_lord.race, unitId);
+          const recruitSecs = EconomyCore.getRecruitTime(
+            def, 1,
+            EconomyCore.getResearchEffects(player.research),
+            training ? (city.buildings?.[training.buildingId] || 0) : 0,
+            training ? training.minLevel : 0,
+          );
+          // Veterancy: attack/defense shown as the unit will actually fight
+          // (training-building levels summed across ALL cities).
+          const vetPct = EconomyCore.getVeterancyPct(
+            _lord.race, unitId,
+            CityService.getPlayerCities(player.id).map(c => c.buildings));
+          const atkShown = Math.round(def.combatStats.attack  * (1 + vetPct));
+          const defShown = Math.round(def.combatStats.defense * (1 + vetPct));
           return `
             <div class="la-recruit-card ${queueFull ? 'la-recruit-card--busy' : ''}">
               ${_unitPortraitHtml(def)}
               <div class="la-recruit-body">
-                <div class="la-recruit-name">${def.name}</div>
-                <div class="la-recruit-stats">⚔${def.combatStats.attack} 🛡${def.combatStats.defense} ❤${def.combatStats.hp} 💨${def.combatStats.speed}</div>
-                <div class="la-recruit-cost">💰${def.goldCost} · ⏱${TimeService.formatDuration(def.recruitTime)}</div>
-                <div class="la-recruit-upkeep">💸 ${def.upkeep}/24h upkeep</div>
+                <div class="la-recruit-name">${def.name}${vetPct > 0 ? ` <span class="la-vet-badge" title="Veterancy from training buildings across your empire">+${Math.round(vetPct * 100)}%</span>` : ''}</div>
+                <div class="la-recruit-stats">${gi('crossed-swords')}${atkShown} ${gi('round-shield')}${defShown} ${gi('hearts')}${def.combatStats.hp} ${gi('wingfoot')}${def.combatStats.speed}</div>
+                <div class="la-recruit-cost">${gi('two-coins')}${def.goldCost} · ${gi('stopwatch')}${TimeService.formatDuration(recruitSecs)}</div>
                 ${_traitBadgesHtml(def)}
                 ${_abilityBadgesHtml(def)}
                 ${_tagBadgesHtml(def)}
@@ -1113,15 +1076,14 @@ const LordScreen = (() => {
           const canAfford  = (player.coins || 0) >= def.goldCost;
           const wouldExceedPower = _projectedArmyPower(_lord.id, unitId, 1) > maxPower;
           const disabled   = !canAfford || wouldExceedPower;
-          const btnLabel   = wouldExceedPower ? '⚠ Power Limit' : canAfford ? 'Hire' : 'No gold';
+          const btnLabel   = wouldExceedPower ? gi('hazard-sign') + ' Power Limit' : canAfford ? 'Hire' : 'No gold';
           return `
             <div class="la-recruit-card">
               ${_unitPortraitHtml(def)}
               <div class="la-recruit-body">
                 <div class="la-recruit-name">${def.name} <span class="la-merc-badge">Mercenary</span></div>
-                <div class="la-recruit-stats">⚔${def.combatStats.attack} 🛡${def.combatStats.defense} ❤${def.combatStats.hp} 💨${def.combatStats.speed}</div>
-                <div class="la-recruit-cost">💰${def.goldCost} · Instant</div>
-                <div class="la-recruit-upkeep">💸 ${def.upkeep}/24h upkeep</div>
+                <div class="la-recruit-stats">${gi('crossed-swords')}${def.combatStats.attack} ${gi('round-shield')}${def.combatStats.defense} ${gi('hearts')}${def.combatStats.hp} ${gi('wingfoot')}${def.combatStats.speed}</div>
+                <div class="la-recruit-cost">${gi('two-coins')}${def.goldCost} · Instant</div>
                 ${_traitBadgesHtml(def)}
                 ${_tagBadgesHtml(def)}
               </div>
@@ -1132,7 +1094,7 @@ const LordScreen = (() => {
             </div>
           `;
         }).join('');
-        return `<div class="la-merc-group"><div class="la-merc-group-title">${discDef?.icon || '⚔'} ${discDef?.name || record.definitionId}</div>${cards}</div>`;
+        return `<div class="la-merc-group"><div class="la-merc-group-title">${discDef?.icon || gi('crossed-swords')} ${discDef?.name || record.definitionId}</div>${cards}</div>`;
       }).join('');
 
       mercHtml = `
@@ -1146,7 +1108,7 @@ const LordScreen = (() => {
       <div class="la-army-tab">
         <div class="la-section-header-row">
           <div class="la-section-title">Army</div>
-          <span class="la-army-power${overPower ? ' la-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">⚔ ${currentPower} / ${maxPower} PWR</span>
+          <span class="la-army-power${overPower ? ' la-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">${gi('crossed-swords')} ${currentPower} / ${maxPower} PWR</span>
         </div>
         ${armyListHtml}
         <div class="la-section-divider"></div>
@@ -1183,7 +1145,7 @@ const LordScreen = (() => {
         const result   = await ServerActions.disbandUnit(_lord.id, unitId, modelIdx);
         if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
         const def = UNIT_DEFS[unitId];
-        if (def) _toast(`${def.icon} ${def.name} dismissed.`);
+        if (def) _toast(`${def.name} dismissed.`);
         _renderTab();
       });
     });
@@ -1214,7 +1176,7 @@ const LordScreen = (() => {
         if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
         _player = PlayerService.getById(_player.id);
         HUD.refresh();
-        _toast(`${def.icon} ${def.name} hired!`);
+        _toast(`${def.name} hired!`);
         _renderTab();
       });
     });
@@ -1241,7 +1203,7 @@ const LordScreen = (() => {
     if (log.length === 0) {
       return `
         <div class="la-placeholder">
-          <div class="la-placeholder-icon">🔍</div>
+          <div class="la-placeholder-icon">${gi('magnifying-glass')}</div>
           <div class="la-placeholder-text">No quests yet</div>
           <div class="la-placeholder-sub">Use <strong>Send on Quest</strong> to explore this tile.</div>
         </div>`;
@@ -1257,9 +1219,9 @@ const LordScreen = (() => {
       const def       = DISCOVERY_DEFS[entry.definitionId];
       const isNothing = !def || def.category === 'nothing';
       const isCombat  = def && _ACTION_CATEGORIES.has(def.category);
-      const terrain   = TERRAIN_TYPES[entry.terrain] || { icon: '🌍', name: entry.terrain || 'Unknown' };
+      const terrain   = TERRAIN_TYPES[entry.terrain] || { icon: gi('world'), name: entry.terrain || 'Unknown' };
       const ago       = _timeAgo(TimeService.now() - entry.loggedAt);
-      const icon      = def ? def.icon : '❓';
+      const icon      = def ? def.icon : gi('uncertainty');
       const defName   = isNothing ? 'Nothing Found' : (def ? def.name : 'Quest');
       const name      = entry.storyTitle || defName;
       // When a story quest supplied a custom headline, still surface the
@@ -1304,14 +1266,14 @@ const LordScreen = (() => {
         const canViewReport = entry.lordId && entry.lordId === _lord.id;
         bodyHtml = `
           <div class="qd-banner ${cls}">
-            <span class="qd-banner-icon">${won ? '⚔' : '☠'}</span>
+            <span class="qd-banner-icon">${won ? gi('crossed-swords') : gi('skull-crossed-bones')}</span>
             <div class="qd-banner-body">
               <div class="qd-banner-title">${kindLabel}</div>
               <div class="qd-banner-sub">${sub}</div>
             </div>
           </div>
           ${canViewReport
-            ? `<button class="qd-battle-link" data-view-battles="1">📜 View Battle Report</button>`
+            ? `<button class="qd-battle-link" data-view-battles="1">${gi('scroll-unfurled')} View Battle Report</button>`
             : `<div class="qd-hint">Full battle report in the Battles tab.</div>`}`;
       } else if (isCombat) {
         const activeRecord = entry.recordId ? DiscoveryService.getActive(_player.id).find(r => r.id === entry.recordId) : null;
@@ -1324,7 +1286,7 @@ const LordScreen = (() => {
             </div>
           </div>
           ${campPreview}
-          <div class="qd-hint">📍 Visible on the map at (${entry.tileX}, ${entry.tileY}). Move your lord there and attack when ready.</div>`;
+          <div class="qd-hint">${gi('position-marker')} Visible on the map at (${entry.tileX}, ${entry.tileY}). Move your lord there and attack when ready.</div>`;
       } else if (!isNothing && entry.rewards && entry.rewards.length > 0) {
         const rows = entry.rewards
           .filter(r => _RES_ICONS[r.type] && r.amount > 0)
@@ -1389,12 +1351,15 @@ const LordScreen = (() => {
 
     return `
       <div class="disc-tab-body">
-        <div class="disc-section-label">📋 Quest History</div>
+        <div class="disc-section-row">
+          <div class="disc-section-label">${gi('scroll-quill')} Quest History</div>
+          <button class="disc-clear-all-btn" id="qd-clear-all">${gi('trash-can')} Clear All</button>
+        </div>
         <div class="disc-log-list">${entries}</div>
       </div>`;
   }
 
-  const _RES_ICONS = { gold: '💰', wood: '🪵', stone: '⛏', iron: '⚒', food: '🌾', xp: '⭐' };
+  const _RES_ICONS = { gold: gi('two-coins'), wood: gi('wood-pile'), stone: gi('war-pick'), food: gi('wheat'), xp: gi('round-star') };
   const _ACTION_CATEGORIES = new Set(['combat']);
 
   function _campPreviewHtml(cd) {
@@ -1402,13 +1367,13 @@ const LordScreen = (() => {
     const campDef = CAMP_DEFS[cd.type] || {};
     const chips = cd.defenders.map(d => {
       const def = UNIT_DEFS[d.unitId];
-      return `<span class="camp-unit-chip">${def?.icon || '⚔'} ${def?.name || d.unitId} ×${d.count}</span>`;
+      return `<span class="camp-unit-chip">${def?.icon || gi('crossed-swords')} ${def?.name || d.unitId} ×${d.count}</span>`;
     }).join('');
     return `
       <div class="camp-preview">
         <div class="camp-preview-header">
           <span class="camp-level-badge">Level ${cd.level}</span>
-          <span class="camp-type-label">${campDef.icon || '⚔'} ${campDef.displayName || cd.type}</span>
+          <span class="camp-type-label">${campDef.icon || gi('crossed-swords')} ${campDef.displayName || cd.type}</span>
         </div>
         <div class="camp-unit-chips">${chips}</div>
       </div>`;
@@ -1430,7 +1395,7 @@ const LordScreen = (() => {
     if (level < 5) {
       talentSectionHtml = `
         <div class="lt-locked-notice">
-          <div class="lt-locked-icon">🔒</div>
+          <div class="lt-locked-icon">${gi('padlock')}</div>
           <div class="lt-locked-text">Talent selection unlocks at <strong>level 5</strong>.</div>
           <div class="lt-locked-hint">Level up your lord to choose a permanent talent.</div>
         </div>`;
@@ -1440,7 +1405,7 @@ const LordScreen = (() => {
           <div class="lt-chosen-icon" style="color:${chosenTalent.color}">${chosenTalent.icon}</div>
           <div class="lt-chosen-body">
             <div class="lt-chosen-name" style="color:${chosenTalent.color}">${chosenTalent.name}</div>
-            <div class="lt-chosen-category">${chosenTalent.category === 'combat' ? '⚔ Combat' : '🗺 Strategic'}</div>
+            <div class="lt-chosen-category">${chosenTalent.category === 'combat' ? gi('crossed-swords') + ' Combat' : gi('treasure-map') + ' Strategic'}</div>
             <div class="lt-chosen-desc">${chosenTalent.description}</div>
           </div>
           <div class="lt-chosen-badge">Permanent</div>
@@ -1462,16 +1427,16 @@ const LordScreen = (() => {
         </div>`).join('');
 
       talentSectionHtml = `
-        <div class="lt-group-label">⚔ Combat Talents</div>
+        <div class="lt-group-label">${gi('crossed-swords')} Combat Talents</div>
         <div class="lt-talent-grid">${renderCards(combatTalents)}</div>
-        <div class="lt-group-label">🗺 Strategic Talents</div>
+        <div class="lt-group-label">${gi('treasure-map')} Strategic Talents</div>
         <div class="lt-talent-grid">${renderCards(strategicTalents)}</div>`;
     }
 
     return `
       <div class="lt-container">
         <div class="lt-section">
-          <div class="lt-section-title">✨ Talent</div>
+          <div class="lt-section-title">${gi('magic-swirl')} Talent</div>
           ${talentSectionHtml}
         </div>
       </div>`;
@@ -1520,7 +1485,7 @@ const LordScreen = (() => {
       slotHtml = `
         <div class="lm-slot-card lm-slot-card--locked">
           <div class="lm-slot-plus">+</div>
-          <div class="lm-slot-label">🔒 Unlocks at level 5</div>
+          <div class="lm-slot-label">${gi('padlock')} Unlocks at level 5</div>
         </div>`;
     } else if (chosen && !picking) {
       slotHtml = `
@@ -1552,7 +1517,7 @@ const LordScreen = (() => {
             <div class="lm-mount-visual">${_mountVisual(m, 'lm-mount-icon-lg')}</div>
             <div class="lm-mount-header">
               <span class="lm-mount-name" style="color:${m.color}">${m.name}</span>
-              <span class="lm-mount-cost${canAfford ? '' : ' lm-mount-cost--short'}">💰${m.cost || 0}</span>
+              <span class="lm-mount-cost${canAfford ? '' : ' lm-mount-cost--short'}">${gi('two-coins')}${m.cost || 0}</span>
             </div>
             <div class="lm-stat-chips">${_mountEffectChips(m.effects)}</div>
             <button class="lm-choose-btn" data-mount-id="${m.id}" style="border-color:${m.color};color:${m.color}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>
@@ -1565,7 +1530,7 @@ const LordScreen = (() => {
     return `
       <div class="lm-container">
         <div class="lm-section">
-          <div class="lm-section-title">🐎 Mount</div>
+          <div class="lm-section-title">${gi('horse-head')} Mount</div>
           ${slotHtml}
           ${pickerHtml}
         </div>
@@ -1600,7 +1565,7 @@ const LordScreen = (() => {
         _player = PlayerService.getById(_player.id);
         HUD.refresh();
         const mount = MOUNT_POOL[btn.dataset.mountId];
-        _toast(`${mount?.icon || '🐎'} ${mount?.name || 'Mount'} equipped!`);
+        _toast(`${mount?.name || 'Mount'} equipped!`);
         _mountPickerOpen = false;
         _renderTab();
       });
@@ -1608,9 +1573,9 @@ const LordScreen = (() => {
   }
 
   const _OUTCOME_META = {
-    victory: { label: 'Victory', icon: '⚔', css: 'bh-victory' },
-    defeat:  { label: 'Defeat',  icon: '☠', css: 'bh-defeat'  },
-    draw:    { label: 'Draw',    icon: '🤝', css: 'bh-draw'    },
+    victory: { label: 'Victory', icon: gi('crossed-swords'), css: 'bh-victory' },
+    defeat:  { label: 'Defeat',  icon: gi('skull-crossed-bones'), css: 'bh-defeat'  },
+    draw:    { label: 'Draw',    icon: gi('shaking-hands'), css: 'bh-draw'    },
   };
 
   const _REASON_LABELS_TAB = {
@@ -1626,7 +1591,7 @@ const LordScreen = (() => {
     if (battles.length === 0) {
       return `
         <div class="bh-empty">
-          <div class="bh-empty-icon">🗡</div>
+          <div class="bh-empty-icon">${gi('plain-dagger')}</div>
           <p class="bh-empty-msg">No battles recorded yet.</p>
           <p class="bh-empty-hint">Attack a camp from the Quests tab.</p>
         </div>`;
@@ -1639,7 +1604,7 @@ const LordScreen = (() => {
       const resLoot = b.outcome === 'victory'
         ? Object.entries(b.resourceLoot || {}).map(([t, amt]) => `+${amt}${_RES_ICONS[t] || ''} · `).join('')
         : '';
-      const loot   = (b.outcome === 'victory' && b.goldEarned > 0 ? `+${b.goldEarned}💰 · ` : '') + resLoot;
+      const loot   = (b.outcome === 'victory' && b.goldEarned > 0 ? `+${b.goldEarned}${gi('two-coins')} · ` : '') + resLoot;
       const honor  = b.honorEarned || 0;
       const honorCls = honor > 0 ? 'bh-honor--pos' : honor < 0 ? 'bh-honor--neg' : '';
       const honorHtml = honor !== 0
@@ -1649,25 +1614,29 @@ const LordScreen = (() => {
         <div class="bh-entry ${om.css}" data-bh-idx="${idx}">
           <div class="bh-entry-header">
             <span class="bh-outcome-badge ${om.css}">${om.icon} ${om.label}</span>
-            <span class="bh-camp-name">${b.campIcon || '⚔'} ${b.campName}</span>
+            <span class="bh-camp-name">${b.campIcon || gi('crossed-swords')} ${b.campName}</span>
             <span class="bh-date">${date} ${time}</span>
           </div>
           ${b.lordLevel ? `<div class="bh-lord-sub mip-value--muted">${_lord.name} · Lv ${b.lordLevel}</div>` : ''}
           <div class="bh-entry-stats">
             <span>Rounds: <strong>${b.rounds}</strong></span>
             <span>Losses: <strong>${b.modelsLost}</strong></span>
-            <span>${loot}+${b.xpEarned}⭐</span>
+            <span>${loot}+${b.xpEarned}${gi('round-star')}</span>
             ${honorHtml}
             <span class="bh-reason">${_REASON_LABELS_TAB[b.reason] || b.reason}</span>
           </div>
-          <button class="bh-log-toggle" data-bh-idx="${idx}">📜 View Report</button>
+          <button class="bh-log-toggle" data-bh-idx="${idx}">${gi('scroll-unfurled')} View Report</button>
           <div class="bh-log-body hidden" id="bh-log-${idx}">
             ${b.report ? _battleLogHtml(b) : '<em>Report unavailable</em>'}
           </div>
         </div>`;
     }).join('');
 
-    return `<div class="bh-list">${rows}</div>`;
+    return `
+      <div class="bh-section-row">
+        <button class="disc-clear-all-btn" id="bh-clear-all">${gi('trash-can')} Clear All</button>
+      </div>
+      <div class="bh-list">${rows}</div>`;
   }
 
   function _battleLogHtml(b) {
@@ -1680,6 +1649,11 @@ const LordScreen = (() => {
         const body = document.getElementById(`bh-log-${btn.dataset.bhIdx}`);
         if (body) body.classList.toggle('hidden');
       });
+    });
+    document.getElementById('bh-clear-all')?.addEventListener('click', () => {
+      if (!confirm(`Clear all battle history for ${_lord.name}? This cannot be undone.`)) return;
+      BattleHistoryService.clearForLord(_lord.id);
+      _renderTab();
     });
   }
 
@@ -1702,11 +1676,11 @@ const LordScreen = (() => {
     // Hydrate from server response (XP, coins, resources already applied server-side).
     _lord   = LordService.getById(_lord.id);
     _player = PlayerService.getById(_player.id);
-    if ((_lord.level || 1) > oldLevel) _toast(`⭐ Level up! Now level ${_lord.level}.`);
+    if ((_lord.level || 1) > oldLevel) _toast(`Level up! Now level ${_lord.level}.`);
 
     const discoveries = result.discoveries || [];
     if (discoveries.length === 0) {
-      _toast('🔍 Quest complete — see Quests tab');
+      _toast('Quest complete — see Quests tab');
       _refreshDiscoveryBadge();
       _renderTab();
       HUD.refresh();
@@ -1759,12 +1733,12 @@ const LordScreen = (() => {
         _lord   = LordService.getById(_lord.id);
         _player = PlayerService.getById(_player.id);
         const outcome = result.report?.winner === 'defender' ? 'repelled' : result.report?.winner === 'draw' ? 'draw' : 'caught';
-        _toast(outcome === 'repelled' ? '🛡 Ambushed — but you fought them off!' : outcome === 'draw' ? '🤝 Ambushed — battle was a draw' : '☠ Ambushed! No intel gathered — see Battles tab');
+        _toast(outcome === 'repelled' ? 'Ambushed — but you fought them off!' : outcome === 'draw' ? 'Ambushed — battle was a draw' : 'Ambushed! No intel gathered — see Battles tab');
         _activeTab = 'battles';
       } else if (result.outcome === 'intel') {
         const applied = _applyIntelDiscoveries(result.discoveries);
         const gained   = applied.length;
-        _toast(gained > 0 ? `🕵 Scouting complete — ${gained} report${gained > 1 ? 's' : ''} gathered` : '🕵 Scouting complete — nothing on this tile');
+        _toast(gained > 0 ? `Scouting complete — ${gained} report${gained > 1 ? 's' : ''} gathered` : 'Scouting complete — nothing on this tile');
 
         // Persistent notification with the findings attached — City/Lord
         // name plus a rough "how much do we know" percentage derived from
@@ -1780,7 +1754,7 @@ const LordScreen = (() => {
         const summary = [...cityParts, ...lordParts].join(' · ');
         ActivityService.log(_player.id, {
           type:  'scout_result',
-          icon:  '🕵',
+          icon:  gi('spy'),
           title: gained > 0 ? 'Scout report ready' : 'Scout complete — nothing found',
           detail: x != null ? `(${x}, ${y})${summary ? ' · ' + summary : ' · tile was empty'}` : '',
           lordName: _lord.name,
@@ -1817,7 +1791,7 @@ const LordScreen = (() => {
         terrain: terrainId, rewards: [], narrative, storyTitle,
         lordId: _lord.id, lordName: _lord.name,
       });
-      _toast(storyTitle ? `🔍 ${storyTitle} — see Quests tab` : '🔍 Quest complete — nothing found');
+      _toast(storyTitle ? `${storyTitle} — see Quests tab` : 'Quest complete — nothing found');
       return;
     }
 
@@ -1842,11 +1816,11 @@ const LordScreen = (() => {
         lordId: _lord.id, lordName: _lord.name,
       });
       ActivityService.log(_player.id, {
-        type: 'discovery', icon: def.icon || '🔍',
+        type: 'discovery', icon: def.icon || gi('magnifying-glass'),
         title: `${reportName} discovered`, detail: `(${record.tileX}, ${record.tileY})`,
         lordName: _lord.name,
       });
-      _toast(`${def.icon} ${reportName} spotted — attack from the map`);
+      _toast(`${reportName} spotted — attack from the map`);
     } else {
       // Non-combat: gold/resources/XP already applied server-side; just show the log.
       DiscoveryService.addLog(_player.id, {
@@ -1856,12 +1830,12 @@ const LordScreen = (() => {
       });
       const rewardStr = rewards.filter(r => r.type !== 'xp').map(r => `+${r.amount} ${r.type}`).join(', ');
       ActivityService.log(_player.id, {
-        type: 'discovery', icon: def.icon || '🔍',
+        type: 'discovery', icon: def.icon || gi('magnifying-glass'),
         title: `${reportName} claimed`,
-        detail: rewardStr || `+${rewards.find(r => r.type === 'xp')?.amount || 0}⭐`,
+        detail: rewardStr || `+${rewards.find(r => r.type === 'xp')?.amount || 0}${gi('round-star')}`,
         lordName: _lord.name,
       });
-      _toast(`${def.icon} ${reportName} — see Quests tab`);
+      _toast(`${reportName} — see Quests tab`);
     }
   }
 
@@ -1882,6 +1856,11 @@ const LordScreen = (() => {
         document.querySelectorAll('.ls-tab').forEach(b => b.classList.toggle('ls-tab--active', b.dataset.tab === 'battles'));
         _renderTab();
       });
+    });
+    document.getElementById('qd-clear-all')?.addEventListener('click', () => {
+      if (!confirm(`Clear all quest history for ${_lord.name}? This cannot be undone.`)) return;
+      DiscoveryService.clearLog(_player.id, _lord.id);
+      _renderTab();
     });
   }
 
@@ -1922,7 +1901,7 @@ const LordScreen = (() => {
     BattleHistoryService.save(_lord.id, {
       outcome,
       campName:   meta.campName  || 'Enemy',
-      campIcon:   meta.campIcon  || '⚔',
+      campIcon:   meta.campIcon  || gi('crossed-swords'),
       campLevel:  meta.campLevel || null,
       terrain:    meta.terrain   || null,
       goldEarned: outcome === 'victory' ? report.loot.gold : 0,
@@ -1935,7 +1914,7 @@ const LordScreen = (() => {
       honorEarned: result.honorDelta || 0,
     });
 
-    const actIcon  = outcome === 'victory' ? '⚔' : outcome === 'draw' ? '🤝' : '☠';
+    const actIcon  = outcome === 'victory' ? gi('crossed-swords') : outcome === 'draw' ? gi('shaking-hands') : gi('skull-crossed-bones');
     const actTitle = outcome === 'victory' ? `Victory: ${meta.campName || 'Enemy'}`
                    : outcome === 'draw'    ? `Draw: ${meta.campName || 'Enemy'}`
                    : `Defeat: ${meta.campName || 'Enemy'}`;
@@ -1944,8 +1923,8 @@ const LordScreen = (() => {
       type:     `battle_${outcome}`,
       icon:     actIcon,
       title:    actTitle,
-      detail:   `${report.rounds} rounds · losses: ${report.attacker.modelsLost}${outcome === 'victory' ? ` · +${report.loot.gold}💰${resLabel}` : ''} · +${report.xpEarned}⭐`
-        + (result.honorDelta ? ` · ${result.honorDelta > 0 ? '+' : ''}${result.honorDelta}⚖` : ''),
+      detail:   `${report.rounds} rounds · losses: ${report.attacker.modelsLost}${outcome === 'victory' ? ` · +${report.loot.gold}${gi('two-coins')}${resLabel}` : ''} · +${report.xpEarned}${gi('round-star')}`
+        + (result.honorDelta ? ` · ${result.honorDelta > 0 ? '+' : ''}${result.honorDelta}${gi('scales')}` : ''),
       lordName: _lord.name,
     });
 
@@ -1955,8 +1934,8 @@ const LordScreen = (() => {
     _player = PlayerService.getById(_player.id);
     HUD.refresh();
 
-    if (result.leveled > 0) _toast(`⭐ Level up! Now level ${_lord.level}.`);
-    const outcomeLabel = outcome === 'victory' ? '⚔ Victory' : outcome === 'draw' ? '🤝 Draw' : '☠ Defeat';
+    if (result.leveled > 0) _toast(`Level up! Now level ${_lord.level}.`);
+    const outcomeLabel = outcome === 'victory' ? 'Victory' : outcome === 'draw' ? 'Draw' : 'Defeat';
     _toast(`${outcomeLabel} — report in the Battles tab`);
     _activeTab = 'battles';
     _stopCountdown();
@@ -2001,7 +1980,7 @@ const LordScreen = (() => {
   async function _ransomNow() {
     const result = await ServerActions.ransomLord(_lord.id);
     if (!result.ok) { _toast(result.error || 'Server error'); return; }
-    _toast('🔓 Ransom paid — your lord is free.');
+    _toast('Ransom paid — your lord is free.');
     _lord   = LordService.getById(_lord.id);
     _player = PlayerService.getById(_player.id);
     HUD.refresh();
@@ -2028,7 +2007,7 @@ const LordScreen = (() => {
     if (c) {
       if (c.actionId === 'search_area')        await _resolveSearch();
       else if (c.actionId === 'scout')         await _resolveScout();
-      else if (c.actionId === 'move_lord')     _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
+      else if (c.actionId === 'move_lord')     _toast(`Arrived at (${c.destX}, ${c.destY}).`);
     }
     HUD.refresh();
     _stopCountdown();
@@ -2059,7 +2038,7 @@ const LordScreen = (() => {
 
     _player = PlayerService.getById(_player.id);
     const uDef = UNIT_DEFS[job.unitId];
-    _toast(`${uDef?.icon || '⚔'} ${uDef?.name || job.unitId} ×${job.count} ready!`);
+    _toast(`${uDef?.name || job.unitId} ×${job.count} ready!`);
     HUD.refresh();
     _stopCountdown();
     _renderTab();
@@ -2093,7 +2072,7 @@ const LordScreen = (() => {
               await _resolveScout();
             } else if (c.actionId === 'move_lord') {
               if (c.intent === 'attack') {
-                _toast('⚔ Attack dispatched — resolving on server…');
+                _toast('Attack dispatched — resolving on server…');
                 setTimeout(async () => {
                   await ServerActions.syncNow();
                   _lord = LordService.getById(_lord.id);
@@ -2103,10 +2082,10 @@ const LordScreen = (() => {
                   _startCountdown();
                 }, 6000);
               } else {
-                _toast(`📍 Arrived at (${c.destX}, ${c.destY}).`);
+                _toast(`Arrived at (${c.destX}, ${c.destY}).`);
                 ActivityService.log(_player.id, {
                   type:     'lord_moved',
-                  icon:     '📍',
+                  icon:     gi('position-marker'),
                   title:    `${_lord.name} arrived at (${c.destX}, ${c.destY})`,
                   detail:   '',
                   lordName: _lord.name,
@@ -2122,7 +2101,7 @@ const LordScreen = (() => {
                 lordName: _lord.name,
               });
             }
-            if (c.leveled > 0) _toast(`⭐ Level Up! Now Level ${_lord.level}.`);
+            if (c.leveled > 0) _toast(`Level Up! Now Level ${_lord.level}.`);
           }
           await ServerActions.syncNow();
           needsRender = true;
@@ -2186,7 +2165,7 @@ const LordScreen = (() => {
           ServerActions.syncNow(); // persist completion + army update to Supabase
           completed.forEach(c => {
             const uDef = UNIT_DEFS[c.unitId];
-            _toast(`${uDef?.icon || '⚔'} ${uDef?.name || c.unitId} ×${c.count} ready!`);
+            _toast(`${uDef?.name || c.unitId} ×${c.count} ready!`);
           });
           needsRender = true;
         } else {

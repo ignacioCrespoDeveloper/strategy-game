@@ -29,12 +29,12 @@ var DISCOVERY_DEFS = {
     id:          'nothing_found',
     name:        'Nothing Found',
     description: 'You comb the area with care but find nothing of interest.',
-    icon:        '🌫',
+    icon:        gi('fog'),
     category:    'nothing',
     baseWeight:  40,
     baseDuration: 0,
     terrainMultipliers: {
-      forest: 0.5, plains: 0.7, hills: 0.9, marsh: 1.2, mountain: 1.3, desert: 2.5,
+      forest: 0.5, plains: 0.7, marsh: 1.2, mountain: 1.3, desert: 2.5,
     },
   },
 
@@ -42,16 +42,16 @@ var DISCOVERY_DEFS = {
 
   iron_vein: {
     id:          'iron_vein',
-    name:        'Iron Vein',
+    name:        'Ore Vein',
     tier:        1,
     intelType:   'resources',
-    description: 'A surface iron vein, easy to chip away and carry back to the city.',
-    icon:        '🔩',
+    description: 'A surface ore vein laced through workable stone, easy to chip away and carry back to the city.',
+    icon:        gi('ore'),
     category:    'resource',
     baseWeight:  18,
     baseDuration: 1 * 24 * 3600,
     terrainMultipliers: {
-      hills: 3.0, mountain: 2.0, desert: 0.8, plains: 0.5, forest: 0.3, marsh: 0.1,
+      mountain: 2.0, desert: 0.8, plains: 0.5, forest: 0.3, marsh: 0.1,
     },
   },
 
@@ -61,12 +61,12 @@ var DISCOVERY_DEFS = {
     tier:        1,
     intelType:   'resources',
     description: 'A rocky outcrop with loose, workable stone — easy pickings for a labour party.',
-    icon:        '🗿',
+    icon:        gi('moai'),
     category:    'resource',
     baseWeight:  18,
     baseDuration: 2 * 24 * 3600,
     terrainMultipliers: {
-      mountain: 3.0, hills: 2.5, desert: 1.0, plains: 0.3, forest: 0.2, marsh: 0.1,
+      mountain: 3.0, desert: 1.0, plains: 0.3, forest: 0.2, marsh: 0.1,
     },
   },
 
@@ -76,12 +76,12 @@ var DISCOVERY_DEFS = {
     tier:        1,
     intelType:   'resources',
     description: 'Abandoned farmland, still rich with soil. A quick harvest would fill many baskets.',
-    icon:        '🌾',
+    icon:        gi('wheat'),
     category:    'resource',
     baseWeight:  20,
     baseDuration: 1 * 24 * 3600,
     terrainMultipliers: {
-      plains: 4.0, hills: 1.0, forest: 0.5, marsh: 0.5, mountain: 0.1, desert: 0.0,
+      plains: 4.0, forest: 0.5, marsh: 0.5, mountain: 0.1, desert: 0.0,
     },
   },
 
@@ -91,12 +91,12 @@ var DISCOVERY_DEFS = {
     tier:        1,
     intelType:   'resources',
     description: 'A ford where fish congregate and fresh water flows freely. Good for a quick supply run.',
-    icon:        '🎣',
+    icon:        gi('fishing-pole'),
     category:    'resource',
     baseWeight:  16,
     baseDuration: 2 * 24 * 3600,
     terrainMultipliers: {
-      marsh: 3.0, plains: 2.0, forest: 2.0, hills: 1.0, mountain: 0.5, desert: 0.0,
+      marsh: 3.0, plains: 2.0, forest: 2.0, mountain: 0.5, desert: 0.0,
     },
   },
 
@@ -106,12 +106,12 @@ var DISCOVERY_DEFS = {
     tier:        1,
     intelType:   'resources',
     description: 'A small pouch of coins hidden beneath a stone. Better than nothing.',
-    icon:        '🪙',
+    icon:        gi('coins'),
     category:    'resource',
     baseWeight:  10,
     baseDuration: 1 * 24 * 3600,
     terrainMultipliers: {
-      plains: 1.5, forest: 1.3, hills: 1.2, desert: 1.5, mountain: 1.0, marsh: 0.8,
+      plains: 1.5, forest: 1.3, desert: 1.5, mountain: 1.0, marsh: 0.8,
     },
   },
 
@@ -123,12 +123,12 @@ var DISCOVERY_DEFS = {
     tier:        2,
     intelType:   'resources',
     description: 'A stack of felled logs left by loggers who never returned. Quality wood, ready for the taking.',
-    icon:        '🪵',
+    icon:        gi('wood-pile'),
     category:    'resource',
     baseWeight:  15,
     baseDuration: 3 * 24 * 3600,
     terrainMultipliers: {
-      forest: 3.0, marsh: 1.5, plains: 0.8, hills: 0.5, mountain: 0.2, desert: 0.0,
+      forest: 3.0, marsh: 1.5, plains: 0.8, mountain: 0.2, desert: 0.0,
     },
   },
 
@@ -137,13 +137,13 @@ var DISCOVERY_DEFS = {
     name:        'Abandoned Mine',
     tier:        2,
     intelType:   'resources',
-    description: 'An old mine shaft sealed by a cave-in. Its veins still run rich with iron ore.',
-    icon:        '⛏',
+    description: 'An old mine shaft sealed by a cave-in. Its galleries still run rich with cut stone and ore.',
+    icon:        gi('war-pick'),
     category:    'resource',
     baseWeight:  10,
     baseDuration: 7 * 24 * 3600,
     terrainMultipliers: {
-      mountain: 3.0, hills: 2.0, desert: 1.2, plains: 0.4, forest: 0.3, marsh: 0.1,
+      mountain: 3.0, desert: 1.2, plains: 0.4, forest: 0.3, marsh: 0.1,
     },
   },
 
@@ -153,12 +153,12 @@ var DISCOVERY_DEFS = {
     tier:        2,
     intelType:   'resources',
     description: 'A rich vein of quality building stone breaks the surface here, ready to be quarried.',
-    icon:        '🪨',
+    icon:        gi('stone-block'),
     category:    'resource',
     baseWeight:  12,
     baseDuration: 5 * 24 * 3600,
     terrainMultipliers: {
-      mountain: 3.0, hills: 2.5, desert: 1.0, plains: 0.3, forest: 0.2, marsh: 0.1,
+      mountain: 3.0, desert: 1.0, plains: 0.3, forest: 0.2, marsh: 0.1,
     },
   },
 
@@ -168,12 +168,12 @@ var DISCOVERY_DEFS = {
     tier:        2,
     intelType:   'resources',
     description: 'Rich hunting grounds. Your hunters could fill the city larders from this land.',
-    icon:        '🦌',
+    icon:        gi('deer'),
     category:    'resource',
     baseWeight:  12,
     baseDuration: 4 * 24 * 3600,
     terrainMultipliers: {
-      forest: 3.0, plains: 1.5, hills: 1.0, marsh: 0.8, mountain: 0.3, desert: 0.0,
+      forest: 3.0, plains: 1.5, marsh: 0.8, mountain: 0.3, desert: 0.0,
     },
   },
 
@@ -183,12 +183,12 @@ var DISCOVERY_DEFS = {
     tier:        2,
     intelType:   'resources',
     description: 'A buried chest, heavy with coins and gemstones. Someone hid this long ago and never came back.',
-    icon:        '💰',
+    icon:        gi('two-coins'),
     category:    'resource',
     baseWeight:  5,
     baseDuration: 2 * 24 * 3600,
     terrainMultipliers: {
-      desert: 2.0, forest: 1.5, plains: 1.2, hills: 1.0, mountain: 0.8, marsh: 0.5,
+      desert: 2.0, forest: 1.5, plains: 1.2, mountain: 0.8, marsh: 0.5,
     },
   },
 
@@ -200,12 +200,12 @@ var DISCOVERY_DEFS = {
     tier:        3,
     intelType:   'resources',
     description: 'A grove of primordial trees, untouched for centuries. Their timber alone could supply a city for months.',
-    icon:        '🌲',
+    icon:        gi('pine-tree'),
     category:    'resource',
     baseWeight:  4,
     baseDuration: 10 * 24 * 3600,
     terrainMultipliers: {
-      forest: 5.0, marsh: 1.5, hills: 0.5, plains: 0.2, mountain: 0.1, desert: 0.0,
+      forest: 5.0, marsh: 1.5, plains: 0.2, mountain: 0.1, desert: 0.0,
     },
   },
 
@@ -214,13 +214,13 @@ var DISCOVERY_DEFS = {
     name:        'Deep Ore Shaft',
     tier:        3,
     intelType:   'resources',
-    description: 'A massive natural iron deposit, rich enough to arm a dozen armies. The ore practically falls from the walls.',
-    icon:        '⚙',
+    description: 'A massive natural stone deposit, rich enough to raise a dozen fortresses. The rock practically falls from the walls.',
+    icon:        gi('gears'),
     category:    'resource',
     baseWeight:  3,
     baseDuration: 14 * 24 * 3600,
     terrainMultipliers: {
-      mountain: 4.0, hills: 2.5, desert: 0.8, plains: 0.2, forest: 0.1, marsh: 0.0,
+      mountain: 4.0, desert: 0.8, plains: 0.2, forest: 0.1, marsh: 0.0,
     },
   },
 
@@ -230,12 +230,12 @@ var DISCOVERY_DEFS = {
     tier:        3,
     intelType:   'resources',
     description: 'An entire mountainside of premium marble. Whoever controls this site can build in a style that endures.',
-    icon:        '🏛',
+    icon:        gi('capitol'),
     category:    'resource',
     baseWeight:  3,
     baseDuration: 14 * 24 * 3600,
     terrainMultipliers: {
-      mountain: 4.0, hills: 2.0, desert: 1.0, plains: 0.2, forest: 0.1, marsh: 0.0,
+      mountain: 4.0, desert: 1.0, plains: 0.2, forest: 0.1, marsh: 0.0,
     },
   },
 
@@ -245,12 +245,12 @@ var DISCOVERY_DEFS = {
     tier:        3,
     intelType:   'resources',
     description: 'An exceptional stretch of wilderness teeming with prey. Your hunters could feed an entire army from this land.',
-    icon:        '🦬',
+    icon:        gi('bison'),
     category:    'resource',
     baseWeight:  4,
     baseDuration: 7 * 24 * 3600,
     terrainMultipliers: {
-      forest: 4.0, plains: 2.5, hills: 1.5, marsh: 1.0, mountain: 0.3, desert: 0.0,
+      forest: 4.0, plains: 2.5, marsh: 1.0, mountain: 0.3, desert: 0.0,
     },
   },
 
@@ -260,12 +260,12 @@ var DISCOVERY_DEFS = {
     tier:        3,
     intelType:   'resources',
     description: 'A sealed underground chamber stuffed with the wealth of some long-dead lord. The dust of ages guards it still.',
-    icon:        '🏺',
+    icon:        gi('amphora'),
     category:    'resource',
     baseWeight:  2,
     baseDuration: 7 * 24 * 3600,
     terrainMultipliers: {
-      desert: 3.0, mountain: 2.0, hills: 1.5, plains: 1.0, forest: 1.0, marsh: 0.5,
+      desert: 3.0, mountain: 2.0, plains: 1.0, forest: 1.0, marsh: 0.5,
     },
   },
 
@@ -276,12 +276,12 @@ var DISCOVERY_DEFS = {
     name:        'Bandit Camp',
     intelType:   'bandit_camp',
     description: 'A gang of outlaws has made camp here. Dangerous — but they carry loot worth fighting for.',
-    icon:        '🏕',
+    icon:        gi('campfire'),
     category:    'combat',
     baseWeight:  7,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      forest: 2.5, hills: 1.8, plains: 1.2, marsh: 0.6, mountain: 0.5, desert: 0.8,
+      forest: 2.5, plains: 1.2, marsh: 0.6, mountain: 0.5, desert: 0.8,
     },
   },
 
@@ -290,12 +290,12 @@ var DISCOVERY_DEFS = {
     name:        'Goblin Camp',
     intelType:   'bandit_camp',
     description: 'A chaotic sprawl of tents, bones and noise. The greenskins inside are cowardly but numerous.',
-    icon:        '👺',
+    icon:        gi('goblin-head'),
     category:    'combat',
     baseWeight:  6,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      forest: 3.0, marsh: 2.0, hills: 1.5, plains: 1.0, mountain: 0.5, desert: 0.2,
+      forest: 3.0, marsh: 2.0, plains: 1.0, mountain: 0.5, desert: 0.2,
     },
   },
 
@@ -304,12 +304,12 @@ var DISCOVERY_DEFS = {
     name:        'Mercenary Company',
     intelType:   'bandit_camp',
     description: 'A professional warband between contracts. They fight hard and demand good coin — but can be hired.',
-    icon:        '⚔',
+    icon:        gi('crossed-swords'),
     category:    'combat',
     baseWeight:  4,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      plains: 2.5, hills: 1.5, forest: 0.8, mountain: 0.5, marsh: 0.4, desert: 0.6,
+      plains: 2.5, forest: 0.8, mountain: 0.5, marsh: 0.4, desert: 0.6,
     },
   },
 
@@ -318,12 +318,12 @@ var DISCOVERY_DEFS = {
     name:        'Wolf Rider Camp',
     intelType:   'bandit_camp',
     description: 'Fast-moving goblin cavalry who raid and vanish before retaliation arrives.',
-    icon:        '🐺',
+    icon:        gi('wolf-head'),
     category:    'combat',
     baseWeight:  5,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      plains: 2.5, forest: 2.0, hills: 1.5, marsh: 0.5, mountain: 0.3, desert: 1.0,
+      plains: 2.5, forest: 2.0, marsh: 0.5, mountain: 0.3, desert: 1.0,
     },
   },
 
@@ -332,12 +332,12 @@ var DISCOVERY_DEFS = {
     name:        'Ogre Camp',
     intelType:   'bandit_camp',
     description: 'Where ogres make camp, nothing grows and travellers disappear. Extremely dangerous — but the loot is legendary.',
-    icon:        '💀',
+    icon:        gi('death-skull'),
     category:    'combat',
     baseWeight:  4,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      mountain: 2.5, hills: 2.0, forest: 1.5, plains: 0.8, marsh: 0.5, desert: 0.6,
+      mountain: 2.5, forest: 1.5, plains: 0.8, marsh: 0.5, desert: 0.6,
     },
   },
 
@@ -346,12 +346,12 @@ var DISCOVERY_DEFS = {
     name:        'Orc Warcamp',
     intelType:   'bandit_camp',
     description: 'A full Greenskin warcamp. Boyz, bosses and boars, all looking for a fight.',
-    icon:        '🪓',
+    icon:        gi('battle-axe'),
     category:    'combat',
     baseWeight:  4,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      plains: 2.0, forest: 1.8, marsh: 1.2, hills: 1.5, mountain: 0.4, desert: 0.5,
+      plains: 2.0, forest: 1.8, marsh: 1.2, mountain: 0.4, desert: 0.5,
     },
   },
 
@@ -360,12 +360,12 @@ var DISCOVERY_DEFS = {
     name:        'Dark Elf Raiders',
     intelType:   'bandit_camp',
     description: 'A landing party of Dark Elf corsairs. Disciplined, cruel, and carrying prisoners they\'ll sell if left alone.',
-    icon:        '🌑',
+    icon:        gi('evil-moon'),
     category:    'combat',
     baseWeight:  2,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      coast: 3.0, forest: 2.0, marsh: 1.5, hills: 1.0, mountain: 0.5, plains: 0.8, desert: 0.3,
+      coast: 3.0, forest: 2.0, marsh: 1.5, mountain: 0.5, plains: 0.8, desert: 0.3,
     },
   },
 
@@ -374,12 +374,12 @@ var DISCOVERY_DEFS = {
     name:        'Dwarf Expedition',
     intelType:   'bandit_camp',
     description: 'A heavily armed Dwarven prospecting party, deep in grudge-paying territory. They won\'t move without a fight.',
-    icon:        '⛏',
+    icon:        gi('war-pick'),
     category:    'combat',
     baseWeight:  2,
     baseDuration: 24 * 3600,
     terrainMultipliers: {
-      mountain: 3.0, hills: 2.5, forest: 0.5, plains: 0.4, marsh: 0.2, desert: 0.8,
+      mountain: 3.0, forest: 0.5, plains: 0.4, marsh: 0.2, desert: 0.8,
     },
   },
 
@@ -388,12 +388,12 @@ var DISCOVERY_DEFS = {
     name:        'Beast Lair',
     intelType:   'bandit_camp',
     description: 'A den of monstrous creatures. No negotiation possible — only steel and nerve will clear it.',
-    icon:        '🦴',
+    icon:        gi('bone-gnawer'),
     category:    'combat',
     baseWeight:  1,
     baseDuration: 48 * 3600,
     terrainMultipliers: {
-      forest: 3.0, marsh: 2.5, mountain: 2.0, hills: 1.0, plains: 0.3, desert: 0.2,
+      forest: 3.0, marsh: 2.5, mountain: 2.0, plains: 0.3, desert: 0.2,
     },
   },
 
@@ -402,12 +402,12 @@ var DISCOVERY_DEFS = {
     name:        'Dragon Cult',
     intelType:   'bandit_camp',
     description: 'Fanatics who worship a living dragon. They guard their master with their lives and cannot be reasoned with.',
-    icon:        '🐲',
+    icon:        gi('dragon-head'),
     category:    'combat',
     baseWeight:  1,
     baseDuration: 48 * 3600,
     terrainMultipliers: {
-      mountain: 3.0, desert: 2.0, hills: 1.5, forest: 0.8, plains: 0.3, marsh: 0.2,
+      mountain: 3.0, desert: 2.0, forest: 0.8, plains: 0.3, marsh: 0.2,
     },
   },
 
@@ -418,12 +418,12 @@ var DISCOVERY_DEFS = {
     name:        'Ancient Ruins',
     intelType:   'ruins',
     description: 'Crumbling stone walls hint at a civilization long forgotten. Scholars would pay dearly for access.',
-    icon:        '🏛',
+    icon:        gi('capitol'),
     category:    'event',
     baseWeight:  8,
     baseDuration: 14 * 24 * 3600,
     terrainMultipliers: {
-      desert: 2.5, mountain: 2.0, hills: 1.5, forest: 0.8, plains: 0.6, marsh: 0.4,
+      desert: 2.5, mountain: 2.0, forest: 0.8, plains: 0.6, marsh: 0.4,
     },
   },
 
@@ -432,13 +432,13 @@ var DISCOVERY_DEFS = {
     name:        'Abandoned Keep',
     intelType:   'ruins',
     description: 'A crumbling fortress ruin, long since stripped of defenders. Treasures may still lie within its vaults.',
-    icon:        '🏚',
+    icon:        gi('damaged-house'),
     category:    'event',
     tier:        2,
     baseWeight:  8,
     baseDuration: 14 * 24 * 3600,
     terrainMultipliers: {
-      mountain: 2.0, hills: 2.0, plains: 1.2, forest: 1.0, marsh: 0.6, desert: 0.8,
+      mountain: 2.0, plains: 1.2, forest: 1.0, marsh: 0.6, desert: 0.8,
     },
   },
 
@@ -447,13 +447,13 @@ var DISCOVERY_DEFS = {
     name:        'Wandering Sage',
     intelType:   'ruins',
     description: 'A travelling scholar bearing ancient knowledge. Time spent with them grants rare insight.',
-    icon:        '📖',
+    icon:        gi('open-book'),
     category:    'event',
     tier:        2,
     baseWeight:  8,
     baseDuration: 6 * 3600,
     terrainMultipliers: {
-      plains: 2.0, forest: 1.8, hills: 1.2, marsh: 0.6, mountain: 0.5, desert: 0.4,
+      plains: 2.0, forest: 1.8, marsh: 0.6, mountain: 0.5, desert: 0.4,
     },
   },
 
@@ -464,12 +464,12 @@ var DISCOVERY_DEFS = {
     name:        'Merchant Caravan',
     intelType:   'mercenary_camp',
     description: 'A traveling trader rests here with exotic wares and willing ears.',
-    icon:        '🐪',
+    icon:        gi('camel'),
     category:    'trade',
     baseWeight:  8,
     baseDuration: 12 * 3600,
     terrainMultipliers: {
-      plains: 2.5, hills: 1.0, forest: 0.5, mountain: 0.2, marsh: 0.2, desert: 0.4,
+      plains: 2.5, forest: 0.5, mountain: 0.2, marsh: 0.2, desert: 0.4,
     },
   },
 
@@ -478,13 +478,13 @@ var DISCOVERY_DEFS = {
     name:        'Traveling Merchant',
     intelType:   'mercenary_camp',
     description: 'A wealthy trader with exotic goods far beyond the usual stock. A lucrative encounter.',
-    icon:        '💰',
+    icon:        gi('two-coins'),
     category:    'trade',
     tier:        2,
     baseWeight:  6,
     baseDuration: 10 * 3600,
     terrainMultipliers: {
-      plains: 2.5, hills: 1.2, forest: 0.8, mountain: 0.3, marsh: 0.2, desert: 0.6,
+      plains: 2.5, forest: 0.8, mountain: 0.3, marsh: 0.2, desert: 0.6,
     },
   },
 
@@ -495,12 +495,12 @@ var DISCOVERY_DEFS = {
     name:        'Ancient Relic',
     intelType:   'ruins',
     description: 'An artifact of unknown origin, humming with faint arcane energy. Extremely rare.',
-    icon:        '🔮',
+    icon:        gi('crystal-ball'),
     category:    'legendary',
     baseWeight:  2,
     baseDuration: 30 * 24 * 3600,
     terrainMultipliers: {
-      mountain: 2.5, desert: 2.0, hills: 1.5, marsh: 1.2, forest: 0.8, plains: 0.5,
+      mountain: 2.5, desert: 2.0, marsh: 1.2, forest: 0.8, plains: 0.5,
     },
   },
 
@@ -509,12 +509,12 @@ var DISCOVERY_DEFS = {
     name:        'Bog Crystal',
     intelType:   'ruins',
     description: 'Strange luminescent crystals, formed over centuries in the murky depths. None have seen their like before.',
-    icon:        '💠',
+    icon:        gi('crystal-growth'),
     category:    'legendary',
     baseWeight:  3,
     baseDuration: 21 * 24 * 3600,
     terrainMultipliers: {
-      marsh: 4.0, forest: 0.4, plains: 0.0, hills: 0.0, mountain: 0.0, desert: 0.0,
+      marsh: 4.0, forest: 0.4, plains: 0.0, mountain: 0.0, desert: 0.0,
     },
   },
 
@@ -523,7 +523,7 @@ var DISCOVERY_DEFS = {
   enemy_city: {
     id:          'enemy_city',
     name:        'Enemy City',
-    icon:        '🏯',
+    icon:        gi('guarded-tower'),
     category:    'intelligence',
     baseWeight:  0,
     baseDuration: 0,
@@ -532,7 +532,7 @@ var DISCOVERY_DEFS = {
   enemy_lord: {
     id:          'enemy_lord',
     name:        'Enemy Lord',
-    icon:        '👑',
+    icon:        gi('crown'),
     category:    'intelligence',
     baseWeight:  0,
     baseDuration: 0,

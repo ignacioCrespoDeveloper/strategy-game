@@ -22,9 +22,11 @@ import { resolvePvpBattle, resolveScout, resolveArrivalCheck } from '../combat-r
 import {
   DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL,
   LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS,
+  BUILDING_DEFS, RACES, EconomyCore,
+  TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
 } from '../engine-loader.js';
 
-const _ENGINE   = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS };
+const _ENGINE   = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS };
 const SYNC_KEYS = ['players', 'lords', 'cities', 'armies'];
 
 function _admin() {

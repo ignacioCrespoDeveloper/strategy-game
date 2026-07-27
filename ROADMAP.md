@@ -128,6 +128,13 @@ anywhere any more"; the real gate live in `recruit.js` is a PWR cap
    keep the steep curve if the intent is "rare units are a luxury gold sink,"
    but write that decision down.
 3. Delete the dead weight/slot system in `recruitment.js`.
+4. **Add unit health regeneration** (Known Issue #6, reported 2026-07-27):
+   unit damage persists between battles but nothing ever heals it — the only
+   heal paths are the raiding-stance passive full-heal and disbanding the
+   damaged model. Lords regen 2%/min; units regen never. Decide the design
+   (passive %/min like lords? only in a friendly city? a healer building or
+   upkeep cost?) and implement it in `catch-up.js` alongside lord regen so
+   offline healing works too.
 
 **Suggestions:** Do this as one data-driven pass, not scattered edits — and
 do it *after* Garrisons/Conquest land, since those may introduce new unit
@@ -178,7 +185,11 @@ distribution: resource 56%, "nothing found" 15%, combat 13%, event 9%, trade
 since "too much combat" was an earlier assumption that the actual data
 doesn't support. Separately, the same-tile credit-finish bug from the
 Known Issues table is still open — no comment anywhere in `discovery.js` or
-`lord-screen.js` references or explains it.
+`lord-screen.js` references or explains it. A second report landed
+2026-07-27 (Known Issue #7): quests completing **without anything
+happening** — no reward, discovery, or feedback — possibly the same root
+cause, but not yet confirmed to be limited to the same-tile credit-finish
+path.
 
 **Plan:**
 1. Investigate and fix the same-tile credit-finish bug first — it silently
@@ -203,8 +214,9 @@ vertical-slice philosophy.
 - The 2 races that *do* declare a portrait path (high_elf, dark_elf) point to
   files that **don't exist** at that path anymore (`assets/lord/` now only
   has per-race subfolders) — likely broken images today.
-- 2 of 6 terrain types (hills, desert) have `image: null` in `world.js` —
-  color/icon only, no art.
+- ~~Terrain art~~ RESOLVED 2026-07-27: all 5 terrain types now have images
+  in `assets/terrain/`. (Hills was removed as a terrain type the same day;
+  its tiles became mountain.)
 - `assets/units/mercenaries/` has only 1 image for 6–7 mercenary units.
 - Lord portrait pools are uneven per race/class (e.g. humans/high_elves
   warrior: 5 portraits each; dwarfs rogue/mage: 1 each).
@@ -222,8 +234,7 @@ vertical-slice philosophy.
 2. Decide once: either source portrait art for human/dwarf/orc, or embrace
    the icon+gradient card for **all 5 races** for consistency — the second
    option is the fast, low-risk fix if new art isn't coming soon.
-3. Add art for hills/desert terrain, or explicitly document that some
-   terrains are icon-only by design.
+3. ~~Add art for desert terrain~~ — done 2026-07-27 (`desert.webp`).
 4. Even out (or gracefully cycle) lord portrait pools per race+class.
 5. Delete the stale `assets/units/README.txt`; check whether
    `assets/buildings/building_icons4.jpg` is still referenced anywhere.

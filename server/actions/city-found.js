@@ -11,8 +11,9 @@
 import { loadAndCatchUp, saveState } from '../action-base.js';
 
 const MAX_CITIES  = 5;
-const MAP_WIDTH   = 100;
-const MAP_HEIGHT  = 100;
+// Mirrors the client's WorldService WIDTH/HEIGHT (js/domain/world.js).
+const MAP_WIDTH   = 20;
+const MAP_HEIGHT  = 10;
 
 function _foundCost(existingCount) {
   if (existingCount === 0) return 0;
@@ -54,7 +55,7 @@ export async function handleCityFound(req, res) {
 
   const cost = _foundCost(playerCities.length);
   if (cost > 0 && (player.coins || 0) < cost) {
-    return res.status(400).json({ ok: false, error: `Founding costs ${cost.toLocaleString()} 💰 gold. Not enough coins.` });
+    return res.status(400).json({ ok: false, error: `Founding costs ${cost.toLocaleString()} gold. Not enough coins.` });
   }
 
   if (cost > 0) player.coins = (player.coins || 0) - cost;
@@ -68,9 +69,9 @@ export async function handleCityFound(req, res) {
   // (catch-up may have already initialized resources to all-zero for new players,
   //  so we can't rely on !player.resources to detect a brand-new account)
   if (isFirst) {
-    player.resources = { food: 5000, wood: 5000, stone: 4000, iron: 1000 };
+    player.resources = { food: 5000, wood: 5000, stone: 4000 };
   } else {
-    player.resources = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
+    player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
   }
 
   const city = {

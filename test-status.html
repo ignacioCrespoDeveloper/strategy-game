@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hexfront — Test Status</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-deep: #080c18; --bg-base: #0d1224; --bg-surface: #111827; --bg-raised: #1a2540;
+      --border-muted: #1e2d4a; --border-base: #2a3d60; --border-gold: #c8933a;
+      --text-primary: #e8d8a8; --text-secondary: #8a9ab8; --text-muted: #7a8ab0;
+      --gold: #c8933a; --gold-light: #f0b84a;
+      --pass: #4a9a4a; --fail: #d04a3a; --skip: #8a9ab8;
+      --font-display: 'Cinzel', Georgia, serif;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg-base); color: var(--text-primary);
+      font: 0.85rem/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+      min-height: 100vh; padding: 2rem 1.5rem;
+    }
+    .wrap { max-width: 880px; margin: 0 auto; }
+
+    header { display: flex; align-items: baseline; gap: 1rem; margin-bottom: 0.4rem; flex-wrap: wrap; }
+    h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.4rem; letter-spacing: 0.08em; color: var(--gold); }
+    .updated { color: var(--text-muted); font-size: 0.75rem; margin-left: auto; }
+    .hint { color: var(--text-muted); font-size: 0.75rem; margin-bottom: 1.4rem; }
+    .hint code { color: var(--text-secondary); background: var(--bg-deep); padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid var(--border-muted); }
+
+    .overall {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      font-family: var(--font-display); font-weight: 700; letter-spacing: 0.1em; font-size: 0.85rem;
+      padding: 0.3rem 0.9rem; border-radius: 999px; border: 1px solid var(--border-base);
+    }
+    .overall.ok   { color: #7ac47a; border-color: #2c5a2c; background: rgba(58,138,58,0.12); }
+    .overall.bad  { color: #e07a6a; border-color: #6a2a20; background: rgba(184,58,42,0.12); }
+    .overall.run  { color: var(--gold-light); border-color: var(--border-gold); background: rgba(200,147,58,0.10); }
+    .overall.none { color: var(--text-muted); }
+
+    .suite {
+      background: var(--bg-surface); border: 1px solid var(--border-base);
+      border-radius: 8px; margin-bottom: 1rem; overflow: hidden;
+    }
+    .suite.passed  { border-left: 3px solid var(--pass); }
+    .suite.failed  { border-left: 3px solid var(--fail); }
+    .suite.running { border-left: 3px solid var(--gold); }
+
+    .suite-head {
+      display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+      padding: 0.7rem 1rem; background: var(--bg-raised); cursor: pointer; user-select: none;
+    }
+    .suite-name { font-family: var(--font-display); font-weight: 600; font-size: 0.95rem; letter-spacing: 0.05em; }
+    .pill {
+      font-family: var(--font-display); font-weight: 700; font-size: 0.68rem; letter-spacing: 0.12em;
+      padding: 0.15rem 0.6rem; border-radius: 999px; border: 1px solid;
+    }
+    .pill.passed  { color: #7ac47a; border-color: #2c5a2c; }
+    .pill.failed  { color: #e07a6a; border-color: #6a2a20; }
+    .pill.pending { color: var(--text-muted); border-color: var(--border-base); }
+    .pill.running { color: var(--gold-light); border-color: var(--border-gold); animation: pulse 1.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: 0.45; } }
+
+    .counts { display: flex; gap: 0.9rem; margin-left: auto; font-size: 0.75rem; color: var(--text-secondary); }
+    .counts b.p { color: #7ac47a; } .counts b.f { color: #e07a6a; } .counts b.s { color: var(--skip); }
+    .meta { font-size: 0.7rem; color: var(--text-muted); }
+
+    .suite-body { padding: 0.8rem 1rem 1rem; display: none; }
+    .suite.open .suite-body { display: block; }
+    .desc { color: var(--text-muted); font-size: 0.74rem; margin-bottom: 0.7rem; }
+
+    .fail-box {
+      border: 1px solid #6a2a20; background: rgba(184,58,42,0.08);
+      border-radius: 6px; padding: 0.5rem 0.8rem; margin-bottom: 0.8rem; font-size: 0.78rem;
+    }
+    .fail-box div { color: #e07a6a; }
+
+    .section-title {
+      font-family: var(--font-display); font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+      color: var(--gold); margin: 0.7rem 0 0.25rem;
+    }
+    .check { display: flex; gap: 0.5rem; padding: 0.1rem 0; font-size: 0.78rem; color: var(--text-secondary); }
+    .check .ic { flex: 0 0 1.1rem; text-align: center; }
+    .check.pass .ic { color: var(--pass); }
+    .check.fail      { color: #e07a6a; }
+    .check.skip      { color: var(--text-muted); font-style: italic; }
+    .check .detail   { color: var(--text-muted); }
+
+    .raw { background: var(--bg-deep); border: 1px solid var(--border-muted); border-radius: 6px;
+           padding: 0.6rem 0.8rem; font: 0.72rem/1.5 'Courier New', monospace; color: var(--text-secondary);
+           white-space: pre-wrap; overflow-x: auto; margin-top: 0.6rem; }
+    .empty { color: var(--text-muted); text-align: center; padding: 3rem 1rem; }
+    .empty .big { font-size: 2rem; margin-bottom: 0.6rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>⚔ Hexfront — Test Status</h1>
+      <span class="overall none" id="overall">NO DATA</span>
+      <span class="updated" id="updated"></span>
+    </header>
+    <div class="hint">
+      Auto-refreshes every 2s from <code>test-results.json</code>.
+      Run suites with <code>node scripts/run-all-tests.js</code> (or <code>… economy</code> / <code>… battle</code>) — or just ask Claude to run them.
+    </div>
+    <div id="suites"><div class="empty"><div class="big">📋</div>No test run recorded yet.<br>Run <b>node scripts/run-all-tests.js</b> to populate this page.</div></div>
+  </div>
+
+  <script>
+    const openState = {}; // suiteId -> bool, survives re-renders
+
+    function timeAgo(ms) {
+      const s = Math.floor((Date.now() - ms) / 1000);
+      if (s < 5)    return 'just now';
+      if (s < 60)   return s + 's ago';
+      if (s < 3600) return Math.floor(s / 60) + 'm ago';
+      if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+      return Math.floor(s / 86400) + 'd ago';
+    }
+    function fmtDur(ms) {
+      if (ms == null) return '';
+      const s = Math.round(ms / 1000);
+      return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+    }
+    function esc(str) {
+      return String(str ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function render(data) {
+      const overall = document.getElementById('overall');
+      const anyRunning = data.running || data.suites.some(s => s.status === 'running');
+      const ranSuites  = data.suites.filter(s => s.status === 'passed' || s.status === 'failed');
+      if (anyRunning)                                { overall.textContent = '⏳ RUNNING…';   overall.className = 'overall run'; }
+      else if (ranSuites.length === 0)               { overall.textContent = 'NO DATA';       overall.className = 'overall none'; }
+      else if (ranSuites.some(s => s.status === 'failed')) { overall.textContent = '✗ FAILURES'; overall.className = 'overall bad'; }
+      else                                           { overall.textContent = '✓ ALL PASSED';  overall.className = 'overall ok'; }
+
+      document.getElementById('updated').textContent = 'updated ' + timeAgo(data.generatedAt);
+
+      document.getElementById('suites').innerHTML = data.suites.map(s => {
+        const pill = { passed: 'PASSED', failed: 'FAILED', running: 'RUNNING…', pending: 'PENDING' }[s.status] || s.status;
+        const lastRun = s.finishedAt ? `last run ${timeAgo(s.finishedAt)} · ${fmtDur(s.durationMs)}`
+                       : s.status === 'running' ? 'running…' : 'never run';
+
+        let sections = '';
+        let currentSection = null;
+        for (const c of (s.checks || [])) {
+          if (c.section !== currentSection) {
+            currentSection = c.section;
+            if (currentSection) sections += `<div class="section-title">${esc(currentSection)}</div>`;
+          }
+          const ic = c.status === 'pass' ? '✓' : c.status === 'fail' ? '✗' : '⏭';
+          sections += `<div class="check ${c.status}"><span class="ic">${ic}</span><span>${esc(c.name)}${c.detail ? ` <span class="detail">— ${esc(c.detail)}</span>` : ''}</span></div>`;
+        }
+
+        const failBox = (s.failures || []).length
+          ? `<div class="fail-box"><b>Failures:</b>${s.failures.map(f => `<div>✗ ${esc(f)}</div>`).join('')}</div>` : '';
+        const raw = s.rawTail ? `<div class="raw">${esc(s.rawTail)}</div>` : '';
+
+        return `
+          <div class="suite ${s.status} ${openState[s.id] || s.status === 'failed' ? 'open' : ''}" data-id="${s.id}">
+            <div class="suite-head">
+              <span class="suite-name">${esc(s.name)}</span>
+              <span class="pill ${s.status}">${pill}</span>
+              <span class="counts">
+                <span><b class="p">${s.passed}</b> passed</span>
+                <span><b class="f">${s.failed}</b> failed</span>
+                <span><b class="s">${s.skipped}</b> skipped</span>
+              </span>
+              <span class="meta">${lastRun}</span>
+            </div>
+            <div class="suite-body">
+              <div class="desc">${esc(s.description)}</div>
+              ${failBox}${sections}${raw}
+            </div>
+          </div>`;
+      }).join('');
+
+      document.querySelectorAll('.suite-head').forEach(head => {
+        head.addEventListener('click', () => {
+          const suite = head.parentElement;
+          suite.classList.toggle('open');
+          openState[suite.dataset.id] = suite.classList.contains('open');
+        });
+      });
+    }
+
+    async function poll() {
+      try {
+        const res = await fetch('test-results.json?ts=' + Date.now(), { cache: 'no-store' });
+        if (res.ok) render(await res.json());
+      } catch (_) { /* server down or no file yet — keep last view */ }
+    }
+    poll();
+    setInterval(poll, 2000);
+  </script>
+</body>
+</html>

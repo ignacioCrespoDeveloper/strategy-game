@@ -90,6 +90,58 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/attack/incoming
+  // Derived list of enemy attack-marches heading at this player's tiles.
+  // Read-only — no local state hydration.
+  async function checkIncomingAttacks() {
+    return _post('/api/attack/incoming', {});
+  }
+
+  // POST /api/research/start — begin researching a Library book.
+  // POST /api/research/instant — finish the active research with credits.
+  // Both hydrate the player (resources/credits/research state changed).
+  async function researchStart(bookId) {
+    const result = await _post('/api/research/start', { bookId });
+    if (result.ok && result.player) {
+      const players             = StorageService.get('players') || {};
+      players[result.player.id] = _mergePlayer(result.player);
+      StorageService.hydrate({ players });
+    }
+    return result;
+  }
+
+  async function researchInstant() {
+    const result = await _post('/api/research/instant', {});
+    if (result.ok && result.player) {
+      const players             = StorageService.get('players') || {};
+      players[result.player.id] = _mergePlayer(result.player);
+      StorageService.hydrate({ players });
+    }
+    return result;
+  }
+
+  // POST /api/city/demolish
+  // Tears down one level of a building (instant, no refund).
+  // On success, hydrates city + player from server response.
+  async function demolish(cityId, buildingId) {
+    const result = await _post('/api/city/demolish', { cityId, buildingId });
+    if (result.ok) {
+      const patch = {};
+      if (result.city) {
+        const cities   = StorageService.get('cities') || {};
+        cities[cityId] = result.city;
+        patch.cities   = cities;
+      }
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
   // POST /api/city/recruit
   // Enqueues a unit training batch.
   // On success, hydrates city + player from server response.
@@ -124,7 +176,15 @@ const ServerActions = (() => {
       intent: opts.intent || null,
     });
     if (result.ok && result.lord) {
-      StorageService.hydrate({ lords: _mergeLord(result.lord) });
+      const patch = { lords: _mergeLord(result.lord) };
+      if (result.player) {
+        // March food cost was deducted server-side — reflect it right away.
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
+      StorageService.hydrate(patch);
+      HUD.refresh();
     }
     return result;
   }
@@ -672,5 +732,5 @@ const ServerActions = (() => {
     return _post('/api/clan/war-declare', { targetClanId, durationSecs });
   }
 
-  return { build, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, syncNow, instantBuild, instantRecruit, pveAttack, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
+  return { build, demolish, checkIncomingAttacks, researchStart, researchInstant, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, syncNow, instantBuild, instantRecruit, pveAttack, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
 })();

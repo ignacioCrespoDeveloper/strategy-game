@@ -5,3 +5,4 @@ node_modules/
 .vscode/settings.json
 .env
 server/.env
+test-results.json

@@ -11,12 +11,13 @@ const HUD = (() => {
   let _alertTick   = 0;
   let _lastSeenFeedId = null;
 
+  // Render order = economic weight: gold, then wood → stone → food
+  // (food is the scarcest/most expensive produced resource).
   const RES = {
-    coins: { icon: '💰', label: 'Gold'  },
-    food:  { icon: '🌾', label: 'Food'  },
-    wood:  { icon: '🪵', label: 'Wood'  },
-    stone: { icon: '⛏',  label: 'Stone' },
-    iron:  { icon: '⚒',  label: 'Iron'  },
+    coins: { icon: gi('two-coins'), label: 'Gold'  },
+    wood:  { icon: gi('wood-pile'), label: 'Wood'  },
+    stone: { icon: gi('war-pick'),  label: 'Stone' },
+    food:  { icon: gi('wheat'), label: 'Food'  },
   };
 
   function _updateClock() {
@@ -126,8 +127,9 @@ const HUD = (() => {
       Nav.refreshBadge();
 
       // Show toasts for pvp notifications regardless of which screen is active.
-      const pvpNew = newEntries.filter(e => e.type === 'pvp_result' || e.type === 'pvp_threat');
-      pvpNew.forEach(e => _toast(`${e.icon} ${e.title}`));
+      // (pvp_threat no longer exists — attacks arrive unannounced by design.)
+      const pvpNew = newEntries.filter(e => e.type === 'pvp_result' || e.type === 'lord_captured' || e.type === 'lord_fallen');
+      pvpNew.forEach(e => _toast(e.title));
 
       // Save battle history + sync lord HP for both sides from activity_feed
       // entries. The server dispatcher writes the authoritative result; this
@@ -139,7 +141,7 @@ const HUD = (() => {
           BattleHistoryService.save(e.lordId, {
             outcome:      e.outcome || 'defeat',
             campName:     e.opponentName || 'Enemy Lord',
-            campIcon:     e.opponentType === 'city' ? '🏯' : '⚔',
+            campIcon:     e.opponentType === 'city' ? gi('guarded-tower') : gi('crossed-swords'),
             campLevel:    null,
             lordLevel:    e.lordLevel || null,
             terrain:      e.terrain || null,
@@ -222,14 +224,13 @@ const HUD = (() => {
       food:  Math.floor(playerRes.food  || 0),
       wood:  Math.floor(playerRes.wood  || 0),
       stone: Math.floor(playerRes.stone || 0),
-      iron:  Math.floor(playerRes.iron  || 0),
     };
 
     // Production rates: sum across all cities
-    const rates  = { food: 0, wood: 0, stone: 0, iron: 0 };
+    const rates  = { food: 0, wood: 0, stone: 0 };
     cities.forEach(city => {
       const cityRates = ProductionService.getRates(city, null);
-      ['food', 'wood', 'stone', 'iron'].forEach(k => {
+      ['food', 'wood', 'stone'].forEach(k => {
         rates[k] += cityRates[k] || 0;
       });
     });
@@ -244,7 +245,7 @@ const HUD = (() => {
     document.getElementById('hud-r-coins-rate')?.classList.toggle('hud-res-rate--neg', goldNet < 0);
     document.getElementById('hud-r-coins-rate')?.classList.toggle('hud-res-rate--pos', goldNet > 0);
 
-    ['food', 'wood', 'stone', 'iron'].forEach(k => {
+    ['food', 'wood', 'stone'].forEach(k => {
       _set(`hud-r-${k}`,       _fmt(totals[k]));
       _set(`hud-r-${k}-rate`,  _fmtRate(rates[k]));
       document.getElementById(`hud-r-${k}-rate`)?.classList.toggle('hud-res-rate--pos', rates[k] > 0);
@@ -289,7 +290,7 @@ const HUD = (() => {
       </div>
 
       <div class="hud-lord-center hud-lord-btn" id="hud-lord-btn" title="Empire Overview">
-        <div class="hud-lord-portrait">${race.icon || '👤'}</div>
+        <div class="hud-lord-portrait">${race.icon || gi('person')}</div>
         <div class="hud-lord-text">
           <div class="hud-lord-name">
             <span id="hud-honor-tag" class="hud-honor-tag"></span>${_player?.username || ''}
@@ -306,7 +307,7 @@ const HUD = (() => {
           <span class="hud-clock-time" id="hud-clock">--:--:--</span>
         </div>
         <div class="hud-credits" title="Premium Credits — spend to finish actions instantly">
-          <span class="hud-credits-icon">💎</span>
+          <span class="hud-credits-icon">${gi('cut-diamond')}</span>
           <div class="hud-credits-text">
             <span class="hud-credits-label">Credits</span>
             <span class="hud-credits-amount" id="hud-credits-amount">0</span>

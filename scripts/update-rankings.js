@@ -72,7 +72,7 @@
       if (!def || level <= 0) return;
       for (let l = 1; l <= level; l++) {
         const c = def.cost(l);
-        score += ((c.wood || 0) + (c.stone || 0) + (c.iron || 0) + (c.food || 0)) * 2;
+        score += ((c.wood || 0) + (c.stone || 0) + (c.food || 0)) * 2;
       }
     });
     return Math.round(score);

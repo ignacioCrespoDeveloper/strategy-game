@@ -1,7 +1,14 @@
 // =============================================
 //  ranking-screen.js — RankingScreen
 //
-//  5 tabs: Overall · Infrastructure · Lords · Militar · Honor
+//  City-view-style split layout:
+//    Left panel  — the viewer's identity (lord portrait, crest, clan
+//                  tag) + total score + per-category breakdown. Each
+//                  category row is ALSO a tab switcher, mirroring how
+//                  the city screen's left stat rows drive the right pane.
+//    Right pane  — underline tab bar (Overall · Infrastructure · Lords ·
+//                  Military · Honor) over the scrollable leaderboard.
+//
 //    Infrastructure = Buildings + City Tier Bonus
 //    Lords          = Lord Levels + Quests
 //    Militar        = Army PWR only (PvP wins/conquests no longer score
@@ -10,22 +17,22 @@
 //  Each tab sorts the same leaderboard data by a different field.
 //  No extra Supabase fetches on tab switch. Each row shows a ▲/▼ badge
 //  when the player's rank in that tab has moved in roughly the last hour.
-//  "YOUR SCORE" is a closed-by-default <details> dropdown — only the
-//  grouped category totals show, the per-field breakdown is opt-in.
 // =============================================
 
 const RankingScreen = (() => {
 
   let _root       = null;
   let _player     = null;
+  let _lord       = null;
   let _leaderboard = [];
   let _ownScore   = null;
   let _activeTab  = 'overall';
   let _clanByPid  = {};
 
-  async function render(root, { player }) {
+  async function render(root, { player, lord }) {
     _root      = root;
     _player    = player;
+    _lord      = lord || (player?.lordId ? LordService.getById(player.lordId) : null);
     _activeTab = 'overall';
 
     root.innerHTML = _loadingHtml();
@@ -78,15 +85,15 @@ const RankingScreen = (() => {
   }
 
   const _TABS = [
-    { id: 'overall',  label: '🏆 Overall',        name: 'Overall'        },
-    { id: 'infra',    label: '🏛 Infrastructure', name: 'Infrastructure' },
-    { id: 'lords',    label: '👑 Lords',          name: 'Lords'          },
-    { id: 'militar',  label: '⚔ Military',        name: 'Military'       },
-    { id: 'honor',    label: '🛡 Honor',          name: 'Honor'          },
+    { id: 'overall',  label: gi('trophy') + ' Overall',        name: 'Overall'        },
+    { id: 'infra',    label: gi('capitol') + ' Infrastructure', name: 'Infrastructure' },
+    { id: 'lords',    label: gi('crown') + ' Lords',          name: 'Lords'          },
+    { id: 'militar',  label: gi('crossed-swords') + ' Military',        name: 'Military'       },
+    { id: 'honor',    label: gi('round-shield') + ' Honor',          name: 'Honor'          },
   ];
 
   // Grouped-category totals — the single source of truth for what each
-  // group means, shared by tab sorting, the own-score dropdown, and row
+  // group means, shared by tab sorting, the left-panel breakdown, and row
   // subtitles so they can never drift out of sync with each other.
   // Militar is pure army PWR now — PvP wins and conquests no longer award
   // ranking points at all (PvP's reward is honor, scaled by power
@@ -104,9 +111,9 @@ const RankingScreen = (() => {
   }
 
   // Single source of truth for "how is this tab sorted" — used both to
-  // render the list and to compute the header's position-in-this-tab,
-  // so the two can never drift out of sync again. Always sorts a copy;
-  // never mutates the shared _leaderboard array.
+  // render the list and to compute each rank position, so the two can
+  // never drift out of sync. Always sorts a copy; never mutates the
+  // shared _leaderboard array.
   function _sortedForTab(tab) {
     const sorted = [..._leaderboard];
     switch (tab) {
@@ -164,31 +171,114 @@ const RankingScreen = (() => {
     return _sortedForTab(tab).findIndex(e => e.playerId === _player.id) + 1;
   }
 
-  function _headerSubtitle() {
-    const rank  = _rankForTab(_activeTab);
-    const tabDef = _TABS.find(t => t.id === _activeTab);
-    const suffix = _activeTab !== 'overall' ? ` (${tabDef?.name || ''})` : '';
-    return `Your position: #${rank} of ${_leaderboard.length}${suffix}`;
+  function _posText() {
+    return `Your position: #${_rankForTab(_activeTab)} of ${_leaderboard.length}`;
   }
 
   function _html() {
-    const tabsHtml = _TABS.map(t => `
-      <button class="rank-tab ${_activeTab === t.id ? 'rank-tab--active' : ''}" data-rank-tab="${t.id}">${t.label}</button>
-    `).join('');
-
     return `
       <div class="rank-screen">
-        <div class="rank-header">
-          <h2 class="rank-title">📊 Rankings</h2>
-          <div class="rank-subtitle" id="rank-subtitle">${_headerSubtitle()}</div>
-        </div>
-
-        <div class="rank-content">
-          ${_ownScoreCard()}
-          <div class="rank-tabs-row">${tabsHtml}</div>
-          <div class="rank-tab-content" id="rank-tab-content"></div>
+        <div class="rkv-body">
+          <aside class="rkv-left">
+            ${_leftPanelHtml()}
+          </aside>
+          <div class="rkv-right">
+            <div class="rkv-tabs" id="rkv-tabs">
+              ${_TABS.map(t => `
+                <button class="rkv-tab ${_activeTab === t.id ? 'rkv-tab--active' : ''}" data-rank-tab="${t.id}">${t.label}</button>
+              `).join('')}
+              <span class="rkv-pos" id="rkv-pos">${_posText()}</span>
+            </div>
+            <div class="rkv-list-area" id="rank-tab-content"></div>
+          </div>
         </div>
       </div>`;
+  }
+
+  // ── Left panel ────────────────────────────────────────────────
+
+  function _portraitHtml() {
+    const race = RACES[_lord?.race] || {};
+    const src  = _lord
+      ? (pickLordPortrait(_lord.race, _lord.classId, _lord.id) || _lord.portrait || race.portrait)
+      : null;
+    const overallRank = _rankForTab('overall');
+
+    const artHtml = src
+      ? `<img class="rkv-portrait-img" src="${src}" alt="${_lord?.name || _player.username}" />`
+      : `<div class="rkv-portrait-empty">${gi('trophy')}</div>`;
+
+    return `
+      <div class="rkv-portrait">
+        ${artHtml}
+        <div class="rkv-portrait-fade"></div>
+        <div class="rkv-portrait-rank">${gi('trophy')} Rank #${overallRank}</div>
+      </div>`;
+  }
+
+  function _leftPanelHtml() {
+    const b     = _ownScore.breakdown;
+    const honor = _player.honorPoints || 0;
+    const tier  = getHonorTier(honor);
+    const race  = RACES[_lord?.race] || {};
+    const meta  = _ownScore.lordMeta;
+
+    const cats = [
+      {
+        tab: 'militar', icon: gi('crossed-swords'), label: 'Military',
+        pts: `${_fmt(_militarPts({ breakdown: b }))}`,
+        sub: `Army Power ${_fmt(b.armyPts || 0)}`,
+      },
+      {
+        tab: 'infra', icon: gi('capitol'), label: 'Infrastructure',
+        pts: `${_fmt(_infraPts({ breakdown: b }))}`,
+        sub: `Buildings ${_fmt(b.buildingPts || 0)} · City Tier ${_fmt(b.tierPts || 0)}`,
+      },
+      {
+        tab: 'lords', icon: gi('crown'), label: 'Lords',
+        pts: `${_fmt(_lordsPts({ breakdown: b }))}`,
+        sub: `Lord Levels ${_fmt(b.lordPts || 0)} · Quests ${_fmt(b.questPts || 0)}`,
+      },
+      {
+        tab: 'honor', icon: gi('round-shield'), label: 'Honor',
+        pts: _honorValue(honor),
+        sub: tier ? `${tier.side === 'good' ? 'Good' : 'Evil'} · ${tier.name}` : 'Reputation earned in PvP',
+      },
+    ];
+
+    const catsHtml = cats.map(c => `
+      <button class="rkv-cat ${_activeTab === c.tab ? 'rkv-cat--active' : ''}" data-rank-tab="${c.tab}">
+        <span class="rkv-cat-icon">${c.icon}</span>
+        <span class="rkv-cat-body">
+          <span class="rkv-cat-label">${c.label}</span>
+          <span class="rkv-cat-sub">${c.sub}</span>
+        </span>
+        <span class="rkv-cat-right">
+          <span class="rkv-cat-pts">${c.pts}</span>
+          <span class="rkv-cat-rank">#${_rankForTab(c.tab)} ${_deltaBadgeHtml(c.tab, _player.id)}</span>
+        </span>
+      </button>`).join('');
+
+    return `
+      ${_portraitHtml()}
+
+      <div class="rkv-id">
+        <h1 class="rkv-name">${_honorTag(honor)}${_clanTag(_player.id)}${_player.username}</h1>
+        <div class="rkv-id-sub">${race.icon || ''} ${race.name || '—'}${meta ? ` · ${meta.name} · Lv ${meta.level}` : ''}</div>
+      </div>
+
+      <div class="rkv-divider"></div>
+
+      <button class="rkv-total ${_activeTab === 'overall' ? 'rkv-total--active' : ''}" data-rank-tab="overall">
+        <div class="rkv-total-label">${gi('trophy')} Total Score</div>
+        <div class="rkv-total-value">${_fmt(_ownScore.total)} <span class="rkv-total-unit">pts</span></div>
+        <div class="rkv-total-sub">#${_rankForTab('overall')} of ${_leaderboard.length} lords ${_deltaBadgeHtml('overall', _player.id)}</div>
+      </button>
+
+      <div class="rkv-divider"></div>
+      <div class="rkv-cats-header">Score Breakdown</div>
+      <div class="rkv-cats">${catsHtml}</div>
+    `;
   }
 
   // Tiered Good/Evil crest, shown only once honor clears the first tier threshold.
@@ -216,43 +306,7 @@ const RankingScreen = (() => {
     return `${_honorTag(honor)}${_clanTag(playerId)}${username || '?'}${extraHtml || ''} ${_honorValue(honor)}`;
   }
 
-  function _ownScoreCard() {
-    const b     = _ownScore.breakdown;
-    const honor = _player.honorPoints || 0;
-    const entry = { breakdown: b };
-    const groups = [
-      { icon: '⚔', label: 'Military',       pts: _militarPts(entry), sub: `Army Power ${_fmt(b.armyPts || 0)} (lords' combined PWR)` },
-      { icon: '🏛', label: 'Infrastructure', pts: _infraPts(entry),   sub: `Buildings ${_fmt(b.buildingPts || 0)} · City Tier Bonus ${_fmt(b.tierPts || 0)}` },
-      { icon: '👑', label: 'Lords',          pts: _lordsPts(entry),   sub: `Lord Levels ${_fmt(b.lordPts || 0)} · Quests ${_fmt(b.questPts || 0)}` },
-    ];
-
-    return `
-      <section class="rank-section">
-        <div class="rank-section-title">YOUR SCORE</div>
-        <details class="rank-own-card">
-          <summary class="rank-own-top">
-            <span class="rank-own-name">${_nameWithHonor(_player.username, honor, '', _player.id)}</span>
-            <div class="rank-own-right">
-              <span class="rank-own-total">${_fmt(_ownScore.total)} <span class="rank-pts-unit">pts</span></span>
-              <span class="rank-own-chevron">▾</span>
-            </div>
-          </summary>
-          <div class="rank-breakdown">
-            ${groups.map(g => `
-              <div class="rank-brow">
-                <span class="rank-brow-icon">${g.icon}</span>
-                <div class="rank-brow-body">
-                  <div class="rank-brow-top">
-                    <span class="rank-brow-label">${g.label}</span>
-                    <span class="rank-brow-pts">${_fmt(g.pts)}</span>
-                  </div>
-                  <div class="rank-brow-sub">${g.sub}</div>
-                </div>
-              </div>`).join('')}
-          </div>
-        </details>
-      </section>`;
-  }
+  // ── Right pane: leaderboard ───────────────────────────────────
 
   function _renderTabContent() {
     const el = document.getElementById('rank-tab-content');
@@ -286,7 +340,7 @@ const RankingScreen = (() => {
   }
 
   function _medalOf(i) {
-    return i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `#${i + 1}`;
+    return i === 0 ? gi('podium-winner') : i === 1 ? gi('medal', 'gi--silver') : i === 2 ? gi('medal', 'gi--bronze') : `#${i + 1}`;
   }
 
   function _cls(entry) {
@@ -351,24 +405,36 @@ const RankingScreen = (() => {
   function _loadingHtml() {
     return `
       <div class="rank-screen">
-        <div class="rank-header"><h2 class="rank-title">📊 Rankings</h2></div>
         <div class="rank-loading">Loading scores…</div>
       </div>`;
   }
 
   // ── Events ────────────────────────────────────────────────────
 
+  // Tab switches come from TWO places — the underline tab bar on the right
+  // AND the left panel's total/category rows — so both carry data-rank-tab
+  // and funnel into the same handler, then _syncActive keeps every switcher's
+  // active state in agreement.
   function _bindEvents() {
-    document.querySelectorAll('.rank-tab[data-rank-tab]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        _activeTab = btn.dataset.rankTab;
-        document.querySelectorAll('.rank-tab').forEach(b => b.classList.remove('rank-tab--active'));
-        btn.classList.add('rank-tab--active');
+    _root.querySelectorAll('[data-rank-tab]').forEach(el => {
+      el.addEventListener('click', () => {
+        if (_activeTab === el.dataset.rankTab) return;
+        _activeTab = el.dataset.rankTab;
+        _syncActive();
         _renderTabContent();
-        const subtitleEl = document.getElementById('rank-subtitle');
-        if (subtitleEl) subtitleEl.textContent = _headerSubtitle();
       });
     });
+  }
+
+  function _syncActive() {
+    _root.querySelectorAll('.rkv-tab').forEach(b =>
+      b.classList.toggle('rkv-tab--active', b.dataset.rankTab === _activeTab));
+    _root.querySelectorAll('.rkv-cat').forEach(b =>
+      b.classList.toggle('rkv-cat--active', b.dataset.rankTab === _activeTab));
+    const total = _root.querySelector('.rkv-total');
+    if (total) total.classList.toggle('rkv-total--active', _activeTab === 'overall');
+    const pos = document.getElementById('rkv-pos');
+    if (pos) pos.textContent = _posText();
   }
 
   return { render };

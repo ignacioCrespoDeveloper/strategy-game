@@ -29,26 +29,26 @@ var LORD_STAT_MAX = {
 
 // Icon, colour and label for each stat — consumed by all UI components.
 var LORD_STAT_META = {
-  health:     { label: 'Health',     icon: '❤',  color: '#4aaa4a' },
-  attack:     { label: 'Attack',     icon: '⚔',  color: '#c05040' },
-  defense:    { label: 'Defense',    icon: '🛡',  color: '#4070d0' },
-  leadership: { label: 'Leadership', icon: '👑',  color: '#c8933a' },
-  magic:      { label: 'Magic',      icon: '✨',  color: '#9040c0' },
-  speed:      { label: 'Speed',      icon: '💨',  color: '#30a0b0' },
+  health:     { label: 'Health',     icon: gi('hearts'),  color: '#4aaa4a' },
+  attack:     { label: 'Attack',     icon: gi('crossed-swords'),  color: '#c05040' },
+  defense:    { label: 'Defense',    icon: gi('round-shield'),  color: '#4070d0' },
+  leadership: { label: 'Leadership', icon: gi('crown'),  color: '#c8933a' },
+  magic:      { label: 'Magic',      icon: gi('magic-swirl'),  color: '#9040c0' },
+  speed:      { label: 'Speed',      icon: gi('wingfoot'),  color: '#30a0b0' },
 };
 
 var LORD_CLASSES = {
   warrior: {
     id:          'warrior',
     name:        'Warrior',
-    icon:        '⚔',
+    icon:        gi('crossed-swords'),
     color:       '#c05040',
     description: 'Masters of direct combat. Warriors lead from the front and inspire allies through sheer force of arms.',
     modifiers:   { attack: 2, defense: 2 },
     passive: {
       id:          'commander',
       name:        'Commander',
-      icon:        '🛡',
+      icon:        gi('round-shield'),
       description: 'Born to lead armies into battle. Future: grants +2 Attack to every unit under your command.',
     },
   },
@@ -56,14 +56,14 @@ var LORD_CLASSES = {
   rogue: {
     id:          'rogue',
     name:        'Rogue',
-    icon:        '🗡',
+    icon:        gi('plain-dagger'),
     color:       '#20b060',
     description: 'Swift and elusive. Rogues excel at exploration and strike before the enemy knows they are there.',
     modifiers:   { speed: 3, attack: 1 },
     passive: {
       id:          'explorer',
       name:        'Explorer',
-      icon:        '🔍',
+      icon:        gi('magnifying-glass'),
       description: 'Search Area takes half the time. Higher chance of valuable discoveries.',
       effects: {
         searchDurationMult:   0.5,
@@ -75,14 +75,14 @@ var LORD_CLASSES = {
   priest: {
     id:          'priest',
     name:        'Priest',
-    icon:        '✝',
+    icon:        gi('crucifix'),
     color:       '#d0b040',
     description: 'Spiritual leaders who bolster the faith of the people. Priests keep cities loyal and prosperous.',
     modifiers:   { leadership: 3, defense: 1 },
     passive: {
       id:          'faithkeeper',
       name:        'Faithkeeper',
-      icon:        '☀',
+      icon:        gi('sun'),
       description: 'Improves city Happiness while the lord is present. Future: healing, diplomacy and religious authority.',
     },
   },
@@ -90,14 +90,14 @@ var LORD_CLASSES = {
   mage: {
     id:          'mage',
     name:        'Mage',
-    icon:        '🔮',
+    icon:        gi('crystal-ball'),
     color:       '#8040c0',
     description: 'Scholars of the arcane. Mages wield devastating magic and push the boundaries of knowledge.',
     modifiers:   { magic: 4, leadership: 1 },
     passive: {
       id:          'arcane_scholar',
       name:        'Arcane Scholar',
-      icon:        '📚',
+      icon:        gi('book-pile'),
       description: 'Deep mastery of magical arts. Future: magic damage, research acceleration, magic resistance.',
     },
   },
@@ -105,14 +105,14 @@ var LORD_CLASSES = {
   dark_lord: {
     id:          'dark_lord',
     name:        'Dark Lord',
-    icon:        '💀',
+    icon:        gi('death-skull'),
     color:       '#8030a0',
     description: 'Warlords who thrive on conquest and fear. Their dark power grows with every victory.',
     modifiers:   { attack: 2, magic: 2 },
     passive: {
       id:          'dark_presence',
       name:        'Dark Presence',
-      icon:        '🔥',
+      icon:        gi('flame'),
       description: 'Spreads corruption and terror. Future: dark magic bonuses, enhanced rewards from aggressive actions.',
     },
   },
@@ -146,7 +146,7 @@ var TALENT_POOL = {
   blademaster: {
     id:          'blademaster',
     name:        'Blademaster',
-    icon:        '⚔',
+    icon:        gi('crossed-swords'),
     color:       '#c05040',
     category:    'combat',
     description: 'Your lord fights with deadly precision in battle. +4 Attack and armor-piercing strikes — enemy armor provides minimal protection.',
@@ -160,7 +160,7 @@ var TALENT_POOL = {
   double_strike: {
     id:          'double_strike',
     name:        'Double Strike',
-    icon:        '🗡',
+    icon:        gi('plain-dagger'),
     color:       '#20b060',
     category:    'combat',
     description: 'Your lord strikes with blinding speed. 30% chance to attack twice per melee round.',
@@ -173,7 +173,7 @@ var TALENT_POOL = {
   pyroblast: {
     id:          'pyroblast',
     name:        'Pyroblast',
-    icon:        '🔥',
+    icon:        gi('flame'),
     color:       '#9040c0',
     category:    'combat',
     description: 'In the opening round your lord unleashes a torrent of arcane fire, scorching all enemies simultaneously and suppressing their regeneration.',
@@ -186,7 +186,7 @@ var TALENT_POOL = {
   iron_wall: {
     id:          'iron_wall',
     name:        'Iron Wall',
-    icon:        '🛡',
+    icon:        gi('round-shield'),
     color:       '#4070d0',
     category:    'combat',
     description: 'Your lord becomes an immovable bastion. +4 Defense and the Shield Wall ability — incoming melee damage reduced while frontline units stand.',
@@ -202,7 +202,7 @@ var TALENT_POOL = {
   pathfinder: {
     id:          'pathfinder',
     name:        'Pathfinder',
-    icon:        '🔍',
+    icon:        gi('magnifying-glass'),
     color:       '#30a0b0',
     category:    'strategic',
     description: 'Your lord navigates the wilderness with unmatched instinct. Quest duration reduced by 25%.',
@@ -215,7 +215,7 @@ var TALENT_POOL = {
   treasure_hunter: {
     id:          'treasure_hunter',
     name:        'Treasure Hunter',
-    icon:        '💰',
+    icon:        gi('two-coins'),
     color:       '#c8933a',
     category:    'strategic',
     description: 'Your lord has a nose for coin. Gold-type discoveries (coin caches, lost treasures, buried vaults) appear 40% more frequently.',
@@ -228,7 +228,7 @@ var TALENT_POOL = {
   commander: {
     id:          'commander',
     name:        'Commander',
-    icon:        '👑',
+    icon:        gi('crown'),
     color:       '#c8933a',
     category:    'strategic',
     description: 'Your lord inspires loyalty and discipline. Army capacity increased by +2 unit slots.',
@@ -241,7 +241,7 @@ var TALENT_POOL = {
   strategist: {
     id:          'strategist',
     name:        'Strategist',
-    icon:        '🗺',
+    icon:        gi('treasure-map'),
     color:       '#4070d0',
     category:    'strategic',
     description: 'Your lord commands with iron authority. Army Combat Power cap increased by +100 CP.',
@@ -254,7 +254,7 @@ var TALENT_POOL = {
   inspiring: {
     id:          'inspiring',
     name:        'Inspiring',
-    icon:        '☀',
+    icon:        gi('sun'),
     color:       '#d0b040',
     category:    'strategic',
     description: 'Your lord\'s presence lifts the spirits of every soldier. Allied morale starts 10 points higher at the start of every battle.',
@@ -267,7 +267,7 @@ var TALENT_POOL = {
   fearsome: {
     id:          'fearsome',
     name:        'Fearsome',
-    icon:        '💀',
+    icon:        gi('death-skull'),
     color:       '#8030a0',
     category:    'strategic',
     description: 'Your lord\'s reputation precedes them. Enemy forces enter battle with 10 less morale.',
@@ -280,7 +280,7 @@ var TALENT_POOL = {
   scholar: {
     id:          'scholar',
     name:        'Scholar',
-    icon:        '📚',
+    icon:        gi('book-pile'),
     color:       '#9040c0',
     category:    'strategic',
     description: 'Your lord reflects deeply on every experience. All XP earned from quests, battles, and actions increased by 20%.',
@@ -293,7 +293,7 @@ var TALENT_POOL = {
   drillmaster: {
     id:          'drillmaster',
     name:        'Drillmaster',
-    icon:        '⚒',
+    icon:        gi('anvil'),
     color:       '#c05040',
     category:    'strategic',
     description: 'Your lord runs relentless training regimens. Unit recruitment time reduced by 30%.',
@@ -320,7 +320,7 @@ var MOUNT_POOL = {
   warhorse: {
     id:          'warhorse',
     name:        'Warhorse',
-    icon:        '🐎',
+    icon:        gi('horse-head'),
     image:       null,
     color:       '#c8933a',
     description: 'A sturdy battle-trained warhorse. Balanced power and mobility for any lord.',
@@ -334,7 +334,7 @@ var MOUNT_POOL = {
   dire_wolf: {
     id:          'dire_wolf',
     name:        'Dire Wolf',
-    icon:        '🐺',
+    icon:        gi('wolf-head'),
     image:       null,
     color:       '#4070d0',
     description: 'A massive wolf bred for speed and ambush tactics. Outruns any pursuer.',
@@ -348,7 +348,7 @@ var MOUNT_POOL = {
   griffon: {
     id:          'griffon',
     name:        'Griffon',
-    icon:        '🦅',
+    icon:        gi('eagle-emblem'),
     image:       null,
     color:       '#30a0b0',
     description: 'A majestic aerial predator, striking from above with deadly talons.',
@@ -362,7 +362,7 @@ var MOUNT_POOL = {
   armored_boar: {
     id:          'armored_boar',
     name:        'Armored Boar',
-    icon:        '🐗',
+    icon:        gi('boar-tusks'),
     image:       null,
     color:       '#8030a0',
     description: 'A tusked war-boar clad in iron plate. Slow to provoke, brutal in the charge.',

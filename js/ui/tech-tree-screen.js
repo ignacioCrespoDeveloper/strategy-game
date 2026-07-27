@@ -9,10 +9,10 @@ const TechTreeScreen = (() => {
   let _player = null;
 
   const BLD_CATEGORIES = [
-    { id: 'infrastructure', label: 'Infrastructure', icon: '🏛' },
-    { id: 'economy',        label: 'Economy',        icon: '💰' },
-    { id: 'military',       label: 'Military',       icon: '⚔' },
-    { id: 'landmarks',      label: 'Landmarks',      icon: '🏵' },
+    { id: 'resources',      label: 'Resources',      icon: gi('wheat') },
+    { id: 'infrastructure', label: 'Infrastructure', icon: gi('capitol') },
+    { id: 'military',       label: 'Military',       icon: gi('crossed-swords') },
+    { id: 'landmarks',      label: 'Landmarks',      icon: gi('obelisk') },
   ];
 
   function render(root, { player, lord }) {
@@ -30,14 +30,14 @@ const TechTreeScreen = (() => {
     return `
       <div class="tt-screen">
         <div class="tt-header">
-          <h1 class="tt-title">📚 Tech Tree</h1>
+          <h1 class="tt-title">${gi('book-pile')} Tech Tree</h1>
           <div class="tt-tabs">
-            <button class="tt-tab ${_tab === 'buildings' ? 'tt-tab--active' : ''}" data-tt-tab="buildings">🏗 Buildings</button>
-            <button class="tt-tab ${_tab === 'units'     ? 'tt-tab--active' : ''}" data-tt-tab="units">⚔ Units</button>
+            <button class="tt-tab ${_tab === 'buildings' ? 'tt-tab--active' : ''}" data-tt-tab="buildings">${gi('hammer-nails')} Buildings</button>
+            <button class="tt-tab ${_tab === 'units'     ? 'tt-tab--active' : ''}" data-tt-tab="units">${gi('crossed-swords')} Units</button>
           </div>
         </div>
         <div class="tt-race-bar">
-          ${[...Object.values(RACES), { id: 'bandits', name: 'Bandits', icon: '☠' }].map(r => `
+          ${[...Object.values(RACES), { id: 'bandits', name: 'Bandits', icon: gi('skull-crossed-bones') }].map(r => `
             <button class="tt-race-btn ${_race === r.id ? 'tt-race-btn--active' : ''}" data-tt-race="${r.id}" title="${r.name}">
               <span class="tt-race-icon">${r.icon}</span>
               <span class="tt-race-label">${r.name}</span>
@@ -135,22 +135,26 @@ const TechTreeScreen = (() => {
     const lockedClass = status === 'locked'    ? ' tt-card--locked' : '';
     const builtBadge  = status === 'built'     ? '<span class="tt-card-built">✓</span>' : '';
 
+    // Same art-banner card grammar as the city view's building grid:
+    // artwork with a bottom fade on top (emoji fallback), info below.
     return `
       <div class="tt-bld-card${lockedClass}">
         ${builtBadge}
-        <div class="tt-bld-head">
-          <span class="tt-bld-icon">${def.icon}</span>
-          <div class="tt-bld-info">
-            <div class="tt-bld-name">${def.name}</div>
-            <div class="tt-bld-meta">Max Lv ${def.maxLevel}</div>
-          </div>
+        <div class="tt-bld-art">
+          ${def.image
+            ? `<img class="tt-bld-art-img" src="${def.image}" alt="" loading="lazy" />`
+            : `<span class="tt-bld-art-icon">${def.icon}</span>`}
+          <span class="tt-bld-art-fade"></span>
         </div>
-        <div class="tt-bld-desc">${def.description || ''}</div>
-        ${reqs.length ? `
-          <div class="tt-reqs">
-            ${reqs.map(r => `<span class="tt-req">🔒 ${r}</span>`).join('')}
-          </div>` : ''}
-        ${effectsHtml ? `<div class="tt-effects">${effectsHtml}</div>` : ''}
+        <div class="tt-bld-body">
+          <div class="tt-bld-name">${def.name}</div>
+          <div class="tt-bld-desc">${def.description || ''}</div>
+          ${reqs.length ? `
+            <div class="tt-reqs">
+              ${reqs.map(r => `<span class="tt-req">${gi('padlock')} ${r}</span>`).join('')}
+            </div>` : ''}
+          ${effectsHtml ? `<div class="tt-effects">${effectsHtml}</div>` : ''}
+        </div>
       </div>
     `;
   }
@@ -223,7 +227,7 @@ const TechTreeScreen = (() => {
       sections.push(`
         <section class="tt-section">
           <div class="tt-section-title">
-            ${bldDef?.icon || '🏗'} ${bldDef?.name || bldId}
+            ${bldDef?.icon || gi('hammer-nails')} ${bldDef?.name || bldId}
           </div>
           <div class="tt-unit-grid">${cards}</div>
         </section>
@@ -244,7 +248,7 @@ const TechTreeScreen = (() => {
     const raceInfo    = unit.race ? RACES[unit.race] : null;
     const raceBadge   = raceInfo
       ? `<span class="tt-unit-race">${raceInfo.icon} ${raceInfo.name}</span>`
-      : `<span class="tt-unit-race tt-unit-race--merc">☠ Mercenary</span>`;
+      : `<span class="tt-unit-race tt-unit-race--merc">${gi('skull-crossed-bones')} Mercenary</span>`;
 
     const portrait = unit.image
       ? `<img class="tt-uc-img" src="${unit.image}" alt="${unit.name}" loading="lazy" />`
@@ -254,12 +258,12 @@ const TechTreeScreen = (() => {
     // they're never actually hired for free, so show that plainly instead
     // of a misleading "💰 0".
     const costHtml = unit.goldCost > 0
-      ? `<span class="tt-unit-cost">💰 ${unit.goldCost}</span>`
-      : `<span class="tt-unit-cost tt-unit-cost--none" title="Only encountered as a camp defender — not directly recruitable">🏕 Camp Only</span>`;
+      ? `<span class="tt-unit-cost">${gi('two-coins')} ${unit.goldCost}</span>`
+      : `<span class="tt-unit-cost tt-unit-cost--none" title="Only encountered as a camp defender — not directly recruitable">${gi('campfire')} Camp Only</span>`;
 
     return `
       <div class="tt-unit-card${lockedClass}">
-        <div class="tt-uc-portrait">${portrait}</div>
+        <div class="tt-uc-portrait">${portrait}${giUnitType(unit.category)}</div>
         <div class="tt-uc-body">
           <div class="tt-uc-top">
             <span class="tt-unit-name">${unit.name}</span>
@@ -267,16 +271,17 @@ const TechTreeScreen = (() => {
           </div>
           ${raceBadge}
           <div class="tt-unit-stats">
-            <span class="tt-stat" title="Attack">⚔ ${s.attack ?? '—'}</span>
-            <span class="tt-stat" title="Defense">🛡 ${s.defense ?? '—'}</span>
-            <span class="tt-stat" title="HP">❤ ${s.hp ?? '—'}</span>
-            <span class="tt-stat" title="Speed">💨 ${s.speed ?? '—'}</span>
+            <span class="tt-stat" title="Attack">${gi('crossed-swords')} ${s.attack ?? '—'}</span>
+            <span class="tt-stat" title="Defense">${gi('round-shield')} ${s.defense ?? '—'}</span>
+            <span class="tt-stat" title="HP">${gi('hearts')} ${s.hp ?? '—'}</span>
+            <span class="tt-stat" title="Speed">${gi('wingfoot')} ${s.speed ?? '—'}</span>
+            <span class="tt-stat tt-stat--pwr" title="Army Power cost per model — combat traits are priced in">${gi('rank-3')} ${Math.round(EconomyCore.getUnitPower(unit))} PWR</span>
           </div>
           ${traitLabels.length ? `
             <div class="tt-traits">
               ${traitLabels.map(t => `<span class="tt-trait">${t}</span>`).join('')}
             </div>` : ''}
-          ${buildingName ? `<div class="tt-unit-req">🏗 ${buildingName} Lv ${minLevel}+</div>` : ''}
+          ${buildingName ? `<div class="tt-unit-req">${gi('hammer-nails')} ${buildingName} Lv ${minLevel}+</div>` : ''}
         </div>
       </div>
     `;

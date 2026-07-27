@@ -11,7 +11,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL } from '../engine-loader.js';
+import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL, EconomyCore } from '../engine-loader.js';
 
 // Base scout duration before the speed multiplier — mirrors move's own
 // distance*20*(5/speed) curve so speed behaves consistently everywhere.
@@ -93,6 +93,20 @@ export async function handleLordAction(req, res) {
     const minSecs  = intent === 'attack' ? 60 : 0;
     const secs     = Math.max(minSecs, distance > 0 ? Math.round(distance * 20 * (5 / speed)) : 0);
 
+    // March food cost (the OGame deuterium role): crossing tiles burns food,
+    // paid up front at enqueue — same-tile actions stay free. No refund on
+    // cancel/defeat, same as construction costs. Cartography research discounts.
+    const foodCost = EconomyCore.getMarchFoodCost(
+      distance, armies[lordId]?.units, EconomyCore.getResearchEffects(player.research));
+    if (foodCost > 0) {
+      player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
+      const have = Math.floor(player.resources.food || 0);
+      if (have < foodCost) {
+        return res.status(400).json({ ok: false, error: `Not enough food to march: need ${foodCost} 🌾, have ${have}. Feed your army or shorten the march.` });
+      }
+      player.resources.food = (player.resources.food || 0) - foodCost;
+    }
+
     const item = { actionId: 'move_lord', startedAt: now, finishAt: now + secs * 1000, destX, destY };
     if (intent) item.intent = intent;
     lord.actionQueue = [item];
@@ -165,5 +179,7 @@ export async function handleLordAction(req, res) {
   });
   if (evtErr) console.warn('[lord-action] pending_events insert failed:', evtErr.message);
 
-  return res.json({ ok: true, lord });
+  // player is included so the client can hydrate the march food deduction
+  // immediately (moves are the only lord action that spends resources).
+  return res.json({ ok: true, lord, player });
 }

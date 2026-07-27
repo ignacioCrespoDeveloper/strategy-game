@@ -10,9 +10,9 @@
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { catchUp } from '../tick/catch-up.js';
-import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS } from '../engine-loader.js';
+import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS } from '../engine-loader.js';
 
-const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS };
+const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS };
 
 export async function handleInstantAction(req, res) {
   const { lordId } = req.body || {};
@@ -43,7 +43,7 @@ export async function handleInstantAction(req, res) {
   const cost     = Math.max(1, Math.ceil(secsLeft / 60));
 
   if ((player.credits || 0) < cost) {
-    return res.status(400).json({ ok: false, error: `Need ${cost} 💎 credits (have ${player.credits || 0})` });
+    return res.status(400).json({ ok: false, error: `Need ${cost} credits (have ${player.credits || 0})` });
   }
 
   player.credits = (player.credits || 0) - cost;

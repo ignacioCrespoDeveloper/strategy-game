@@ -1,0 +1,3019 @@
+{
+  "generatedAt": 1785171068065,
+  "reps": 96,
+  "goldBudget": 60000,
+  "pwrCap": 1000,
+  "raceRate": {
+    "human": 0.5277777777777778,
+    "dwarf": 0.43464781746031744,
+    "orc": 0.5033482142857143,
+    "high_elf": 0.5746527777777778,
+    "dark_elf": 0.4595734126984127
+  },
+  "archRate": {
+    "swarm": 0.4982142857142857,
+    "elite": 0.49962797619047616,
+    "balanced": 0.5021577380952381
+  },
+  "comboRate": {
+    "human/swarm": 0.5833333333333334,
+    "human/elite": 0.6369047619047619,
+    "human/balanced": 0.3630952380952381,
+    "dwarf/swarm": 0.40922619047619047,
+    "dwarf/elite": 0.4382440476190476,
+    "dwarf/balanced": 0.4564732142857143,
+    "orc/swarm": 0.5431547619047619,
+    "orc/elite": 0.5245535714285714,
+    "orc/balanced": 0.44233630952380953,
+    "high_elf/swarm": 0.48921130952380953,
+    "high_elf/elite": 0.5502232142857143,
+    "high_elf/balanced": 0.6845238095238095,
+    "dark_elf/swarm": 0.4661458333333333,
+    "dark_elf/elite": 0.3482142857142857,
+    "dark_elf/balanced": 0.5643601190476191
+  },
+  "raceVsRate": {
+    "human": {
+      "human": 0.5,
+      "dwarf": 0.6273148148148148,
+      "orc": 0.4832175925925926,
+      "high_elf": 0.4878472222222222,
+      "dark_elf": 0.53125
+    },
+    "dwarf": {
+      "human": 0.3726851851851852,
+      "dwarf": 0.5,
+      "orc": 0.40914351851851855,
+      "high_elf": 0.4652777777777778,
+      "dark_elf": 0.4479166666666667
+    },
+    "orc": {
+      "human": 0.5167824074074074,
+      "dwarf": 0.5908564814814815,
+      "orc": 0.5,
+      "high_elf": 0.36516203703703703,
+      "dark_elf": 0.5428240740740741
+    },
+    "high_elf": {
+      "human": 0.5121527777777778,
+      "dwarf": 0.5347222222222222,
+      "orc": 0.6348379629629629,
+      "high_elf": 0.5,
+      "dark_elf": 0.6666666666666666
+    },
+    "dark_elf": {
+      "human": 0.46875,
+      "dwarf": 0.5520833333333334,
+      "orc": 0.45717592592592593,
+      "high_elf": 0.3333333333333333,
+      "dark_elf": 0.5
+    }
+  },
+  "combos": [
+    {
+      "key": "human/swarm",
+      "race": "human",
+      "arch": "swarm",
+      "pwr": 983,
+      "gold": 4900,
+      "winRate": 0.5833333333333334,
+      "units": [
+        {
+          "unitId": "spearmen",
+          "name": "Spearmen",
+          "count": 2
+        },
+        {
+          "unitId": "swordsmen",
+          "name": "Swordsmen",
+          "count": 1
+        },
+        {
+          "unitId": "handgunners",
+          "name": "Handgunners",
+          "count": 1
+        },
+        {
+          "unitId": "halberdiers",
+          "name": "Halberdiers",
+          "count": 1
+        },
+        {
+          "unitId": "outriders",
+          "name": "Outriders",
+          "count": 1
+        },
+        {
+          "unitId": "war_wagons",
+          "name": "War Wagons",
+          "count": 1
+        },
+        {
+          "unitId": "empire_knights",
+          "name": "Empire Knights",
+          "count": 1
+        },
+        {
+          "unitId": "reiksguard",
+          "name": "Reiksguard",
+          "count": 1
+        },
+        {
+          "unitId": "greatswords",
+          "name": "Greatswords",
+          "count": 1
+        },
+        {
+          "unitId": "demigryph_knights",
+          "name": "Demigryph Knights",
+          "count": 1
+        },
+        {
+          "unitId": "great_cannon",
+          "name": "Great Cannon",
+          "count": 1
+        },
+        {
+          "unitId": "steam_tank",
+          "name": "Steam Tank",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "human/elite",
+      "race": "human",
+      "arch": "elite",
+      "pwr": 999,
+      "gold": 4955,
+      "winRate": 0.6369047619047619,
+      "units": [
+        {
+          "unitId": "steam_tank",
+          "name": "Steam Tank",
+          "count": 1
+        },
+        {
+          "unitId": "demigryph_knights",
+          "name": "Demigryph Knights",
+          "count": 1
+        },
+        {
+          "unitId": "great_cannon",
+          "name": "Great Cannon",
+          "count": 1
+        },
+        {
+          "unitId": "greatswords",
+          "name": "Greatswords",
+          "count": 1
+        },
+        {
+          "unitId": "reiksguard",
+          "name": "Reiksguard",
+          "count": 1
+        },
+        {
+          "unitId": "war_wagons",
+          "name": "War Wagons",
+          "count": 1
+        },
+        {
+          "unitId": "empire_knights",
+          "name": "Empire Knights",
+          "count": 1
+        },
+        {
+          "unitId": "outriders",
+          "name": "Outriders",
+          "count": 2
+        },
+        {
+          "unitId": "halberdiers",
+          "name": "Halberdiers",
+          "count": 1
+        },
+        {
+          "unitId": "handgunners",
+          "name": "Handgunners",
+          "count": 1
+        },
+        {
+          "unitId": "spearmen",
+          "name": "Spearmen",
+          "count": 1
+        },
+        {
+          "unitId": "swordsmen",
+          "name": "Swordsmen",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "human/balanced",
+      "race": "human",
+      "arch": "balanced",
+      "pwr": 970,
+      "gold": 5780,
+      "winRate": 0.3630952380952381,
+      "units": [
+        {
+          "unitId": "spearmen",
+          "name": "Spearmen",
+          "count": 2
+        },
+        {
+          "unitId": "greatswords",
+          "name": "Greatswords",
+          "count": 2
+        },
+        {
+          "unitId": "great_cannon",
+          "name": "Great Cannon",
+          "count": 2
+        },
+        {
+          "unitId": "demigryph_knights",
+          "name": "Demigryph Knights",
+          "count": 2
+        },
+        {
+          "unitId": "steam_tank",
+          "name": "Steam Tank",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "key": "dwarf/swarm",
+      "race": "dwarf",
+      "arch": "swarm",
+      "pwr": 973,
+      "gold": 5030,
+      "winRate": 0.40922619047619047,
+      "units": [
+        {
+          "unitId": "quarrellers",
+          "name": "Quarrellers",
+          "count": 2
+        },
+        {
+          "unitId": "dwarf_warriors",
+          "name": "Dwarf Warriors",
+          "count": 1
+        },
+        {
+          "unitId": "thunderers",
+          "name": "Thunderers",
+          "count": 1
+        },
+        {
+          "unitId": "longbeards",
+          "name": "Longbeards",
+          "count": 1
+        },
+        {
+          "unitId": "gyrocopter",
+          "name": "Gyrocopter",
+          "count": 1
+        },
+        {
+          "unitId": "slayers",
+          "name": "Slayers",
+          "count": 1
+        },
+        {
+          "unitId": "giant_slayers",
+          "name": "Giant Slayers",
+          "count": 1
+        },
+        {
+          "unitId": "ironbreakers",
+          "name": "Ironbreakers",
+          "count": 1
+        },
+        {
+          "unitId": "hammerers",
+          "name": "Hammerers",
+          "count": 1
+        },
+        {
+          "unitId": "irondrakes",
+          "name": "Irondrakes",
+          "count": 1
+        },
+        {
+          "unitId": "dwarf_cannon",
+          "name": "Cannon",
+          "count": 1
+        },
+        {
+          "unitId": "organ_gun",
+          "name": "Organ Gun",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "dwarf/elite",
+      "race": "dwarf",
+      "arch": "elite",
+      "pwr": 996,
+      "gold": 5115,
+      "winRate": 0.4382440476190476,
+      "units": [
+        {
+          "unitId": "irondrakes",
+          "name": "Irondrakes",
+          "count": 1
+        },
+        {
+          "unitId": "organ_gun",
+          "name": "Organ Gun",
+          "count": 1
+        },
+        {
+          "unitId": "hammerers",
+          "name": "Hammerers",
+          "count": 1
+        },
+        {
+          "unitId": "ironbreakers",
+          "name": "Ironbreakers",
+          "count": 1
+        },
+        {
+          "unitId": "dwarf_cannon",
+          "name": "Cannon",
+          "count": 1
+        },
+        {
+          "unitId": "giant_slayers",
+          "name": "Giant Slayers",
+          "count": 1
+        },
+        {
+          "unitId": "slayers",
+          "name": "Slayers",
+          "count": 1
+        },
+        {
+          "unitId": "longbeards",
+          "name": "Longbeards",
+          "count": 2
+        },
+        {
+          "unitId": "thunderers",
+          "name": "Thunderers",
+          "count": 1
+        },
+        {
+          "unitId": "gyrocopter",
+          "name": "Gyrocopter",
+          "count": 1
+        },
+        {
+          "unitId": "dwarf_warriors",
+          "name": "Dwarf Warriors",
+          "count": 1
+        },
+        {
+          "unitId": "quarrellers",
+          "name": "Quarrellers",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "dwarf/balanced",
+      "race": "dwarf",
+      "arch": "balanced",
+      "pwr": 986,
+      "gold": 4730,
+      "winRate": 0.4564732142857143,
+      "units": [
+        {
+          "unitId": "dwarf_warriors",
+          "name": "Dwarf Warriors",
+          "count": 6
+        },
+        {
+          "unitId": "hammerers",
+          "name": "Hammerers",
+          "count": 4
+        },
+        {
+          "unitId": "irondrakes",
+          "name": "Irondrakes",
+          "count": 3
+        }
+      ]
+    },
+    {
+      "key": "orc/swarm",
+      "race": "orc",
+      "arch": "swarm",
+      "pwr": 999,
+      "gold": 6315,
+      "winRate": 0.5431547619047619,
+      "units": [
+        {
+          "unitId": "goblins",
+          "name": "Goblins",
+          "count": 1
+        },
+        {
+          "unitId": "orc_goblin_archers",
+          "name": "Goblin Archers",
+          "count": 1
+        },
+        {
+          "unitId": "savage_orc_arrer_boyz",
+          "name": "Savage Orc Arrers",
+          "count": 1
+        },
+        {
+          "unitId": "orc_boyz",
+          "name": "Orc Boyz",
+          "count": 1
+        },
+        {
+          "unitId": "orc_wolf_riders",
+          "name": "Goblin Wolf Riders",
+          "count": 1
+        },
+        {
+          "unitId": "orc_big_uns",
+          "name": "Orc Big 'Uns",
+          "count": 1
+        },
+        {
+          "unitId": "snotling_pump_wagons",
+          "name": "Pump Wagons",
+          "count": 1
+        },
+        {
+          "unitId": "boar_boyz",
+          "name": "Boar Boyz",
+          "count": 1
+        },
+        {
+          "unitId": "savage_orc_boar_big_uns",
+          "name": "Savage Orc Boars",
+          "count": 1
+        },
+        {
+          "unitId": "rock_lobber",
+          "name": "Rock Lobber",
+          "count": 1
+        },
+        {
+          "unitId": "black_orcs",
+          "name": "Black Orcs",
+          "count": 1
+        },
+        {
+          "unitId": "trolls",
+          "name": "Trolls",
+          "count": 1
+        },
+        {
+          "unitId": "giant",
+          "name": "Giant",
+          "count": 1
+        },
+        {
+          "unitId": "arachnarok_spider",
+          "name": "Arachnarok Spider",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "orc/elite",
+      "race": "orc",
+      "arch": "elite",
+      "pwr": 999,
+      "gold": 6315,
+      "winRate": 0.5245535714285714,
+      "units": [
+        {
+          "unitId": "arachnarok_spider",
+          "name": "Arachnarok Spider",
+          "count": 1
+        },
+        {
+          "unitId": "giant",
+          "name": "Giant",
+          "count": 1
+        },
+        {
+          "unitId": "black_orcs",
+          "name": "Black Orcs",
+          "count": 1
+        },
+        {
+          "unitId": "trolls",
+          "name": "Trolls",
+          "count": 1
+        },
+        {
+          "unitId": "savage_orc_boar_big_uns",
+          "name": "Savage Orc Boars",
+          "count": 1
+        },
+        {
+          "unitId": "boar_boyz",
+          "name": "Boar Boyz",
+          "count": 1
+        },
+        {
+          "unitId": "orc_big_uns",
+          "name": "Orc Big 'Uns",
+          "count": 1
+        },
+        {
+          "unitId": "rock_lobber",
+          "name": "Rock Lobber",
+          "count": 1
+        },
+        {
+          "unitId": "orc_boyz",
+          "name": "Orc Boyz",
+          "count": 1
+        },
+        {
+          "unitId": "snotling_pump_wagons",
+          "name": "Pump Wagons",
+          "count": 1
+        },
+        {
+          "unitId": "savage_orc_arrer_boyz",
+          "name": "Savage Orc Arrers",
+          "count": 1
+        },
+        {
+          "unitId": "orc_wolf_riders",
+          "name": "Goblin Wolf Riders",
+          "count": 1
+        },
+        {
+          "unitId": "orc_goblin_archers",
+          "name": "Goblin Archers",
+          "count": 1
+        },
+        {
+          "unitId": "goblins",
+          "name": "Goblins",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "orc/balanced",
+      "race": "orc",
+      "arch": "balanced",
+      "pwr": 988,
+      "gold": 7020,
+      "winRate": 0.44233630952380953,
+      "units": [
+        {
+          "unitId": "goblins",
+          "name": "Goblins",
+          "count": 3
+        },
+        {
+          "unitId": "black_orcs",
+          "name": "Black Orcs",
+          "count": 3
+        },
+        {
+          "unitId": "rock_lobber",
+          "name": "Rock Lobber",
+          "count": 2
+        },
+        {
+          "unitId": "savage_orc_boar_big_uns",
+          "name": "Savage Orc Boars",
+          "count": 2
+        },
+        {
+          "unitId": "arachnarok_spider",
+          "name": "Arachnarok Spider",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "key": "high_elf/swarm",
+      "race": "high_elf",
+      "arch": "swarm",
+      "pwr": 1000,
+      "gold": 5130,
+      "winRate": 0.48921130952380953,
+      "units": [
+        {
+          "unitId": "he_spearmen",
+          "name": "Spearmen",
+          "count": 3
+        },
+        {
+          "unitId": "archers",
+          "name": "Archers",
+          "count": 1
+        },
+        {
+          "unitId": "lothern_sea_guard",
+          "name": "Lothern Sea Guard",
+          "count": 1
+        },
+        {
+          "unitId": "sisters_of_avelorn",
+          "name": "Sisters of Avelorn",
+          "count": 1
+        },
+        {
+          "unitId": "silver_helms",
+          "name": "Silver Helms",
+          "count": 1
+        },
+        {
+          "unitId": "swordmasters_of_hoeth",
+          "name": "Swordmasters",
+          "count": 1
+        },
+        {
+          "unitId": "white_lions",
+          "name": "White Lions",
+          "count": 1
+        },
+        {
+          "unitId": "phoenix_guard",
+          "name": "Phoenix Guard",
+          "count": 1
+        },
+        {
+          "unitId": "dragon_princes",
+          "name": "Dragon Princes",
+          "count": 1
+        },
+        {
+          "unitId": "eagle_claw_bolt_thrower",
+          "name": "Eagle Thrower",
+          "count": 1
+        },
+        {
+          "unitId": "frostheart_phoenix",
+          "name": "Frostheart Phoenix",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "high_elf/elite",
+      "race": "high_elf",
+      "arch": "elite",
+      "pwr": 992,
+      "gold": 5720,
+      "winRate": 0.5502232142857143,
+      "units": [
+        {
+          "unitId": "sun_dragon",
+          "name": "Sun Dragon",
+          "count": 1
+        },
+        {
+          "unitId": "frostheart_phoenix",
+          "name": "Frostheart Phoenix",
+          "count": 1
+        },
+        {
+          "unitId": "dragon_princes",
+          "name": "Dragon Princes",
+          "count": 1
+        },
+        {
+          "unitId": "phoenix_guard",
+          "name": "Phoenix Guard",
+          "count": 1
+        },
+        {
+          "unitId": "white_lions",
+          "name": "White Lions",
+          "count": 1
+        },
+        {
+          "unitId": "swordmasters_of_hoeth",
+          "name": "Swordmasters",
+          "count": 1
+        },
+        {
+          "unitId": "eagle_claw_bolt_thrower",
+          "name": "Eagle Thrower",
+          "count": 1
+        },
+        {
+          "unitId": "sisters_of_avelorn",
+          "name": "Sisters of Avelorn",
+          "count": 1
+        },
+        {
+          "unitId": "silver_helms",
+          "name": "Silver Helms",
+          "count": 1
+        },
+        {
+          "unitId": "lothern_sea_guard",
+          "name": "Lothern Sea Guard",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "high_elf/balanced",
+      "race": "high_elf",
+      "arch": "balanced",
+      "pwr": 984,
+      "gold": 5900,
+      "winRate": 0.6845238095238095,
+      "units": [
+        {
+          "unitId": "he_spearmen",
+          "name": "Spearmen",
+          "count": 2
+        },
+        {
+          "unitId": "phoenix_guard",
+          "name": "Phoenix Guard",
+          "count": 2
+        },
+        {
+          "unitId": "eagle_claw_bolt_thrower",
+          "name": "Eagle Thrower",
+          "count": 2
+        },
+        {
+          "unitId": "dragon_princes",
+          "name": "Dragon Princes",
+          "count": 2
+        },
+        {
+          "unitId": "sun_dragon",
+          "name": "Sun Dragon",
+          "count": 2
+        }
+      ]
+    },
+    {
+      "key": "dark_elf/swarm",
+      "race": "dark_elf",
+      "arch": "swarm",
+      "pwr": 994,
+      "gold": 4605,
+      "winRate": 0.4661458333333333,
+      "units": [
+        {
+          "unitId": "bleakswords",
+          "name": "Bleakswords",
+          "count": 3
+        },
+        {
+          "unitId": "dreadspears",
+          "name": "Dreadspears",
+          "count": 2
+        },
+        {
+          "unitId": "darkshards",
+          "name": "Darkshards",
+          "count": 1
+        },
+        {
+          "unitId": "shades",
+          "name": "Shades",
+          "count": 1
+        },
+        {
+          "unitId": "dark_riders",
+          "name": "Dark Riders",
+          "count": 1
+        },
+        {
+          "unitId": "sisters_of_slaughter",
+          "name": "Sisters of Slaughter",
+          "count": 1
+        },
+        {
+          "unitId": "har_ganeth_executioners",
+          "name": "Executioners",
+          "count": 1
+        },
+        {
+          "unitId": "witch_elves",
+          "name": "Witch Elves",
+          "count": 1
+        },
+        {
+          "unitId": "cold_one_knights",
+          "name": "Cold One Knights",
+          "count": 1
+        },
+        {
+          "unitId": "black_guard_naggarond",
+          "name": "Black Guard",
+          "count": 1
+        },
+        {
+          "unitId": "reaper_bolt_throwers",
+          "name": "Reaper Bolt Throwers",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "dark_elf/elite",
+      "race": "dark_elf",
+      "arch": "elite",
+      "pwr": 953,
+      "gold": 6855,
+      "winRate": 0.3482142857142857,
+      "units": [
+        {
+          "unitId": "black_dragon",
+          "name": "Black Dragon",
+          "count": 1
+        },
+        {
+          "unitId": "war_hydra",
+          "name": "War Hydra",
+          "count": 1
+        },
+        {
+          "unitId": "black_guard_naggarond",
+          "name": "Black Guard",
+          "count": 1
+        },
+        {
+          "unitId": "cold_one_knights",
+          "name": "Cold One Knights",
+          "count": 1
+        },
+        {
+          "unitId": "witch_elves",
+          "name": "Witch Elves",
+          "count": 1
+        },
+        {
+          "unitId": "har_ganeth_executioners",
+          "name": "Executioners",
+          "count": 1
+        },
+        {
+          "unitId": "reaper_bolt_throwers",
+          "name": "Reaper Bolt Throwers",
+          "count": 1
+        },
+        {
+          "unitId": "sisters_of_slaughter",
+          "name": "Sisters of Slaughter",
+          "count": 1
+        }
+      ]
+    },
+    {
+      "key": "dark_elf/balanced",
+      "race": "dark_elf",
+      "arch": "balanced",
+      "pwr": 975,
+      "gold": 6475,
+      "winRate": 0.5643601190476191,
+      "units": [
+        {
+          "unitId": "bleakswords",
+          "name": "Bleakswords",
+          "count": 3
+        },
+        {
+          "unitId": "black_guard_naggarond",
+          "name": "Black Guard",
+          "count": 2
+        },
+        {
+          "unitId": "reaper_bolt_throwers",
+          "name": "Reaper Bolt Throwers",
+          "count": 2
+        },
+        {
+          "unitId": "cold_one_knights",
+          "name": "Cold One Knights",
+          "count": 2
+        },
+        {
+          "unitId": "black_dragon",
+          "name": "Black Dragon",
+          "count": 1
+        }
+      ]
+    }
+  ],
+  "stages": {
+    "start": {
+      "label": "Start",
+      "lordLevel": 3,
+      "pwrCap": 440,
+      "raceRate": {
+        "human": 0.4973958333333333,
+        "dwarf": 0.7390873015873016,
+        "orc": 0.3645833333333333,
+        "high_elf": 0.388640873015873,
+        "dark_elf": 0.5102926587301587
+      },
+      "raceVsRate": {
+        "human": {
+          "human": 0.5,
+          "dwarf": 0.15335648148148148,
+          "orc": 0.7309027777777778,
+          "high_elf": 0.6024305555555556,
+          "dark_elf": 0.5011574074074074
+        },
+        "dwarf": {
+          "human": 0.8466435185185185,
+          "dwarf": 0.5,
+          "orc": 0.8478009259259259,
+          "high_elf": 0.8292824074074074,
+          "dark_elf": 0.5920138888888888
+        },
+        "orc": {
+          "human": 0.2690972222222222,
+          "dwarf": 0.15219907407407407,
+          "orc": 0.5,
+          "high_elf": 0.5306712962962963,
+          "dark_elf": 0.41608796296296297
+        },
+        "high_elf": {
+          "human": 0.3975694444444444,
+          "dwarf": 0.1707175925925926,
+          "orc": 0.4693287037037037,
+          "high_elf": 0.5,
+          "dark_elf": 0.4427083333333333
+        },
+        "dark_elf": {
+          "human": 0.4988425925925926,
+          "dwarf": 0.4079861111111111,
+          "orc": 0.5839120370370371,
+          "high_elf": 0.5572916666666666,
+          "dark_elf": 0.5
+        }
+      },
+      "combos": [
+        {
+          "key": "human/swarm",
+          "race": "human",
+          "arch": "swarm",
+          "pwr": 411,
+          "gold": 1680,
+          "winRate": 0.18415178571428573,
+          "units": [
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 3
+            },
+            {
+              "unitId": "swordsmen",
+              "name": "Swordsmen",
+              "count": 3
+            },
+            {
+              "unitId": "empire_knights",
+              "name": "Empire Knights",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "human/elite",
+          "race": "human",
+          "arch": "elite",
+          "pwr": 430,
+          "gold": 1860,
+          "winRate": 0.6808035714285714,
+          "units": [
+            {
+              "unitId": "empire_knights",
+              "name": "Empire Knights",
+              "count": 3
+            },
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 3
+            },
+            {
+              "unitId": "swordsmen",
+              "name": "Swordsmen",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "human/balanced",
+          "race": "human",
+          "arch": "balanced",
+          "pwr": 430,
+          "gold": 1860,
+          "winRate": 0.6272321428571429,
+          "units": [
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 5
+            },
+            {
+              "unitId": "empire_knights",
+              "name": "Empire Knights",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "key": "dwarf/swarm",
+          "race": "dwarf",
+          "arch": "swarm",
+          "pwr": 415,
+          "gold": 1450,
+          "winRate": 0.7514880952380952,
+          "units": [
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 5
+            },
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 5
+            }
+          ]
+        },
+        {
+          "key": "dwarf/elite",
+          "race": "dwarf",
+          "arch": "elite",
+          "pwr": 415,
+          "gold": 1450,
+          "winRate": 0.7377232142857143,
+          "units": [
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 5
+            },
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 5
+            }
+          ]
+        },
+        {
+          "key": "dwarf/balanced",
+          "race": "dwarf",
+          "arch": "balanced",
+          "pwr": 415,
+          "gold": 1450,
+          "winRate": 0.7280505952380952,
+          "units": [
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 5
+            },
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 5
+            }
+          ]
+        },
+        {
+          "key": "orc/swarm",
+          "race": "orc",
+          "arch": "swarm",
+          "pwr": 440,
+          "gold": 1900,
+          "winRate": 0.4382440476190476,
+          "units": [
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 3
+            },
+            {
+              "unitId": "orc_goblin_archers",
+              "name": "Goblin Archers",
+              "count": 3
+            },
+            {
+              "unitId": "orc_boyz",
+              "name": "Orc Boyz",
+              "count": 2
+            },
+            {
+              "unitId": "orc_wolf_riders",
+              "name": "Goblin Wolf Riders",
+              "count": 2
+            },
+            {
+              "unitId": "boar_boyz",
+              "name": "Boar Boyz",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "orc/elite",
+          "race": "orc",
+          "arch": "elite",
+          "pwr": 437,
+          "gold": 1890,
+          "winRate": 0.4616815476190476,
+          "units": [
+            {
+              "unitId": "boar_boyz",
+              "name": "Boar Boyz",
+              "count": 2
+            },
+            {
+              "unitId": "orc_boyz",
+              "name": "Orc Boyz",
+              "count": 3
+            },
+            {
+              "unitId": "orc_wolf_riders",
+              "name": "Goblin Wolf Riders",
+              "count": 2
+            },
+            {
+              "unitId": "orc_goblin_archers",
+              "name": "Goblin Archers",
+              "count": 2
+            },
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "orc/balanced",
+          "race": "orc",
+          "arch": "balanced",
+          "pwr": 430,
+          "gold": 1735,
+          "winRate": 0.19382440476190477,
+          "units": [
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 4
+            },
+            {
+              "unitId": "orc_boyz",
+              "name": "Orc Boyz",
+              "count": 3
+            },
+            {
+              "unitId": "orc_goblin_archers",
+              "name": "Goblin Archers",
+              "count": 3
+            },
+            {
+              "unitId": "boar_boyz",
+              "name": "Boar Boyz",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "high_elf/swarm",
+          "race": "high_elf",
+          "arch": "swarm",
+          "pwr": 427,
+          "gold": 1620,
+          "winRate": 0.5874255952380952,
+          "units": [
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 3
+            },
+            {
+              "unitId": "archers",
+              "name": "Archers",
+              "count": 2
+            },
+            {
+              "unitId": "lothern_sea_guard",
+              "name": "Lothern Sea Guard",
+              "count": 2
+            },
+            {
+              "unitId": "silver_helms",
+              "name": "Silver Helms",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "high_elf/elite",
+          "race": "high_elf",
+          "arch": "elite",
+          "pwr": 406,
+          "gold": 1670,
+          "winRate": 0.34598214285714285,
+          "units": [
+            {
+              "unitId": "silver_helms",
+              "name": "Silver Helms",
+              "count": 2
+            },
+            {
+              "unitId": "lothern_sea_guard",
+              "name": "Lothern Sea Guard",
+              "count": 2
+            },
+            {
+              "unitId": "archers",
+              "name": "Archers",
+              "count": 2
+            },
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "high_elf/balanced",
+          "race": "high_elf",
+          "arch": "balanced",
+          "pwr": 399,
+          "gold": 1640,
+          "winRate": 0.23251488095238096,
+          "units": [
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 3
+            },
+            {
+              "unitId": "lothern_sea_guard",
+              "name": "Lothern Sea Guard",
+              "count": 2
+            },
+            {
+              "unitId": "silver_helms",
+              "name": "Silver Helms",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/swarm",
+          "race": "dark_elf",
+          "arch": "swarm",
+          "pwr": 428,
+          "gold": 1610,
+          "winRate": 0.40811011904761907,
+          "units": [
+            {
+              "unitId": "bleakswords",
+              "name": "Bleakswords",
+              "count": 2
+            },
+            {
+              "unitId": "dreadspears",
+              "name": "Dreadspears",
+              "count": 2
+            },
+            {
+              "unitId": "darkshards",
+              "name": "Darkshards",
+              "count": 2
+            },
+            {
+              "unitId": "dark_riders",
+              "name": "Dark Riders",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/elite",
+          "race": "dark_elf",
+          "arch": "elite",
+          "pwr": 437,
+          "gold": 1760,
+          "winRate": 0.7061011904761905,
+          "units": [
+            {
+              "unitId": "dark_riders",
+              "name": "Dark Riders",
+              "count": 2
+            },
+            {
+              "unitId": "darkshards",
+              "name": "Darkshards",
+              "count": 2
+            },
+            {
+              "unitId": "dreadspears",
+              "name": "Dreadspears",
+              "count": 2
+            },
+            {
+              "unitId": "bleakswords",
+              "name": "Bleakswords",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/balanced",
+          "race": "dark_elf",
+          "arch": "balanced",
+          "pwr": 428,
+          "gold": 1610,
+          "winRate": 0.4166666666666667,
+          "units": [
+            {
+              "unitId": "bleakswords",
+              "name": "Bleakswords",
+              "count": 2
+            },
+            {
+              "unitId": "dreadspears",
+              "name": "Dreadspears",
+              "count": 2
+            },
+            {
+              "unitId": "darkshards",
+              "name": "Darkshards",
+              "count": 2
+            },
+            {
+              "unitId": "dark_riders",
+              "name": "Dark Riders",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
+    "mid": {
+      "label": "Midgame",
+      "lordLevel": 6,
+      "pwrCap": 680,
+      "raceRate": {
+        "human": 0.39533730158730157,
+        "dwarf": 0.49962797619047616,
+        "orc": 0.7088293650793651,
+        "high_elf": 0.3240327380952381,
+        "dark_elf": 0.5721726190476191
+      },
+      "raceVsRate": {
+        "human": {
+          "human": 0.5,
+          "dwarf": 0.38078703703703703,
+          "orc": 0.1869212962962963,
+          "high_elf": 0.5920138888888888,
+          "dark_elf": 0.35185185185185186
+        },
+        "dwarf": {
+          "human": 0.6192129629629629,
+          "dwarf": 0.5,
+          "orc": 0.30844907407407407,
+          "high_elf": 0.7037037037037037,
+          "dark_elf": 0.36689814814814814
+        },
+        "orc": {
+          "human": 0.8130787037037037,
+          "dwarf": 0.6915509259259259,
+          "orc": 0.5,
+          "high_elf": 0.9016203703703703,
+          "dark_elf": 0.5682870370370371
+        },
+        "high_elf": {
+          "human": 0.4079861111111111,
+          "dwarf": 0.2962962962962963,
+          "orc": 0.09837962962962964,
+          "high_elf": 0.5,
+          "dark_elf": 0.3761574074074074
+        },
+        "dark_elf": {
+          "human": 0.6481481481481481,
+          "dwarf": 0.6331018518518519,
+          "orc": 0.43171296296296297,
+          "high_elf": 0.6238425925925926,
+          "dark_elf": 0.5
+        }
+      },
+      "combos": [
+        {
+          "key": "human/swarm",
+          "race": "human",
+          "arch": "swarm",
+          "pwr": 641,
+          "gold": 2850,
+          "winRate": 0.2570684523809524,
+          "units": [
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 2
+            },
+            {
+              "unitId": "swordsmen",
+              "name": "Swordsmen",
+              "count": 1
+            },
+            {
+              "unitId": "handgunners",
+              "name": "Handgunners",
+              "count": 1
+            },
+            {
+              "unitId": "halberdiers",
+              "name": "Halberdiers",
+              "count": 1
+            },
+            {
+              "unitId": "outriders",
+              "name": "Outriders",
+              "count": 1
+            },
+            {
+              "unitId": "war_wagons",
+              "name": "War Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "empire_knights",
+              "name": "Empire Knights",
+              "count": 1
+            },
+            {
+              "unitId": "reiksguard",
+              "name": "Reiksguard",
+              "count": 1
+            },
+            {
+              "unitId": "great_cannon",
+              "name": "Great Cannon",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "human/elite",
+          "race": "human",
+          "arch": "elite",
+          "pwr": 678,
+          "gold": 3120,
+          "winRate": 0.4211309523809524,
+          "units": [
+            {
+              "unitId": "great_cannon",
+              "name": "Great Cannon",
+              "count": 1
+            },
+            {
+              "unitId": "reiksguard",
+              "name": "Reiksguard",
+              "count": 2
+            },
+            {
+              "unitId": "war_wagons",
+              "name": "War Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "empire_knights",
+              "name": "Empire Knights",
+              "count": 1
+            },
+            {
+              "unitId": "outriders",
+              "name": "Outriders",
+              "count": 1
+            },
+            {
+              "unitId": "halberdiers",
+              "name": "Halberdiers",
+              "count": 1
+            },
+            {
+              "unitId": "handgunners",
+              "name": "Handgunners",
+              "count": 1
+            },
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 1
+            },
+            {
+              "unitId": "swordsmen",
+              "name": "Swordsmen",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "human/balanced",
+          "race": "human",
+          "arch": "balanced",
+          "pwr": 679,
+          "gold": 3345,
+          "winRate": 0.5078125,
+          "units": [
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 3
+            },
+            {
+              "unitId": "halberdiers",
+              "name": "Halberdiers",
+              "count": 3
+            },
+            {
+              "unitId": "great_cannon",
+              "name": "Great Cannon",
+              "count": 2
+            },
+            {
+              "unitId": "reiksguard",
+              "name": "Reiksguard",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "dwarf/swarm",
+          "race": "dwarf",
+          "arch": "swarm",
+          "pwr": 661,
+          "gold": 3205,
+          "winRate": 0.37351190476190477,
+          "units": [
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 2
+            },
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 1
+            },
+            {
+              "unitId": "thunderers",
+              "name": "Thunderers",
+              "count": 1
+            },
+            {
+              "unitId": "longbeards",
+              "name": "Longbeards",
+              "count": 1
+            },
+            {
+              "unitId": "gyrocopter",
+              "name": "Gyrocopter",
+              "count": 1
+            },
+            {
+              "unitId": "slayers",
+              "name": "Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "giant_slayers",
+              "name": "Giant Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "hammerers",
+              "name": "Hammerers",
+              "count": 1
+            },
+            {
+              "unitId": "dwarf_cannon",
+              "name": "Cannon",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dwarf/elite",
+          "race": "dwarf",
+          "arch": "elite",
+          "pwr": 680,
+          "gold": 3275,
+          "winRate": 0.49516369047619047,
+          "units": [
+            {
+              "unitId": "hammerers",
+              "name": "Hammerers",
+              "count": 1
+            },
+            {
+              "unitId": "dwarf_cannon",
+              "name": "Cannon",
+              "count": 1
+            },
+            {
+              "unitId": "giant_slayers",
+              "name": "Giant Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "slayers",
+              "name": "Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "longbeards",
+              "name": "Longbeards",
+              "count": 1
+            },
+            {
+              "unitId": "thunderers",
+              "name": "Thunderers",
+              "count": 2
+            },
+            {
+              "unitId": "gyrocopter",
+              "name": "Gyrocopter",
+              "count": 1
+            },
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 1
+            },
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dwarf/balanced",
+          "race": "dwarf",
+          "arch": "balanced",
+          "pwr": 655,
+          "gold": 3455,
+          "winRate": 0.6302083333333334,
+          "units": [
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 4
+            },
+            {
+              "unitId": "hammerers",
+              "name": "Hammerers",
+              "count": 3
+            },
+            {
+              "unitId": "dwarf_cannon",
+              "name": "Cannon",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "orc/swarm",
+          "race": "orc",
+          "arch": "swarm",
+          "pwr": 669,
+          "gold": 3000,
+          "winRate": 0.6778273809523809,
+          "units": [
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 3
+            },
+            {
+              "unitId": "orc_goblin_archers",
+              "name": "Goblin Archers",
+              "count": 2
+            },
+            {
+              "unitId": "savage_orc_arrer_boyz",
+              "name": "Savage Orc Arrers",
+              "count": 2
+            },
+            {
+              "unitId": "orc_boyz",
+              "name": "Orc Boyz",
+              "count": 2
+            },
+            {
+              "unitId": "orc_wolf_riders",
+              "name": "Goblin Wolf Riders",
+              "count": 2
+            },
+            {
+              "unitId": "orc_big_uns",
+              "name": "Orc Big 'Uns",
+              "count": 1
+            },
+            {
+              "unitId": "snotling_pump_wagons",
+              "name": "Pump Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "boar_boyz",
+              "name": "Boar Boyz",
+              "count": 1
+            },
+            {
+              "unitId": "savage_orc_boar_big_uns",
+              "name": "Savage Orc Boars",
+              "count": 1
+            },
+            {
+              "unitId": "rock_lobber",
+              "name": "Rock Lobber",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "orc/elite",
+          "race": "orc",
+          "arch": "elite",
+          "pwr": 676,
+          "gold": 3200,
+          "winRate": 0.7492559523809523,
+          "units": [
+            {
+              "unitId": "savage_orc_boar_big_uns",
+              "name": "Savage Orc Boars",
+              "count": 2
+            },
+            {
+              "unitId": "boar_boyz",
+              "name": "Boar Boyz",
+              "count": 2
+            },
+            {
+              "unitId": "orc_big_uns",
+              "name": "Orc Big 'Uns",
+              "count": 2
+            },
+            {
+              "unitId": "rock_lobber",
+              "name": "Rock Lobber",
+              "count": 1
+            },
+            {
+              "unitId": "orc_boyz",
+              "name": "Orc Boyz",
+              "count": 1
+            },
+            {
+              "unitId": "snotling_pump_wagons",
+              "name": "Pump Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "savage_orc_arrer_boyz",
+              "name": "Savage Orc Arrers",
+              "count": 1
+            },
+            {
+              "unitId": "orc_wolf_riders",
+              "name": "Goblin Wolf Riders",
+              "count": 1
+            },
+            {
+              "unitId": "orc_goblin_archers",
+              "name": "Goblin Archers",
+              "count": 1
+            },
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "orc/balanced",
+          "race": "orc",
+          "arch": "balanced",
+          "pwr": 672,
+          "gold": 3360,
+          "winRate": 0.6994047619047619,
+          "units": [
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 4
+            },
+            {
+              "unitId": "orc_big_uns",
+              "name": "Orc Big 'Uns",
+              "count": 3
+            },
+            {
+              "unitId": "rock_lobber",
+              "name": "Rock Lobber",
+              "count": 3
+            },
+            {
+              "unitId": "savage_orc_boar_big_uns",
+              "name": "Savage Orc Boars",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "key": "high_elf/swarm",
+          "race": "high_elf",
+          "arch": "swarm",
+          "pwr": 656,
+          "gold": 3025,
+          "winRate": 0.3396577380952381,
+          "units": [
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 2
+            },
+            {
+              "unitId": "archers",
+              "name": "Archers",
+              "count": 2
+            },
+            {
+              "unitId": "lothern_sea_guard",
+              "name": "Lothern Sea Guard",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_avelorn",
+              "name": "Sisters of Avelorn",
+              "count": 1
+            },
+            {
+              "unitId": "silver_helms",
+              "name": "Silver Helms",
+              "count": 1
+            },
+            {
+              "unitId": "white_lions",
+              "name": "White Lions",
+              "count": 1
+            },
+            {
+              "unitId": "dragon_princes",
+              "name": "Dragon Princes",
+              "count": 1
+            },
+            {
+              "unitId": "eagle_claw_bolt_thrower",
+              "name": "Eagle Thrower",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "high_elf/elite",
+          "race": "high_elf",
+          "arch": "elite",
+          "pwr": 661,
+          "gold": 3215,
+          "winRate": 0.24107142857142858,
+          "units": [
+            {
+              "unitId": "dragon_princes",
+              "name": "Dragon Princes",
+              "count": 2
+            },
+            {
+              "unitId": "white_lions",
+              "name": "White Lions",
+              "count": 1
+            },
+            {
+              "unitId": "eagle_claw_bolt_thrower",
+              "name": "Eagle Thrower",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_avelorn",
+              "name": "Sisters of Avelorn",
+              "count": 1
+            },
+            {
+              "unitId": "silver_helms",
+              "name": "Silver Helms",
+              "count": 1
+            },
+            {
+              "unitId": "lothern_sea_guard",
+              "name": "Lothern Sea Guard",
+              "count": 1
+            },
+            {
+              "unitId": "archers",
+              "name": "Archers",
+              "count": 1
+            },
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "high_elf/balanced",
+          "race": "high_elf",
+          "arch": "balanced",
+          "pwr": 666,
+          "gold": 3530,
+          "winRate": 0.3913690476190476,
+          "units": [
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 3
+            },
+            {
+              "unitId": "white_lions",
+              "name": "White Lions",
+              "count": 2
+            },
+            {
+              "unitId": "eagle_claw_bolt_thrower",
+              "name": "Eagle Thrower",
+              "count": 2
+            },
+            {
+              "unitId": "dragon_princes",
+              "name": "Dragon Princes",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/swarm",
+          "race": "dark_elf",
+          "arch": "swarm",
+          "pwr": 645,
+          "gold": 2945,
+          "winRate": 0.6781994047619048,
+          "units": [
+            {
+              "unitId": "bleakswords",
+              "name": "Bleakswords",
+              "count": 1
+            },
+            {
+              "unitId": "dreadspears",
+              "name": "Dreadspears",
+              "count": 1
+            },
+            {
+              "unitId": "darkshards",
+              "name": "Darkshards",
+              "count": 1
+            },
+            {
+              "unitId": "shades",
+              "name": "Shades",
+              "count": 1
+            },
+            {
+              "unitId": "dark_riders",
+              "name": "Dark Riders",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_slaughter",
+              "name": "Sisters of Slaughter",
+              "count": 1
+            },
+            {
+              "unitId": "har_ganeth_executioners",
+              "name": "Executioners",
+              "count": 1
+            },
+            {
+              "unitId": "witch_elves",
+              "name": "Witch Elves",
+              "count": 1
+            },
+            {
+              "unitId": "cold_one_knights",
+              "name": "Cold One Knights",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/elite",
+          "race": "dark_elf",
+          "arch": "elite",
+          "pwr": 664,
+          "gold": 3285,
+          "winRate": 0.7548363095238095,
+          "units": [
+            {
+              "unitId": "cold_one_knights",
+              "name": "Cold One Knights",
+              "count": 1
+            },
+            {
+              "unitId": "witch_elves",
+              "name": "Witch Elves",
+              "count": 1
+            },
+            {
+              "unitId": "har_ganeth_executioners",
+              "name": "Executioners",
+              "count": 1
+            },
+            {
+              "unitId": "reaper_bolt_throwers",
+              "name": "Reaper Bolt Throwers",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_slaughter",
+              "name": "Sisters of Slaughter",
+              "count": 1
+            },
+            {
+              "unitId": "shades",
+              "name": "Shades",
+              "count": 1
+            },
+            {
+              "unitId": "dark_riders",
+              "name": "Dark Riders",
+              "count": 1
+            },
+            {
+              "unitId": "darkshards",
+              "name": "Darkshards",
+              "count": 1
+            },
+            {
+              "unitId": "dreadspears",
+              "name": "Dreadspears",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/balanced",
+          "race": "dark_elf",
+          "arch": "balanced",
+          "pwr": 630,
+          "gold": 3370,
+          "winRate": 0.28348214285714285,
+          "units": [
+            {
+              "unitId": "bleakswords",
+              "name": "Bleakswords",
+              "count": 2
+            },
+            {
+              "unitId": "witch_elves",
+              "name": "Witch Elves",
+              "count": 2
+            },
+            {
+              "unitId": "reaper_bolt_throwers",
+              "name": "Reaper Bolt Throwers",
+              "count": 2
+            },
+            {
+              "unitId": "cold_one_knights",
+              "name": "Cold One Knights",
+              "count": 2
+            }
+          ]
+        }
+      ]
+    },
+    "end": {
+      "label": "Endgame",
+      "lordLevel": 10,
+      "pwrCap": 1000,
+      "raceRate": {
+        "human": 0.5277777777777778,
+        "dwarf": 0.43464781746031744,
+        "orc": 0.5033482142857143,
+        "high_elf": 0.5746527777777778,
+        "dark_elf": 0.4595734126984127
+      },
+      "raceVsRate": {
+        "human": {
+          "human": 0.5,
+          "dwarf": 0.6273148148148148,
+          "orc": 0.4832175925925926,
+          "high_elf": 0.4878472222222222,
+          "dark_elf": 0.53125
+        },
+        "dwarf": {
+          "human": 0.3726851851851852,
+          "dwarf": 0.5,
+          "orc": 0.40914351851851855,
+          "high_elf": 0.4652777777777778,
+          "dark_elf": 0.4479166666666667
+        },
+        "orc": {
+          "human": 0.5167824074074074,
+          "dwarf": 0.5908564814814815,
+          "orc": 0.5,
+          "high_elf": 0.36516203703703703,
+          "dark_elf": 0.5428240740740741
+        },
+        "high_elf": {
+          "human": 0.5121527777777778,
+          "dwarf": 0.5347222222222222,
+          "orc": 0.6348379629629629,
+          "high_elf": 0.5,
+          "dark_elf": 0.6666666666666666
+        },
+        "dark_elf": {
+          "human": 0.46875,
+          "dwarf": 0.5520833333333334,
+          "orc": 0.45717592592592593,
+          "high_elf": 0.3333333333333333,
+          "dark_elf": 0.5
+        }
+      },
+      "combos": [
+        {
+          "key": "human/swarm",
+          "race": "human",
+          "arch": "swarm",
+          "pwr": 983,
+          "gold": 4900,
+          "winRate": 0.5833333333333334,
+          "units": [
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 2
+            },
+            {
+              "unitId": "swordsmen",
+              "name": "Swordsmen",
+              "count": 1
+            },
+            {
+              "unitId": "handgunners",
+              "name": "Handgunners",
+              "count": 1
+            },
+            {
+              "unitId": "halberdiers",
+              "name": "Halberdiers",
+              "count": 1
+            },
+            {
+              "unitId": "outriders",
+              "name": "Outriders",
+              "count": 1
+            },
+            {
+              "unitId": "war_wagons",
+              "name": "War Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "empire_knights",
+              "name": "Empire Knights",
+              "count": 1
+            },
+            {
+              "unitId": "reiksguard",
+              "name": "Reiksguard",
+              "count": 1
+            },
+            {
+              "unitId": "greatswords",
+              "name": "Greatswords",
+              "count": 1
+            },
+            {
+              "unitId": "demigryph_knights",
+              "name": "Demigryph Knights",
+              "count": 1
+            },
+            {
+              "unitId": "great_cannon",
+              "name": "Great Cannon",
+              "count": 1
+            },
+            {
+              "unitId": "steam_tank",
+              "name": "Steam Tank",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "human/elite",
+          "race": "human",
+          "arch": "elite",
+          "pwr": 999,
+          "gold": 4955,
+          "winRate": 0.6369047619047619,
+          "units": [
+            {
+              "unitId": "steam_tank",
+              "name": "Steam Tank",
+              "count": 1
+            },
+            {
+              "unitId": "demigryph_knights",
+              "name": "Demigryph Knights",
+              "count": 1
+            },
+            {
+              "unitId": "great_cannon",
+              "name": "Great Cannon",
+              "count": 1
+            },
+            {
+              "unitId": "greatswords",
+              "name": "Greatswords",
+              "count": 1
+            },
+            {
+              "unitId": "reiksguard",
+              "name": "Reiksguard",
+              "count": 1
+            },
+            {
+              "unitId": "war_wagons",
+              "name": "War Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "empire_knights",
+              "name": "Empire Knights",
+              "count": 1
+            },
+            {
+              "unitId": "outriders",
+              "name": "Outriders",
+              "count": 2
+            },
+            {
+              "unitId": "halberdiers",
+              "name": "Halberdiers",
+              "count": 1
+            },
+            {
+              "unitId": "handgunners",
+              "name": "Handgunners",
+              "count": 1
+            },
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 1
+            },
+            {
+              "unitId": "swordsmen",
+              "name": "Swordsmen",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "human/balanced",
+          "race": "human",
+          "arch": "balanced",
+          "pwr": 970,
+          "gold": 5780,
+          "winRate": 0.3630952380952381,
+          "units": [
+            {
+              "unitId": "spearmen",
+              "name": "Spearmen",
+              "count": 2
+            },
+            {
+              "unitId": "greatswords",
+              "name": "Greatswords",
+              "count": 2
+            },
+            {
+              "unitId": "great_cannon",
+              "name": "Great Cannon",
+              "count": 2
+            },
+            {
+              "unitId": "demigryph_knights",
+              "name": "Demigryph Knights",
+              "count": 2
+            },
+            {
+              "unitId": "steam_tank",
+              "name": "Steam Tank",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "dwarf/swarm",
+          "race": "dwarf",
+          "arch": "swarm",
+          "pwr": 973,
+          "gold": 5030,
+          "winRate": 0.40922619047619047,
+          "units": [
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 2
+            },
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 1
+            },
+            {
+              "unitId": "thunderers",
+              "name": "Thunderers",
+              "count": 1
+            },
+            {
+              "unitId": "longbeards",
+              "name": "Longbeards",
+              "count": 1
+            },
+            {
+              "unitId": "gyrocopter",
+              "name": "Gyrocopter",
+              "count": 1
+            },
+            {
+              "unitId": "slayers",
+              "name": "Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "giant_slayers",
+              "name": "Giant Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "ironbreakers",
+              "name": "Ironbreakers",
+              "count": 1
+            },
+            {
+              "unitId": "hammerers",
+              "name": "Hammerers",
+              "count": 1
+            },
+            {
+              "unitId": "irondrakes",
+              "name": "Irondrakes",
+              "count": 1
+            },
+            {
+              "unitId": "dwarf_cannon",
+              "name": "Cannon",
+              "count": 1
+            },
+            {
+              "unitId": "organ_gun",
+              "name": "Organ Gun",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dwarf/elite",
+          "race": "dwarf",
+          "arch": "elite",
+          "pwr": 996,
+          "gold": 5115,
+          "winRate": 0.4382440476190476,
+          "units": [
+            {
+              "unitId": "irondrakes",
+              "name": "Irondrakes",
+              "count": 1
+            },
+            {
+              "unitId": "organ_gun",
+              "name": "Organ Gun",
+              "count": 1
+            },
+            {
+              "unitId": "hammerers",
+              "name": "Hammerers",
+              "count": 1
+            },
+            {
+              "unitId": "ironbreakers",
+              "name": "Ironbreakers",
+              "count": 1
+            },
+            {
+              "unitId": "dwarf_cannon",
+              "name": "Cannon",
+              "count": 1
+            },
+            {
+              "unitId": "giant_slayers",
+              "name": "Giant Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "slayers",
+              "name": "Slayers",
+              "count": 1
+            },
+            {
+              "unitId": "longbeards",
+              "name": "Longbeards",
+              "count": 2
+            },
+            {
+              "unitId": "thunderers",
+              "name": "Thunderers",
+              "count": 1
+            },
+            {
+              "unitId": "gyrocopter",
+              "name": "Gyrocopter",
+              "count": 1
+            },
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 1
+            },
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dwarf/balanced",
+          "race": "dwarf",
+          "arch": "balanced",
+          "pwr": 986,
+          "gold": 4730,
+          "winRate": 0.4564732142857143,
+          "units": [
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 6
+            },
+            {
+              "unitId": "hammerers",
+              "name": "Hammerers",
+              "count": 4
+            },
+            {
+              "unitId": "irondrakes",
+              "name": "Irondrakes",
+              "count": 3
+            }
+          ]
+        },
+        {
+          "key": "orc/swarm",
+          "race": "orc",
+          "arch": "swarm",
+          "pwr": 999,
+          "gold": 6315,
+          "winRate": 0.5431547619047619,
+          "units": [
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 1
+            },
+            {
+              "unitId": "orc_goblin_archers",
+              "name": "Goblin Archers",
+              "count": 1
+            },
+            {
+              "unitId": "savage_orc_arrer_boyz",
+              "name": "Savage Orc Arrers",
+              "count": 1
+            },
+            {
+              "unitId": "orc_boyz",
+              "name": "Orc Boyz",
+              "count": 1
+            },
+            {
+              "unitId": "orc_wolf_riders",
+              "name": "Goblin Wolf Riders",
+              "count": 1
+            },
+            {
+              "unitId": "orc_big_uns",
+              "name": "Orc Big 'Uns",
+              "count": 1
+            },
+            {
+              "unitId": "snotling_pump_wagons",
+              "name": "Pump Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "boar_boyz",
+              "name": "Boar Boyz",
+              "count": 1
+            },
+            {
+              "unitId": "savage_orc_boar_big_uns",
+              "name": "Savage Orc Boars",
+              "count": 1
+            },
+            {
+              "unitId": "rock_lobber",
+              "name": "Rock Lobber",
+              "count": 1
+            },
+            {
+              "unitId": "black_orcs",
+              "name": "Black Orcs",
+              "count": 1
+            },
+            {
+              "unitId": "trolls",
+              "name": "Trolls",
+              "count": 1
+            },
+            {
+              "unitId": "giant",
+              "name": "Giant",
+              "count": 1
+            },
+            {
+              "unitId": "arachnarok_spider",
+              "name": "Arachnarok Spider",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "orc/elite",
+          "race": "orc",
+          "arch": "elite",
+          "pwr": 999,
+          "gold": 6315,
+          "winRate": 0.5245535714285714,
+          "units": [
+            {
+              "unitId": "arachnarok_spider",
+              "name": "Arachnarok Spider",
+              "count": 1
+            },
+            {
+              "unitId": "giant",
+              "name": "Giant",
+              "count": 1
+            },
+            {
+              "unitId": "black_orcs",
+              "name": "Black Orcs",
+              "count": 1
+            },
+            {
+              "unitId": "trolls",
+              "name": "Trolls",
+              "count": 1
+            },
+            {
+              "unitId": "savage_orc_boar_big_uns",
+              "name": "Savage Orc Boars",
+              "count": 1
+            },
+            {
+              "unitId": "boar_boyz",
+              "name": "Boar Boyz",
+              "count": 1
+            },
+            {
+              "unitId": "orc_big_uns",
+              "name": "Orc Big 'Uns",
+              "count": 1
+            },
+            {
+              "unitId": "rock_lobber",
+              "name": "Rock Lobber",
+              "count": 1
+            },
+            {
+              "unitId": "orc_boyz",
+              "name": "Orc Boyz",
+              "count": 1
+            },
+            {
+              "unitId": "snotling_pump_wagons",
+              "name": "Pump Wagons",
+              "count": 1
+            },
+            {
+              "unitId": "savage_orc_arrer_boyz",
+              "name": "Savage Orc Arrers",
+              "count": 1
+            },
+            {
+              "unitId": "orc_wolf_riders",
+              "name": "Goblin Wolf Riders",
+              "count": 1
+            },
+            {
+              "unitId": "orc_goblin_archers",
+              "name": "Goblin Archers",
+              "count": 1
+            },
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "orc/balanced",
+          "race": "orc",
+          "arch": "balanced",
+          "pwr": 988,
+          "gold": 7020,
+          "winRate": 0.44233630952380953,
+          "units": [
+            {
+              "unitId": "goblins",
+              "name": "Goblins",
+              "count": 3
+            },
+            {
+              "unitId": "black_orcs",
+              "name": "Black Orcs",
+              "count": 3
+            },
+            {
+              "unitId": "rock_lobber",
+              "name": "Rock Lobber",
+              "count": 2
+            },
+            {
+              "unitId": "savage_orc_boar_big_uns",
+              "name": "Savage Orc Boars",
+              "count": 2
+            },
+            {
+              "unitId": "arachnarok_spider",
+              "name": "Arachnarok Spider",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "high_elf/swarm",
+          "race": "high_elf",
+          "arch": "swarm",
+          "pwr": 1000,
+          "gold": 5130,
+          "winRate": 0.48921130952380953,
+          "units": [
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 3
+            },
+            {
+              "unitId": "archers",
+              "name": "Archers",
+              "count": 1
+            },
+            {
+              "unitId": "lothern_sea_guard",
+              "name": "Lothern Sea Guard",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_avelorn",
+              "name": "Sisters of Avelorn",
+              "count": 1
+            },
+            {
+              "unitId": "silver_helms",
+              "name": "Silver Helms",
+              "count": 1
+            },
+            {
+              "unitId": "swordmasters_of_hoeth",
+              "name": "Swordmasters",
+              "count": 1
+            },
+            {
+              "unitId": "white_lions",
+              "name": "White Lions",
+              "count": 1
+            },
+            {
+              "unitId": "phoenix_guard",
+              "name": "Phoenix Guard",
+              "count": 1
+            },
+            {
+              "unitId": "dragon_princes",
+              "name": "Dragon Princes",
+              "count": 1
+            },
+            {
+              "unitId": "eagle_claw_bolt_thrower",
+              "name": "Eagle Thrower",
+              "count": 1
+            },
+            {
+              "unitId": "frostheart_phoenix",
+              "name": "Frostheart Phoenix",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "high_elf/elite",
+          "race": "high_elf",
+          "arch": "elite",
+          "pwr": 992,
+          "gold": 5720,
+          "winRate": 0.5502232142857143,
+          "units": [
+            {
+              "unitId": "sun_dragon",
+              "name": "Sun Dragon",
+              "count": 1
+            },
+            {
+              "unitId": "frostheart_phoenix",
+              "name": "Frostheart Phoenix",
+              "count": 1
+            },
+            {
+              "unitId": "dragon_princes",
+              "name": "Dragon Princes",
+              "count": 1
+            },
+            {
+              "unitId": "phoenix_guard",
+              "name": "Phoenix Guard",
+              "count": 1
+            },
+            {
+              "unitId": "white_lions",
+              "name": "White Lions",
+              "count": 1
+            },
+            {
+              "unitId": "swordmasters_of_hoeth",
+              "name": "Swordmasters",
+              "count": 1
+            },
+            {
+              "unitId": "eagle_claw_bolt_thrower",
+              "name": "Eagle Thrower",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_avelorn",
+              "name": "Sisters of Avelorn",
+              "count": 1
+            },
+            {
+              "unitId": "silver_helms",
+              "name": "Silver Helms",
+              "count": 1
+            },
+            {
+              "unitId": "lothern_sea_guard",
+              "name": "Lothern Sea Guard",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "high_elf/balanced",
+          "race": "high_elf",
+          "arch": "balanced",
+          "pwr": 984,
+          "gold": 5900,
+          "winRate": 0.6845238095238095,
+          "units": [
+            {
+              "unitId": "he_spearmen",
+              "name": "Spearmen",
+              "count": 2
+            },
+            {
+              "unitId": "phoenix_guard",
+              "name": "Phoenix Guard",
+              "count": 2
+            },
+            {
+              "unitId": "eagle_claw_bolt_thrower",
+              "name": "Eagle Thrower",
+              "count": 2
+            },
+            {
+              "unitId": "dragon_princes",
+              "name": "Dragon Princes",
+              "count": 2
+            },
+            {
+              "unitId": "sun_dragon",
+              "name": "Sun Dragon",
+              "count": 2
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/swarm",
+          "race": "dark_elf",
+          "arch": "swarm",
+          "pwr": 994,
+          "gold": 4605,
+          "winRate": 0.4661458333333333,
+          "units": [
+            {
+              "unitId": "bleakswords",
+              "name": "Bleakswords",
+              "count": 3
+            },
+            {
+              "unitId": "dreadspears",
+              "name": "Dreadspears",
+              "count": 2
+            },
+            {
+              "unitId": "darkshards",
+              "name": "Darkshards",
+              "count": 1
+            },
+            {
+              "unitId": "shades",
+              "name": "Shades",
+              "count": 1
+            },
+            {
+              "unitId": "dark_riders",
+              "name": "Dark Riders",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_slaughter",
+              "name": "Sisters of Slaughter",
+              "count": 1
+            },
+            {
+              "unitId": "har_ganeth_executioners",
+              "name": "Executioners",
+              "count": 1
+            },
+            {
+              "unitId": "witch_elves",
+              "name": "Witch Elves",
+              "count": 1
+            },
+            {
+              "unitId": "cold_one_knights",
+              "name": "Cold One Knights",
+              "count": 1
+            },
+            {
+              "unitId": "black_guard_naggarond",
+              "name": "Black Guard",
+              "count": 1
+            },
+            {
+              "unitId": "reaper_bolt_throwers",
+              "name": "Reaper Bolt Throwers",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/elite",
+          "race": "dark_elf",
+          "arch": "elite",
+          "pwr": 953,
+          "gold": 6855,
+          "winRate": 0.3482142857142857,
+          "units": [
+            {
+              "unitId": "black_dragon",
+              "name": "Black Dragon",
+              "count": 1
+            },
+            {
+              "unitId": "war_hydra",
+              "name": "War Hydra",
+              "count": 1
+            },
+            {
+              "unitId": "black_guard_naggarond",
+              "name": "Black Guard",
+              "count": 1
+            },
+            {
+              "unitId": "cold_one_knights",
+              "name": "Cold One Knights",
+              "count": 1
+            },
+            {
+              "unitId": "witch_elves",
+              "name": "Witch Elves",
+              "count": 1
+            },
+            {
+              "unitId": "har_ganeth_executioners",
+              "name": "Executioners",
+              "count": 1
+            },
+            {
+              "unitId": "reaper_bolt_throwers",
+              "name": "Reaper Bolt Throwers",
+              "count": 1
+            },
+            {
+              "unitId": "sisters_of_slaughter",
+              "name": "Sisters of Slaughter",
+              "count": 1
+            }
+          ]
+        },
+        {
+          "key": "dark_elf/balanced",
+          "race": "dark_elf",
+          "arch": "balanced",
+          "pwr": 975,
+          "gold": 6475,
+          "winRate": 0.5643601190476191,
+          "units": [
+            {
+              "unitId": "bleakswords",
+              "name": "Bleakswords",
+              "count": 3
+            },
+            {
+              "unitId": "black_guard_naggarond",
+              "name": "Black Guard",
+              "count": 2
+            },
+            {
+              "unitId": "reaper_bolt_throwers",
+              "name": "Reaper Bolt Throwers",
+              "count": 2
+            },
+            {
+              "unitId": "cold_one_knights",
+              "name": "Cold One Knights",
+              "count": 2
+            },
+            {
+              "unitId": "black_dragon",
+              "name": "Black Dragon",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

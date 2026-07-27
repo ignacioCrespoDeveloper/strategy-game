@@ -54,7 +54,7 @@ export async function handleLordCreate(req, res) {
 
   const cost = _recruitCost(playerLords.length);
   if ((player.coins || 0) < cost) {
-    return res.status(400).json({ ok: false, error: `Recruiting costs ${cost.toLocaleString()} 💰 gold. Not enough coins.` });
+    return res.status(400).json({ ok: false, error: `Recruiting costs ${cost.toLocaleString()} gold. Not enough coins.` });
   }
 
   // Deduct cost

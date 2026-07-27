@@ -193,20 +193,20 @@ const DiscoveryService = (() => {
   // Actual amount is determined by def.tier + lord level in _rollRewards.
   const _BASE_REWARDS = {
     // Tier 1
-    iron_vein:        { iron: 1,  xp: 15 },
+    iron_vein:        { stone: 1, xp: 15 },
     cliff_face:       { stone: 1, xp: 15 },
     fertile_fields:   { food: 1,  xp: 15 },
     river_crossing:   { food: 1,  xp: 15 },
     coin_cache:       { gold: 1,  xp: 15 },
     // Tier 2
     timber_cache:     { wood: 1,  xp: 30 },
-    abandoned_mine:   { iron: 1,  xp: 40 },
+    abandoned_mine:   { stone: 1, xp: 40 },
     stone_deposit:    { stone: 1, xp: 30 },
     wild_game:        { food: 1,  xp: 20 },
     lost_treasure:    { gold: 1,  xp: 60 },
     // Tier 3
     ancient_forest:   { wood: 1,  xp: 70  },
-    deep_ore_shaft:   { iron: 1,  xp: 80  },
+    deep_ore_shaft:   { stone: 1, xp: 80  },
     marble_quarry:    { stone: 1, xp: 80  },
     bountiful_hunt:   { food: 1,  xp: 60  },
     buried_vault:     { gold: 1,  xp: 100 },
@@ -231,7 +231,7 @@ const DiscoveryService = (() => {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  const _RES_TYPES = ['gold', 'food', 'wood', 'stone', 'iron'];
+  const _RES_TYPES = ['gold', 'food', 'wood', 'stone'];
 
   // Rolls loot for a discovery. Amounts scale by def.tier (1-3) × lord level.
   // Tier 1 → small, Tier 2 → medium, Tier 3 → large. Lord level adds +12%/level.
@@ -348,6 +348,16 @@ const DiscoveryService = (() => {
     _saveLog(all);
   }
 
+  // Clears only THIS lord's entries from the player's log — the log itself
+  // is stored per-player (see file header), shared across all of a
+  // player's lords, so a blind wipe would also erase other lords' history.
+  function clearLog(playerId, lordId) {
+    const all = _getLog();
+    if (!all[playerId]) return;
+    all[playerId] = all[playerId].filter(e => e.lordId !== lordId);
+    _saveLog(all);
+  }
+
   // Per-lord "seen since" timestamps, keyed { [playerId]: { [lordId]: ts } } —
   // each lord's Quests tab has its own log and its own unseen badge, so a
   // single per-player timestamp would mark lord B's entries seen just from
@@ -401,7 +411,7 @@ const DiscoveryService = (() => {
 
   return {
     search, claim, negotiate, getActive, expireOld, formatExpiry,
-    addLog, getLog, dismissLog, markLogSeen, getUnseenCount,
+    addLog, getLog, dismissLog, clearLog, markLogSeen, getUnseenCount,
     spawnBanditCamp,
     getSearchDuration, incrementFatigue, getFatigueCount,
   };

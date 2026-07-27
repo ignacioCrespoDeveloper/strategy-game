@@ -27,14 +27,23 @@ function load(relPath) {
 // Provide Math and console — engine files use them.
 // Omit window/document so files that check `typeof window`
 // will see it as undefined (same as browser, not Node).
-const _ctx = vm.createContext({ Math, console, Date });
+// gi() mirrors js/core/icons.js — data files call it in their icon fields,
+// and the markup must match what the client renders (campIcon etc. are
+// sent to the client and interpolated into innerHTML there).
+const _ctx = vm.createContext({
+  Math, console, Date,
+  gi: (name, cls) => '<svg class="gi' + (cls ? ' ' + cls : '') + '" viewBox="0 0 512 512" aria-hidden="true"><use href="#gi-' + name + '"/></svg>',
+});
 
 // ── Load order: deps before consumers ────────────────────────
 load('js/data/lord-classes.js');     // LORD_BASE_STATS, LORD_CLASSES
 load('js/data/stances.js');          // STANCE_DEFS
 load('js/data/units.js');            // UNIT_DEFS
 load('js/data/buildings.js');        // BUILDING_DEFS
+load('js/data/research.js');         // RESEARCH_DEFS, RESEARCH_TIERS (Library books)
 load('js/data/races.js');            // RACES
+load('js/domain/world.js');          // TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS (WorldService itself is unused here)
+load('js/domain/economy-core.js');   // EconomyCore — THE shared economy math (needs BUILDING_DEFS)
 load('js/data/battle-defs.js');      // TERRAIN_BATTLE_MODS, CAMP_DEFS
 load('js/data/discoveries.js');      // DISCOVERY_DEFS
 load('js/domain/battle-targeting.js');
@@ -42,17 +51,23 @@ load('js/domain/battle-morale.js');  // needs TERRAIN_BATTLE_MODS
 load('js/domain/battle-traits.js');
 load('js/domain/battle-engine.js'); // needs all above; buildContext() drives server-side PvE resolution
 
-export const BattleEngine        = _ctx.BattleEngine;
-export const UNIT_DEFS           = _ctx.UNIT_DEFS;
-export const BUILDING_DEFS       = _ctx.BUILDING_DEFS;
-export const RACES               = _ctx.RACES;
-export const TERRAIN_BATTLE_MODS = _ctx.TERRAIN_BATTLE_MODS;
-export const LORD_BASE_STATS     = _ctx.LORD_BASE_STATS;
-export const LORD_CLASSES        = _ctx.LORD_CLASSES;
-export const STANCE_DEFS         = _ctx.STANCE_DEFS;
-export const TALENT_POOL         = _ctx.TALENT_POOL;
-export const MOUNT_POOL          = _ctx.MOUNT_POOL;
-export const lordRansomCost      = _ctx.lordRansomCost;
-export const DISCOVERY_DEFS      = _ctx.DISCOVERY_DEFS;
-export const CAMP_DEFS           = _ctx.CAMP_DEFS;
-export const CAMP_LEVEL_LOOT     = _ctx.CAMP_LEVEL_LOOT;
+export const BattleEngine          = _ctx.BattleEngine;
+export const UNIT_DEFS             = _ctx.UNIT_DEFS;
+export const UNIT_ROSTER           = _ctx.UNIT_ROSTER;
+export const BUILDING_DEFS         = _ctx.BUILDING_DEFS;
+export const RESEARCH_DEFS         = _ctx.RESEARCH_DEFS;
+export const RESEARCH_TIERS        = _ctx.RESEARCH_TIERS;
+export const RACES                 = _ctx.RACES;
+export const EconomyCore           = _ctx.EconomyCore;
+export const TERRAIN_RESOURCE_MODS = _ctx.TERRAIN_RESOURCE_MODS;
+export const TERRAIN_STAT_MODS     = _ctx.TERRAIN_STAT_MODS;
+export const TERRAIN_BATTLE_MODS   = _ctx.TERRAIN_BATTLE_MODS;
+export const LORD_BASE_STATS       = _ctx.LORD_BASE_STATS;
+export const LORD_CLASSES          = _ctx.LORD_CLASSES;
+export const STANCE_DEFS           = _ctx.STANCE_DEFS;
+export const TALENT_POOL           = _ctx.TALENT_POOL;
+export const MOUNT_POOL            = _ctx.MOUNT_POOL;
+export const lordRansomCost        = _ctx.lordRansomCost;
+export const DISCOVERY_DEFS        = _ctx.DISCOVERY_DEFS;
+export const CAMP_DEFS             = _ctx.CAMP_DEFS;
+export const CAMP_LEVEL_LOOT       = _ctx.CAMP_LEVEL_LOOT;

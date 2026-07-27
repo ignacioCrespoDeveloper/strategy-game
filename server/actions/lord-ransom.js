@@ -38,7 +38,7 @@ export async function handleLordRansom(req, res) {
   const cost     = lordRansomCost(lord.level);
 
   if ((player.coins || 0) < cost) {
-    return res.status(400).json({ ok: false, error: `Not enough gold (need ${cost}💰)` });
+    return res.status(400).json({ ok: false, error: `Not enough gold (need ${cost})` });
   }
 
   player.coins             = (player.coins || 0) - cost;

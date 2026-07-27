@@ -1,29 +1,45 @@
 // =============================================
 //  city-view.js — Full-screen city management
+//
+//  OGame-style layout: tabs Overview · Resources ·
+//  Infrastructure · Military. Building tabs show a
+//  thumbnail grid with level badges; clicking a tile
+//  opens a detail panel ABOVE the grid (Improve /
+//  Tear down / requirements), mirroring OGame.
 // =============================================
 
 const CityView = (() => {
-  let _city      = null;
-  let _lord      = null;
-  let _player    = null;
+  let _city         = null;
+  let _lord         = null;
+  let _player       = null;
   let _bldTab       = 'overview';
   let _selectedStat = null;
+  let _selectedBld  = null;   // building id shown in the detail panel
   let _tickTimer    = null;
 
+  // Display order matches the HUD: wood → stone → food (food is scarcest).
   const RES = {
-    food:  { icon: '🌾', name: 'Food'  },
-    wood:  { icon: '🪵', name: 'Wood'  },
-    stone: { icon: '⛏',  name: 'Stone' },
-    iron:  { icon: '⚒',  name: 'Iron'  },
+    wood:  { icon: gi('wood-pile'), name: 'Wood'  },
+    stone: { icon: gi('war-pick'),  name: 'Stone' },
+    food:  { icon: gi('wheat'), name: 'Food'  },
   };
 
   const BLD_TABS = [
-    { id: 'overview',       label: 'Overview',       icon: '📊' },
-    { id: 'infrastructure', label: 'Infrastructure', icon: '🏛' },
-    { id: 'economy',        label: 'Economy',        icon: '💰' },
-    { id: 'military',       label: 'Military',       icon: '⚔'  },
-    { id: 'landmarks',      label: 'Landmarks',      icon: '🏵' },
+    { id: 'overview',       label: 'Overview',       icon: gi('histogram') },
+    { id: 'resources',      label: 'Resources',      icon: gi('wheat') },
+    { id: 'infrastructure', label: 'Infrastructure', icon: gi('capitol') },
+    { id: 'military',       label: 'Military',       icon: gi('crossed-swords')  },
   ];
+
+  // One tab per building group (the single-tab experiment was reverted).
+  // Landmarks live inside the Infrastructure tab.
+  const BLD_SECTIONS = {
+    resources:      { categories: ['resources'] },
+    infrastructure: { categories: ['infrastructure', 'landmarks'] },
+    military:       { categories: ['military'] },
+  };
+
+  const MAX_QUEUE = 5;
 
   // ── Entry point ───────────────────────────────────────────────
 
@@ -48,7 +64,8 @@ const CityView = (() => {
       _city = CityService.getById(_city.id);
     }
 
-    _bldTab = 'overview';
+    _bldTab      = 'overview';
+    _selectedBld = null;
 
     root.innerHTML = _shell();
     _renderContent();
@@ -61,7 +78,6 @@ const CityView = (() => {
   // ── Shell ─────────────────────────────────────────────────────
 
   function _shell() {
-    const race = RACES[_lord?.race] || {};
     return `
       <div class="city-view">
         <div class="cv-body">
@@ -75,7 +91,7 @@ const CityView = (() => {
         </div>
       </div>
       <button class="ov-float-map-btn" id="cv-map-btn">
-        <span>🗺</span><span>World Map</span>
+        <span>${gi('treasure-map')}</span><span>World Map</span>
       </button>
     `;
   }
@@ -131,7 +147,7 @@ const CityView = (() => {
       <div class="cvl-divider"></div>
 
       <div class="cvl-pop-row">
-        <span class="cvl-pop-label">👥 Population</span>
+        <span class="cvl-pop-label">${gi('three-friends')} Population</span>
         <span class="cvl-pop-value">${Math.floor(_city.population || 1000)}</span>
         <span class="cvl-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</span>
       </div>
@@ -189,7 +205,7 @@ const CityView = (() => {
           </div>
           <div class="cvl-stat2-desc">${meta.desc}</div>
         </div>
-        ${selected ? '<span class="cvl-stat2-filter-icon">🔍</span>' : ''}
+        ${selected ? '<span class="cvl-stat2-filter-icon">' + gi('magnifying-glass') + '</span>' : ''}
       </div>
     `;
   }
@@ -214,6 +230,17 @@ const CityView = (() => {
     }
   }
 
+  function _sectionBuildings(section) {
+    return Object.values(BUILDING_DEFS)
+      .filter(d => section.categories.includes(d.category))
+      .filter(def => {
+        const currentLvl = _city.buildings[def.id] || 0;
+        if (currentLvl > 0) return true; // already built — always show
+        const { locked } = BuildingUnlockService.check(_city, _lord, def);
+        return !locked;
+      });
+  }
+
   function _buildingsHtml() {
     const tabsHtml = `
       <div class="bld2-tabs">
@@ -229,21 +256,18 @@ const CityView = (() => {
       return tabsHtml + _overviewTabHtml();
     }
 
-    const buildings = Object.values(BUILDING_DEFS)
-      .filter(d => d.category === _bldTab)
-      .filter(def => {
-        const currentLvl = _city.buildings[def.id] || 0;
-        if (currentLvl > 0) return true; // already built — always show
-        const { locked } = BuildingUnlockService.check(_city, _lord, def);
-        return !locked;
-      });
-    const MAX_QUEUE  = 5;
-    const queueFull  = _city.constructionQueue.length >= MAX_QUEUE;
+    const section    = BLD_SECTIONS[_bldTab];
+    const buildings  = _sectionBuildings(section);
+    const selDef     = _selectedBld ? BUILDING_DEFS[_selectedBld] : null;
+    const selVisible = selDef && buildings.some(d => d.id === selDef.id);
 
+    // The detail panel opens BELOW the grid (drops down under the tiles).
     return tabsHtml +
-      (_bldTab === 'landmarks' ? _landmarkHeaderHtml() : '') +
-      `<div class="bld2-list">${buildings.map(def => _cardHtml(def, queueFull)).join('')}</div>`;
+      `<div class="bld3-grid">${buildings.map(def => _tileHtml(def)).join('')}</div>` +
+      (selVisible ? _detailHtml(selDef) : '');
   }
+
+  // ── Overview tab (kept as-is, minus iron, plus water) ─────────
 
   function _overviewTabHtml() {
     const stats    = CityStatsService.getStats(_city);
@@ -275,14 +299,10 @@ const CityView = (() => {
 
     const garrisonTotal = garrison.reduce((s, r) => s + r.count, 0);
 
-    const fmtRate    = n => n === 0 ? '—' : (n > 0 ? '+' : '') + (Number.isInteger(n) ? n : n.toFixed(1));
-    const fmtRateGold = n => { const r = Math.round(n); return (r > 0 ? '+' : '') + r + '/h'; };
+    const fmtRate = n => n === 0 ? '—' : (n > 0 ? '+' : '') + (Number.isInteger(n) ? n : n.toFixed(1));
 
     // Gold economy data
-    const player         = _player ? PlayerService.getById(_player.id) : null;
     const cityGoldRate   = ProductionService.getGoldRate(_city);
-    const empireGoldRate = ProductionService.getNetGoldRate(_player?.id || _city.playerId);
-    const goldRateClass  = empireGoldRate >= 0 ? 'cvov-rate-pos' : 'cvov-rate-neg';
 
     // Tier progress — T5 starts at 100k, peak goal is 150k
     const TIER_THRESHOLDS = [0, 10000, 25000, 50000, 100000, 150000];
@@ -340,7 +360,7 @@ const CityView = (() => {
             <div class="cvov-hero-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</div>
           </div>
           <div class="cvov-hero-gold">
-            <div class="cvov-hero-gold-rate">+${cityGoldRate}💰/h</div>
+            <div class="cvov-hero-gold-rate">+${cityGoldRate}${gi('two-coins')}/h</div>
             <div class="cvov-hero-gold-label">Gold / hr</div>
           </div>
         </div>
@@ -348,7 +368,7 @@ const CityView = (() => {
         <!-- Tier progress -->
         ${isPeakPop ? `
         <div class="cvov-tier-prog cvov-tier-prog--max">
-          <span>⭐ Peak Population — City fully developed</span>
+          <span>${gi('round-star')} Peak Population — City fully developed</span>
         </div>
         ` : `
         <div class="cvov-tier-prog">
@@ -362,7 +382,7 @@ const CityView = (() => {
         `}
 
         <div class="cvov-section">
-          <div class="cvov-section-title">🧱 Building Slots</div>
+          <div class="cvov-section-title">${gi('brick-wall')} Building Slots</div>
           <div class="cvov-slots-header">
             <span class="cvov-slots-label">Used: <strong>${usedSlots}</strong> / ${maxSlots}</span>
             <span class="cvov-slots-pct" style="color:${slotColor}">${slotPct}%</span>
@@ -374,7 +394,7 @@ const CityView = (() => {
         </div>
 
         <div class="cvov-section">
-          <div class="cvov-section-title">📦 Resources & Production</div>
+          <div class="cvov-section-title">${gi('wooden-crate')} Resources & Production</div>
           <div class="cvov-res-table">
             <div class="cvov-res-thead">
               <span class="cvov-res-th-res">Resource</span>
@@ -406,35 +426,43 @@ const CityView = (() => {
         </div>
 
         <div class="cvov-section">
-          <div class="cvov-section-title">📊 City Status</div>
+          <div class="cvov-section-title">${gi('histogram')} City Status</div>
           ${mainStats.map(key => _statRowHtml(key, stats[key], trends[key])).join('')}
         </div>
 
         <div class="cvov-section">
-          <div class="cvov-section-title">🛡 City Defenses</div>
+          <div class="cvov-section-title">${gi('round-shield')} City Defenses</div>
           ${extraStats.map(key => _statRowHtml(key, stats[key], trends[key])).join('')}
         </div>
 
         <div class="cvov-section">
-          <div class="cvov-section-title">⚔ Garrison <span class="cvov-garrison-count">${garrisonTotal} / 10</span></div>
+          <div class="cvov-section-title">${gi('guarded-tower')} Garrison <span class="cvov-garrison-count">${garrisonTotal} / 10</span></div>
           ${garrison.length === 0
             ? '<div class="cvl-garrison-empty">No garrison — build a Guard Post</div>'
-            : `<div class="cvl-garrison">${garrison.map(r => {
-                const def = UNIT_DEFS[r.unitId];
-                return `<div class="cvl-garrison-row">
-                  <span class="cvl-garrison-icon">${def?.icon || '⚔'}</span>
-                  <span class="cvl-garrison-name">${def?.name || r.unitId}</span>
-                  <span class="cvl-garrison-count">×${r.count}</span>
-                </div>`;
+            : `<div class="la-unit-cards cvl-garrison-cards">${garrison.flatMap(r => {
+                const def = UNIT_DEFS[r.unitId] || {};
+                const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
+                  : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
+                  : def.category === 'monster' ? ' la-unit-card--monster'
+                  : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+                const portrait = def.image
+                  ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || r.unitId}" loading="lazy">`
+                  : `<div class="la-uc-img la-uc-img--fallback">${def.icon || gi('crossed-swords')}</div>`;
+                return Array.from({ length: r.count }, () => `
+                  <div class="la-unit-card${tierClass}" title="${def.name || r.unitId}">
+                    <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
+                    ${portrait}
+                    ${giUnitType(def.category)}
+                  </div>`);
               }).join('')}</div>`
           }
         </div>
 
         ${_city.landmark ? `
         <div class="cvov-section">
-          <div class="cvov-section-title">🏵 Landmark</div>
+          <div class="cvov-section-title">${gi('obelisk')} Landmark</div>
           <div class="cvov-landmark-row">
-            <span class="cvov-lm-icon">${BUILDING_DEFS[_city.landmark]?.icon || '🏵'}</span>
+            <span class="cvov-lm-icon">${BUILDING_DEFS[_city.landmark]?.icon || gi('obelisk')}</span>
             <span class="cvov-lm-name">${BUILDING_DEFS[_city.landmark]?.name || _city.landmark}</span>
             <span class="cvov-lm-level">Lv ${_city.buildings[_city.landmark] || 1}</span>
           </div>
@@ -443,7 +471,7 @@ const CityView = (() => {
 
         ${uniqueEvents.length > 0 ? `
         <div class="cvov-section">
-          <div class="cvov-section-title">⚡ Active Effects</div>
+          <div class="cvov-section-title">${gi('power-lightning')} Active Effects</div>
           ${uniqueEvents.map(m => `
             <div class="cvl-event-row">
               <span class="cvl-event-name">${(m.source || '').replace('event:', '').replace(/_/g, ' ')}</span>
@@ -457,109 +485,162 @@ const CityView = (() => {
     `;
   }
 
-  function _landmarkHeaderHtml() {
-    const current = _city.landmark ? BUILDING_DEFS[_city.landmark] : null;
-    return `
-      <div class="bld2-lm-notice">
-        <div class="bld2-lm-notice-title">🏵 City Landmark</div>
-        <div class="bld2-lm-notice-body">Each city may construct ONE Landmark. Choose wisely — you cannot switch to a different one.</div>
-        ${current ? `
-          <div class="bld2-lm-active">
-            ${current.icon} <strong>${current.name}</strong> — Level ${_city.buildings[_city.landmark] || 1}
-          </div>
-        ` : `<div class="bld2-lm-none">No Landmark has been built in this city yet.</div>`}
-      </div>
-    `;
-  }
+  // ── Building state (shared by tile + detail panel) ────────────
+  // Mirrors server/actions/build.js's effectiveLevel stacking so the
+  // displayed cost/duration/max-level state matches what the server will
+  // actually do when Improve is clicked.
 
-  function _cardHtml(def, queueFull) {
-    const currentLvl    = _city.buildings[def.id] || 0;
-    // Same-building upgrades already queued push the next target level up,
-    // mirroring server/actions/build.js's effectiveLevel stacking so the
-    // displayed cost/duration/max-level state matches what the server will
-    // actually do when this card is clicked again.
+  function _bldState(def) {
+    const currentLvl     = _city.buildings[def.id] || 0;
     const queuedForThis  = _city.constructionQueue.filter(q => q.buildingId === def.id).length;
     const effectiveLevel = currentLvl + queuedForThis;
-    const targetLvl  = effectiveLevel + 1;
-    const atMax      = effectiveLevel >= def.maxLevel;
-    const inQueue    = queuedForThis > 0;
-    const isLandmark = !!def.isLandmark;
+    const targetLvl      = effectiveLevel + 1;
+    const atMax          = effectiveLevel >= def.maxLevel;
+    const inQueue        = queuedForThis > 0;
+    const queueFull      = _city.constructionQueue.length >= MAX_QUEUE;
 
     const { locked, reasons } = BuildingUnlockService.check(_city, _lord, def);
 
-    const playerRes = (_player && _player.resources) ? _player.resources : {};
-    const cost      = !atMax ? def.cost(targetLvl) : {};
-    const canAfford = !atMax && !locked && !queueFull &&
+    const playerRes  = (_player && _player.resources) ? _player.resources : {};
+    const cost       = !atMax ? def.cost(targetLvl) : {};
+    // affordable = pure resource check; canAfford additionally requires
+    // unlocked + queue space (drives the action button state).
+    const affordable = !atMax &&
       Object.entries(cost).every(([res, amt]) => amt <= 0 || Math.floor(playerRes[res] || 0) >= amt);
-    const duration  = !atMax ? TimeService.formatDuration(def.buildTime(targetLvl)) : '';
+    const canAfford  = affordable && !locked && !queueFull;
+    // Displayed duration matches the server: race construction_speed +
+    // Engineering Tomes research + this city's Town Hall
+    // (EconomyCore.getBuildTime on both sides).
+    const duration   = !atMax ? TimeService.formatDuration(EconomyCore.getBuildTime(
+      def, targetLvl,
+      RACES[_lord?.race]?.bonuses,
+      EconomyCore.getResearchEffects(_player?.research),
+      _city.buildings,
+    )) : '';
 
-    const effects   = def.effects ? def.effects(Math.max(1, currentLvl)) : [];
-    const prodNow   = currentLvl > 0 ? def.production(currentLvl) : {};
-    const prodNext  = !atMax ? def.production(targetLvl) : {};
-    const hasProdNow  = Object.values(prodNow).some(v => v > 0);
-    const hasProdNext = Object.values(prodNext).some(v => v > 0);
+    // When this building has queued upgrade(s): the finishAt of its LAST
+    // queued job — what the tile overlay counts down to.
+    const queueFinishAt = inQueue
+      ? Math.max(..._city.constructionQueue.filter(q => q.buildingId === def.id).map(q => q.finishAt))
+      : null;
 
-    // Button state
-    let btnLabel, btnClass, btnDisabled;
-    if (atMax) {
-      btnLabel = 'Max Level'; btnClass = 'bld2-btn--maxed'; btnDisabled = true;
-    } else if (locked) {
-      btnLabel = '🔒 Locked'; btnClass = 'bld2-btn--locked'; btnDisabled = true;
-    } else if (queueFull) {
-      btnLabel = 'Queue Full'; btnClass = 'bld2-btn--busy'; btnDisabled = true;
-    } else if (!canAfford) {
-      btnLabel = 'Need Resources'; btnClass = 'bld2-btn--cant'; btnDisabled = true;
-    } else if (inQueue) {
-      btnLabel = `▲ Queue Lv ${targetLvl}`; btnClass = 'bld2-btn--ready'; btnDisabled = false;
-    } else {
-      btnLabel = currentLvl === 0 ? '▶ Build' : '▲ Upgrade'; btnClass = 'bld2-btn--ready'; btnDisabled = false;
-    }
+    return { currentLvl, queuedForThis, effectiveLevel, targetLvl, atMax, inQueue, queueFull, locked, reasons, cost, affordable, canAfford, duration, queueFinishAt };
+  }
+
+  // ── Thumbnail grid tile ───────────────────────────────────────
+
+  function _tileHtml(def) {
+    const s = _bldState(def);
 
     let statHighlight = '';
     if (_selectedStat) {
-      const checkEffects = def.effects ? def.effects(Math.max(1, currentLvl)) : [];
+      const checkEffects = def.effects ? def.effects(Math.max(1, s.currentLvl)) : [];
       const impact = checkEffects
         .filter(e => e.stat === _selectedStat)
         .reduce((sum, e) => sum + e.value, 0);
-      statHighlight = impact > 0 ? 'bld2-card--stat-pos' : impact < 0 ? 'bld2-card--stat-neg' : 'bld2-card--stat-muted';
+      statHighlight = impact > 0 ? 'bld3-tile--stat-pos' : impact < 0 ? 'bld3-tile--stat-neg' : 'bld3-tile--stat-muted';
     }
 
-    const cardClasses = [
-      'bld2-card',
-      locked     ? 'bld2-card--locked'   : '',
-      atMax      ? 'bld2-card--maxed'    : '',
-      inQueue    ? 'bld2-card--inqueue'  : '',
-      isLandmark ? 'bld2-card--landmark' : '',
+    // Crossed-out state: buildable but the next level isn't affordable.
+    // (Queued buildings show the busy overlay instead; locked ones dim.)
+    const cant = !s.locked && !s.atMax && !s.inQueue && !s.affordable;
+
+    const classes = [
+      'bld3-tile',
+      _selectedBld === def.id ? 'bld3-tile--selected' : '',
+      s.locked   ? 'bld3-tile--locked'   : '',
+      s.atMax    ? 'bld3-tile--maxed'    : '',
+      s.inQueue  ? 'bld3-tile--inqueue'  : '',
+      cant       ? 'bld3-tile--cant'     : '',
+      def.isLandmark ? 'bld3-tile--landmark' : '',
       statHighlight,
     ].filter(Boolean).join(' ');
 
+    // Busy overlay (mirrors the lord cards' activity overlays): shown while
+    // this building has queued construction, with a live countdown.
+    const busyEta = s.inQueue ? Math.max(0, Math.round((s.queueFinishAt - TimeService.now()) / 1000)) : 0;
+    const busyOverlay = s.inQueue ? `
+      <span class="bld3-tile-busy">
+        <span class="bld3-tile-busy-icon">${gi('claw-hammer')}</span>
+        <span class="bld3-tile-busy-label">${s.currentLvl === 0 ? 'Building' : 'Upgrading'} → Lv ${s.effectiveLevel}</span>
+        <span class="bld3-tile-busy-cd" id="bld3-cd-${def.id}">${TimeService.formatDuration(busyEta)}</span>
+      </span>` : '';
+
+    // Can't afford → the tile just gets the diagonal-stripe treatment
+    // (same as the locked "Found City"/"Recruit Lord" add-cards, via the
+    // bld3-tile--cant class). The exact missing resources are shown in the
+    // detail panel when the tile is clicked.
+
+    // Same card grammar as the Overview's city/lord cards: art with a
+    // bottom fade on top, name + level row underneath.
     return `
-      <div class="${cardClasses}">
-        ${isLandmark ? '<div class="bld2-lm-banner">🏵 LANDMARK</div>' : ''}
+      <button class="${classes}" data-bld="${def.id}" title="${def.name}" aria-label="${def.name}, level ${s.currentLvl}">
+        <span class="bld3-tile-art">
+          ${def.image
+            ? `<img class="bld3-tile-img" src="${def.image}" alt="" loading="lazy" />`
+            : `<span class="bld3-tile-icon">${def.icon}</span>`}
+          <span class="bld3-tile-art-fade"></span>
+          ${def.isLandmark ? '<span class="bld3-tile-lm">' + gi('obelisk') + '</span>' : ''}
+          ${busyOverlay}
+        </span>
+        <span class="bld3-tile-info">
+          <span class="bld3-tile-name">${def.name}</span>
+          <span class="bld3-tile-level">${s.atMax ? 'MAX' : `Lv ${s.currentLvl}`}</span>
+        </span>
+      </button>
+    `;
+  }
 
-        <div class="bld2-card-main">
+  // ── Detail panel (drops down under the grid, OGame-style) ─────
 
-          <!-- Left: icon + level -->
-          <div class="bld2-icon-col">
-            <div class="bld2-icon">${def.icon}</div>
-            <div class="bld2-level-block ${atMax ? 'bld2-level--max' : ''}">
-              <div class="bld2-level-label">${atMax ? 'MAX' : 'LEVEL'}</div>
-              <div class="bld2-level-num">${atMax ? '✓' : currentLvl}</div>
-            </div>
-          </div>
+  function _detailHtml(def) {
+    const s = _bldState(def);
 
-          <!-- Center: info -->
-          <div class="bld2-center-col">
-            <div class="bld2-name">${def.name}</div>
-            <div class="bld2-desc">${def.description}</div>
+    const effects   = def.effects ? def.effects(Math.max(1, s.currentLvl)) : [];
+    const prodNow   = s.currentLvl > 0 ? def.production(s.currentLvl) : {};
+    const prodNext  = !s.atMax ? def.production(s.targetLvl) : {};
+    const hasProdNow  = Object.values(prodNow).some(v => v > 0);
+    const hasProdNext = Object.values(prodNext).some(v => v > 0);
+
+    // Improve button state
+    let btnLabel, btnClass, btnDisabled;
+    if (s.atMax) {
+      btnLabel = 'Max Level'; btnClass = 'bld2-btn--maxed'; btnDisabled = true;
+    } else if (s.locked) {
+      btnLabel = gi('padlock') + ' Locked'; btnClass = 'bld2-btn--locked'; btnDisabled = true;
+    } else if (s.queueFull) {
+      btnLabel = 'Queue Full'; btnClass = 'bld2-btn--busy'; btnDisabled = true;
+    } else if (!s.canAfford) {
+      btnLabel = 'Need Resources'; btnClass = 'bld2-btn--cant'; btnDisabled = true;
+    } else if (s.inQueue) {
+      btnLabel = `▲ Queue Lv ${s.targetLvl}`; btnClass = 'bld2-btn--ready'; btnDisabled = false;
+    } else {
+      btnLabel = s.currentLvl === 0 ? '▶ Build' : '▲ Improve'; btnClass = 'bld2-btn--ready'; btnDisabled = false;
+    }
+
+    const canTearDown = s.currentLvl > 0 && def.id !== 'town_hall' && !s.inQueue;
+
+    return `
+      <div class="bld3-detail ${def.isLandmark ? 'bld3-detail--landmark' : ''}">
+        <div class="bld3-detail-head">
+          <span class="bld3-detail-name">${def.isLandmark ? gi('obelisk') + ' ' : ''}${def.name}</span>
+          <span class="bld3-detail-level">${s.atMax ? 'Max Level' : `Level ${s.currentLvl}`}${s.inQueue ? ` <span class="bld3-detail-queued">(+${s.queuedForThis} queued)</span>` : ''}</span>
+          <button class="bld3-detail-close" id="bld3-close" aria-label="Close details">✕</button>
+        </div>
+        <div class="bld3-detail-body">
+          ${def.image
+            ? `<img class="bld3-detail-img" src="${def.image}" alt="${def.name}" />`
+            : `<div class="bld3-detail-icon">${def.icon}</div>`}
+          <div class="bld3-detail-info">
+            <div class="bld3-detail-desc">${def.description}</div>
 
             ${effects.length > 0 ? `
               <div class="bld2-effects-row">
                 ${effects.map(e => {
                   const meta = CityStatsService.META[e.stat];
                   if (!meta) return '';
-                  const cls     = e.value >= 0 ? 'eff-pos' : 'eff-neg';
-                  const active  = _selectedStat === e.stat ? ' eff-active' : '';
+                  const cls    = e.value >= 0 ? 'eff-pos' : 'eff-neg';
+                  const active = _selectedStat === e.stat ? ' eff-active' : '';
                   return `<span class="bld-eff-tag ${cls}${active}" title="${meta.label}">${meta.icon} ${e.value > 0 ? '+' : ''}${e.value}</span>`;
                 }).filter(Boolean).join('')}
               </div>
@@ -569,32 +650,68 @@ const CityView = (() => {
               <div class="bld2-prod-row">
                 ${hasProdNow ? `<span class="bld2-prod-cur">${_prodLine(prodNow)}</span>` : ''}
                 ${hasProdNow && hasProdNext ? `<span class="bld2-prod-sep">→</span>` : ''}
-                ${hasProdNext ? `<span class="bld2-prod-next">Lv ${targetLvl}: ${_prodLine(prodNext)}</span>` : ''}
+                ${hasProdNext ? `<span class="bld2-prod-next">Lv ${s.targetLvl}: ${_prodLine(prodNext)}</span>` : ''}
               </div>
             ` : ''}
 
-            ${locked ? `
-              <div class="bld2-reasons">
-                ${reasons.map(r => `<div class="bld2-reason">🔒 ${r}</div>`).join('')}
+            ${def.buildTimeDivisor ? `
+              <div class="bld2-prod-row">
+                ${s.currentLvl > 0 ? `<span class="bld2-prod-cur">${gi('claw-hammer')} City builds ${def.buildTimeDivisor(s.currentLvl).toLocaleString()}× faster</span>` : ''}
+                ${s.currentLvl > 0 && !s.atMax ? `<span class="bld2-prod-sep">→</span>` : ''}
+                ${!s.atMax ? `<span class="bld2-prod-next">Lv ${s.targetLvl}: ${def.buildTimeDivisor(s.targetLvl).toLocaleString()}× faster</span>` : ''}
               </div>
-            ` : !atMax ? `
+            ` : ''}
+
+            ${(() => {
+              // Veterancy line: this building trains units (any race's roster)
+              // → +2% attack/defense per level, summed across ALL cities.
+              const trains = typeof UNIT_ROSTER !== 'undefined' &&
+                Object.values(UNIT_ROSTER).some(r => r[def.id]);
+              if (trains) {
+                const totalLv = CityService.getPlayerCities(_player.id)
+                  .reduce((sum, c) => sum + (c.buildings?.[def.id] || 0), 0);
+                return `
+                  <div class="bld2-prod-row">
+                    <span class="bld2-prod-cur">${gi('crossed-swords')} Veterancy: +${totalLv * 2}% attack & defense for its units (empire-wide)</span>
+                    ${!s.atMax ? `<span class="bld2-prod-sep">→</span><span class="bld2-prod-next">+${(totalLv + 1) * 2}%</span>` : ''}
+                  </div>`;
+              }
+              if (def.garrisonRoster) {
+                return `
+                  <div class="bld2-prod-row">
+                    <span class="bld2-prod-cur">${gi('round-shield')} Garrison veterancy: +${((_city.buildings?.guard_post || 0) + (_city.buildings?.fortress || 0)) * 2}% attack & defense (this city)</span>
+                  </div>`;
+              }
+              return '';
+            })()}
+
+            ${s.locked ? `
+              <div class="bld2-reasons">
+                ${s.reasons.map(r => `<div class="bld2-reason">${gi('padlock')} ${r}</div>`).join('')}
+              </div>
+            ` : !s.atMax ? `
+              <div class="bld3-detail-req-title">Required to ${s.currentLvl === 0 ? 'build' : `improve to level ${s.targetLvl}`}:</div>
               <div class="bld2-cost-row">
-                ${_costHtml(cost)}
-                <span class="bld2-duration">⏱ ${duration}</span>
+                ${_costHtml(s.cost)}
+                <span class="bld2-duration">${gi('stopwatch')} ${s.duration}</span>
               </div>
             ` : ''}
           </div>
-
-          <!-- Right: action -->
-          <div class="bld2-action-col">
+          <div class="bld3-detail-actions">
             <button class="bld2-btn ${btnClass}" data-building="${def.id}" ${btnDisabled ? 'disabled' : ''}>
               ${btnLabel}
             </button>
-            ${!atMax && !locked ? `<div class="bld2-next-hint">→ Lv ${targetLvl}</div>` : ''}
+            ${!s.atMax && !s.locked ? `<div class="bld2-next-hint">→ Lv ${s.targetLvl}</div>` : ''}
+            ${canTearDown ? `
+              <button class="bld3-teardown-btn" data-demolish="${def.id}">
+                ${gi('trash-can')} Tear down
+              </button>
+            ` : ''}
           </div>
-
         </div>
-        ${locked ? '<div class="bld2-locked-veil"></div>' : ''}
+        ${def.id === 'library' && s.currentLvl > 0 ? `
+          <div class="rs-hint">${gi('open-book')} Books are researched in the <b>Research</b> tab — higher Library levels unlock more of them.</div>
+        ` : ''}
       </div>
     `;
   }
@@ -603,7 +720,6 @@ const CityView = (() => {
 
   function _queueBannerHtml() {
     if (_city.constructionQueue.length === 0) return '';
-    const MAX_QUEUE = 5;
     const item      = _city.constructionQueue[0];
     const def       = BUILDING_DEFS[item.buildingId];
     const secs      = ConstructionService.timeRemaining(_city);
@@ -628,12 +744,12 @@ const CityView = (() => {
 
     return `
       <div class="cv-queue-inner">
-        <span class="cv-queue-icon">🔨</span>
+        <span class="cv-queue-icon">${gi('claw-hammer')}</span>
         <span class="cv-queue-label">${def?.name || item.buildingId} → Level ${item.targetLevel}</span>
         <div class="cv-queue-bar"><div class="cv-queue-fill" id="cv-q-fill" style="transform:scaleX(${pct / 100})"></div></div>
         <span class="cv-queue-timer" id="cv-q-timer">${TimeService.formatDuration(secs)}</span>
         <button class="cv-boost-btn ${canBoost ? '' : 'cv-boost-btn--cant'}" id="cv-boost-btn" ${canBoost ? '' : 'disabled'}>
-          ⚡ ${boostCost}💎
+          ${gi('power-lightning')} ${boostCost}${gi('cut-diamond')}
         </button>
       </div>
       ${upcomingHtml ? `<div class="cv-queue-upcoming">${upcomingHtml}</div>` : ''}
@@ -655,7 +771,7 @@ const CityView = (() => {
       .filter(([, v]) => v > 0)
       .map(([res, v]) => {
         const has = Math.floor((_player?.resources || {})[res] || 0) >= v;
-        return `<span class="${has ? 'bld2-res' : 'bld2-res bld2-res--short'}">${RES[res]?.icon || res} ${v}</span>`;
+        return `<span class="${has ? 'bld2-res' : 'bld2-res bld2-res--short'}">${RES[res]?.icon || res} ${v.toLocaleString()}</span>`;
       })
       .join('');
   }
@@ -694,22 +810,63 @@ const CityView = (() => {
     // Category tab switching
     document.querySelectorAll('.bld2-tab[data-bldtab]').forEach(btn => {
       btn.addEventListener('click', () => {
-        _bldTab = btn.dataset.bldtab;
+        _bldTab      = btn.dataset.bldtab;
+        _selectedBld = null;
         _renderContent();
       });
     });
 
-    // Build / upgrade buttons
+    // Grid tile → open detail panel (below the grid; scroll it into view)
+    document.querySelectorAll('.bld3-tile[data-bld]').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const id = tile.dataset.bld;
+        _selectedBld = _selectedBld === id ? null : id;
+        _renderContent();
+        if (_selectedBld) {
+          document.querySelector('.bld3-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      });
+    });
+
+    // Detail panel close
+    document.getElementById('bld3-close')?.addEventListener('click', () => {
+      _selectedBld = null;
+      _renderContent();
+    });
+
+    // Improve / Build button
     document.querySelectorAll('.bld2-btn[data-building]:not([disabled])').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
         const result = await ServerActions.build(_city.id, btn.dataset.building);
         if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
-        _city = CityService.getById(_city.id);
+        _city   = CityService.getById(_city.id);
+        _player = PlayerService.getById(_player.id);
         _renderContent();
         _startCountdown();
-        EventBus.emit('resources:changed', _city.resources);
+        EventBus.emit('resources:changed');
         HUD.refresh();
+      });
+    });
+
+    // Tear down button
+    document.querySelectorAll('.bld3-teardown-btn[data-demolish]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const id  = btn.dataset.demolish;
+        const def = BUILDING_DEFS[id];
+        const lvl = _city.buildings[id] || 0;
+        if (!window.confirm(`Tear down ${def?.name || id} to level ${Math.max(0, lvl - 1)}? No resources are refunded.`)) return;
+        btn.disabled = true;
+        const result = await ServerActions.demolish(_city.id, id);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
+        _city   = CityService.getById(_city.id);
+        _player = PlayerService.getById(_player.id);
+        const lp = document.getElementById('cv-left');
+        if (lp) lp.innerHTML = _leftPanelHtml();
+        _renderContent();
+        EventBus.emit('resources:changed');
+        HUD.refresh();
+        _toast(`${def?.name || id} torn down.`);
       });
     });
   }
@@ -717,13 +874,13 @@ const CityView = (() => {
   async function _instantComplete() {
     if (_city.constructionQueue.length === 0) return;
     const btn = document.getElementById('cv-boost-btn');
-    if (btn) { btn.disabled = true; btn.textContent = '⏳ Completing…'; }
+    if (btn) { btn.disabled = true; btn.innerHTML = `${gi('hourglass')} Completing…`; }
 
     const result = await ServerActions.instantBuild(_city.id);
 
     if (!result.ok) {
       _toast(result.error || 'Failed to instant-complete');
-      if (btn) { btn.disabled = false; btn.textContent = '💎 Instant'; }
+      if (btn) { btn.disabled = false; btn.innerHTML = `${gi('cut-diamond')} Instant`; }
       return;
     }
 
@@ -761,6 +918,16 @@ const CityView = (() => {
       if (!timerEl) { _stopCountdown(); return; }
       timerEl.textContent = TimeService.formatDuration(ConstructionService.timeRemaining(_city));
       if (fillEl) fillEl.style.transform = `scaleX(${ConstructionService.progress(_city)})`;
+
+      // Patch each busy tile's countdown in place (last queued job per building)
+      const finishByBld = {};
+      _city.constructionQueue.forEach(q => {
+        finishByBld[q.buildingId] = Math.max(finishByBld[q.buildingId] || 0, q.finishAt);
+      });
+      Object.entries(finishByBld).forEach(([bid, finishAt]) => {
+        const el = document.getElementById(`bld3-cd-${bid}`);
+        if (el) el.textContent = TimeService.formatDuration(Math.max(0, Math.round((finishAt - TimeService.now()) / 1000)));
+      });
     }, 1000);
   }
 

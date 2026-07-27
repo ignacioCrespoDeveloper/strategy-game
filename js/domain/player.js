@@ -56,8 +56,9 @@ const PlayerService = (() => {
       passwordHash: _hash(password),
       createdAt:    TimeService.now(),
       lordId:       null,
-      coins:        600,
-      credits:      0,
+      // Starter kit — keep in sync with the authoritative server bootstrap (server/sync.js)
+      coins:        5000,
+      credits:      9999,
       honorPoints:  0,
     };
 
@@ -118,7 +119,7 @@ const PlayerService = (() => {
     const players = _getAll();
     const p = players[playerId];
     if (!p) return { ok: false, error: 'Player not found.' };
-    if ((p.credits || 0) < amount) return { ok: false, error: `Not enough credits. Need ${amount}💎, have ${p.credits || 0}💎.` };
+    if ((p.credits || 0) < amount) return { ok: false, error: `Not enough credits. Need ${amount}, have ${p.credits || 0}.` };
     players[playerId].credits = (p.credits || 0) - amount;
     _saveAll(players);
     return { ok: true, remaining: players[playerId].credits };

@@ -19,7 +19,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { BattleEngine, DISCOVERY_DEFS, CAMP_DEFS, CAMP_LEVEL_LOOT } from '../engine-loader.js';
+import { BattleEngine, DISCOVERY_DEFS, CAMP_DEFS, CAMP_LEVEL_LOOT, EconomyCore } from '../engine-loader.js';
 import { _checkLevelUp, _effectiveStats } from '../combat-resolver.js';
 
 // PvE only ever grants a flat honor gain on a win. PvP honor instead swings
@@ -83,7 +83,16 @@ export async function handlePveAttack(req, res) {
   };
 
   const army = armies[lordId] || { lordId, units: [] };
-  const battleCtx = BattleEngine.buildContext({ lord, army, encounter, terrain: record.terrain });
+  // Veterancy: the attacker's units fight with their training-building buff
+  // (summed across all their cities). Camp defenders have no buildings.
+  const cityBuildingsList = Object.values(cities || {})
+    .filter(c => c?.playerId === playerId)
+    .map(c => c.buildings)
+    .filter(Boolean);
+  const battleCtx = BattleEngine.buildContext({
+    lord, army, encounter, terrain: record.terrain,
+    veterancy: unitId => EconomyCore.getVeterancyPct(lord.race, unitId, cityBuildingsList),
+  });
   const report = BattleEngine.resolve(battleCtx);
   report._meta = {
     campName:  encounter.name,
@@ -135,18 +144,15 @@ export async function handlePveAttack(req, res) {
     goldEarned = report.loot?.gold || 0;
     if (goldEarned > 0) player.coins = (player.coins || 0) + goldEarned;
 
+    // Resource loot goes straight into the empire-wide pool — it used to be
+    // written to the vestigial per-city stockpile (city.resources), which
+    // nothing reads any more, silently losing the loot.
     resourceLoot = report.loot?.resource || null;
     if (resourceLoot && Object.keys(resourceLoot).length > 0) {
-      const cityList = Object.values(cities || {});
-      const city = cityList.find(c => c.playerId === playerId && c.x === lord.x && c.y === lord.y)
-        || cityList.find(c => c.playerId === playerId);
-      if (city) {
-        city.resources = city.resources || {};
-        Object.entries(resourceLoot).forEach(([type, amt]) => {
-          city.resources[type] = (city.resources[type] || 0) + amt;
-        });
-        cities[city.id] = city;
-      }
+      player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
+      Object.entries(resourceLoot).forEach(([type, amt]) => {
+        if (type in player.resources) player.resources[type] = (player.resources[type] || 0) + amt;
+      });
     }
   }
 

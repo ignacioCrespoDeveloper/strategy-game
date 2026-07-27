@@ -34,7 +34,7 @@ export async function handleLordMounts(req, res) {
   if (lord.mountId !== mountId) {
     const cost = mount.cost || 0;
     if ((player.coins || 0) < cost) {
-      return res.status(400).json({ ok: false, error: `Need ${cost}💰, have ${player.coins || 0}💰.` });
+      return res.status(400).json({ ok: false, error: `Need ${cost} gold, have ${player.coins || 0}.` });
     }
     player.coins = (player.coins || 0) - cost;
     lord.mountId = mountId;

@@ -1,8 +1,11 @@
 // =============================================
 //  catch-up.js — Offline progression engine
 //
-//  Pure ES module. Zero imports. Works identically
-//  in Node.js (≥ 16 with "type":"module") and Deno.
+//  Pure ES module. Zero imports. All game data and economy
+//  math arrive via the `engine` parameter (built from
+//  engine-loader.js by every caller) — the economy formulas
+//  themselves live in js/domain/economy-core.js and are
+//  NEVER duplicated here.
 //
 //  Takes a player's state snapshot + current timestamp,
 //  returns the updated state with all time-based
@@ -15,7 +18,7 @@
 //    ✓ Lord action queue completions (move + search)
 //    ✓ Building construction completions
 //    ✓ Unit recruitment completions (adds to army)
-//    ✓ Resource production (food/wood/stone/iron)
+//    ✓ Resource production (food/wood/stone × race × terrain)
 //    ✓ Population growth
 //    ✓ Gold income + upkeep deduction
 // =============================================
@@ -27,228 +30,6 @@ const _LORD_BASE_HP = 100;
 const _LORD_CLASS_HP_MOD = {
   warrior: 0, rogue: 0, priest: 0, mage: 0, dark_lord: 0,
 };
-
-// Buildings that set city.landmark on completion (isLandmark: true in buildings.js)
-const _LANDMARK_IDS = new Set([
-  'imperial_palace', 'sacred_grove', 'grand_forge',
-  'great_war_camp', 'slave_market', 'blood_citadel', 'dragon_lair',
-]);
-
-// ── Phase 1b: Building production & economic constants ────────
-
-// Mirrors buildings.js _scale()
-function _scale(base, factor, level) {
-  return Math.floor(base * Math.pow(factor, level - 1));
-}
-
-// Resource output per hour at building level l.
-// Matches each building's production(level) in buildings.js.
-const _BUILDING_PRODUCTION = {
-  farm:           l => ({ food:  _scale(30,  1.3,  l) }),
-  granary:        l => ({ food:  _scale(15,  1.25, l) }),
-  lumber_mill:    l => ({ wood:  _scale(25,  1.3,  l) }),
-  stone_quarry:   l => ({ stone: _scale(20,  1.3,  l) }),
-  iron_mine:      l => ({ iron:  _scale(15,  1.3,  l) }),
-  blacksmith:     l => ({ iron:  _scale(12,  1.25, l) }),
-  sacred_grove:   l => ({ food:  40 * l }),
-  grand_forge:    l => ({ iron:  80 * l }),
-  great_war_camp: l => ({ food:  60 * l }),
-  slave_market:   l => ({ food:  30 * l, iron: 30 * l }),
-};
-
-// Stat effects per building level → [[statName, value], ...].
-// Matches each building's effects(level) in buildings.js.
-const _BUILDING_EFFECTS = {
-  town_hall:            l => [['hygiene',6*l],['corruption',-4*l],['culture',3*l],['stability',3*l]],
-  aqueduct:             l => [['hygiene',8*l],['happiness',2*l]],
-  sewers:               l => [['hygiene',14*l]],
-  library:              l => [['culture',8*l],['stability',2*l]],
-  courthouse:           l => [['corruption',-5*l],['stability',4*l]],
-  temple:               l => [['religion',12*l],['happiness',5*l],['corruption',-3*l],['hygiene',2*l]],
-  farm:                 l => [['happiness',4*l],['unemployment',-5*l]],
-  granary:              l => [['happiness',3*l],['stability',4*l]],
-  lumber_mill:          l => [['unemployment',-4*l],['hygiene',-2*l]],
-  stone_quarry:         l => [['unemployment',-4*l],['happiness',-1*l]],
-  iron_mine:            l => [['unemployment',-4*l],['hygiene',-5*l],['happiness',-2*l]],
-  warehouse:            l => [['unemployment',-2*l]],
-  blacksmith:           l => [['unemployment',-4*l]],
-  tavern:               l => [['happiness',5*l],['culture',3*l],['unemployment',-3*l],['corruption',2*l]],
-  marketplace:          l => [['unemployment',-5*l],['corruption',6*l],['happiness',4*l],['culture',4*l]],
-  barracks:             l => [['unemployment',-6*l],['happiness',-3*l],['religion',-2*l],['security',5*l]],
-  watchtower:           l => [['security',10*l],['stability',2*l]],
-  archery_range:        l => [['security',3*l],['unemployment',-4*l]],
-  stables:              l => [['security',4*l],['unemployment',-3*l]],
-  monster_pit:          l => [['security',8*l],['happiness',-5*l]],
-  guard_post:           l => [['security',4*l],['unemployment',-3*l]],
-  fortress:             l => [['security',8*l],['stability',4*l],['happiness',-2*l]],
-  gunpowder_workshop:   l => [['security',3*l],['culture',2*l],['happiness',-1*l]],
-  engineering_guild:    l => [['security',6*l],['culture',4*l],['stability',3*l]],
-  engineering_workshop: l => [['security',4*l],['culture',3*l],['stability',2*l]],
-  slayer_lodge:         l => [['security',5*l],['stability',3*l],['happiness',-2*l]],
-  eagle_tower:          l => [['security',8*l],['culture',4*l]],
-  goblin_camp:          l => [['security',3*l],['happiness',-2*l]],
-  boar_pens:            l => [['security',5*l]],
-  monster_den:          l => [['security',10*l],['happiness',-5*l]],
-  siege_workshop:       l => [['security',6*l]],
-  dragon_lair:          l => [['security',15*l],['happiness',-8*l]],
-  imperial_palace:      l => [['happiness',8*l],['stability',10*l],['culture',6*l],['corruption',-5*l]],
-  sacred_grove:         l => [['culture',10*l],['happiness',7*l],['hygiene',6*l],['religion',5*l]],
-  grand_forge:          l => [['unemployment',-8*l],['stability',8*l],['hygiene',-4*l]],
-  great_war_camp:       l => [['unemployment',-15*l],['security',10*l],['stability',5*l],['happiness',-3*l]],
-  slave_market:         l => [['unemployment',-12*l],['corruption',8*l],['happiness',-5*l],['stability',-4*l]],
-  blood_citadel:        l => [['stability',12*l],['security',8*l],['religion',-8*l],['happiness',-5*l],['corruption',-4*l]],
-};
-
-// Race resource production multipliers (from races.js bonuses).
-const _RACE_BONUSES = {
-  human:    { food: 0.05, wood: 0.05, stone: 0.05, iron: 0.05 },
-  dwarf:    { food: 0.00, wood: 0.00, stone: 0.30, iron: 0.30 },
-  orc:      { food: 0.20, wood: 0.00, stone: 0.00, iron: 0.00 },
-  high_elf: { food: 0.15, wood: 0.10, stone: 0.00, iron: 0.00 },
-  dark_elf: { food: 0.00, wood: 0.20, stone: 0.00, iron: 0.30 },
-};
-
-// Unit upkeep gold/hour per unit. Mirrors units.js upkeep field.
-const _UNIT_UPKEEP = {
-  dreadspears:1, bleakswords:1, darkshards:1, witch_elves:1, dark_riders:1,
-  war_hydra:7, black_dragon:24,
-  dwarf_warriors:1, longbeards:1, thunderers:1, ironbreakers:3, slayers:1,
-  dwarf_cannon:3, gyrocopter:2,
-  spearmen:1, swordsmen:1, handgunners:1, empire_knights:1, greatswords:2,
-  steam_tank:11, great_cannon:3,
-  he_spearmen:1, archers:1, silver_helms:2, swordmasters_of_hoeth:2,
-  phoenix_guard:2, eagle_claw_bolt_thrower:2, star_dragon:20,
-  orc_boyz:1, orc_goblin_archers:1, boar_boyz:2, black_orcs:2, trolls:3,
-  rock_lobber:2, arachnarok_spider:13,
-  bandits:3, bandit_archers:4,
-  goblin_spearmen:2, crossbowmen:4,
-  ogre_bulls:12, ironguts:18,
-  goblin_rabble:0, goblin_archers:2, goblin_wolf_riders:5,
-  mercenary_spearmen:4, mercenary_crossbows:0,
-  forest_troll:0, ogre_warrior:0, ogre_champion:0,
-  dragon_guard:0, young_dragon:0,
-  city_guard:0, militia_archer:0, garrison_soldier:0,
-};
-
-// ── Phase 1b helpers ──────────────────────────────────────────
-
-const _STAT_BASE = {
-  corruption: 0, happiness: 50, hygiene: 50,
-  unemployment: 15, religion: 50, culture: 50,
-  stability: 50, security: 20,
-};
-
-function _clampStat(v) { return Math.max(0, Math.min(100, Math.round(v))); }
-
-// Mirrors CityStatsService.getStats() — no active-event modifiers (server side).
-function _getStats(buildings, population) {
-  const s = { ..._STAT_BASE };
-  for (const [id, lvl] of Object.entries(buildings || {})) {
-    if (!lvl || lvl <= 0) continue;
-    const efn = _BUILDING_EFFECTS[id];
-    if (!efn) continue;
-    for (const [stat, value] of efn(lvl)) s[stat] = (s[stat] || 0) + value;
-  }
-  const pop = population || 1000;
-  if (pop > 1000) {
-    s.hygiene      -= Math.floor((pop - 1000) / 2000);
-    s.unemployment += Math.floor((pop - 1000) / 5000);
-  }
-  for (const k of Object.keys(s)) s[k] = _clampStat(s[k]);
-  if (s.corruption   > 20) s.happiness  -= Math.floor((s.corruption   - 20) * 0.4);
-  if (s.culture      > 50) s.happiness  += Math.floor((s.culture      - 50) * 0.2);
-  if (s.religion     > 60) s.corruption -= Math.floor((s.religion     - 60) * 0.2);
-  if (s.unemployment > 20) s.happiness  -= Math.floor((s.unemployment - 20) * 0.3);
-  for (const k of Object.keys(s)) s[k] = _clampStat(s[k]);
-  return s;
-}
-
-// Mirrors ProductionService.getRates().
-function _getRates(buildings, raceId) {
-  const t = { food: 0, wood: 0, stone: 0, iron: 0 };
-  for (const [id, lvl] of Object.entries(buildings || {})) {
-    if (!lvl || lvl <= 0) continue;
-    const pfn = _BUILDING_PRODUCTION[id];
-    if (!pfn) continue;
-    for (const [res, amt] of Object.entries(pfn(lvl))) t[res] = (t[res] || 0) + amt;
-  }
-  const b = _RACE_BONUSES[raceId] || {};
-  t.food  = Math.floor(t.food  * (1 + (b.food  || 0)));
-  t.wood  = Math.floor(t.wood  * (1 + (b.wood  || 0)));
-  t.stone = Math.floor(t.stone * (1 + (b.stone || 0)));
-  t.iron  = Math.floor(t.iron  * (1 + (b.iron  || 0)));
-  return t;
-}
-
-// Mirrors ProductionService.getGoldRate().
-function _getGoldRate(city) {
-  const stats     = _getStats(city.buildings || {}, city.population || 1000);
-  const happiness = Math.max(0, stats.happiness);
-  const pop       = city.population || 1000;
-  let   rate      = pop * 0.013 * (happiness / 100);
-  const mkLevel   = (city.buildings || {}).marketplace || 0;
-  if (mkLevel > 0) rate *= (1 + 0.08 * mkLevel);
-  return Math.floor(rate);
-}
-
-// Mirrors CityStatsService.getPopulationGrowthRate().
-function _getPopGrowthRate(city, stats, rates) {
-  let pct = 0;
-
-  if      (stats.happiness >= 70) pct += 0.30;
-  else if (stats.happiness >= 50) pct += 0.15;
-  else if (stats.happiness >= 35) pct += 0.05;
-  else if (stats.happiness <  20) pct -= 0.20;
-  else                             pct -= 0.08;
-
-  if      (stats.hygiene >= 60) pct += 0.15;
-  else if (stats.hygiene <  25) pct -= 0.10;
-  else if (stats.hygiene <  10) pct -= 0.25;
-
-  const food = rates.food || 0;
-  if (food > 0)  pct += 0.08;
-  else           pct -= 0.05;
-
-  // Count stats in Warning or Critical
-  const warnings = Object.keys(stats).filter(k => {
-    const goodHigh = ['happiness','hygiene','religion','culture','stability','security'].includes(k);
-    const val = goodHigh ? stats[k] : (100 - stats[k]);
-    return val < 45;
-  }).length;
-  if (warnings >= 3) pct -= 0.10;
-  if (warnings >= 5) pct -= 0.20;
-
-  pct = Math.max(-0.50, Math.min(0.55, pct));
-  return Math.round(pct * 1130);
-}
-
-// Degrades buildings randomly when usedSlots > maxSlots (after a tier-downgrade).
-function _degradeExcessBuildings(city) {
-  const usedSlots = Object.values(city.buildings || {}).reduce((s, v) => s + v, 0);
-  const pop = city.population || 1000;
-  const maxSlots =
-    pop >= 100000 ? 150 :
-    pop >= 50000  ? 100 :
-    pop >= 25000  ? 75  :
-    pop >= 10000  ? 50  : 30;
-
-  let excess = usedSlots - maxSlots;
-  if (excess <= 0) return false;
-
-  const entries = Object.entries(city.buildings || {}).filter(([, v]) => v > 0);
-  for (let i = entries.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [entries[i], entries[j]] = [entries[j], entries[i]];
-  }
-  for (const [id, lvl] of entries) {
-    if (excess <= 0) break;
-    const degrade = Math.min(lvl, excess);
-    city.buildings[id] = lvl - degrade;
-    if (city.buildings[id] <= 0) delete city.buildings[id];
-    excess -= degrade;
-  }
-  return true;
-}
 
 // ── Lord helper ───────────────────────────────────────────────
 
@@ -267,7 +48,7 @@ function _raidHourlyRewards(lord) {
   const lvl  = lord.level || 1;
   const gold = Math.round(25 + lvl * 5);
   const res  = Math.round(15 + lvl * 3);
-  return { gold, food: res, wood: res, stone: res, iron: res };
+  return { gold, food: res, wood: res, stone: res };
 }
 
 // ── Server-side quest resolution helpers ──────────────────────
@@ -278,7 +59,7 @@ function _raidHourlyRewards(lord) {
 // Deterministic terrain — mirrors WorldService.getTerrain(). No storage needed.
 function _getTerrain(x, y) {
   const h = (((x * 1664525 + 1013904223) ^ (y * 214013 + 2531011)) >>> 0);
-  const keys = ['forest','forest','plains','plains','plains','hills','hills','marsh','mountain','desert'];
+  const keys = ['forest','forest','plains','plains','plains','mountain','mountain','marsh','mountain','desert'];
   return keys[h % keys.length];
 }
 
@@ -303,18 +84,13 @@ function _checkLevelUp(lord, engine) {
   }
 }
 
-// Army combat power from the armies map — mirrors _armyPower() in lord-screen.js.
-// Dampened per stack (count^0.8) to match battle-engine.js's _stackDamageMult —
-// otherwise this overvalues numerous cheap units relative to what they actually deal.
-function _armyPower(armies, lordId, UNIT_DEFS) {
+// Army combat power from the armies map — same PWR the recruit cap uses
+// (EconomyCore.getArmyPower: linear per-model cost + combat-trait tax), so
+// camp difficulty scales with the number the player actually sees.
+function _armyPower(armies, lordId, engine) {
   const army = armies?.[lordId];
-  if (!army?.units || !UNIT_DEFS) return 0;
-  return army.units.reduce((sum, u) => {
-    const d = UNIT_DEFS[u.unitId];
-    if (!d) return sum;
-    const s = d.combatStats || {};
-    return sum + ((s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0)) * Math.pow(u.count || 0, 0.8);
-  }, 0);
+  if (!army?.units || !engine?.EconomyCore) return 0;
+  return engine.EconomyCore.getArmyPower(army.units, engine.UNIT_DEFS);
 }
 
 // Weighted random roll over DISCOVERY_DEFS. Mirrors DiscoveryService._roll().
@@ -347,12 +123,12 @@ function _rollCampDetails(CAMP_DEFS, defId, armyPower) {
 
 // Loot roll for non-combat discoveries. Mirrors DiscoveryService._rollRewards().
 const _DISC_BASE_REWARDS = {
-  iron_vein: { iron: 1, xp: 15 }, cliff_face: { stone: 1, xp: 15 },
+  iron_vein: { stone: 1, xp: 15 }, cliff_face: { stone: 1, xp: 15 },
   fertile_fields: { food: 1, xp: 15 }, river_crossing: { food: 1, xp: 15 },
   coin_cache: { gold: 1, xp: 15 }, timber_cache: { wood: 1, xp: 30 },
-  abandoned_mine: { iron: 1, xp: 40 }, stone_deposit: { stone: 1, xp: 30 },
+  abandoned_mine: { stone: 1, xp: 40 }, stone_deposit: { stone: 1, xp: 30 },
   wild_game: { food: 1, xp: 20 }, lost_treasure: { gold: 1, xp: 60 },
-  ancient_forest: { wood: 1, xp: 70 }, deep_ore_shaft: { iron: 1, xp: 80 },
+  ancient_forest: { wood: 1, xp: 70 }, deep_ore_shaft: { stone: 1, xp: 80 },
   marble_quarry: { stone: 1, xp: 80 }, bountiful_hunt: { food: 1, xp: 60 },
   buried_vault: { gold: 1, xp: 100 }, ancient_ruins: { xp: 80 },
   abandoned_keep: { gold: 1, xp: 50 }, wandering_sage: { xp: 100 },
@@ -373,7 +149,7 @@ function _rollDiscRewards(def, lordLevel) {
   const base   = _DISC_BASE_REWARDS[def.id];
   const rewards = [];
   if (base) {
-    ['gold','food','wood','stone','iron'].forEach(t => {
+    ['gold','food','wood','stone'].forEach(t => {
       if (!base[t]) return;
       const [min, max] = t === 'gold'
         ? (def.id === 'lost_treasure' ? [80, 200] : ranges.gold)
@@ -414,7 +190,7 @@ function _resolveSearchArea(lord, armies, nowMs, engine) {
   };
 
   if (def.category === 'combat') {
-    const ap = _armyPower(armies, lord.id, UNIT_DEFS);
+    const ap = _armyPower(armies, lord.id, engine);
     record.campDetails = _rollCampDetails(CAMP_DEFS, def.id, ap);
     return { defId: def.id, category: def.category, record, rewards: [] };
   }
@@ -498,7 +274,7 @@ export function catchUp(state, nowMs, engine = null) {
           for (const r of (pending.rewards || [])) {
             if      (r.type === 'gold') player.coins = Math.floor((player.coins || 0) + r.amount);
             else if (r.type === 'xp')  lord.xp = (lord.xp || 0) + r.amount;
-            else if (['food','wood','stone','iron'].includes(r.type)) {
+            else if (['food','wood','stone'].includes(r.type)) {
               player.resources = player.resources || {};
               player.resources[r.type] = Math.floor((player.resources[r.type] || 0) + r.amount);
             }
@@ -568,8 +344,8 @@ export function catchUp(state, nowMs, engine = null) {
         const rates = _raidHourlyRewards(lord);
         const goldEarned = Math.floor(rates.gold * hours);
         player.coins      = Math.floor((player.coins || 0) + goldEarned);
-        player.resources  = player.resources || { food: 0, wood: 0, stone: 0, iron: 0 };
-        ['food', 'wood', 'stone', 'iron'].forEach(r => {
+        player.resources  = player.resources || { food: 0, wood: 0, stone: 0 };
+        ['food', 'wood', 'stone'].forEach(r => {
           player.resources[r] = Math.floor((player.resources[r] || 0) + rates[r] * hours);
         });
         lord.currentHp = maxHp;
@@ -596,7 +372,7 @@ export function catchUp(state, nowMs, engine = null) {
       if (nowMs < item.finishAt) return true;
       city.buildings = city.buildings || {};
       city.buildings[item.buildingId] = item.targetLevel;
-      if (_LANDMARK_IDS.has(item.buildingId)) city.landmark = item.buildingId;
+      if (engine?.BUILDING_DEFS?.[item.buildingId]?.isLandmark) city.landmark = item.buildingId;
       doneBuildings.push(item.buildingId);
       return false;
     });
@@ -638,24 +414,55 @@ export function catchUp(state, nowMs, engine = null) {
     changed = true;
   }
 
-  // One-time migration: seed player.resources from existing city stockpiles
+  // Seed / migrate the empire resource pool
   if (!player.resources) {
-    player.resources = { food: 0, wood: 0, stone: 0, iron: 0 };
-    for (const c of Object.values(cities)) {
-      if (!c?.id) continue;
-      for (const k of ['food','wood','stone','iron']) {
-        player.resources[k] = (player.resources[k] || 0) + Math.floor(c.resources?.[k] || 0);
-      }
-    }
+    player.resources = { food: 0, wood: 0, stone: 0 };
+    changed = true;
+  }
+  if ('iron' in player.resources) {
+    delete player.resources.iron; // legacy resource, removed in the OGame overhaul
+    changed = true;
   }
 
-  const mainLord = lords[player.lordId];
-  const raceId   = mainLord?.race || null;
-  let   totalGoldEarned = 0;
+  // Library research completion (empire-level, single slot). Level is
+  // stored on the queue item so no defs are needed to complete it.
+  if (Array.isArray(player.researchQueue) && player.researchQueue.length > 0) {
+    player.researchQueue = player.researchQueue.filter(item => {
+      if (nowMs < item.finishAt) return true;
+      player.research = player.research || {};
+      player.research[item.bookId] = item.targetLevel;
+      events.push({ type: 'research_completed', bookId: item.bookId, level: item.targetLevel });
+      changed = true;
+      return false;
+    });
+  }
+
+  // Economy (production/population/gold) requires the shared EconomyCore
+  // from engine-loader.js. Every normal caller passes it; the one deliberate
+  // exception is combat-resolver's offline-attacker position update, which
+  // passes no engine and only needs queues/positions — for that path the
+  // whole economy section is skipped WITHOUT advancing lastResourceUpdate,
+  // so no production is lost (the next real sync applies it).
+  const eco = engine?.EconomyCore;
+
+  const mainLord    = lords[player.lordId];
+  const raceId      = mainLord?.race || null;
+  const raceBonuses = engine?.RACES?.[raceId]?.bonuses || {};
+
+  // Race and Library-research production bonuses share the same flat keys —
+  // combine them once, then feed the merged object to getRates.
+  const researchFx  = eco ? eco.getResearchEffects(player.research) : {};
+  const prodBonuses = {};
+  for (const r of ['food', 'wood', 'stone']) {
+    prodBonuses[r + '_production'] = (raceBonuses[r + '_production'] || 0) + (researchFx[r + '_production'] || 0);
+  }
+
+  let totalGoldEarned = 0;
 
   const MAX_ELAPSED_H = 720; // cap at 30 days to avoid runaway catch-up
 
   for (const city of Object.values(cities)) {
+    if (!eco) break; // engine-less call — skip economy, see comment above
     if (!city?.id) continue;
 
     const lastUpdate = city.lastResourceUpdate;
@@ -664,22 +471,33 @@ export function catchUp(state, nowMs, engine = null) {
     const elapsedH = Math.min((nowMs - lastUpdate) / 3_600_000, MAX_ELAPSED_H);
     if (elapsedH <= 0) continue;
 
-    // Resource production → empire-wide player.resources pool
-    const rates = _getRates(city.buildings || {}, raceId);
+    // Terrain context — deterministic from coordinates, same as WorldService
+    const terrainKey  = (city.x != null && city.y != null) ? _getTerrain(city.x, city.y) : null;
+    const terrainMods = engine?.TERRAIN_RESOURCE_MODS?.[terrainKey] || {};
+
+    // Extra stat effects: active (non-expired) event modifiers + terrain stat mods
+    const extraEffects = [
+      ...(city.activeModifiers || []).filter(m => !m.expiresAt || nowMs < m.expiresAt),
+      ...(engine?.TERRAIN_STAT_MODS?.[terrainKey] || []),
+    ];
+
+    const stats = eco.getStats(city.buildings || {}, city.population || 1000, extraEffects);
+
+    // Resource production (race + research + terrain) → empire-wide pool
+    const rates = eco.getRates(city.buildings || {}, prodBonuses, terrainMods);
     for (const [res, perHour] of Object.entries(rates)) {
       if (perHour > 0) player.resources[res] = (player.resources[res] || 0) + perHour * elapsedH;
     }
 
     // Gold income (accumulated, applied to player after all cities)
-    totalGoldEarned += _getGoldRate(city) * elapsedH;
+    totalGoldEarned += eco.getGoldRate(city.buildings || {}, city.population, stats.happiness) * elapsedH;
 
     // Population growth
-    const stats   = _getStats(city.buildings || {}, city.population || 1000);
-    const popRate = _getPopGrowthRate(city, stats, rates);
+    const popRate = eco.getPopGrowthRate(stats, rates.food);
     if (popRate !== 0) {
       city.population = Math.max(1, Math.round((city.population || 1000) + popRate * elapsedH));
     }
-    _degradeExcessBuildings(city);
+    eco.degradeExcessBuildings(city);
 
     // freePopulation: +5/day ≈ 0.2083/h, cap 20
     city.freePopulation = Math.min(20, (city.freePopulation ?? 3) + (5 / 24) * elapsedH);
@@ -689,30 +507,13 @@ export function catchUp(state, nowMs, engine = null) {
     changed = true;
   }
 
-  // Gold income + upkeep — net once per player across all cities
-  const lastUpkeepAt   = player.lastUpkeepAt;
-  const upkeepElapsedH = lastUpkeepAt
-    ? Math.min((nowMs - lastUpkeepAt) / 3_600_000, MAX_ELAPSED_H)
-    : 0;
-
-  if (totalGoldEarned > 0 || upkeepElapsedH > 0) {
-    let upkeepPerHour = 0;
-    if (upkeepElapsedH > 0) {
-      for (const lord of Object.values(lords)) {
-        if (!lord?.id) continue;
-        upkeepPerHour += 5 + (lord.level || 1);
-      }
-      for (const army of Object.values(armies)) {
-        for (const stack of (army?.units || [])) {
-          upkeepPerHour += (_UNIT_UPKEEP[stack.unitId] || 0) * stack.count;
-        }
-      }
-    }
-    const upkeepCost = upkeepPerHour * upkeepElapsedH;
-    player.coins = Math.max(0, Math.floor((player.coins || 0) + totalGoldEarned - upkeepCost));
-    if (upkeepElapsedH > 0) player.lastUpkeepAt = nowMs;
+  // Gold income — upkeep was removed entirely (2026-07-27 review): armies
+  // are constrained by the PWR cap, not by maintenance costs.
+  if (eco && totalGoldEarned > 0) {
+    player.coins = Math.floor((player.coins || 0) + totalGoldEarned);
     changed = true;
   }
+  if ('lastUpkeepAt' in player) { delete player.lastUpkeepAt; changed = true; } // legacy field
 
   return { lords, cities, armies, player, events, changed };
 }

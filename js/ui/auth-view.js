@@ -29,7 +29,7 @@ const AuthView = (() => {
       <div class="auth-screen">
         <div class="auth-bg"></div>
         <div class="auth-card">
-          <div class="auth-logo">⚔</div>
+          <div class="auth-logo">${gi('crossed-swords')}</div>
           <h1 class="auth-title">HEXFRONT</h1>
           <p class="auth-tagline">Age of Lords</p>
 
@@ -83,6 +83,7 @@ const AuthView = (() => {
           </div>
 
         </div>
+        <p class="auth-credits">Icons by <a href="https://game-icons.net" target="_blank" rel="noopener">game-icons.net</a> (Lorc, Delapouite &amp; contributors), CC BY 3.0</p>
       </div>
     `;
     _bindEvents();
