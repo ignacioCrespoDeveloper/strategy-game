@@ -6,9 +6,14 @@
 //  Removes 1 model from the stack. If modelIdx === 0
 //  (the front / damaged model), clears currentHp so the
 //  next model in line starts fresh.
+//
+//  Refunds the model's gold cost scaled by its remaining
+//  HP: a fresh model refunds full price, a model at 10%
+//  HP refunds 10%. Only the front model can be damaged.
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
+import { UNIT_DEFS } from '../engine-loader.js';
 
 export async function handleArmyDisband(req, res) {
   const { lordId, unitId, modelIdx = 0 } = req.body || {};
@@ -31,13 +36,25 @@ export async function handleArmyDisband(req, res) {
     return res.status(400).json({ ok: false, error: 'Unit not found in army' });
   }
 
+  // HP-proportional refund — read the fraction BEFORE clearing HP tracking.
+  // Only the front model (modelIdx 0) can be damaged; everything behind it
+  // is fresh and refunds full price. goldCost-0 units refund nothing.
+  const def   = UNIT_DEFS[unitId];
+  const maxHp = def?.combatStats?.hp || 0;
+  const hpFrac = (modelIdx === 0 && stack.currentHp != null && maxHp > 0)
+    ? Math.min(1, Math.max(0, stack.currentHp / maxHp))
+    : 1;
+  const refund = Math.floor((def?.goldCost || 0) * hpFrac);
+
   stack.count -= 1;
   // If the front (damaged) model was removed, clear the HP tracking so
   // the next model shows as fresh.
   if (modelIdx === 0) stack.currentHp = null;
   army.units = army.units.filter(u => u.count > 0);
 
+  player.coins = (player.coins || 0) + refund;
+
   await saveState(admin, playerId, rawPlayers, { player, lords, cities, armies });
 
-  return res.json({ ok: true, army });
+  return res.json({ ok: true, army, player, refund });
 }

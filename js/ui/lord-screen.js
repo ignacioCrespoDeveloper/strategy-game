@@ -817,16 +817,6 @@ const LordScreen = (() => {
 
   // ── Army tab ──────────────────────────────────────────────────
 
-  function _traitBadgesHtml(def) {
-    if (!def.traits || def.traits.length === 0) return '';
-    const badges = def.traits.map(tid => {
-      const t = TRAIT_DEFS[tid];
-      if (!t) return '';
-      return `<span class="la-unit-trait" title="${t.description}">${t.name}</span>`;
-    }).join('');
-    return `<div class="la-unit-traits">${badges}</div>`;
-  }
-
   function _abilityBadgesHtml(def) {
     if (!def.abilities || def.abilities.length === 0) return '';
     const badges = def.abilities.map(aid => {
@@ -844,11 +834,6 @@ const LordScreen = (() => {
       return `<span class="la-unit-tag">${t ? t.name : tid}</span>`;
     }).join('');
     return `<div class="la-unit-tags">${badges}</div>`;
-  }
-
-  function _unitPortraitHtml(def) {
-    if (def.image) return `<img src="${def.image}" class="la-recruit-img" alt="${def.name}" loading="lazy">`;
-    return `<div class="la-recruit-icon">${def.icon}</div>`;
   }
 
   function _getLordCurrentCity() {
@@ -892,7 +877,7 @@ const LordScreen = (() => {
     }).join('');
 
     const removeBtn = removable
-      ? `<button class="la-uc-remove" data-unit-id="${def.id}" data-model-idx="${modelIdx}" title="Dismiss 1">×</button>`
+      ? `<button class="la-uc-remove" data-unit-id="${def.id}" data-model-idx="${modelIdx}" title="Dismiss 1 — refunds gold based on remaining HP">×</button>`
       : '';
 
     return `
@@ -1040,24 +1025,20 @@ const LordScreen = (() => {
             CityService.getPlayerCities(player.id).map(c => c.buildings));
           const atkShown = Math.round(def.combatStats.attack  * (1 + vetPct));
           const defShown = Math.round(def.combatStats.defense * (1 + vetPct));
-          return `
-            <div class="la-recruit-card ${queueFull ? 'la-recruit-card--busy' : ''}">
-              ${_unitPortraitHtml(def)}
-              <div class="la-recruit-body">
-                <div class="la-recruit-name">${def.name}${vetPct > 0 ? ` <span class="la-vet-badge" title="Veterancy from training buildings across your empire">+${Math.round(vetPct * 100)}%</span>` : ''}</div>
-                <div class="la-recruit-stats">${gi('crossed-swords')}${atkShown} ${gi('round-shield')}${defShown} ${gi('hearts')}${def.combatStats.hp} ${gi('wingfoot')}${def.combatStats.speed}</div>
-                <div class="la-recruit-cost">${gi('two-coins')}${def.goldCost} · ${gi('stopwatch')}${TimeService.formatDuration(recruitSecs)}</div>
-                ${_traitBadgesHtml(def)}
-                ${_abilityBadgesHtml(def)}
-                ${_tagBadgesHtml(def)}
-              </div>
+          return TechTreeScreen.unitCardHtml(def, {
+            extraClass: queueFull ? 'la-recruit-card--busy' : '',
+            nameSuffixHtml: vetPct > 0 ? ` <span class="la-vet-badge" title="Veterancy from training buildings across your empire">+${Math.round(vetPct * 100)}%</span>` : '',
+            stats: { attack: atkShown, defense: defShown },
+            costHtml: `<span class="tt-unit-cost">${gi('two-coins')} ${def.goldCost} · ${gi('stopwatch')} ${TimeService.formatDuration(recruitSecs)}</span>`,
+            bodyExtraHtml: `${_abilityBadgesHtml(def)}${_tagBadgesHtml(def)}`,
+            actionHtml: `
               <button class="la-recruit-btn bld-btn--ready" data-unit-id="${unitId}"
                       ${disabled ? 'disabled' : ''}>
                 ${btnLabel}
-              </button>
-            </div>
-          `;
+              </button>`,
+          });
         }).join('');
+        cardsHtml = `<div class="tt-unit-grid">${cardsHtml}</div>`;
       }
       recruitSectionHtml = `${queueHtml}${cardsHtml}`;
     }
@@ -1066,8 +1047,6 @@ const LordScreen = (() => {
     const mercDiscoveries = RecruitmentService.getAvailableFromDiscoveries(_player.id);
     let mercHtml = '';
     if (mercDiscoveries.length > 0) {
-      const cityQueue  = city ? (city.recruitmentQueue || []) : [];
-      const cityBusy   = cityQueue.length > 0;
       const mercGroups = mercDiscoveries.map(record => {
         const discDef = DISCOVERY_DEFS[record.definitionId];
         const cards   = (CAMP_DEFS[record.definitionId]?.mercenaryRoster || []).map(unitId => {
@@ -1077,24 +1056,17 @@ const LordScreen = (() => {
           const wouldExceedPower = _projectedArmyPower(_lord.id, unitId, 1) > maxPower;
           const disabled   = !canAfford || wouldExceedPower;
           const btnLabel   = wouldExceedPower ? gi('hazard-sign') + ' Power Limit' : canAfford ? 'Hire' : 'No gold';
-          return `
-            <div class="la-recruit-card">
-              ${_unitPortraitHtml(def)}
-              <div class="la-recruit-body">
-                <div class="la-recruit-name">${def.name} <span class="la-merc-badge">Mercenary</span></div>
-                <div class="la-recruit-stats">${gi('crossed-swords')}${def.combatStats.attack} ${gi('round-shield')}${def.combatStats.defense} ${gi('hearts')}${def.combatStats.hp} ${gi('wingfoot')}${def.combatStats.speed}</div>
-                <div class="la-recruit-cost">${gi('two-coins')}${def.goldCost} · Instant</div>
-                ${_traitBadgesHtml(def)}
-                ${_tagBadgesHtml(def)}
-              </div>
+          return TechTreeScreen.unitCardHtml(def, {
+            costHtml: `<span class="tt-unit-cost">${gi('two-coins')} ${def.goldCost} · Instant</span>`,
+            bodyExtraHtml: _tagBadgesHtml(def),
+            actionHtml: `
               <button class="la-recruit-btn la-hire-btn" data-unit-id="${unitId}"
                       ${disabled ? 'disabled' : ''}>
                 ${btnLabel}
-              </button>
-            </div>
-          `;
+              </button>`,
+          });
         }).join('');
-        return `<div class="la-merc-group"><div class="la-merc-group-title">${discDef?.icon || gi('crossed-swords')} ${discDef?.name || record.definitionId}</div>${cards}</div>`;
+        return `<div class="la-merc-group"><div class="la-merc-group-title">${discDef?.icon || gi('crossed-swords')} ${discDef?.name || record.definitionId}</div><div class="tt-unit-grid">${cards}</div></div>`;
       }).join('');
 
       mercHtml = `
@@ -1134,7 +1106,7 @@ const LordScreen = (() => {
           clearTimeout(btn._confirmTimer);
           btn._confirmTimer = setTimeout(() => {
             btn.classList.remove('la-uc-remove--confirm');
-            btn.title = 'Dismiss 1';
+            btn.title = 'Dismiss 1 — refunds gold based on remaining HP';
           }, 3000);
           return;
         }
@@ -1144,8 +1116,10 @@ const LordScreen = (() => {
         const modelIdx = parseInt(btn.dataset.modelIdx || '0', 10);
         const result   = await ServerActions.disbandUnit(_lord.id, unitId, modelIdx);
         if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
+        _player = PlayerService.getById(_player.id);
+        HUD.refresh();
         const def = UNIT_DEFS[unitId];
-        if (def) _toast(`${def.name} dismissed.`);
+        if (def) _toast(result.refund > 0 ? `${def.name} dismissed — ${result.refund} gold refunded.` : `${def.name} dismissed.`);
         _renderTab();
       });
     });

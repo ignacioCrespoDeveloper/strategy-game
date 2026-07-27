@@ -237,14 +237,23 @@ const TechTreeScreen = (() => {
     return sections.join('');
   }
 
-  function _unitCard(unit, buildingName, minLevel, status) {
-    const s = unit.combatStats || {};
+  // `opts` lets other screens (lord-screen recruitment) reuse this exact
+  // card while layering their own context on top:
+  //   stats          — {attack, defense, ...} overrides (e.g. veterancy-adjusted)
+  //   costHtml       — replaces the default gold-cost span (e.g. gold + train time)
+  //   nameSuffixHtml — appended after the unit name (e.g. veterancy badge)
+  //   bodyExtraHtml  — appended after traits (e.g. ability/tag badges)
+  //   actionHtml     — action strip at the bottom of the body (e.g. Recruit button)
+  //   extraClass     — additional class(es) on the card root
+  function _unitCard(unit, buildingName, minLevel, status, opts = {}) {
+    const s = { ...(unit.combatStats || {}), ...(opts.stats || {}) };
     const traitLabels = (unit.traits || []).map(t => {
       const def = typeof TRAIT_DEFS !== 'undefined' ? TRAIT_DEFS[t] : null;
       return def ? def.name : t.replace(/_/g, ' ');
     });
 
-    const lockedClass = status === 'locked' ? ' tt-card--locked' : '';
+    const lockedClass = (status === 'locked' ? ' tt-card--locked' : '')
+      + (opts.extraClass ? ` ${opts.extraClass}` : '');
     const raceInfo    = unit.race ? RACES[unit.race] : null;
     const raceBadge   = raceInfo
       ? `<span class="tt-unit-race">${raceInfo.icon} ${raceInfo.name}</span>`
@@ -257,16 +266,16 @@ const TechTreeScreen = (() => {
     // goldCost 0 marks camp-defender-only units (e.g. mercenary_spearmen) —
     // they're never actually hired for free, so show that plainly instead
     // of a misleading "💰 0".
-    const costHtml = unit.goldCost > 0
+    const costHtml = opts.costHtml !== undefined ? opts.costHtml : (unit.goldCost > 0
       ? `<span class="tt-unit-cost">${gi('two-coins')} ${unit.goldCost}</span>`
-      : `<span class="tt-unit-cost tt-unit-cost--none" title="Only encountered as a camp defender — not directly recruitable">${gi('campfire')} Camp Only</span>`;
+      : `<span class="tt-unit-cost tt-unit-cost--none" title="Only encountered as a camp defender — not directly recruitable">${gi('campfire')} Camp Only</span>`);
 
     return `
       <div class="tt-unit-card${lockedClass}">
         <div class="tt-uc-portrait">${portrait}${giUnitType(unit.category)}</div>
         <div class="tt-uc-body">
           <div class="tt-uc-top">
-            <span class="tt-unit-name">${unit.name}</span>
+            <span class="tt-unit-name">${unit.name}${opts.nameSuffixHtml || ''}</span>
             ${costHtml}
           </div>
           ${raceBadge}
@@ -281,7 +290,9 @@ const TechTreeScreen = (() => {
             <div class="tt-traits">
               ${traitLabels.map(t => `<span class="tt-trait">${t}</span>`).join('')}
             </div>` : ''}
+          ${opts.bodyExtraHtml || ''}
           ${buildingName ? `<div class="tt-unit-req">${gi('hammer-nails')} ${buildingName} Lv ${minLevel}+</div>` : ''}
+          ${opts.actionHtml ? `<div class="tt-uc-action">${opts.actionHtml}</div>` : ''}
         </div>
       </div>
     `;
@@ -307,5 +318,11 @@ const TechTreeScreen = (() => {
     });
   }
 
-  return { render };
+  // Public card builder so other screens (lord-screen recruitment) render
+  // the exact same unit card. See _unitCard for the supported opts.
+  function unitCardHtml(unit, opts = {}) {
+    return _unitCard(unit, opts.buildingName ?? null, opts.minLevel ?? null, opts.status ?? 'available', opts);
+  }
+
+  return { render, unitCardHtml };
 })();

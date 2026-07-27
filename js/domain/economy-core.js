@@ -342,9 +342,12 @@ var EconomyCore = (() => {
     else if (stats.happiness <  20) pct -= 0.20;
     else                             pct -= 0.08;
 
+    // Order matters: the harshest bracket must be checked first — with
+    // `< 25` before `< 10`, the `< 10` branch was unreachable and
+    // catastrophic hygiene was under-penalized (found 2026-07-27).
     if      (stats.hygiene >= 60) pct += 0.15;
-    else if (stats.hygiene <  25) pct -= 0.10;
     else if (stats.hygiene <  10) pct -= 0.25;
+    else if (stats.hygiene <  25) pct -= 0.10;
 
     if ((foodRate || 0) > 0) pct += 0.08;
     else                     pct -= 0.05;

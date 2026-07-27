@@ -4,6 +4,26 @@ Ten items, grounded in what's actually in the code today (verified by reading
 the relevant files, not assumed). Each entry has: **Current state**, **Plan**,
 and **Suggestions**. A recommended priority order is at the bottom.
 
+> **2026-07-27 mega-update:** items **#4 (Army costs & PWR)** and **#5 (talent
+> battle hooks)** are now ✅ DONE, delivered as part of a much larger pass:
+> - PWR unified into `EconomyCore` (getUnitPower/getArmyPower — linear stack
+>   cost, weighted combat-trait tax); all nine former formula copies deleted.
+> - Unit gold pricing is now formula-driven: `gold = PWR × 3.5 × tier premium`
+>   (1.0 line / 1.5 cav-elite-flying-merc / 2.0 artillery-monster / 3.0
+>   legendary), mercenaries included, with a drift-guard in the economy suite.
+> - **29 new TWW3 units** across all five races (full building-chain tiers),
+>   art wired for all but two (Halberdiers, Sisters of Slaughter).
+> - Battle engine v2: linear stack damage, melee/charge overkill spillover
+>   (×0.5/hop), round-3+ breakthrough targeting, power-based (HP-aware)
+>   morale, 15 rounds max with a 10% draw band, terror capped −25/side.
+> - Nine traits implemented that were flavor-only: heavy_armor, stubborn,
+>   fearless, coward, accurate, duelist, anti_infantry, monster (×1.3 dmg),
+>   double_strike — each priced in the PWR tax table.
+> - Race progression curves tuned per stage (start/mid/endgame) with a
+>   3-tournament balance suite (`scripts/test-balance.js`) + live matchup
+>   matrices in `army-guide.html`. All endgame guardrails green.
+> - See `TESTING.md` and memory for the full methodology.
+
 ---
 
 ## 1. Lord Captured vs. Lord Fallen
@@ -102,7 +122,18 @@ parallel system.
 
 ---
 
-## 4. Review Army Costs & PWR
+## 4. Review Army Costs & PWR — ✅ DONE 2026-07-27 (except two leftovers below)
+
+**Done:** PWR extracted to `EconomyCore` (single source, linear stack cost,
+weighted trait taxes); cost-per-PWR curve is now the intentional, documented
+`PWR × 3.5 × tier premium` formula (old 30–45× swing eliminated); the balance
+suite regression-guards it all. **Still open from this item:**
+- Delete `js/domain/recruitment.js`'s dead weight/slot system (→ #9 cleanup).
+- **Unit health regeneration** (Known Issue #6) — still not designed/built.
+
+<details><summary>Original item (for history)</summary>
+
+## (original) 4. Review Army Costs & PWR
 
 **Current state:** The PWR formula —
 `unitPower = attack*3 + defense*2 + floor(hp/10) + speed`, dampened by
@@ -141,9 +172,21 @@ do it *after* Garrisons/Conquest land, since those may introduce new unit
 needs (garrison-specific units?) worth folding into the same balance pass
 rather than redoing it twice.
 
+</details>
+
 ---
 
-## 5. Lord Talents — Verify (and Fix) Battle Application
+## 5. Lord Talents — ✅ RESOLVED 2026-07-27 (verify pass recommended)
+
+Both missing trait hooks now exist in the battle engine: `double_strike`
+(30% second melee attack — also used by Hammerers/White Lions) and
+`pyroblast` (round-1 magic splash, suppresses regeneration). All four combat
+talents are mechanically live. Remaining: a quick manual pass in the Battle
+Simulator to eyeball each talent's effect in a report, then close.
+
+<details><summary>Original item (for history)</summary>
+
+## (original) 5. Lord Talents — Verify (and Fix) Battle Application
 
 **Current state:** Mostly already working. `TALENT_POOL`
 (`js/data/lord-classes.js`) has 11 talents — 4 combat (`blademaster`,
@@ -172,6 +215,8 @@ whole effect). This is a silent no-op for half the combat talent pool.
 
 **Suggestions:** Small, contained, no dependencies — good candidate to slot
 in early or opportunistically alongside any other item.
+
+</details>
 
 ---
 
@@ -327,19 +372,24 @@ teeth; cleanup and the wiki should trail the features they document; the
 Google login item is pure external config that can happen anytime in
 parallel):
 
-1. **Lord Captured vs. Fallen** — contained, no dependencies, adds real
+1. **Database reset** (`reset-db`) before serious playtesting — existing
+   accounts carry pre-overhaul prices, removed buildings and old-economy
+   wallets; nothing else can be honestly evaluated until this happens.
+2. **Lord Captured vs. Fallen** — contained, no dependencies, adds real
    risk/reward.
-2. **Garrisons on cities** — needed before conquest means anything.
-3. **Conquest on cities** — builds on #2 for a cohesive "wars have stakes"
+3. **Garrisons on cities** — needed before conquest means anything.
+4. **Conquest on cities** — builds on #3 for a cohesive "wars have stakes"
    milestone.
-4. **Lord talents battle fixes** (`double_strike`/`pyroblast`) — small,
-   independent, quick win, slot in anytime.
-5. **Army costs & PWR review** — best done once #2/#3 settle any new unit
-   needs, so it's one full pass, not two.
-6. **Quests refactor** — independent; prioritize the same-tile bugfix early
+5. **Quests refactor** — independent; prioritize the same-tile bugfix early
    since it's a silent, trust-eroding failure.
-7. **Google login config** — external, non-blocking, can happen whenever.
-8. **Clean up** — after 1–6, so it captures debt from those changes too.
-9. **UI/icons/images final pass** — after all new screens (conquest,
-   garrisons, capture/fallen) exist, as one consolidated pass.
-10. **Wiki** — last, once the ruleset is stable.
+6. **Unit health regeneration** — the surviving piece of old item #4.
+7. **PvE camp difficulty recheck** — camps got effectively stronger under
+   linear damage + the monster ×1.3 buff; the level curves were tuned
+   pre-overhaul.
+8. **Google login config** — external, non-blocking, can happen whenever.
+9. **Clean up** — after the above, so it captures their debt too (includes
+   dead `recruitment.js`, legacy `checkIncomingAttacks`, `/api/debug/lords`).
+10. **UI/icons/images final pass** — after all new screens exist.
+11. **Wiki** — last, once the ruleset is stable (the balance rules are now
+    stable enough to start drafting the Combat + Units chapters from
+    `army-guide.html` and `TESTING.md`).

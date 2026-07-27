@@ -471,10 +471,20 @@ const ServerActions = (() => {
   // modelIdx: 0 = front (possibly damaged) model, 1+ = healthy models.
   async function disbandUnit(lordId, unitId, modelIdx = 0) {
     const result = await _post('/api/army/disband', { lordId, unitId, modelIdx });
-    if (result.ok && result.army) {
-      const armies = StorageService.get('armies') || {};
-      armies[result.army.lordId] = result.army;
-      StorageService.hydrate({ armies });
+    if (result.ok) {
+      const patch = {};
+      if (result.army) {
+        const armies               = StorageService.get('armies') || {};
+        armies[result.army.lordId] = result.army;
+        patch.armies               = armies;
+      }
+      // Player comes back with the HP-proportional gold refund applied
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
     }
     return result;
   }

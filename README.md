@@ -93,15 +93,31 @@ the first entity genuinely shared across multiple players at once — so they
 get their own dedicated `clans` / `clan_wars` tables instead.
 
 ### Core mechanics today
+- **Economy (OGame model)** — wood/stone/food production on OGame curves,
+  gold from population, water/hygiene as the energy analogue, march food
+  cost per tile (the deuterium role), Library research books, Town Hall as
+  the nanite-style build accelerator. One formula source for everything:
+  `js/domain/economy-core.js` (EconomyCore), loaded by browser AND server.
+- **Armies & PWR** — units cost ONLY gold, priced by formula
+  (`gold = PWR × 3.5 × tier premium`); the sole army constraint is the PWR
+  cap (200 + 80×lord level). PWR = stats + a weighted tax for every combat
+  trait, linear per model. No upkeep of any kind. Veterancy: +2% atk/def per
+  training-building level summed across all cities.
+- **Units** — 5 races × ~13-unit TWW3-style rosters gated by building levels
+  (Barracks/Archery/Stables chains up to Monster Pit and Dragon Lair), each
+  race with a distinct progression curve (dwarfs peak early, orcs mid,
+  high elves late) and race-exclusive combat traits (stubborn, dodge,
+  accurate, duelist...).
 - **Lords** — classes (Warrior/Mage/Rogue/Priest...), leveling, talents
-  (combat talents actually modify the lord's battle stats/traits; strategic
-  talents affect quest speed, XP, command capacity, etc.), stances (idle,
-  raiding, ambush...).
+  (all four combat talents mechanically live), stances (idle, raiding,
+  ambush — see Known Issue #5 on ambush).
 - **Cities** — building tiers, production, population/growth status, a
   building-derived garrison (see ROADMAP.md #3 for what's still missing here).
-- **Battle Engine** — phased resolution (ranged → melee → morale/rout),
-  traits/abilities per unit, a standalone Battle Simulator to theorycraft
-  matchups without spending real armies.
+- **Battle Engine** — phased resolution (ranged → charge → melee → morale)
+  over up to 15 rounds; ~20 implemented traits; overkill spillover in
+  contact phases; frontline screening with round-3+ breakthrough;
+  power-based morale with terror/fear capped per side; near-tie grinds end
+  in an honest draw. A standalone Battle Simulator theorycrafts matchups.
 - **PvP & PvE** — attacking enemy lords/cities or bandit/monster camps;
   honor points swing based on power destroyed vs. the opponent's strength.
 - **Rankings** — 5-tab leaderboard (Overall/Infrastructure/Lords/Militar/
@@ -109,6 +125,18 @@ get their own dedicated `clans` / `clan_wars` tables instead.
 - **Clans & Wars** — create/apply/leader-approve/kick, a member roster with
   honor + ranking points, and time-boxed clan-vs-clan wars scored by power
   destroyed; allies (same clan) can't attack each other.
+
+### Tests & live dashboards
+```bash
+node scripts/run-all-tests.js        # all three suites → test-results.json
+node scripts/test-economy.js         # 57 checks, in-process, ~1s
+node scripts/test-balance.js         # staged balance sim (start/mid/end), ~20s
+node scripts/test-battle-movement.js # live 5-account integration, ~3 min
+node scripts/generate-army-guide.js  # rebuild army-guide.html from the sim
+```
+With the dev server running: **test-status.html** (live suite dashboard) and
+**army-guide.html** (race matchup matrices per game stage + top army
+compositions) are served at the server root. See `TESTING.md` for details.
 
 ---
 
@@ -123,6 +151,14 @@ get their own dedicated `clans` / `clan_wars` tables instead.
 | 5 | Stances | Ambush stance can never actually be observed server-side by anyone. Entering it (`LordService.enterStance`, `js/domain/lord.js`) only mutates `localStorage` — `js/core/storage.js`'s `SERVER_KEYS` set includes `'lords'`, so that write is explicitly skipped from the Supabase sync queue and never reaches the server. `resolveScout()` (`server/combat-resolver.js`), the only code that checks for an ambushing lord, reads the Supabase `lords` row — which never has the ambush stance on it. Unlike raiding (`server/actions/raid-start.js`), there is no server endpoint to enter ambush at all. Found 2026-07-25 while writing `TESTING.md`'s integration test. | **Open** — needs a real `/api/lord/ambush-start`-style endpoint; see `TESTING.md` |
 | 6 | Armies | **Units have no health regeneration.** Unit damage persists between battles (`combat-resolver.js` writes surviving stacks' `currentHp` back to the stored army after every fight) but nothing ever heals them: the only heal paths in the codebase are the raiding-stance passive full-heal (`server/tick/catch-up.js` §1d) and disbanding the damaged front model (`army-disband.js`). Lords regen 2% of maxHp per minute (`catch-up.js` §1b); units never regen at all. A wounded army stays wounded forever unless it raids. Reported 2026-07-27. | **Open** — see ROADMAP.md #4 |
 | 7 | Quests | Reported 2026-07-27: **quests got completed without anything happening** — no reward, discovery, or feedback on completion. Possibly the same root cause as issue #1 (same-tile credit-finish), but this report suggests it may not be limited to the credit-finish path. Needs repro details next time it happens: timer-finish vs credit-finish, and whether the lord was on the same tile as the quest. | **Open** — see ROADMAP.md #6 |
+| 8 | Data | **Existing accounts are stale after the 2026-07-27 economy/roster overhaul**: they hold pre-formula gold prices, units that changed stats/traits, levels in buildings that no longer exist, and pre-overhaul wallets. A database reset (`reset-db`) is required before any honest playtesting. | **Open — blocks playtesting** |
+| 9 | Economy | `EconomyCore.getPopGrowthRate` has an **unreachable branch**: `else if (hygiene < 25) −0.10; else if (hygiene < 10) −0.25` — the `< 10` case can never fire because `< 25` catches it first. Cities with catastrophic hygiene are under-penalized (−0.10 instead of −0.25). One-line fix: swap the order of the two branches. | **Open** — trivial fix |
+| 10 | PvE | Bandit/monster camps got **effectively stronger** on 2026-07-27: linear stack damage and the monster ×1.3 multiplier apply to camp defenders too, but camp level curves (`_rollCampDetails`, `CAMP_DEFS` rosters) were tuned before the overhaul. Camp difficulty needs a playtest pass. | **Open** |
+| 11 | Combat/UI | Battles can now legitimately end in a **draw** (max-rounds within a 10% power margin) and this will happen more often than before. `_resolveCore`/battle-report UI handle `winner: 'draw'` from before, but the flows (honor, loot, capture, report wording) haven't been re-verified since draws became common. | **Open — verify** |
+| 12 | Assets | Units still missing art (icon fallback): **Halberdiers** (human), **Sisters of Slaughter** (dark elf), plus the garrison NPCs (city_guard, militia_archer, garrison_soldier) and most mercenaries. | **Open** |
+| 13 | Cleanup | Legacy `checkIncomingAttacks` in `server/combat-resolver.js` is unrouted dead code (superseded by `scanIncomingAttacks`); `/api/debug/lords` is still an unauthenticated debug endpoint; `armyWeight` is a near-dead field (only gates lord level ≥12 for weight-12 units). | **Open** — see ROADMAP.md #9 |
+| 14 | Design debt | Several unit traits shown in tooltips/tech tree are still **flavor-only** (no engine effect): `impact`, `splash_damage`, `poison`, `siege`, `scout`, `fast`, `veteran`, `discipline`, `berserk`, `aggressive`, `bloodlust`-adjacent ability entries (`web_trap`, `venom_bite`, `fire_breath`, `dragon_breath`, `sky_dive`). Players may reasonably expect them to do something. Either implement (the 2026-07-27 pattern: implement + tax) or hide from UI. | **Open** |
+| 15 | Balance (accepted) | Two deliberate stage-balance outliers, ruled as racial identity on 2026-07-27: **dwarfs dominate the early game** (~74% overall at lord ~3) and **orcs dominate the midgame** (~71%). Revisit only if playtesting says they feel unfair in practice. | **By design — monitor** |
 
 ---
 
