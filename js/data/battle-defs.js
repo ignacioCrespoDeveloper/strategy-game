@@ -11,6 +11,12 @@
 //    Nothing else changes.
 // =============================================
 
+// Fraction of max HP that a battle's WINNING side's surviving units recover
+// immediately after victory (PvE and PvP alike). Applied server-side in
+// pve-attack.js and combat-resolver.js on top of the units' post-battle HP,
+// capped at full. Winning patches you up a little; it never fully heals. Tunable.
+var BATTLE_WIN_HEAL_PCT = 0.15;
+
 var TERRAIN_BATTLE_MODS = {
   plains:   { chargeMult: 1.2,  defenseMult: 1.0,  moraleMod:   0 },
   forest:   { chargeMult: 0.5,  defenseMult: 1.2,  moraleMod:   5 },

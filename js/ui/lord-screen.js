@@ -219,7 +219,7 @@ const LordScreen = (() => {
            <div class="lsl-portrait-fade"></div>
            <div class="lsl-portrait-glow" style="background:radial-gradient(ellipse at 50% 80%, ${race.portraitGlow || 'rgba(200,147,58,0.25)'} 0%, transparent 70%)"></div>
            ${downOverlay}${activityOverlay}
-           <div class="lsl-portrait-level" title="Level ${level}">${level}</div>
+           <div class="lsl-portrait-level lvl-medal" title="Level ${level}">${gi('laurel-crown', 'lvl-medal-icon')}<span class="lvl-medal-num">${level}</span></div>
            <div class="lsl-portrait-nameplate">
              <span class="lsl-portrait-lord-name">${_lord.name}</span>
              <div class="lsl-portrait-badges">
@@ -231,7 +231,7 @@ const LordScreen = (() => {
       : `<div class="lsl-portrait-area${lordIsDown ? ' lsl-portrait-area--down' : ''}">
            <div class="lsl-portrait">${race.icon || gi('person')}</div>
            ${downOverlay}${activityOverlay}
-           <div class="lsl-portrait-level" title="Level ${level}">${level}</div>
+           <div class="lsl-portrait-level lvl-medal" title="Level ${level}">${gi('laurel-crown', 'lvl-medal-icon')}<span class="lvl-medal-num">${level}</span></div>
          </div>`;
 
     // Stat bars
@@ -383,6 +383,7 @@ const LordScreen = (() => {
       case 'overview':
         content.innerHTML = _overviewTabHtml();
         document.getElementById('lov-finish-lord')?.addEventListener('click', _finishLordActionNow);
+        document.getElementById('lov-cancel-action')?.addEventListener('click', _cancelLordActionNow);
         document.getElementById('lov-search-btn')?.addEventListener('click', async (e) => {
           e.currentTarget.disabled = true;
           const result = await ServerActions.lordSearch(_lord.id);
@@ -629,7 +630,9 @@ const LordScreen = (() => {
         <div class="lov-progress-row">
           <div class="lov-bar"><div class="lov-fill${isAttacking ? ' lov-fill--attack' : ''}" id="lov-fill" style="width:${pct}%"></div></div>
           <span class="lov-timer" id="lov-timer">${TimeService.formatDuration(secs)}</span>
-          ${isAttacking ? '' : `<button class="ls-finish-btn" id="lov-finish-lord">${gi('power-lightning')} ${cost}${gi('cut-diamond')}</button>`}
+          ${isAttacking
+            ? `<button class="x-cancel-btn x-cancel-btn--wide" id="lov-cancel-action" title="Recall the attack (no refund)">✕ Recall</button>`
+            : `<button class="ls-finish-btn" id="lov-finish-lord">${gi('power-lightning')} ${cost}${gi('cut-diamond')}</button>`}
         </div>
       `;
     } else if (queueItem.actionId === 'search_area') {
@@ -785,7 +788,7 @@ const LordScreen = (() => {
     const overPower    = totalPower > maxPower;
     const armyHtml    = army.units.length === 0
       ? `<p class="lov-pos-none">No troops mustered — recruit from the Army tab.</p>`
-      : `<div class="la-unit-cards">${_armyCardsHtml(army, { removable: false })}</div>`;
+      : `${_regenNoteHtml(army)}<div class="la-unit-cards">${_armyCardsHtml(army, { removable: false, regen: _isGarrisonRegen() })}</div>`;
 
     return `
       <div class="lov-tab">
@@ -841,18 +844,33 @@ const LordScreen = (() => {
     return CityService.getPlayerCities(_player.id).find(c => c.x === _lord.x && c.y === _lord.y) || null;
   }
 
-  // ── Shared unit card builder ───────────────────────────────────
-
-  function _cardTierClass(category) {
-    if (category === 'mercenary') return 'la-unit-card--merc';
-    if (category === 'elite' || category === 'cavalry') return 'la-unit-card--elite';
-    if (category === 'monster') return 'la-unit-card--monster';
-    if (category === 'legendary') return 'la-unit-card--legendary';
-    return '';
+  // Garrison regen is active when the lord rests idle (no action, no stance,
+  // not down) on one of its own city tiles — mirrors the server rule in
+  // catch-up.js (1e). Drives the unit-card heal pip and the status note.
+  function _isGarrisonRegen() {
+    if (!_lord) return false;
+    if ((_lord.actionQueue || []).length > 0) return false;
+    if (LordService.isStanced(_lord)) return false;
+    if (LordService.isDown(_lord))    return false;
+    return !!_getLordCurrentCity();
   }
 
-  function _buildUnitCard(def, { removable = false, currentHp, maxHp, modelIdx = 0 } = {}) {
-    const tierClass = _cardTierClass(def.category);
+  // A visible "units are recovering" banner — shown above the roster whenever
+  // the army is garrison-regenerating AND at least one unit is below full HP.
+  function _regenNoteHtml(army) {
+    if (!_isGarrisonRegen()) return '';
+    const damaged = (army.units || []).some(u => {
+      const m = UNIT_DEFS[u.unitId]?.combatStats?.hp;
+      return m && (u.currentHp ?? m) < m;
+    });
+    if (!damaged) return '';
+    return `<div class="la-regen-note">${gi('health-increase')} Resting in garrison — units recovering (+1%/min)</div>`;
+  }
+
+  // ── Shared unit card builder ───────────────────────────────────
+
+  function _buildUnitCard(def, { removable = false, currentHp, maxHp, modelIdx = 0, regen = false } = {}) {
+    const tierClass = unitTierClass(def);
     const hpMax  = maxHp     ?? def.combatStats.hp;
     const hpCur  = currentHp ?? hpMax;
     const hpPct  = Math.min(100, Math.max(0, Math.round((hpCur / hpMax) * 100)));
@@ -880,6 +898,12 @@ const LordScreen = (() => {
       ? `<button class="la-uc-remove" data-unit-id="${def.id}" data-model-idx="${modelIdx}" title="Dismiss 1 — refunds gold based on remaining HP">×</button>`
       : '';
 
+    // Regen pip — only shown on a damaged model while the army rests in a
+    // friendly city (see _isGarrisonRegen). Signals "this unit is healing".
+    const regenBadge = (regen && hpCur < hpMax)
+      ? `<span class="la-uc-regen" title="Regenerating — resting in a friendly city">${gi('health-increase')}</span>`
+      : '';
+
     return `
       <div class="la-uc-wrap">
         <div class="la-unit-card${tierClass ? ' ' + tierClass : ''}">
@@ -888,6 +912,7 @@ const LordScreen = (() => {
           </div>
           ${portrait}
           ${giUnitType(def.category)}
+          ${regenBadge}
           ${removeBtn}
         </div>
         <div class="la-uc-tooltip">
@@ -945,7 +970,7 @@ const LordScreen = (() => {
         </div>
       `;
     } else {
-      armyListHtml = `<div class="la-unit-cards">${_armyCardsHtml(army, { removable: true })}</div>`;
+      armyListHtml = `${_regenNoteHtml(army)}<div class="la-unit-cards">${_armyCardsHtml(army, { removable: true, regen: _isGarrisonRegen() })}</div>`;
     }
 
     // ── Recruitment (city-based) ───────────────────────────────
@@ -980,6 +1005,7 @@ const LordScreen = (() => {
               <span class="la-recruit-queue-icon">${qDef?.icon || gi('crossed-swords')}</span>
               <span class="la-recruit-queue-name">${qDef?.name || q.unitId} ×${q.count}</span>
               <span class="la-recruit-queue-eta">${TimeService.formatDuration(etaSecs)}</span>
+              <button class="x-cancel-btn" data-cancel-recruit="${i + 1}" title="Cancel &amp; refund gold">✕</button>
             </div>`;
         }).join('');
 
@@ -990,6 +1016,7 @@ const LordScreen = (() => {
               <div class="la-bar"><div class="la-fill" id="la-recruit-fill" style="transform:scaleX(${pct / 100})"></div></div>
               <span class="la-timer" id="la-recruit-timer">${TimeService.formatDuration(secs)}</span>
               <button class="ls-finish-btn" id="la-finish-recruit">${gi('power-lightning')} ${recruitCost}${gi('cut-diamond')}</button>
+              <button class="x-cancel-btn" data-cancel-recruit="0" title="Cancel &amp; refund gold">✕</button>
             </div>
             ${upcomingHtml ? `<div class="la-recruit-queue-upcoming">${upcomingHtml}</div>` : ''}
             <div class="la-recruit-queue-slots">${queue.length}/${MAX_QUEUE} queue slots used</div>
@@ -1096,6 +1123,11 @@ const LordScreen = (() => {
   function _bindArmyEvents() {
     // Finish recruitment instantly
     document.getElementById('la-finish-recruit')?.addEventListener('click', _finishRecruitmentNow);
+
+    // Cancel a queued recruitment batch (full gold refund)
+    document.querySelectorAll('[data-cancel-recruit]').forEach(btn => {
+      btn.addEventListener('click', () => _cancelRecruitment(Number(btn.dataset.cancelRecruit)));
+    });
 
     // Dismiss unit from army — click once to arm, click again within 3s to confirm
     document.querySelectorAll('.la-uc-remove').forEach(btn => {
@@ -1989,6 +2021,26 @@ const LordScreen = (() => {
     _startCountdown();
   }
 
+  // Recall an outgoing attack (or any in-progress action). No refund — the
+  // lord simply stops where it started, since position only updates on a
+  // completed move.
+  async function _cancelLordActionNow() {
+    const lord = LordService.getById(_lord.id);
+    if (!lord || (lord.actionQueue || []).length === 0) return;
+    if (!confirm('Recall this attack? The march supplies spent are forfeit.')) return;
+    _stopCountdown();
+
+    const result = await ServerActions.cancelLordAction(_lord.id);
+    if (!result.ok) { _toast(result.error || 'Server error'); _startCountdown(); return; }
+
+    _lord   = LordService.getById(_lord.id);
+    _player = PlayerService.getById(_player.id);
+    HUD.refresh();
+    _renderTab();
+    _startCountdown();
+    _toast('Attack recalled.');
+  }
+
   // Server-authoritative — previously this faked a past finishAt purely
   // client-side (spent credits locally, ticked it, saved), which displayed
   // as complete but was never actually applied server-side: the next full
@@ -2017,6 +2069,20 @@ const LordScreen = (() => {
     _stopCountdown();
     _renderTab();
     _startCountdown();
+  }
+
+  async function _cancelRecruitment(queueIndex) {
+    const city = _getLordCurrentCity();
+    if (!city || !Number.isInteger(queueIndex)) return;
+    const result = await ServerActions.cancelRecruit(city.id, queueIndex);
+    if (!result.ok) { _toast(result.error || 'Server error'); return; }
+
+    _player = PlayerService.getById(_player.id);
+    HUD.refresh();
+    _stopCountdown();
+    _renderTab();
+    _startCountdown();
+    _toast('Recruitment cancelled — gold refunded.');
   }
 
   // ── Live countdown ────────────────────────────────────────────

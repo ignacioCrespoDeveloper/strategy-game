@@ -22,9 +22,13 @@ const ProductionService = (() => {
     const terrain  = WorldService.getTerrain(city.x, city.y);
     const player   = PlayerService.getById(city.playerId);
     const research = EconomyCore.getResearchEffects(player?.research);
+    // God of Nature blessing: % production, additive with race + research.
+    const blessing = EconomyCore.getBlessingEffects(player?.activeBlessing, TimeService.now());
     const bonuses  = {};
     ['food', 'wood', 'stone'].forEach(r => {
-      bonuses[r + '_production'] = (race?.bonuses?.[r + '_production'] || 0) + (research[r + '_production'] || 0);
+      bonuses[r + '_production'] = (race?.bonuses?.[r + '_production'] || 0)
+        + (research[r + '_production'] || 0)
+        + (blessing[r + '_production'] || 0);
     });
     return EconomyCore.getRates(
       city.buildings,
@@ -33,10 +37,14 @@ const ProductionService = (() => {
     );
   }
 
-  // Gold income per hour from a single city.
+  // Gold income per hour from a single city. God of Commerce blessing
+  // scales it empire-wide (same multiplier the server applies in catch-up).
   function getGoldRate(city) {
-    const stats = CityStatsService.getStats(city);
-    return EconomyCore.getGoldRate(city.buildings, city.population, stats.happiness);
+    const stats  = CityStatsService.getStats(city);
+    const base   = EconomyCore.getGoldRate(city.buildings, city.population, stats.happiness);
+    const player = PlayerService.getById(city.playerId);
+    const fx     = EconomyCore.getBlessingEffects(player?.activeBlessing, TimeService.now());
+    return Math.floor(base * (1 + (fx.gold_income_bonus || 0)));
   }
 
   // Total gold rate for a player across all cities. (Upkeep was removed

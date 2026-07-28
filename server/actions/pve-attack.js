@@ -19,7 +19,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { BattleEngine, DISCOVERY_DEFS, CAMP_DEFS, CAMP_LEVEL_LOOT, EconomyCore } from '../engine-loader.js';
+import { BattleEngine, DISCOVERY_DEFS, CAMP_DEFS, CAMP_LEVEL_LOOT, EconomyCore, BATTLE_WIN_HEAL_PCT } from '../engine-loader.js';
 import { _checkLevelUp, _effectiveStats } from '../combat-resolver.js';
 
 // PvE only ever grants a flat honor gain on a win. PvP honor instead swings
@@ -113,6 +113,22 @@ export async function handlePveAttack(req, res) {
       if (surv && stack.count > 0) stack.currentHp = Math.round(surv.avgHp);
     });
   updatedArmy.units = updatedArmy.units.filter(u => u.count > 0);
+
+  // Victory patch-up: surviving units recover BATTLE_WIN_HEAL_PCT of max HP
+  // on a win (front model only — the damaged one), capped at full. Winning a
+  // fight leaves your soldiers bloodied but a little recovered, never fresh.
+  if (report.winner === 'attacker') {
+    updatedArmy.units.forEach(stack => {
+      const uMax = UNIT_DEFS[stack.unitId]?.combatStats?.hp;
+      if (!uMax) return;
+      const cur = stack.currentHp ?? uMax;
+      if (cur < uMax) stack.currentHp = Math.min(uMax, Math.round(cur + uMax * BATTLE_WIN_HEAL_PCT));
+    });
+  }
+
+  // A fight (win or loss) restarts the garrison-regen clock: the survivors
+  // only begin recovering from now, not from before the battle.
+  updatedArmy.regenAt = Date.now();
   armies[lordId] = updatedArmy;
 
   // Apply lord HP / downtime from the battle outcome.
@@ -121,6 +137,11 @@ export async function handlePveAttack(req, res) {
     lord.currentHp      = Math.max(1, Math.round(lordSurv.avgHp));
     lord.downtimeUntil  = null;
     lord.downtimeReason = null;
+    // The lord shares the victory patch-up (capped at full effective HP).
+    if (report.winner === 'attacker') {
+      const lMax = _effectiveStats(lord).health;
+      if (lord.currentHp < lMax) lord.currentHp = Math.min(lMax, Math.round(lord.currentHp + lMax * BATTLE_WIN_HEAL_PCT));
+    }
   } else {
     lord.currentHp      = 0;
     lord.downtimeUntil  = Date.now() + 60 * 60 * 1000;

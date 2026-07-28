@@ -102,7 +102,15 @@ const CityStatsService = (() => {
   // ── Population growth rate (pop/hour) ─────────────────────────
 
   function getPopulationGrowthRate(city, stats, productionRates) {
-    return EconomyCore.getPopGrowthRate(stats, (productionRates && productionRates.food) || 0);
+    let rate = EconomyCore.getPopGrowthRate(stats, (productionRates && productionRates.food) || 0);
+    // God of Fertility blessing boosts positive growth only — a blessing
+    // should never deepen a decline. Mirrors the server catch-up guard.
+    if (rate > 0) {
+      const player = PlayerService.getById(city.playerId);
+      const fx     = EconomyCore.getBlessingEffects(player?.activeBlessing, TimeService.now());
+      if (fx.pop_growth_bonus) rate = Math.round(rate * (1 + fx.pop_growth_bonus));
+    }
+    return rate;
   }
 
   // ── Stat trend indicators ─────────────────────────────────────

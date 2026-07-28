@@ -18,8 +18,10 @@ const BattleSimulator = (() => {
   let _player    = null;
   let _lord      = null;
 
-  const MAX_UNITS    = 10;
-  const MAX_PER_TYPE = 5;
+  // Army size is capped purely by PWR — the same budget the real game uses to
+  // gate armies — rather than by raw unit counts, so what you can field in the
+  // simulator mirrors what you could actually recruit.
+  const MAX_PWR = 1000;
 
   // Sourced from the canonical TERRAIN_TYPES (js/domain/world.js) rather than
   // hand-typed, so the simulator's terrain icons can never drift out of sync
@@ -64,15 +66,28 @@ const BattleSimulator = (() => {
       .reduce((sum, [uid, cnt]) => sum + (UNIT_DEFS[uid]?.goldCost ?? 0) * cnt, 0);
   }
 
-  function _fmtPts(n) { return n.toLocaleString(); }
-
-  function _tierClass(category) {
-    if (category === 'mercenary') return 'la-unit-card--merc';
-    if (category === 'elite' || category === 'cavalry') return 'la-unit-card--elite';
-    if (category === 'monster')   return 'la-unit-card--monster';
-    if (category === 'legendary') return 'la-unit-card--legendary';
-    return '';
+  // Army PWR via the canonical EconomyCore formula — the single source of truth
+  // every recruit gate and army-power readout uses — so the simulator's PWR can
+  // never drift from the real math. Expects [{unitId, count}], not the {uid:cnt}
+  // shape the simulator carries, hence the reshape.
+  function _armyPwr(counts) {
+    const units = Object.entries(counts)
+      .filter(([, c]) => c > 0)
+      .map(([unitId, count]) => ({ unitId, count }));
+    return Math.round(EconomyCore.getArmyPower(units, UNIT_DEFS));
   }
+
+  // Would adding one more of `uid` keep the army within the PWR budget? Uses
+  // EconomyCore.getProjectedArmyPower (the same recruit-gate helper) and rounds
+  // to match the displayed PWR total, so the cap lines up with what's shown.
+  function _canAddUnit(counts, uid) {
+    const units = Object.entries(counts)
+      .filter(([, c]) => c > 0)
+      .map(([unitId, count]) => ({ unitId, count }));
+    return Math.round(EconomyCore.getProjectedArmyPower(units, UNIT_DEFS, uid, 1)) <= MAX_PWR;
+  }
+
+  function _fmtPts(n) { return n.toLocaleString(); }
 
   function _makeBattleUnit(unitId, count, prefix, idx) {
     const def = UNIT_DEFS[unitId];
@@ -92,7 +107,7 @@ const BattleSimulator = (() => {
 
   // Full-health card — used in steps 1/2 and in the pre-battle lineup.
   function _simUnitCard(def) {
-    const tier = _tierClass(def.category);
+    const tier = unitTierClass(def);
     const s    = def.combatStats || {};
     const portrait = def.image
       ? `<img src="${def.image}" class="la-uc-img" alt="${def.name}" loading="lazy">`
@@ -126,7 +141,7 @@ const BattleSimulator = (() => {
   // Post-battle card — shows actual remaining HP and total damage dealt.
   // `dmg` is the total damage this unit TYPE dealt; shown on every card of that type.
   function _postBattleCard(def, isAlive, hpCur, hpMax, dmg) {
-    const tier     = _tierClass(def.category);
+    const tier     = unitTierClass(def);
     const hpPct    = isAlive ? Math.min(100, Math.max(0, Math.round((hpCur / hpMax) * 100))) : 0;
     const hpColor  = hpPct > 60 ? '#4caf50' : hpPct > 30 ? '#ff9800' : '#f44336';
     const portrait = def.image
@@ -201,11 +216,13 @@ const BattleSimulator = (() => {
         </div>`;
     }
     const pts = _armyPoints(counts);
+    const pwr = _armyPwr(counts);
     return `
       <div class="bsim-army-panel">
         <div class="bsim-army-label">
-          Your Army — ${total}/${MAX_UNITS} units
+          Your Army
           <span class="bsim-pts-badge">${gi('two-coins')} ${_fmtPts(pts)} pts</span>
+          <span class="bsim-pwr-badge">${gi('rank-3')} ${_fmtPts(pwr)} / ${_fmtPts(MAX_PWR)} PWR</span>
         </div>
         <div class="la-unit-cards bsim-army-cards">${_armyCards(counts)}</div>
       </div>`;
@@ -235,12 +252,19 @@ const BattleSimulator = (() => {
   }
 
   // ── Catalog card (with +/- controls) ──────────────────────────
+  // Game-stage tier class, tt-prefixed to match .tt-unit-card--mid/--end in
+  // app.css — this is what tints the troop-type medallion blue (mid) / violet
+  // (end); without it the badge stays default bronze for every unit.
+  function _ttTierClass(def) {
+    const t = EconomyCore.getUnitTier(def);
+    return t === 'early' ? '' : ' tt-unit-card--' + t;
+  }
+
   function _catalogCard(uid, counts) {
     const def    = UNIT_DEFS[uid];
     const s      = def.combatStats || {};
     const cnt    = counts[uid] || 0;
-    const total  = _totalModels(counts);
-    const canAdd = cnt < MAX_PER_TYPE && total < MAX_UNITS;
+    const canAdd = _canAddUnit(counts, uid);
 
     const portrait = def.image
       ? `<img class="tt-uc-img" src="${def.image}" alt="${def.name}" loading="lazy">`
@@ -252,7 +276,7 @@ const BattleSimulator = (() => {
     });
 
     return `
-      <div class="tt-unit-card bsim-selectable${cnt > 0 ? ' bsim-selectable--on' : ''}" data-uid="${uid}">
+      <div class="tt-unit-card${_ttTierClass(def)} bsim-selectable${cnt > 0 ? ' bsim-selectable--on' : ''}" data-uid="${uid}">
         <div class="tt-uc-portrait">
           ${portrait}
           ${giUnitType(def.category)}
@@ -312,7 +336,7 @@ const BattleSimulator = (() => {
         <div class="bsim-body">${bodyHtml}</div>
         ${_armyPanel(counts)}
         <div class="bsim-footer">
-          <div class="bsim-footer-info">${total}/${MAX_UNITS} units · max ${MAX_PER_TYPE} per type · <span class="bsim-pts-inline">${gi('two-coins')} ${_fmtPts(_armyPoints(counts))} pts</span></div>
+          <div class="bsim-footer-info"><span class="bsim-pts-inline">${gi('two-coins')} ${_fmtPts(_armyPoints(counts))} pts</span> · <span class="bsim-pwr-inline">${gi('rank-3')} ${_fmtPts(_armyPwr(counts))} / ${_fmtPts(MAX_PWR)} PWR</span></div>
           <button class="bsim-next-btn${total > 0 ? '' : ' bsim-next-btn--off'}" id="bsim-next">
             ${isAtk ? 'Next: Defender →' : 'Next: Battle →'}
           </button>
@@ -352,6 +376,7 @@ const BattleSimulator = (() => {
                 <span class="bsim-lineup-race">${atkRaceInfo.icon || ''} ${atkRaceInfo.name || ''}</span>
                 ${gi('crossed-swords')} Attacker
                 <span class="bsim-pts-badge">${gi('two-coins')} ${_fmtPts(_armyPoints(_atkCounts))} pts</span>
+                <span class="bsim-pwr-badge">${gi('rank-3')} ${_fmtPts(_armyPwr(_atkCounts))} PWR</span>
               </div>
               <div class="la-unit-cards bsim-lineup-cards">${atkCardHtml}</div>
             </div>
@@ -372,6 +397,7 @@ const BattleSimulator = (() => {
                 ${gi('round-shield')} Defender
                 <span class="bsim-lineup-race">${defRaceInfo.icon || ''} ${defRaceInfo.name || ''}</span>
                 <span class="bsim-pts-badge">${gi('two-coins')} ${_fmtPts(_armyPoints(_defCounts))} pts</span>
+                <span class="bsim-pwr-badge">${gi('rank-3')} ${_fmtPts(_armyPwr(_defCounts))} PWR</span>
               </div>
               <div class="la-unit-cards bsim-lineup-cards">${defCardHtml}</div>
             </div>
@@ -384,6 +410,9 @@ const BattleSimulator = (() => {
   }
 
   // ── Battle report (banner + log) ───────────────────────────────
+  // The round-by-round log is the exact same timeline component the Lord
+  // Screen's Battles tab renders (BattleResultView.timelineHtml) — the sim
+  // has no "you", so the mine/enemy tags are relabelled Attacker/Defender.
   function _reportHtml() {
     const r = _report;
     const WINNER = {
@@ -397,17 +426,16 @@ const BattleSimulator = (() => {
     };
     const { label: winLabel, cls: winCls } = WINNER[r.winner] || WINNER.draw;
 
-    const PHASE  = { passive:'Passive', ranged:'Ranged', charge:'Charge', melee:'Melee', morale:'Morale', end_round:'EoR' };
-    const RESULT = { hit:'hit', killed:'killed', eliminated:'ELIMINATED', miss:'miss', routed:'ROUTED', retreated:'RETREAT', healed:'healed' };
-
-    const logRows = r.events.map(e => {
-      const ph = PHASE[e.phase] || e.phase;
-      const rs = RESULT[e.result] || e.result;
-      const tr = e.trait ? ` [${e.trait.replace(/_/g,' ')}]` : '';
-      if (e.result === 'healed') return `<div class="bsim-lrow bsim-lrow--heal">[R${e.round} ${ph}] ${e.actorName} — healed</div>`;
-      if (e.damage === 0)        return `<div class="bsim-lrow bsim-lrow--morale">[R${e.round} ${ph}] ${e.actorName || ''} — ${rs}</div>`;
-      return `<div class="bsim-lrow">[R${e.round} ${ph}] ${e.actorName} → ${e.targetName}${tr} ${gi('crossed-swords')}${e.damage} — <em>${rs}</em></div>`;
-    }).join('');
+    const iconFor = (e, role) => {
+      const id  = role === 'actor' ? e.actorId : e.targetId;
+      const def = id && r._unitDefById ? r._unitDefById[id] : null;
+      return def ? giUnitTypeInline(def.category) : '';
+    };
+    const timelineHtml = BattleResultView.timelineHtml(r.events, false, {
+      mineLabel: 'ATTACKER', enemyLabel: 'DEFENDER',
+      mineArmy:  'Attacker army ', enemyArmy: 'Defender army ',
+      iconFor,
+    });
 
     return `
       <div class="bsim-report">
@@ -419,7 +447,11 @@ const BattleSimulator = (() => {
         <button class="bsim-log-btn" id="bsim-log-btn">
           ${_logOpen ? '▲ Hide Battle Log' : '▼ Show Battle Log'} (${r.events.length} events)
         </button>
-        ${_logOpen ? `<div class="bsim-log">${logRows}</div>` : ''}
+        ${_logOpen ? `
+          <div class="bsim-timeline">
+            <div class="br-tl-section-label">${gi('scroll-unfurled')} Round-by-Round Report</div>
+            ${timelineHtml}
+          </div>` : ''}
       </div>`;
   }
 
@@ -459,6 +491,13 @@ const BattleSimulator = (() => {
 
     _report._atkDmg = atkDmg;
     _report._defDmg = defDmg;
+
+    // Engine unit id → unit def, so the battle-log timeline can prefix each
+    // event's actor/target with its category-tinted troop-type icon.
+    const unitDefById = {};
+    Object.entries(atkMap).forEach(([id, uid]) => { unitDefById[id] = UNIT_DEFS[uid]; });
+    Object.entries(defMap).forEach(([id, uid]) => { unitDefById[id] = UNIT_DEFS[uid]; });
+    _report._unitDefById = unitDefById;
 
     _logOpen = false;
     _rerender();
@@ -500,8 +539,7 @@ const BattleSimulator = (() => {
         const uid    = e.currentTarget.dataset.uid;
         const counts = _step === 'attacker' ? _atkCounts : _defCounts;
         const cur    = counts[uid] || 0;
-        if (_totalModels(counts) >= MAX_UNITS) { _toast(`Max ${MAX_UNITS} total units per side.`); return; }
-        if (cur >= MAX_PER_TYPE)               { _toast(`Max ${MAX_PER_TYPE} of the same unit.`); return; }
+        if (!_canAddUnit(counts, uid)) { _toast(`Army is capped at ${_fmtPts(MAX_PWR)} PWR.`); return; }
         counts[uid] = cur + 1;
         _rerender();
       });

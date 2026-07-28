@@ -51,6 +51,60 @@
 
   /* Transitions */
   --transition: 160ms ease;
+
+  /* Level medal (see .lvl-medal) — gilded laurel-wreath rank badge */
+  --medal-gold-hi:  #ffe9a8;
+}
+
+/* ── Level medal ─────────────────────────────────────────────
+   Gilded laurel-wreath rank badge used for lord levels. Size via
+   --sz; markup is:
+     <div class="lvl-medal">{gi('laurel-crown','lvl-medal-icon')}
+       <span class="lvl-medal-num">N</span></div>
+   The laurel is tinted by #medal-gold-grad (defined in index.html).
+   Reusable — see .lsl-portrait-level / .ov-lc-portrait-level. */
+.lvl-medal {
+  position: relative;
+  width: var(--sz, 2.4rem);
+  height: var(--sz, 2.4rem);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Scoped under .lvl-medal to outrank the later base .gi rule
+   (equal specificity would otherwise force width/height:1em). */
+.lvl-medal .lvl-medal-icon {  /* gold laurel wreath framing the numeral */
+  position: absolute;
+  inset: -4%;
+  width: 108%;
+  height: 108%;
+  fill: url(#medal-gold-grad);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.7));
+}
+.lvl-medal-num {  /* dark centre disc holding the numeral */
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 66%;
+  height: 66%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 38%,
+    #201a10 0%, #14100a 70%, #0a0806 100%);
+  box-shadow:
+    inset 0 2px 4px rgba(0, 0, 0, 0.9),
+    inset 0 -1px 1px rgba(240, 184, 74, 0.35),
+    0 0 0 1px rgba(90, 62, 19, 0.6);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--sz, 2.4rem) * 0.4);
+  line-height: 1;
+  color: var(--medal-gold-hi);
+  text-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.9),
+    0 0 5px rgba(240, 184, 74, 0.5);
+  letter-spacing: -0.02em;
 }
 
 /* â”€â”€ Reset â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -134,30 +188,20 @@ button {
   pointer-events: none;
 }
 
-/* Tier-tinted medallions — match the card's rarity frame color.
-   Tier classes live on .la-unit-card OR .ac-unit-portrait-wrap (attack view). */
-.la-unit-card--elite .uc-type-badge {
+/* Progression-tier medallions, keyed to PWR bands (EconomyCore.getUnitTier):
+   mid → blue, end → violet. Early game keeps the default bronze badge. The
+   tier class lives on .la-unit-card OR .ac-unit-portrait-wrap (attack view). */
+.la-unit-card--mid .uc-type-badge {
   background: radial-gradient(circle at 35% 28%, #1c3350 0%, #0a1420 72%);
   border-color: #5f92c4;
   color: #a6cdf0;
   box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(180,220,255,0.28), 0 1px 2px rgba(0,0,0,0.8);
 }
-.la-unit-card--monster .uc-type-badge {
-  background: radial-gradient(circle at 35% 28%, #3c1a5e 0%, #150826 72%);
-  border-color: #a55ede;
-  color: #d2a6f4;
-  box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(220,180,255,0.28), 0 1px 2px rgba(0,0,0,0.8);
-}
-.la-unit-card--legendary .uc-type-badge {
+.la-unit-card--end .uc-type-badge {
   background: radial-gradient(circle at 35% 28%, #58207f 0%, #1e0a30 72%);
   border-color: #dd7fff;
   color: #eec6ff;
   box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(235,190,255,0.32), 0 1px 2px rgba(0,0,0,0.8);
-}
-.la-unit-card--merc .uc-type-badge {
-  background: radial-gradient(circle at 35% 28%, #38260f 0%, #140c04 72%);
-  border-color: #96662f;
-  color: #d8a868;
 }
 
 input {
@@ -555,6 +599,22 @@ body.nav-open #screen-root {
   flex-direction: row;
   align-items: stretch;
   overflow: hidden;
+}
+
+/* Game-stage tier tint on the troop-type medallion — matches the battle
+   simulator's badge scheme. Early game keeps the default bronze; mid game
+   reads blue, end game violet. The frame stays uniform. */
+.tt-unit-card--mid .uc-type-badge {
+  background: radial-gradient(circle at 35% 28%, #1c3350 0%, #0a1420 72%);
+  border-color: #5f92c4;
+  color: #a6cdf0;
+  box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(180,220,255,0.28), 0 1px 2px rgba(0,0,0,0.8);
+}
+.tt-unit-card--end .uc-type-badge {
+  background: radial-gradient(circle at 35% 28%, #58207f 0%, #1e0a30 72%);
+  border-color: #dd7fff;
+  color: #eec6ff;
+  box-shadow: 0 0 0 1px #050302, inset 0 1px 0 rgba(235,190,255,0.32), 0 1px 2px rgba(0,0,0,0.8);
 }
 
 /* Portrait â€” left column */
@@ -3165,27 +3225,13 @@ body.nav-open #screen-root {
 .lsl-portrait-activity-overlay .ov-lord-activity-dest  { font-size: 0.65rem; }
 .lsl-portrait-activity-overlay .ov-lord-activity-cd    { font-size: 0.72rem; }
 
-/* Level badge — top-right corner of portrait */
+/* Level medal — top-right corner of portrait (visuals via .lvl-medal) */
 .lsl-portrait-level {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  width: 1.9rem;
-  height: 1.9rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.72);
-  border: 1px solid var(--border-gold);
-  border-radius: 50%;
-  padding: 0;
-  font-family: var(--font-display);
-  font-size: 0.85rem;
-  font-weight: 700;
-  color: var(--text-gold-light);
-  backdrop-filter: blur(4px);
+  --sz: 2.6rem;
   z-index: 3;
-  letter-spacing: 0;
 }
 
 /* Name plate overlaid on the bottom of the portrait */
@@ -3577,40 +3623,8 @@ body.nav-open #screen-root {
   box-shadow: 0 0 0 1px #050403, 0 0 9px rgba(228,178,90,0.55);
 }
 
-/* Mercenary â€” worn bronze */
-.la-unit-card--merc {
-  border-image: linear-gradient(165deg, #a87c48 0%, #6b4a24 30%, #3c2810 55%, #7a5528 80%, #4a3014 100%) 1;
-}
-.la-unit-card--merc:hover {
-  box-shadow: 0 0 0 1px #050403, 0 0 9px rgba(190,130,60,0.5);
-}
-
-/* Elite / Cavalry â€” steel blue */
-.la-unit-card--elite {
-  border-image: linear-gradient(165deg, #8fb8dc 0%, #3a6288 28%, #1c3450 52%, #4a7aaa 78%, #223c58 100%) 1;
-  box-shadow: 0 0 0 1px #050403, 0 0 6px rgba(70,130,200,0.4);
-}
-.la-unit-card--elite:hover {
-  box-shadow: 0 0 0 1px #050403, 0 0 10px rgba(90,160,230,0.6);
-}
-
-/* Monster (Hydra) â€” deep purple */
-.la-unit-card--monster {
-  border-image: linear-gradient(165deg, #b47ade 0%, #66308f 28%, #351454 52%, #8a4ec0 78%, #47206a 100%) 1;
-  box-shadow: 0 0 0 1px #050403, 0 0 6px rgba(140,70,200,0.4);
-}
-.la-unit-card--monster:hover {
-  box-shadow: 0 0 0 1px #050403, 0 0 10px rgba(170,100,230,0.6);
-}
-
-/* Legendary (Black Dragon) â€” bright vivid purple */
-.la-unit-card--legendary {
-  border-image: linear-gradient(165deg, #eab0ff 0%, #a040d8 28%, #5c1690 52%, #c060f0 78%, #6e20a8 100%) 1;
-  box-shadow: 0 0 0 1px #050403, 0 0 8px rgba(200,90,255,0.55);
-}
-.la-unit-card--legendary:hover {
-  box-shadow: 0 0 0 1px #050403, 0 0 12px rgba(220,130,255,0.75);
-}
+/* Tier is signalled on the troop-type medallion (see .uc-type-badge tint
+   rules above), not the frame — every card keeps the default bronze border. */
 
 /* HP / strength bar at top â€” recessed groove, TWW campaign style */
 .la-uc-top {
@@ -3691,6 +3705,46 @@ body.nav-open #screen-root {
 .la-uc-remove:hover {
   background: rgba(220,50,50,0.95) !important;
 }
+/* Garrison-regen status banner above the roster. */
+.la-regen-note {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid #2f6a3a;
+  background: linear-gradient(180deg, rgba(30,90,45,0.35) 0%, rgba(16,50,26,0.35) 100%);
+  color: #a7dfb0;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.la-regen-note .gi { width: 0.9rem; height: 0.9rem; }
+
+/* Garrison-regen pip — a soft pulsing heal badge on a healing unit card. */
+.la-uc-regen {
+  position: absolute;
+  bottom: 0.12rem;
+  right: 0.12rem;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: rgba(30,120,50,0.92);
+  color: #d6f5d6;
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.5);
+  pointer-events: none;
+  animation: la-uc-regen-pulse 1.6s ease-in-out infinite;
+}
+.la-uc-regen .gi { width: 0.68rem; height: 0.68rem; }
+@keyframes la-uc-regen-pulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+
 .la-uc-remove--confirm {
   background: rgba(220,50,50,0.95);
   color: transparent;
@@ -3805,12 +3859,12 @@ body.nav-open #screen-root {
   cursor: not-allowed;
 }
 .la-hire-btn {
-  background: linear-gradient(180deg, #1a2f4a 0%, #112040 100%);
-  border-color: #3a6090;
-  color: #80b0e0;
+  background: linear-gradient(180deg, #1a4a2a 0%, #114020 100%);
+  border-color: #3a9050;
+  color: #80e0a0;
   cursor: pointer;
 }
-.la-hire-btn:hover { background: linear-gradient(180deg, #2a4060 0%, #1a2f4a 100%); color: #a0d0ff; }
+.la-hire-btn:hover { background: linear-gradient(180deg, #2a6040 0%, #1a4a2a 100%); color: #a0ffc0; }
 .la-recruit-note {
   font-size: 0.75rem;
   color: var(--text-muted);
@@ -4348,6 +4402,37 @@ body.nav-open #screen-root {
   line-height: 1.4;
   margin-bottom: 0.5rem;
 }
+/* Generic cancel (✕) button — construction/recruitment queue items and the
+   attack-recall control. Compact red square by default; --wide adds a label. */
+.x-cancel-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  height: 1.6rem;
+  padding: 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  border-radius: var(--radius-sm);
+  border: 1px solid #7a3a3a;
+  background: linear-gradient(180deg, #3a1a1a 0%, #241010 100%);
+  color: #e08080;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.x-cancel-btn:hover {
+  background: linear-gradient(180deg, #5a2a2a 0%, #3a1818 100%);
+  border-color: #aa5050;
+  color: #f0a0a0;
+}
+.x-cancel-btn--wide {
+  min-width: auto;
+  gap: 0.25rem;
+  padding: 0 0.6rem;
+}
+
 .lov-raid-btn-row {
   display: flex;
   gap: 0.5rem;
@@ -4854,26 +4939,13 @@ body.nav-open #screen-root {
   pointer-events: none;
 }
 
+/* Level medal — overview lord card (visuals via .lvl-medal) */
 .ov-lc-portrait-level {
   position: absolute;
   top: 0.4rem;
   right: 0.4rem;
-  width: 1.5rem;
-  height: 1.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0,0,0,0.72);
-  border: 1px solid var(--border-gold);
-  border-radius: 50%;
-  padding: 0;
-  font-family: var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--text-gold-light);
-  backdrop-filter: blur(4px);
+  --sz: 2.2rem;
   z-index: 2;
-  letter-spacing: 0;
 }
 
 .ov-lc-portrait-owner {
@@ -6497,6 +6569,9 @@ body.nav-open #screen-root {
 .br-tl-event--heal   { }
 .br-tl-event--morale { background: rgba(100,60,150,0.12); border-radius: 3px; padding: 0.2rem 0.4rem; }
 
+/* Inline, category-tinted troop-type glyph before a unit name in log rows
+   (see giUnitTypeInline in js/core/icons.js). Colour is set inline per unit. */
+.uc-type-inline { font-size: 0.82rem; margin-right: 0.05rem; flex-shrink: 0; line-height: 1; }
 .br-tl-phase  { font-size: 0.62rem; color: var(--text-muted); min-width: 5rem; flex-shrink: 0; }
 .br-tl-actor  { color: #a8c4d8; font-weight: 600; }
 .br-tl-target { color: #d8a4a0; }
@@ -9517,17 +9592,14 @@ body.nav-open #screen-root {
   text-align: left; width: 100%;
 }
 .bsim-log-btn:hover { border-color: var(--text-gold, #c9973a); color: var(--text-gold, #c9973a); }
-.bsim-log {
-  max-height: 11rem; overflow-y: auto;
+/* Round-by-round timeline — shares the Lord-Screen report's .br-tl-* styles
+   (see battle-result-view.js); this only frames the scroll container. */
+.bsim-timeline {
+  max-height: 22rem; overflow-y: auto;
   background: #090909; border: 1px solid var(--border, #222);
-  border-radius: 6px; padding: 0.45rem 0.55rem;
-  font-size: 0.61rem; font-family: monospace;
-  display: flex; flex-direction: column; gap: 0.1rem;
+  border-radius: 6px; padding: 0.55rem 0.65rem;
+  display: flex; flex-direction: column; gap: 0.75rem;
 }
-.bsim-lrow        { color: var(--text-base, #bbb); }
-.bsim-lrow em     { color: #e07050; font-style: normal; }
-.bsim-lrow--morale { color: #9c7aaa; }
-.bsim-lrow--heal   { color: #4a9c5d; }
 
 /* ── Mobile ──────────────────────────────────────────── */
 @media (max-width: 600px) {
@@ -9584,6 +9656,26 @@ body.nav-open #screen-root {
 
 .bsim-pts-inline {
   color: var(--text-gold, #c9973a);
+  font-weight: 700;
+}
+
+/* PWR badge — steel-toned twin of .bsim-pts-badge, so army power reads
+   clearly distinct from the gold-cost badge sitting beside it. */
+.bsim-pwr-badge {
+  display: inline-block;
+  background: #0f1620;
+  border: 1px solid #2c4056;
+  border-radius: 4px;
+  color: #86b4dc;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.35rem;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  text-transform: none;
+}
+.bsim-pwr-inline {
+  color: #86b4dc;
   font-weight: 700;
 }
 

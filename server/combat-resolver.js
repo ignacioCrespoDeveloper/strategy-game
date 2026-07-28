@@ -46,6 +46,7 @@ import {
   MOUNT_POOL,
   TALENT_POOL,
   EconomyCore,
+  BATTLE_WIN_HEAL_PCT,
 } from './engine-loader.js';
 
 // ── Supabase clients ──────────────────────────────────────────
@@ -364,13 +365,16 @@ function _awardXp(lord, xpEarned) {
 
 // Loots a slice of the defender's resource pool into the attacker's, in
 // place on both player records. Returns { [resType]: amountLooted }.
-function _lootResources(defenderPlayer, attackerPlayer) {
+// lootMult scales the plundered fraction — the God of War blessing feeds a
+// >1 multiplier here so a blessed sacking strips a bigger share of the pool.
+function _lootResources(defenderPlayer, attackerPlayer, lootMult = 1) {
   const loot   = {};
   const defRes = defenderPlayer.resources || {};
+  const pct    = _RESOURCE_LOOT_PCT * lootMult;
   attackerPlayer.resources = attackerPlayer.resources || {};
   ['food', 'wood', 'stone'].forEach(r => {
     const avail  = defRes[r] || 0;
-    const amount = Math.floor(avail * _RESOURCE_LOOT_PCT);
+    const amount = Math.floor(avail * pct);
     if (amount <= 0) return;
     defRes[r] = avail - amount;
     attackerPlayer.resources[r] = (attackerPlayer.resources[r] || 0) + amount;
@@ -567,9 +571,19 @@ function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain,
 
 // ── Loss application ──────────────────────────────────────────
 
+// Victory patch-up: heal a survived stack's front model by `pct` of its max
+// HP, capped at full. Applied only to the WINNING side (healPct passed as 0
+// for the loser). Mirrors the PvE heal in pve-attack.js.
+function _winHeal(unitId, currentHp, pct) {
+  const maxHp = UNIT_DEFS[unitId]?.combatStats?.hp;
+  if (!maxHp || pct <= 0 || currentHp >= maxHp) return currentHp;
+  return Math.min(maxHp, Math.round(currentHp + maxHp * pct));
+}
+
 // Apply attacker-side losses to their armies blob.
 // Attacker army stack sourceIds have no prefix (= stack.unitId).
-function _applyAtkLosses(armiesObj, lord, sideReport) {
+// healPct > 0 (only when the attacker WON) patches survivors up post-fight.
+function _applyAtkLosses(armiesObj, lord, sideReport, healPct = 0) {
   const army = armiesObj[lord.id] || { lordId: lord.id, units: [] };
   sideReport.unitsStart.forEach(({ sourceId }) => {
     if (sourceId === lord.id) return; // lord unit — HP handled by _applyLordHp
@@ -577,15 +591,17 @@ function _applyAtkLosses(armiesObj, lord, sideReport) {
     const stack     = army.units.find(u => u.unitId === sourceId);
     if (!stack) return;
     stack.count = surviving?.count ?? 0;
-    if (surviving && stack.count > 0) stack.currentHp = Math.round(surviving.avgHp);
+    if (surviving && stack.count > 0) stack.currentHp = _winHeal(sourceId, Math.round(surviving.avgHp), healPct);
   });
   army.units        = army.units.filter(u => u.count > 0);
+  army.regenAt      = Date.now(); // fight restarts the garrison-regen clock
   armiesObj[lord.id] = army;
 }
 
 // Apply defender-side losses to each defender's armies blob.
 // Defender army stack sourceIds are prefixed: `d${idx}_${unitId}`.
-function _applyDefLosses(defenders, defArmiesByPlayer, sideReport) {
+// healPct > 0 (only when the defender WON) patches survivors up post-fight.
+function _applyDefLosses(defenders, defArmiesByPlayer, sideReport, healPct = 0) {
   defenders.forEach(({ lord, playerId }, dIdx) => {
     const prefix  = `d${dIdx}`;
     const armies  = defArmiesByPlayer[playerId] || {};
@@ -598,10 +614,11 @@ function _applyDefLosses(defenders, defArmiesByPlayer, sideReport) {
       const stack     = army.units.find(u => u.unitId === unitId);
       if (!stack) return;
       stack.count = surviving?.count ?? 0;
-      if (surviving && stack.count > 0) stack.currentHp = Math.round(surviving.avgHp);
+      if (surviving && stack.count > 0) stack.currentHp = _winHeal(unitId, Math.round(surviving.avgHp), healPct);
     });
 
     army.units           = army.units.filter(u => u.count > 0);
+    army.regenAt         = Date.now(); // fight restarts the garrison-regen clock
     armies[lord.id]      = army;
     defArmiesByPlayer[playerId] = armies;
   });
@@ -1186,8 +1203,15 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   let resourceLoot = null;
   if (report.winner === 'attacker' && cityHit) {
     const cityOwnerPlayer = defPlayersByPlayer[cityHit.playerId];
-    if (cityOwnerPlayer && atkPlayers[attackerPlayerId]) {
-      resourceLoot = _lootResources(cityOwnerPlayer, atkPlayers[attackerPlayerId]);
+    const atkP            = atkPlayers[attackerPlayerId];
+    if (cityOwnerPlayer && atkP) {
+      // God of War blessing: heavier war spoils when the attacker sacks a
+      // city — a bigger cut of the owner's resource pool, and matching bonus
+      // gold. Date.now() lets getBlessingEffects ignore a lapsed blessing
+      // even if catchUp hasn't cleared it yet on this path.
+      const warBonus = EconomyCore.getBlessingEffects(atkP.activeBlessing, Date.now()).battle_loot_bonus || 0;
+      resourceLoot = _lootResources(cityOwnerPlayer, atkP, 1 + warBonus);
+      if (warBonus > 0) rewards.atkGold = Math.round(rewards.atkGold * (1 + warBonus));
     }
   }
 
@@ -1203,8 +1227,8 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   }
 
   const updatedAtkArmies = { ...atkArmies };
-  _applyAtkLosses(updatedAtkArmies, attackerLord, report.attacker);
-  _applyDefLosses(defenders, defArmiesByPlayer, report.defender);
+  _applyAtkLosses(updatedAtkArmies, attackerLord, report.attacker, report.winner === 'attacker' ? BATTLE_WIN_HEAL_PCT : 0);
+  _applyDefLosses(defenders, defArmiesByPlayer, report.defender, report.winner === 'defender' ? BATTLE_WIN_HEAL_PCT : 0);
   _applyLordHp(atkLords, attackerLord.id, report.attacker.unitsSurviving, report.winner, 'attacker');
   _awardXp(attackerLord, rewards.atkXp);
   const capturerInfo = { playerId: attackerPlayerId, username: atkPlayer?.username || null };

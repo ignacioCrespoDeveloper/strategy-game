@@ -59,7 +59,7 @@ export async function handleRecruit(req, res) {
 
   const army = armies[lordId] || { units: [] };
 
-  if ((def.armyWeight || 1) >= 12 && (lord.level || 1) < 12) {
+  if (def.category === 'legendary' && (lord.level || 1) < 12) {
     return res.status(400).json({
       ok: false,
       error: `Only a lord of level 12 or higher can command a ${def.name}.`,

@@ -24,6 +24,17 @@
   <!-- Toast notifications (always present) -->
   <div id="toast-container" aria-live="polite"></div>
 
+  <!-- Shared SVG gradient defs (referenced by fill:url(#…) in CSS) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="medal-gold-grad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#ffe9a8" />
+        <stop offset="0.45" stop-color="#f0b84a" />
+        <stop offset="1" stop-color="#a06f28" />
+      </linearGradient>
+    </defs>
+  </svg>
+
   <!-- ── Supabase (must load before config and core) ── -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <script src="js/core/config.js"></script>
@@ -42,6 +53,7 @@
   <script src="js/data/names.js"></script>
   <script src="js/data/buildings.js"></script>
   <script src="js/data/research.js"></script>
+  <script src="js/data/blessings.js"></script>
   <script src="js/data/discoveries.js"></script>
   <script src="js/data/lord-classes.js"></script>
   <script src="js/data/honor-tiers.js"></script>

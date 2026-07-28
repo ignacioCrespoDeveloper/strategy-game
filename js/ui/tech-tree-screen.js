@@ -245,6 +245,14 @@ const TechTreeScreen = (() => {
   //   bodyExtraHtml  — appended after traits (e.g. ability/tag badges)
   //   actionHtml     — action strip at the bottom of the body (e.g. Recruit button)
   //   extraClass     — additional class(es) on the card root
+  // Game-stage frame tint from PWR (EconomyCore.getUnitTier): early → bronze
+  // (no class), mid → blue, end → violet. Same source of truth as every other
+  // unit-card view, so a unit reads the same tier everywhere.
+  function _ttTierClass(unit) {
+    const t = EconomyCore.getUnitTier(unit);
+    return t === 'early' ? '' : 'tt-unit-card--' + t;
+  }
+
   function _unitCard(unit, buildingName, minLevel, status, opts = {}) {
     const s = { ...(unit.combatStats || {}), ...(opts.stats || {}) };
     const traitLabels = (unit.traits || []).map(t => {
@@ -253,6 +261,7 @@ const TechTreeScreen = (() => {
     });
 
     const lockedClass = (status === 'locked' ? ' tt-card--locked' : '')
+      + (_ttTierClass(unit) ? ` ${_ttTierClass(unit)}` : '')
       + (opts.extraClass ? ` ${opts.extraClass}` : '');
     const raceInfo    = unit.race ? RACES[unit.race] : null;
     const raceBadge   = raceInfo

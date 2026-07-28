@@ -83,16 +83,23 @@ const OverviewScreen = (() => {
     if (!pending?.length) return;
     window._pendingSyncEvents = null;
 
+    // NOTE: ToastService.show uses textContent, so these messages MUST be
+    // plain text with emoji prefixes — gi() SVG markup would render as
+    // literal "<svg…>" characters in the toast, not an icon.
     const LABEL = {
-      building_completed:    e => `${gi('capitol')} ${e.cityName}: ${e.buildingId.replace(/_/g, ' ')} completed`,
-      recruitment_completed: e => `${gi('crossed-swords')} ${e.cityName}: ${e.count}× ${e.unitId.replace(/_/g, ' ')} ready`,
-      lord_recovered:        e => `${gi('health-increase')} ${e.lordName} has recovered`,
-      lord_action_done:      e => e.destX != null ? `${gi('treasure-map')} ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
+      building_completed:    e => `🏛️ ${e.cityName}: ${e.buildingId.replace(/_/g, ' ')} completed`,
+      recruitment_completed: e => `⚔️ ${e.cityName}: ${e.count}× ${e.unitId.replace(/_/g, ' ')} ready`,
+      lord_recovered:        e => `❤️ ${e.lordName} has recovered`,
+      blessing_lapsed:       e => `⛪ ${(typeof BLESSING_DEFS !== 'undefined' && BLESSING_DEFS[e.blessingId]?.name) || 'Your blessing'} has lapsed`,
+      lord_action_done:      e => e.destX != null ? `🗺️ ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
       pvp_resolved:          e => {
-        const icon = e.report?.winner === 'attacker' ? gi('crossed-swords') : e.report?.winner === 'draw' ? gi('shaking-hands') : gi('skull-crossed-bones');
+        const icon = e.report?.winner === 'attacker' ? '⚔️' : e.report?.winner === 'draw' ? '🤝' : '💀';
         const lbl  = e.report?.winner === 'attacker' ? 'PvP Victory' : e.report?.winner === 'draw' ? 'PvP Draw' : 'PvP Defeat';
         return `${icon} ${lbl} while offline — see Activity`;
       },
+      // Quest results deliberately have NO toast — they surface in the
+      // Activity tab instead (DiscoveryService.ingestSyncEvents logs them
+      // via ActivityService when the player returns).
     };
 
     // Deduplicate and show at most 3 toasts so we don't flood the screen
@@ -740,11 +747,11 @@ const OverviewScreen = (() => {
       ? `<div class="ov-lc-portrait">
            <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" loading="lazy" />
            <div class="ov-lc-portrait-fade"></div>
-           <div class="ov-lc-portrait-level" title="Level ${lord.level || 1}">${lord.level || 1}</div>
+           <div class="ov-lc-portrait-level lvl-medal" title="Level ${lord.level || 1}">${gi('laurel-crown', 'lvl-medal-icon')}<span class="lvl-medal-num">${lord.level || 1}</span></div>
          </div>`
       : `<div class="ov-lc-portrait ov-lc-portrait--icon">
            <span>${race.icon || gi('person')}</span>
-           <div class="ov-lc-portrait-level" title="Level ${lord.level || 1}">${lord.level || 1}</div>
+           <div class="ov-lc-portrait-level lvl-medal" title="Level ${lord.level || 1}">${gi('laurel-crown', 'lvl-medal-icon')}<span class="lvl-medal-num">${lord.level || 1}</span></div>
          </div>`;
 
     return `

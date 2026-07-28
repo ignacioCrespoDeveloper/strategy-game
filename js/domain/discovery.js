@@ -337,6 +337,72 @@ const DiscoveryService = (() => {
     _saveLog(all);
   }
 
+  // Ingest quest_result events from an /api/sync response — quests that
+  // resolved server-side while the browser was idle/closed (the dispatcher
+  // already applied the gold/XP; these events carry the discovery so the
+  // client can log it + notify). Populates the per-player quest log and
+  // registers combat-camp records into the active discovery list.
+  //
+  // MUST be called from EVERY sync path (App.init login AND ServerActions'
+  // syncNow) because the server CLEARS pendingDiscoveries the moment it
+  // drains them into the response — whichever sync fires first is the only
+  // one that ever sees them. syncNow used to ignore the events array
+  // entirely, so any navigation-triggered sync silently ate the result and
+  // the reward never surfaced (no log, no toast) — fixed 2026-07-27.
+  //
+  // Idempotent per discovery: each pendingDiscovery appears in exactly one
+  // sync response, and combat records dedupe by id, so double-calls are safe.
+  // Populates the per-lord quest log AND drops a "discovery" entry into the
+  // Activity feed (NO toast — quests surface only in the Activity tab, by
+  // design), mirroring the on-screen resolve path in lord-screen.js.
+  function ingestSyncEvents(playerId, events) {
+    if (!playerId || !events?.length) return 0;
+    const DEFS = (typeof DISCOVERY_DEFS !== 'undefined') ? DISCOVERY_DEFS : {};
+    let count = 0;
+    for (const evt of events) {
+      if (evt.type !== 'quest_result') continue;
+      const isCombat = evt.category === 'combat' && evt.record;
+
+      if (isCombat) {
+        const all = _getAll();
+        if (!all[playerId]) all[playerId] = [];
+        if (!all[playerId].some(r => r.id === evt.record.id)) all[playerId].push(evt.record);
+        _saveAll(all);
+      }
+
+      addLog(playerId, {
+        definitionId: evt.defId,
+        tileX:    evt.record?.tileX   ?? null,
+        tileY:    evt.record?.tileY   ?? null,
+        terrain:  evt.record?.terrain ?? 'plains',
+        rewards:  evt.rewards || [],
+        recordId: isCombat ? evt.record.id : undefined,
+        lordId:   evt.lordId   || undefined,
+        lordName: evt.lordName || undefined,
+      });
+
+      // Activity-tab entry — the only notification quests produce.
+      const def       = DEFS[evt.defId] || null;
+      const name      = def?.name || 'A discovery';
+      const rewardStr = (evt.rewards || []).filter(r => r.type !== 'xp')
+        .map(r => `+${r.amount} ${r.type}`).join(', ');
+      if (typeof ActivityService !== 'undefined') {
+        ActivityService.log(playerId, {
+          type:  'discovery',
+          icon:  def?.icon || '🔍',
+          title: isCombat ? `${name} discovered`
+               : evt.category === 'nothing' ? `${evt.lordName || 'Your lord'}'s search found nothing`
+               : `${name} claimed`,
+          detail: isCombat ? `Hostile camp at (${evt.record.tileX}, ${evt.record.tileY}) — attack from the map`
+                : rewardStr || null,
+          lordName: evt.lordName || '',
+        });
+      }
+      count++;
+    }
+    return count;
+  }
+
   function getLog(playerId) {
     return (_getLog()[playerId] || []);
   }
@@ -411,7 +477,7 @@ const DiscoveryService = (() => {
 
   return {
     search, claim, negotiate, getActive, expireOld, formatExpiry,
-    addLog, getLog, dismissLog, clearLog, markLogSeen, getUnseenCount,
+    addLog, ingestSyncEvents, getLog, dismissLog, clearLog, markLogSeen, getUnseenCount,
     spawnBanditCamp,
     getSearchDuration, incrementFatigue, getFatigueCount,
   };

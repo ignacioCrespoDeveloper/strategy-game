@@ -33,6 +33,13 @@ const ServerActions = (() => {
     return lords;
   }
 
+  // NOTE: returns a SINGLE merged player object — unlike _mergeLord above,
+  // which returns the whole lords MAP. Callers must slot it into the players
+  // map by id (players[p.id] = _mergePlayer(p)) before hydrating; assigning
+  // it straight to patch.players replaces the entire map with one player and
+  // corrupts local state (getSession/getById then return null). Bit the three
+  // raid endpoints once — kept symmetric with every other endpoint now.
+  //
   // Defense-in-depth for a server-returned player object: honorPoints lives
   // in its own Supabase key (see combat-resolver.js/pve-attack.js), not the
   // 'players' blob these action responses come from, so action-base.js
@@ -112,6 +119,19 @@ const ServerActions = (() => {
 
   async function researchInstant() {
     const result = await _post('/api/research/instant', {});
+    if (result.ok && result.player) {
+      const players             = StorageService.get('players') || {};
+      players[result.player.id] = _mergePlayer(result.player);
+      StorageService.hydrate({ players });
+    }
+    return result;
+  }
+
+  // POST /api/blessing/consecrate — consecrate a Temple blessing.
+  // Pays a gold offering and (re)starts the single active blessing.
+  // Hydrates the player (coins + activeBlessing changed).
+  async function blessingConsecrate(blessingId) {
+    const result = await _post('/api/blessing/consecrate', { blessingId });
     if (result.ok && result.player) {
       const players             = StorageService.get('players') || {};
       players[result.player.id] = _mergePlayer(result.player);
@@ -393,6 +413,58 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/city/cancel-build — cancel a queued construction item (by
+  // queueIndex) with a full resource refund. Hydrates city + player.
+  async function cancelBuild(cityId, queueIndex) {
+    const result = await _post('/api/city/cancel-build', { cityId, queueIndex });
+    if (result.ok) {
+      const patch = {};
+      if (result.city) {
+        const cities   = StorageService.get('cities') || {};
+        cities[cityId] = result.city;
+        patch.cities   = cities;
+      }
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/city/cancel-recruit — cancel a queued recruitment batch (by
+  // queueIndex) with a full gold refund. Hydrates city + player.
+  async function cancelRecruit(cityId, queueIndex) {
+    const result = await _post('/api/city/cancel-recruit', { cityId, queueIndex });
+    if (result.ok) {
+      const patch = {};
+      if (result.city) {
+        const cities   = StorageService.get('cities') || {};
+        cities[cityId] = result.city;
+        patch.cities   = cities;
+      }
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/lord/cancel-action — cancel a lord's in-progress action
+  // (attack/march/search/scout). No refund. Hydrates the lord.
+  async function cancelLordAction(lordId) {
+    const result = await _post('/api/lord/cancel-action', { lordId });
+    if (result.ok && result.lord) {
+      StorageService.hydrate({ lords: _mergeLord(result.lord) });
+    }
+    return result;
+  }
+
   // POST /api/lord/pve-attack
   // Server-authoritative PvE combat resolution (bandit camps, quest combat).
   // The server re-derives the encounter from the already-trustworthy discovery
@@ -515,8 +587,22 @@ const ServerActions = (() => {
       });
       if (res.ok) {
         const data = await res.json();
-        const { state, serverTime } = data;
+        const { state, serverTime, events } = data;
         if (serverTime) TimeService.setSkew(serverTime - Date.now());
+
+        // Surface any events the server drained on this sync — most
+        // importantly quest_result (offline-resolved quests). This USED to be
+        // ignored here, so a navigation-triggered sync silently consumed the
+        // discovery (the server clears pendingDiscoveries when it drains them),
+        // and the reward never reached the log or a toast. Populate the quest
+        // log now, and stash the events so OverviewScreen._flushSyncEvents can
+        // toast them (deduped/capped there). Fixed 2026-07-27.
+        if (events?.length) {
+          const pid = (typeof PlayerService !== 'undefined') ? PlayerService.getSession()?.id : null;
+          if (pid) DiscoveryService.ingestSyncEvents(pid, events);
+          window._pendingSyncEvents = (window._pendingSyncEvents || []).concat(events);
+        }
+
         if (state) {
           StorageService.hydrate(state);
           // Restore coins to max(local, server).
@@ -654,7 +740,11 @@ const ServerActions = (() => {
     if (result.ok) {
       const patch = {};
       if (result.lord)   patch.lords   = _mergeLord(result.lord);
-      if (result.player) patch.players = _mergePlayer(result.player);
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
     }
     return result;
@@ -666,7 +756,11 @@ const ServerActions = (() => {
     if (result.ok) {
       const patch = {};
       if (result.lord)   patch.lords   = _mergeLord(result.lord);
-      if (result.player) patch.players = _mergePlayer(result.player);
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
     }
     return result;
@@ -679,7 +773,11 @@ const ServerActions = (() => {
     if (result.ok) {
       const patch = {};
       if (result.lord)   patch.lords   = _mergeLord(result.lord);
-      if (result.player) patch.players = _mergePlayer(result.player);
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
+      }
       if (result.army) {
         const armies = StorageService.get('armies') || {};
         armies[result.army.lordId] = result.army;
@@ -742,5 +840,5 @@ const ServerActions = (() => {
     return _post('/api/clan/war-declare', { targetClanId, durationSecs });
   }
 
-  return { build, demolish, checkIncomingAttacks, researchStart, researchInstant, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, syncNow, instantBuild, instantRecruit, pveAttack, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
+  return { build, demolish, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, pveAttack, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
 })();

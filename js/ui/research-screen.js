@@ -13,12 +13,13 @@
 // =============================================
 
 const ResearchScreen = (() => {
-  let _player       = null;
-  let _lord         = null;
-  let _root         = null;
-  let _tab          = 'library';
-  let _selectedBook = null;
-  let _tickTimer    = null;
+  let _player          = null;
+  let _lord            = null;
+  let _root            = null;
+  let _tab             = 'library';
+  let _selectedBook    = null;
+  let _selectedBlessing = null;
+  let _tickTimer       = null;
 
   const TABS = [
     { id: 'library', label: 'Library', icon: () => gi('book-pile') },
@@ -26,10 +27,19 @@ const ResearchScreen = (() => {
   ];
 
   const RES_ICON = {
+    gold:  () => gi('two-coins'),
     wood:  () => gi('wood-pile'),
     stone: () => gi('war-pick'),
     food:  () => gi('wheat'),
   };
+
+  // Current balance for a cost key — gold reads from player.coins, all
+  // other keys are stockpiled resources. Keeps _costChips/_canAfford able
+  // to price both research (resources) and blessings (gold) uniformly.
+  function _balanceOf(key) {
+    if (key === 'gold') return Math.floor(_player?.coins || 0);
+    return Math.floor((_player?.resources || {})[key] || 0);
+  }
 
   // ── Entry point ───────────────────────────────────────────────
 
@@ -56,6 +66,19 @@ const ResearchScreen = (() => {
   function _maxLibraryLevel() {
     return CityService.getPlayerCities(_player.id)
       .reduce((max, c) => Math.max(max, c.buildings?.library || 0), 0);
+  }
+
+  function _maxTempleLevel() {
+    return CityService.getPlayerCities(_player.id)
+      .reduce((max, c) => Math.max(max, c.buildings?.temple || 0), 0);
+  }
+
+  // The player's active blessing, or null if none / already lapsed.
+  function _activeBlessing() {
+    const b = _player?.activeBlessing;
+    if (!b || !b.id) return null;
+    if (b.finishAt && TimeService.now() >= b.finishAt) return null;
+    return b;
   }
 
   function _bookState(def) {
@@ -167,7 +190,9 @@ const ResearchScreen = (() => {
     return `
       <button class="${classes}" data-book="${def.id}" title="${def.name}" aria-label="${def.name}, level ${s.level}">
         <span class="bld3-tile-art">
-          <span class="bld3-tile-icon">${def.icon}</span>
+          ${def.image
+            ? `<img class="bld3-tile-img" src="${def.image}" alt="" loading="lazy" />`
+            : `<span class="bld3-tile-icon">${def.icon}</span>`}
           <span class="bld3-tile-art-fade"></span>
           ${busyOverlay}
         </span>
@@ -208,7 +233,9 @@ const ResearchScreen = (() => {
           <button class="bld3-detail-close" id="rs-close" aria-label="Close details">✕</button>
         </div>
         <div class="bld3-detail-body">
-          <div class="bld3-detail-icon">${def.icon}</div>
+          ${def.image
+            ? `<img class="bld3-detail-img" src="${def.image}" alt="${def.name}" />`
+            : `<div class="bld3-detail-icon">${def.icon}</div>`}
           <div class="bld3-detail-info">
             <div class="bld3-detail-desc">${def.description}</div>
 
@@ -247,26 +274,137 @@ const ResearchScreen = (() => {
   }
 
   function _costChips(cost) {
-    const playerRes = _player?.resources || {};
     return Object.entries(cost)
       .filter(([, v]) => v > 0)
       .map(([res, v]) => {
-        const has = Math.floor(playerRes[res] || 0) >= v;
+        const has = _balanceOf(res) >= v;
         return `<span class="${has ? 'bld2-res' : 'bld2-res bld2-res--short'}">${RES_ICON[res] ? RES_ICON[res]() : res} ${v.toLocaleString()}</span>`;
       })
       .join('');
   }
 
-  // ── Temple tab (placeholder) ──────────────────────────────────
+  // ── Temple tab (blessings) ────────────────────────────────────
 
   function _templeHtml() {
+    const templeLevel = _maxTempleLevel();
+
+    if (templeLevel < BLESSING_MIN_TEMPLE) {
+      return `
+        <div class="rs-empty">
+          <div class="rs-empty-icon">${gi('church')}</div>
+          <div class="rs-empty-title">No Temple yet</div>
+          <div class="rs-empty-sub">Build a Temple in one of your cities to receive the gods' blessings.</div>
+        </div>`;
+    }
+
+    const active   = _activeBlessing();
+    const activeDef = active ? BLESSING_DEFS[active.id] : null;
+    const eta      = active ? Math.max(0, Math.round((active.finishAt - TimeService.now()) / 1000)) : 0;
+    const dur      = TimeService.formatDuration(blessingDuration(templeLevel));
+
+    const blessings = Object.values(BLESSING_DEFS);
+    const selDef    = _selectedBlessing ? BLESSING_DEFS[_selectedBlessing] : null;
+
     return `
-      <div class="rs-empty">
-        <div class="rs-empty-icon">${gi('church')}</div>
-        <div class="rs-empty-title">Temple Blessings</div>
-        <div class="rs-empty-sub">Coming soon — devotions and timed blessings granted by your Temples.</div>
+      <div class="rs-status">
+        <span>${gi('church')} Highest Temple: <b>Lv ${templeLevel}</b></span>
+        <span class="rs-status-sep">·</span>
+        <span>${active
+          ? `Blessed by the <b>${activeDef?.name || active.id}</b> — lapses in <b id="rs-bless-cd">${TimeService.formatDuration(eta)}</b>`
+          : `No blessing consecrated — one active at a time (${dur} per rite)`}</span>
+      </div>
+      <div class="bld3-grid">${blessings.map(def => _blessingTileHtml(def, active, templeLevel)).join('')}</div>
+      ${selDef ? _blessingDetailHtml(selDef, active, templeLevel) : ''}
+    `;
+  }
+
+  function _blessingTileHtml(def, active, templeLevel) {
+    const isActive = active?.id === def.id;
+    const classes  = [
+      'bld3-tile',
+      _selectedBlessing === def.id ? 'bld3-tile--selected' : '',
+      isActive ? 'bld3-tile--inqueue' : '',
+    ].filter(Boolean).join(' ');
+
+    const eta = isActive ? Math.max(0, Math.round((active.finishAt - TimeService.now()) / 1000)) : 0;
+    const busyOverlay = isActive ? `
+      <span class="bld3-tile-busy">
+        <span class="bld3-tile-busy-icon">${gi('church')}</span>
+        <span class="bld3-tile-busy-label">Blessing active</span>
+        <span class="bld3-tile-busy-cd" id="rs-bless-cd-tile">${TimeService.formatDuration(eta)}</span>
+      </span>` : '';
+
+    return `
+      <button class="${classes}" data-blessing="${def.id}" title="${def.name}" aria-label="${def.name}">
+        <span class="bld3-tile-art">
+          ${def.image
+            ? `<img class="bld3-tile-img" src="${def.image}" alt="" loading="lazy" />`
+            : `<span class="bld3-tile-icon">${def.icon}</span>`}
+          <span class="bld3-tile-art-fade"></span>
+          ${busyOverlay}
+        </span>
+        <span class="bld3-tile-info">
+          <span class="bld3-tile-name">${def.name}</span>
+          <span class="bld3-tile-level">${isActive ? 'Active' : 'Blessing'}</span>
+        </span>
+      </button>
+    `;
+  }
+
+  function _blessingDetailHtml(def, active, templeLevel) {
+    const isActive   = active?.id === def.id;
+    const offering   = { gold: blessingCost(templeLevel) };
+    const affordable = _canAfford(offering);
+    const eta        = isActive ? Math.max(0, Math.round((active.finishAt - TimeService.now()) / 1000)) : 0;
+    const durLabel   = TimeService.formatDuration(blessingDuration(templeLevel));
+
+    // Consecrate button state — same grammar as the Library detail panel.
+    let btnLabel, btnClass, btnDisabled;
+    if (!affordable) {
+      btnLabel = 'Need Offering'; btnClass = 'bld2-btn--cant'; btnDisabled = true;
+    } else if (isActive) {
+      btnLabel = `${gi('church')} Renew`; btnClass = 'bld2-btn--ready'; btnDisabled = false;
+    } else {
+      btnLabel = `${gi('church')} Consecrate`; btnClass = 'bld2-btn--ready'; btnDisabled = false;
+    }
+
+    return `
+      <div class="bld3-detail">
+        <div class="bld3-detail-head">
+          <span class="bld3-detail-name">${def.name}</span>
+          <span class="bld3-detail-level">${isActive ? `Active — lapses in ${TimeService.formatDuration(eta)}` : 'Blessing'}</span>
+          <button class="bld3-detail-close" id="rs-bless-close" aria-label="Close details">✕</button>
+        </div>
+        <div class="bld3-detail-body">
+          ${def.image
+            ? `<img class="bld3-detail-img" src="${def.image}" alt="${def.name}" />`
+            : `<div class="bld3-detail-icon">${def.icon}</div>`}
+          <div class="bld3-detail-info">
+            <div class="bld3-detail-desc">${def.description}</div>
+
+            <div class="bld2-prod-row">
+              <span class="bld2-prod-cur">${def.summary}</span>
+            </div>
+
+            <div class="bld3-detail-req-title">${isActive ? 'Renew this rite for:' : 'Consecrate this rite for:'}</div>
+            <div class="bld2-cost-row">
+              ${_costChips(offering)}
+              <span class="bld2-duration">${gi('stopwatch')} ${durLabel}</span>
+            </div>
+            ${active && !isActive ? `
+              <div class="bld2-next-hint">Replaces the active ${gi('church')} ${BLESSING_DEFS[active.id]?.name || active.id}.</div>
+            ` : ''}
+          </div>
+          <div class="bld3-detail-actions">
+            <button class="bld2-btn ${btnClass}" data-consecrate="${def.id}" ${btnDisabled ? 'disabled' : ''}>${btnLabel}</button>
+          </div>
+        </div>
       </div>
     `;
+  }
+
+  function _canAfford(cost) {
+    return Object.entries(cost).every(([res, amt]) => amt <= 0 || _balanceOf(res) >= amt);
   }
 
   // ── Events ────────────────────────────────────────────────────
@@ -274,9 +412,11 @@ const ResearchScreen = (() => {
   function _bindEvents() {
     document.querySelectorAll('.bld2-tab[data-rs-tab]').forEach(btn => {
       btn.addEventListener('click', () => {
-        _tab          = btn.dataset.rsTab;
-        _selectedBook = null;
+        _tab             = btn.dataset.rsTab;
+        _selectedBook    = null;
+        _selectedBlessing = null;
         _rerender();
+        _startCountdown();
       });
     });
 
@@ -317,32 +457,94 @@ const ResearchScreen = (() => {
       HUD.refresh();
       _toast('✓ Research completed instantly!');
     });
+
+    // ── Temple tab: blessings ──────────────────────────────────
+    document.querySelectorAll('.bld3-tile[data-blessing]').forEach(tile => {
+      tile.addEventListener('click', () => {
+        const id = tile.dataset.blessing;
+        _selectedBlessing = _selectedBlessing === id ? null : id;
+        _rerender();
+        if (_selectedBlessing) {
+          document.querySelector('.bld3-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      });
+    });
+
+    document.getElementById('rs-bless-close')?.addEventListener('click', () => {
+      _selectedBlessing = null;
+      _rerender();
+    });
+
+    document.querySelectorAll('.bld2-btn[data-consecrate]:not([disabled])').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const result = await ServerActions.blessingConsecrate(btn.dataset.consecrate);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
+        _player = PlayerService.getById(_player.id);
+        const def = BLESSING_DEFS[btn.dataset.consecrate];
+        _rerender();
+        _startCountdown();
+        EventBus.emit('resources:changed');
+        HUD.refresh();
+        _toast(`${def?.name || 'Blessing'} consecrated!`);
+      });
+    });
   }
 
   // ── Live countdown ────────────────────────────────────────────
 
   function _startCountdown() {
     _stopCountdown();
-    if ((_player?.researchQueue || []).length === 0) return;
+    const hasResearch = (_player?.researchQueue || []).length > 0;
+    const hasBlessing = !!_activeBlessing();
+    if (!hasResearch && !hasBlessing) return;
 
     _tickTimer = setInterval(() => {
+      let live = false;
+
+      // Library research countdown
       const active = (_player?.researchQueue || [])[0];
-      if (!active) { _stopCountdown(); return; }
-      const secs = Math.round((active.finishAt - TimeService.now()) / 1000);
-      if (secs <= 0) {
-        _stopCountdown();
-        ServerActions.syncNow().then(() => {
-          _player = PlayerService.getById(_player.id);
-          _toast('✓ Research completed!');
-          _rerender();
-        });
-        return;
+      if (active) {
+        const secs = Math.round((active.finishAt - TimeService.now()) / 1000);
+        if (secs <= 0) {
+          _stopCountdown();
+          ServerActions.syncNow().then(() => {
+            _player = PlayerService.getById(_player.id);
+            _toast('✓ Research completed!');
+            _rerender();
+          });
+          return;
+        }
+        const f = TimeService.formatDuration(secs);
+        const el1 = document.getElementById('rs-cd');
+        const el2 = document.getElementById('rs-cd-tile');
+        if (el1) el1.textContent = f;
+        if (el2) el2.textContent = f;
+        live = true;
       }
-      const formatted = TimeService.formatDuration(secs);
-      const el1 = document.getElementById('rs-cd');
-      const el2 = document.getElementById('rs-cd-tile');
-      if (el1) el1.textContent = formatted;
-      if (el2) el2.textContent = formatted;
+
+      // Temple blessing countdown
+      const bless = _activeBlessing();
+      if (bless) {
+        const secs = Math.round((bless.finishAt - TimeService.now()) / 1000);
+        if (secs <= 0) {
+          _stopCountdown();
+          ServerActions.syncNow().then(() => {
+            _player = PlayerService.getById(_player.id);
+            _toast('The blessing has lapsed.');
+            _rerender();
+          });
+          return;
+        }
+        const f = TimeService.formatDuration(secs);
+        const elb = document.getElementById('rs-bless-cd');
+        const elt = document.getElementById('rs-bless-cd-tile');
+        if (elb) elb.textContent = f;
+        if (elt) elt.textContent = f;
+        live = true;
+      }
+
+      if (!live) _stopCountdown();
     }, 1000);
   }
 

@@ -161,7 +161,7 @@ check('hangar rule: training-building levels above the gate divide recruit time'
 
 check('getUnitTraining finds the roster gate',
   JSON.stringify(EconomyCore.getUnitTraining('human', 'spearmen')) === JSON.stringify({ buildingId: 'barracks', minLevel: 1 }) &&
-  JSON.stringify(EconomyCore.getUnitTraining('human', 'greatswords')) === JSON.stringify({ buildingId: 'barracks', minLevel: 8 }) &&
+  JSON.stringify(EconomyCore.getUnitTraining('human', 'greatswords')) === JSON.stringify({ buildingId: 'barracks', minLevel: 9 }) &&
   EconomyCore.getUnitTraining('human', 'bandits') === null); // mercs have no training building
 
 check('military chain: each war building requires its predecessor',
@@ -179,9 +179,9 @@ check('veterancy: +2%/level of the training building, SUMMED across cities',
   EconomyCore.getVeterancyPct('human', 'bandits', [{ barracks: 5 }]) === 0 && // mercs unbuffed
   Math.abs(EconomyCore.getGarrisonVeterancyPct({ guard_post: 3, fortress: 2 }) - 0.10) < 1e-9);
 
-check('elite gates hold: Black Orcs Barracks 8, weight 3, 6h',
-  UNIT_DEFS.black_orcs.armyWeight === 3 && UNIT_DEFS.black_orcs.recruitTime === 21600 &&
-  JSON.stringify(EconomyCore.getUnitTraining('orc', 'black_orcs')) === JSON.stringify({ buildingId: 'barracks', minLevel: 8 }));
+check('elite gates hold: Black Orcs Barracks 10 (apex spread), 6h',
+  UNIT_DEFS.black_orcs.recruitTime === 21600 &&
+  JSON.stringify(EconomyCore.getUnitTraining('orc', 'black_orcs')) === JSON.stringify({ buildingId: 'barracks', minLevel: 10 }));
 
 // Gold tracks PWR (2026-07-27): every priced unit must match the formula
 // goldCost = PWR × 3.5 × tier premium (EconomyCore.getUnitGoldCost).
@@ -199,8 +199,8 @@ const _missingDefs = _rosterIds.filter(id => !UNIT_DEFS[id]);
 check('every UNIT_ROSTER entry has a UNIT_DEFS definition',
   _missingDefs.length === 0, _missingDefs.join(', '));
 check('TWW3 tier units are gated in the roster',
-  JSON.stringify(EconomyCore.getUnitTraining('human', 'demigryph_knights')) === JSON.stringify({ buildingId: 'stables', minLevel: 8 }) &&
-  JSON.stringify(EconomyCore.getUnitTraining('dark_elf', 'black_guard_naggarond')) === JSON.stringify({ buildingId: 'barracks', minLevel: 8 }) &&
+  JSON.stringify(EconomyCore.getUnitTraining('human', 'demigryph_knights')) === JSON.stringify({ buildingId: 'stables', minLevel: 10 }) &&
+  JSON.stringify(EconomyCore.getUnitTraining('dark_elf', 'black_guard_naggarond')) === JSON.stringify({ buildingId: 'barracks', minLevel: 10 }) &&
   JSON.stringify(EconomyCore.getUnitTraining('high_elf', 'sun_dragon')) === JSON.stringify({ buildingId: 'dragon_lair', minLevel: 1 }) &&
   JSON.stringify(EconomyCore.getUnitTraining('high_elf', 'frostheart_phoenix')) === JSON.stringify({ buildingId: 'dragon_lair', minLevel: 3 }) &&
   JSON.stringify(EconomyCore.getUnitTraining('dwarf', 'quarrellers')) === JSON.stringify({ buildingId: 'archery_range', minLevel: 3 }) &&

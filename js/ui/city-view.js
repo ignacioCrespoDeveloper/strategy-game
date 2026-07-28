@@ -225,6 +225,9 @@ const CityView = (() => {
       banner.innerHTML = _queueBannerHtml();
       banner.classList.remove('hidden');
       document.getElementById('cv-boost-btn')?.addEventListener('click', _instantComplete);
+      banner.querySelectorAll('[data-cancel-build]').forEach(btn => {
+        btn.addEventListener('click', () => _cancelBuild(Number(btn.dataset.cancelBuild)));
+      });
     } else {
       banner.classList.add('hidden');
     }
@@ -441,15 +444,12 @@ const CityView = (() => {
             ? '<div class="cvl-garrison-empty">No garrison — build a Guard Post</div>'
             : `<div class="la-unit-cards cvl-garrison-cards">${garrison.flatMap(r => {
                 const def = UNIT_DEFS[r.unitId] || {};
-                const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
-                  : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
-                  : def.category === 'monster' ? ' la-unit-card--monster'
-                  : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+                const tierClass = unitTierClass(def);
                 const portrait = def.image
                   ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || r.unitId}" loading="lazy">`
                   : `<div class="la-uc-img la-uc-img--fallback">${def.icon || gi('crossed-swords')}</div>`;
                 return Array.from({ length: r.count }, () => `
-                  <div class="la-unit-card${tierClass}" title="${def.name || r.unitId}">
+                  <div class="la-unit-card${tierClass ? ' ' + tierClass : ''}" title="${def.name || r.unitId}">
                     <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
                     ${portrait}
                     ${giUnitType(def.category)}
@@ -739,6 +739,7 @@ const CityView = (() => {
           <span class="cv-queue-item-pos">#${i + 2}</span>
           <span class="cv-queue-item-name">${qDef?.name || q.buildingId} → Lv ${q.targetLevel}</span>
           <span class="cv-queue-item-eta">${TimeService.formatDuration(etaSecs)}</span>
+          <button class="x-cancel-btn" data-cancel-build="${i + 1}" title="Cancel &amp; refund resources">✕</button>
         </div>`;
     }).join('');
 
@@ -751,6 +752,7 @@ const CityView = (() => {
         <button class="cv-boost-btn ${canBoost ? '' : 'cv-boost-btn--cant'}" id="cv-boost-btn" ${canBoost ? '' : 'disabled'}>
           ${gi('power-lightning')} ${boostCost}${gi('cut-diamond')}
         </button>
+        <button class="x-cancel-btn" data-cancel-build="0" title="Cancel &amp; refund resources">✕</button>
       </div>
       ${upcomingHtml ? `<div class="cv-queue-upcoming">${upcomingHtml}</div>` : ''}
       <div class="cv-queue-slots">${_city.constructionQueue.length}/${MAX_QUEUE} queue slots used</div>
@@ -893,6 +895,22 @@ const CityView = (() => {
     _renderContent();
     _startCountdown();
     _toast('✓ Building completed instantly!');
+  }
+
+  async function _cancelBuild(queueIndex) {
+    if (!Number.isInteger(queueIndex)) return;
+    const result = await ServerActions.cancelBuild(_city.id, queueIndex);
+    if (!result.ok) { _toast(result.error || 'Failed to cancel'); return; }
+
+    _city   = CityService.getById(_city.id);
+    _player = PlayerService.getById(_player.id);
+    _stopCountdown();
+    HUD.refresh();
+    const refreshedLeft = document.getElementById('cv-left');
+    if (refreshedLeft) refreshedLeft.innerHTML = _leftPanelHtml();
+    _renderContent();
+    _startCountdown();
+    _toast('Construction cancelled — resources refunded.');
   }
 
   // ── Live countdown ────────────────────────────────────────────

@@ -13,16 +13,8 @@ const AttackConfirmView = (() => {
 
   // ── Unit card (mirrors lord-screen's _buildUnitCard, same CSS classes) ──
 
-  function _cardTierClass(category) {
-    if (category === 'mercenary') return 'la-unit-card--merc';
-    if (category === 'elite' || category === 'cavalry') return 'la-unit-card--elite';
-    if (category === 'monster') return 'la-unit-card--monster';
-    if (category === 'legendary') return 'la-unit-card--legendary';
-    return '';
-  }
-
   function _unitCardHtml(def, count) {
-    const tierClass = _cardTierClass(def.category);
+    const tierClass = unitTierClass(def);
     const portrait = def.image
       ? `<img src="${def.image}" class="ac-unit-portrait" alt="${def.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
       : '';

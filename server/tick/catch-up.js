@@ -39,6 +39,10 @@ function _maxHp(lord) {
   return baseHp + classMod;
 }
 
+// Garrison regen: fraction of a unit's max HP recovered per minute while its
+// lord rests idle on one of the player's own city tiles. Tunable.
+const _GARRISON_REGEN_PER_MIN = 0.01;
+
 // Raiding stance hourly reward rate — scales with lord level. Landed
 // between passive city income (~7-65 gold/hr) and the effective rate of
 // actively-played search quests (well above that), since raiding requires
@@ -222,6 +226,15 @@ export function catchUp(state, nowMs, engine = null) {
   const events = [];
   let   changed = false;
 
+  // Active Temple blessing effects (empire-wide, single slot). Resolved once
+  // and reused by the raid, gold, production and population sections below.
+  // getBlessingEffects respects finishAt with nowMs, so an expired blessing
+  // yields {} even before the tidy-up clear in the economy section. The
+  // engine-less combat-resolver path (no EconomyCore) simply gets no buff.
+  const blessingFx = engine?.EconomyCore
+    ? engine.EconomyCore.getBlessingEffects(player.activeBlessing, nowMs)
+    : {};
+
   // ── 1. Lord ticks ───────────────────────────────────────────
 
   for (const lord of Object.values(lords)) {
@@ -259,6 +272,11 @@ export function catchUp(state, nowMs, engine = null) {
       const done = queue.shift();
       queueChanged = changed = true;
       if (done.destX != null) { lord.x = done.destX; lord.y = done.destY; }
+
+      // Reset the garrison-regen clock to this action's completion time — rest
+      // only starts counting once the lord finishes what it was doing (a march,
+      // search or scout). See the garrison-regen block below (1e).
+      if (armies[lord.id]) armies[lord.id].regenAt = done.finishAt;
 
       // search_area: resolve XP + discovery server-side when engine data is available.
       // This ensures rewards are applied even when the browser was closed during the quest.
@@ -342,11 +360,13 @@ export function catchUp(state, nowMs, engine = null) {
       if (nowMs >= lord.stance.finishAt) {
         const hours = Math.max(0, (lord.stance.finishAt - lord.stance.startedAt) / 3_600_000);
         const rates = _raidHourlyRewards(lord);
-        const goldEarned = Math.floor(rates.gold * hours);
+        // God of Destruction blessing: heavier plunder from every raid.
+        const raidMult   = 1 + (blessingFx.raid_bonus || 0);
+        const goldEarned = Math.floor(rates.gold * hours * raidMult);
         player.coins      = Math.floor((player.coins || 0) + goldEarned);
         player.resources  = player.resources || { food: 0, wood: 0, stone: 0 };
         ['food', 'wood', 'stone'].forEach(r => {
-          player.resources[r] = Math.floor((player.resources[r] || 0) + rates[r] * hours);
+          player.resources[r] = Math.floor((player.resources[r] || 0) + rates[r] * hours * raidMult);
         });
         lord.currentHp = maxHp;
         lord.hpRegenAt = nowMs;
@@ -357,6 +377,47 @@ export function catchUp(state, nowMs, engine = null) {
       } else {
         if (lord.currentHp !== maxHp) { lord.currentHp = maxHp; lord.hpRegenAt = nowMs; changed = true; }
         healUnits();
+      }
+    }
+
+    // 1e. Garrison unit regen — while the lord is idle (no queued action, not
+    // in a stance) and standing on one of THIS player's own city tiles, its
+    // army's units recover HP over time. Positioning matters: bring a bloodied
+    // army home to heal. The rest clock (army.regenAt) is reset on arrival
+    // (action completion above) and on battle damage (combat-resolver.js /
+    // pve-attack.js), so this only ever counts genuine rest-in-city time.
+    const gArmy  = armies[lord.id];
+    const isIdle = (lord.actionQueue || []).length === 0
+      && (!lord.stance || lord.stance.id === 'idle' || !lord.stance.finishAt || nowMs >= lord.stance.finishAt);
+    const onOwnCity = lord.x != null && lord.y != null
+      && Object.values(cities).some(c => c?.playerId === player.id && c.x === lord.x && c.y === lord.y);
+    if (isIdle && onOwnCity && gArmy?.units?.length && engine?.UNIT_DEFS) {
+      const damaged = gArmy.units.some(u => {
+        const m = engine.UNIT_DEFS[u.unitId]?.combatStats?.hp;
+        return m && (u.currentHp ?? m) < m;
+      });
+      if (damaged) {
+        if (gArmy.regenAt == null) {
+          // First eligible tick with damage (armies that predate this feature,
+          // or were just damaged) have no rest clock yet — start it now so the
+          // next tick can accrue heal. Can't retro-heal without a baseline.
+          gArmy.regenAt = nowMs;
+          changed = true;
+        } else {
+          const mins = (nowMs - gArmy.regenAt) / 60_000;
+          if (mins > 0) {
+            let healed = false;
+            gArmy.units.forEach(u => {
+              const uMax = engine.UNIT_DEFS[u.unitId]?.combatStats?.hp;
+              if (!uMax) return;
+              const cur = u.currentHp ?? uMax;
+              if (cur >= uMax) return;
+              const next = Math.min(uMax, Math.round(cur + uMax * _GARRISON_REGEN_PER_MIN * mins));
+              if (next > cur) { u.currentHp = next; healed = true; }
+            });
+            if (healed) { gArmy.regenAt = nowMs; changed = true; }
+          }
+        }
       }
     }
   }
@@ -437,6 +498,15 @@ export function catchUp(state, nowMs, engine = null) {
     });
   }
 
+  // Temple blessing expiry (empire-wide, single slot). The buff is already
+  // self-enforcing — blessingFx above ignores an expired blessing — but clear
+  // the lapsed record here so state stays tidy and the client can toast it.
+  if (player.activeBlessing && player.activeBlessing.finishAt && nowMs >= player.activeBlessing.finishAt) {
+    events.push({ type: 'blessing_lapsed', blessingId: player.activeBlessing.id });
+    player.activeBlessing = null;
+    changed = true;
+  }
+
   // Economy (production/population/gold) requires the shared EconomyCore
   // from engine-loader.js. Every normal caller passes it; the one deliberate
   // exception is combat-resolver's offline-attacker position update, which
@@ -449,12 +519,15 @@ export function catchUp(state, nowMs, engine = null) {
   const raceId      = mainLord?.race || null;
   const raceBonuses = engine?.RACES?.[raceId]?.bonuses || {};
 
-  // Race and Library-research production bonuses share the same flat keys —
-  // combine them once, then feed the merged object to getRates.
+  // Race, Library-research and God-of-Nature-blessing production bonuses all
+  // share the same flat keys — combine them once, then feed the merged
+  // object to getRates.
   const researchFx  = eco ? eco.getResearchEffects(player.research) : {};
   const prodBonuses = {};
   for (const r of ['food', 'wood', 'stone']) {
-    prodBonuses[r + '_production'] = (raceBonuses[r + '_production'] || 0) + (researchFx[r + '_production'] || 0);
+    prodBonuses[r + '_production'] = (raceBonuses[r + '_production'] || 0)
+      + (researchFx[r + '_production'] || 0)
+      + (blessingFx[r + '_production'] || 0);
   }
 
   let totalGoldEarned = 0;
@@ -492,8 +565,12 @@ export function catchUp(state, nowMs, engine = null) {
     // Gold income (accumulated, applied to player after all cities)
     totalGoldEarned += eco.getGoldRate(city.buildings || {}, city.population, stats.happiness) * elapsedH;
 
-    // Population growth
-    const popRate = eco.getPopGrowthRate(stats, rates.food);
+    // Population growth. God of Fertility blessing boosts positive growth
+    // only — a blessing must never deepen a decline.
+    let popRate = eco.getPopGrowthRate(stats, rates.food);
+    if (popRate > 0 && blessingFx.pop_growth_bonus) {
+      popRate = Math.round(popRate * (1 + blessingFx.pop_growth_bonus));
+    }
     if (popRate !== 0) {
       city.population = Math.max(1, Math.round((city.population || 1000) + popRate * elapsedH));
     }
@@ -508,8 +585,11 @@ export function catchUp(state, nowMs, engine = null) {
   }
 
   // Gold income — upkeep was removed entirely (2026-07-27 review): armies
-  // are constrained by the PWR cap, not by maintenance costs.
+  // are constrained by the PWR cap, not by maintenance costs. God of Commerce
+  // blessing scales the whole empire's take (same multiplier the client's
+  // ProductionService.getGoldRate applies for display).
   if (eco && totalGoldEarned > 0) {
+    totalGoldEarned *= (1 + (blessingFx.gold_income_bonus || 0));
     player.coins = Math.floor((player.coins || 0) + totalGoldEarned);
     changed = true;
   }

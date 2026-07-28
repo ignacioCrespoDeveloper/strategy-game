@@ -69,15 +69,6 @@ const BattleResultView = (() => {
     return '#c05050';
   }
 
-  // Mirrors lord-screen/map-view/battle-simulator's tier styling (same CSS classes).
-  function _cardTierClass(category) {
-    if (category === 'mercenary') return 'la-unit-card--merc';
-    if (category === 'elite' || category === 'cavalry') return 'la-unit-card--elite';
-    if (category === 'monster') return 'la-unit-card--monster';
-    if (category === 'legendary') return 'la-unit-card--legendary';
-    return '';
-  }
-
   // ── Round-by-round timeline ──────────────────────────────────────
 
   // viewerIsDefenderSide: true when the person looking at this log fought as
@@ -86,12 +77,24 @@ const BattleResultView = (() => {
   // per the *report's* fixed roles) — this flips them so "mine" always means
   // "the side the viewer actually fought on", regardless of who physically
   // initiated the attack.
-  function _timelineHtml(events, viewerIsDefenderSide) {
+  // opts: side-label overrides so neutral contexts (the battle simulator, which
+  // has no "you") can relabel the mine/enemy tags as ATTACKER/DEFENDER while
+  // reusing the exact same timeline rendering.
+  function _timelineHtml(events, viewerIsDefenderSide, opts = {}) {
     if (!events || events.length === 0) return '<div class="br-no-events">No events recorded.</div>';
+
+    const mineLabel  = opts.mineLabel  || 'YOU';
+    const enemyLabel = opts.enemyLabel || 'ENEMY';
+    const mineArmy   = opts.mineArmy   || 'Your army ';
+    const enemyArmy  = opts.enemyArmy  || 'Enemy army ';
+    // Optional per-unit icon: (event, 'actor'|'target') => html. Lets callers
+    // (the battle simulator) prefix each unit name with a category-tinted glyph
+    // without this component needing to know how to resolve a unit's category.
+    const _icon = (e, role) => (typeof opts.iconFor === 'function' ? opts.iconFor(e, role) : '');
 
     const _isMine  = side => side ? ((side === 'attacker') !== !!viewerIsDefenderSide) : null;
     const _sideCls = mine => mine === null ? '' : mine ? ' br-tl-side--mine' : ' br-tl-side--enemy';
-    const _sideTag = mine => mine === null ? '' : `<span class="br-tl-side-tag${mine ? ' br-tl-side-tag--mine' : ' br-tl-side-tag--enemy'}">${mine ? 'YOU' : 'ENEMY'}</span>`;
+    const _sideTag = mine => mine === null ? '' : `<span class="br-tl-side-tag${mine ? ' br-tl-side-tag--mine' : ' br-tl-side-tag--enemy'}">${mine ? mineLabel : enemyLabel}</span>`;
 
     // Group events by round
     const byRound = {};
@@ -120,8 +123,11 @@ const BattleResultView = (() => {
         const actorCls   = _sideCls(actorMine);
         const targetCls  = _sideCls(targetMine);
 
-        if (!e.actorName && !e.targetName) {
-          const whoseArmy = actorMine === null ? '' : actorMine ? 'Your army ' : 'Enemy army ';
+        // Army-wide morale events (rout/retreat) carry no target — the engine
+        // stamps a side name ('Attacker'/'Defender') as actorName, so key off
+        // the missing target rather than a missing actor.
+        if (!e.targetName) {
+          const whoseArmy = actorMine === null ? '' : actorMine ? mineArmy : enemyArmy;
           return `<div class="${cls} br-tl-event--morale${actorCls}">
             <span class="br-tl-phase">${phase}</span>
             <span class="br-tl-desc">${gi('cannon')} ${whoseArmy}${e.result === 'routed' ? 'Routed' : 'Retreat'}</span>
@@ -133,7 +139,7 @@ const BattleResultView = (() => {
           return `<div class="${cls}">
             <span class="br-tl-phase">${phase}</span>
             ${_sideTag(actorMine)}
-            <span class="br-tl-actor${actorCls}">${e.actorName}</span>${actorCountStr}
+            <span class="br-tl-actor${actorCls}">${_icon(e, 'actor')}${e.actorName}</span>${actorCountStr}
             <span class="br-tl-arrow">${gi('health-normal')}</span>
             <span class="br-tl-heal">+${-e.damage} healed</span>
           </div>`;
@@ -150,10 +156,10 @@ const BattleResultView = (() => {
         return `<div class="${cls}">
           <span class="br-tl-phase">${phase}</span>
           ${_sideTag(actorMine)}
-          <span class="br-tl-actor${actorCls}">${e.actorName}</span>${actorCountStr}
+          <span class="br-tl-actor${actorCls}">${_icon(e, 'actor')}${e.actorName}</span>${actorCountStr}
           <span class="br-tl-arrow">→</span>
           ${_sideTag(targetMine)}
-          <span class="br-tl-target${targetCls}">${e.targetName}</span>
+          <span class="br-tl-target${targetCls}">${_icon(e, 'target')}${e.targetName}</span>
           ${dmgStr}${traitStr}${armorStr}${killStr}
         </div>`;
       }).join('');
@@ -228,7 +234,7 @@ const BattleResultView = (() => {
         }
         const icon = isLord ? gi('crossed-swords') : (UNIT_DEFS[rawId]?.icon || gi('crossed-swords'));
         const name = s.name || (UNIT_DEFS[rawId]?.name) || rawId;
-        const tier = isLord ? '' : _cardTierClass(UNIT_DEFS[rawId]?.category);
+        const tier = isLord ? '' : unitTierClass(UNIT_DEFS[rawId]);
 
         return Array.from({ length: s.count }, (_, idx) => {
           const isAlive      = idx < survCount;
@@ -366,5 +372,5 @@ const BattleResultView = (() => {
       </div>`;
   }
 
-  return { inlineReportHtml: _inlineReportHtml };
+  return { inlineReportHtml: _inlineReportHtml, timelineHtml: _timelineHtml };
 })();

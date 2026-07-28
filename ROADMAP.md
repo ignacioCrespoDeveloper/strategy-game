@@ -129,7 +129,8 @@ weighted trait taxes); cost-per-PWR curve is now the intentional, documented
 `PWR × 3.5 × tier premium` formula (old 30–45× swing eliminated); the balance
 suite regression-guards it all. **Still open from this item:**
 - Delete `js/domain/recruitment.js`'s dead weight/slot system (→ #9 cleanup).
-- **Unit health regeneration** (Known Issue #6) — still not designed/built.
+- **Unit health regeneration** (the "units never heal" known issue) — still
+  not designed/built.
 
 <details><summary>Original item (for history)</summary>
 
@@ -230,11 +231,10 @@ distribution: resource 56%, "nothing found" 15%, combat 13%, event 9%, trade
 since "too much combat" was an earlier assumption that the actual data
 doesn't support. Separately, the same-tile credit-finish bug from the
 Known Issues table is still open — no comment anywhere in `discovery.js` or
-`lord-screen.js` references or explains it. A second report landed
-2026-07-27 (Known Issue #7): quests completing **without anything
-happening** — no reward, discovery, or feedback — possibly the same root
-cause, but not yet confirmed to be limited to the same-tile credit-finish
-path.
+`lord-screen.js` references or explains it. A second symptom (folded into
+the same known issue): quests completing **without anything happening** —
+no reward, discovery, or feedback — possibly the same root cause, but not
+yet confirmed to be limited to the same-tile credit-finish path.
 
 **Plan:**
 1. Investigate and fix the same-tile credit-finish bug first — it silently
@@ -256,9 +256,10 @@ vertical-slice philosophy.
 **Current state (concrete gaps found):**
 - 3 of 5 races (human, dwarf, orc) have **no portrait art at all** —
   `auth-view.js` falls back to an emoji + gradient card.
-- The 2 races that *do* declare a portrait path (high_elf, dark_elf) point to
-  files that **don't exist** at that path anymore (`assets/lord/` now only
-  has per-race subfolders) — likely broken images today.
+- ~~The 2 races that declare a portrait path (high_elf, dark_elf) point to
+  files that don't exist~~ RESOLVED 2026-07-27: both `race.portrait` paths
+  in `races.js` now point to real per-race warrior portraits under
+  `assets/lord/<race>/warrior/`.
 - ~~Terrain art~~ RESOLVED 2026-07-27: all 5 terrain types now have images
   in `assets/terrain/`. (Hills was removed as a terrain type the same day;
   its tiles became mountain.)
@@ -273,9 +274,7 @@ vertical-slice philosophy.
 - The Account nav item just shows a "coming soon" toast — not built.
 
 **Plan:**
-1. Fix the two broken `race.portrait` paths (point to real files under the
-   new `assets/lord/<race>/` layout, or drop the path and let it fall back
-   cleanly).
+1. ~~Fix the two broken `race.portrait` paths~~ — done 2026-07-27.
 2. Decide once: either source portrait art for human/dwarf/orc, or embrace
    the icon+gradient card for **all 5 races** for consistency — the second
    option is the fast, low-risk fix if new art isn't coming soon.

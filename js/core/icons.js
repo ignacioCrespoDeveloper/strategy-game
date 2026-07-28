@@ -61,3 +61,35 @@ function giUnitType(category) {
   if (!m) return '';
   return '<span class="uc-type-badge" title="' + m.label + '">' + gi(m.icon) + '</span>';
 }
+
+// Per-category tint for inline troop-type glyphs (battle-log rows). Distinct,
+// legible on dark backgrounds — one hue per role so a unit reads at a glance.
+const UNIT_TYPE_COLOR = {
+  infantry:  '#cbb184',
+  ranged:    '#86c56f',
+  elite:     '#e6c15a',
+  cavalry:   '#d9954f',
+  monster:   '#d06a6a',
+  legendary: '#cf8ad9',
+  artillery: '#9ea6b2',
+  flying:    '#79bcd8',
+  mercenary: '#c8a659',
+};
+
+// Inline, category-tinted troop-type glyph for text contexts (e.g. battle-log
+// event rows) — unlike giUnitType()'s absolute-positioned medallion, this flows
+// inline next to a unit name. HTML-context only (same rule as gi()).
+function giUnitTypeInline(category) {
+  const m = UNIT_TYPE_META[category];
+  if (!m) return '';
+  const color = UNIT_TYPE_COLOR[category] || 'currentColor';
+  return '<span class="uc-type-inline" style="color:' + color + '" title="' + m.label + '">' + gi(m.icon) + '</span>';
+}
+
+// Progression-tier CSS class for a unit card, from PWR (EconomyCore.getUnitTier).
+// Early game → '' (default bronze); mid → blue; end → violet. Single helper for
+// every .la-unit-card consumer so the frame/medallion tint stays consistent.
+function unitTierClass(def) {
+  const t = EconomyCore.getUnitTier(def);
+  return t === 'early' ? '' : 'la-unit-card--' + t;
+}

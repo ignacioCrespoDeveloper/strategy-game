@@ -1093,15 +1093,12 @@ const MapView = (() => {
       if (garrisonUnits.length > 0) {
         const garrisonCardsInner = garrisonUnits.flatMap(r => {
           const def = UNIT_DEFS[r.unitId] || {};
-          const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
-            : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
-            : def.category === 'monster' ? ' la-unit-card--monster'
-            : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+          const tierClass = unitTierClass(def);
           const portrait = def.image
             ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || r.unitId}" loading="lazy">`
             : `<div class="la-uc-img la-uc-img--fallback">${def.icon || gi('crossed-swords')}</div>`;
           return Array.from({ length: r.count }, () => `
-            <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || r.unitId}">
+            <div class="la-unit-card mip-enemy-ucard${tierClass ? ' ' + tierClass : ''}" title="${def.name || r.unitId}">
               <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
               ${portrait}
               ${giUnitType(def.category)}
@@ -1264,15 +1261,12 @@ const MapView = (() => {
           const armyUnitCards = ownUnits.length > 0
             ? ownUnits.flatMap(u => {
                 const def = UNIT_DEFS[u.unitId] || {};
-                const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
-                  : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
-                  : def.category === 'monster' ? ' la-unit-card--monster'
-                  : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+                const tierClass = unitTierClass(def);
                 const portrait = def.image
                   ? `<img src="${def.image}" class="la-uc-img" alt="${def.name||u.unitId}" loading="lazy">`
                   : `<div class="la-uc-img la-uc-img--fallback">${def.icon||gi('crossed-swords')}</div>`;
                 return Array.from({ length: u.count }, () => `
-                  <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name||u.unitId}">
+                  <div class="la-unit-card mip-enemy-ucard${tierClass ? ' ' + tierClass : ''}" title="${def.name||u.unitId}">
                     <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
                     ${portrait}
                     ${giUnitType(def.category)}
@@ -1360,15 +1354,12 @@ const MapView = (() => {
       const unitCardsInner = defenders.length > 0
         ? defenders.flatMap(u => {
             const ud = UNIT_DEFS[u.unitId] || {};
-            const tierClass = ud.category === 'mercenary' ? ' la-unit-card--merc'
-              : (ud.category === 'elite' || ud.category === 'cavalry') ? ' la-unit-card--elite'
-              : ud.category === 'monster' ? ' la-unit-card--monster'
-              : ud.category === 'legendary' ? ' la-unit-card--legendary' : '';
+            const tierClass = unitTierClass(ud);
             const portrait = ud.image
               ? `<img src="${ud.image}" class="la-uc-img" alt="${ud.name || u.unitId}" loading="lazy">`
               : `<div class="la-uc-img la-uc-img--fallback">${ud.icon || gi('crossed-swords')}</div>`;
             return Array.from({ length: u.count }, () => `
-              <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${ud.name || u.unitId}">
+              <div class="la-unit-card mip-enemy-ucard${tierClass ? ' ' + tierClass : ''}" title="${ud.name || u.unitId}">
                 <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
                 ${portrait}
                 ${giUnitType(ud.category)}
@@ -1446,15 +1437,12 @@ const MapView = (() => {
 
         const unitCardsInner = units.flatMap(u => {
           const def = UNIT_DEFS[u.unitId] || {};
-          const tierClass = def.category === 'mercenary' ? ' la-unit-card--merc'
-            : (def.category === 'elite' || def.category === 'cavalry') ? ' la-unit-card--elite'
-            : def.category === 'monster' ? ' la-unit-card--monster'
-            : def.category === 'legendary' ? ' la-unit-card--legendary' : '';
+          const tierClass = unitTierClass(def);
           const portrait = def.image
             ? `<img src="${def.image}" class="la-uc-img" alt="${def.name || u.unitId}" loading="lazy">`
             : `<div class="la-uc-img la-uc-img--fallback">${def.icon || gi('crossed-swords')}</div>`;
           return Array.from({ length: u.count }, () => `
-            <div class="la-unit-card mip-enemy-ucard${tierClass}" title="${def.name || u.unitId}">
+            <div class="la-unit-card mip-enemy-ucard${tierClass ? ' ' + tierClass : ''}" title="${def.name || u.unitId}">
               <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
               ${portrait}
               ${giUnitType(def.category)}

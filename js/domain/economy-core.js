@@ -134,6 +134,26 @@ var EconomyCore = (() => {
     return out;
   }
 
+  // ── Temple blessing effects ───────────────────────────────────
+  // Returns the flat-key effect object of the player's single active
+  // blessing ({ battle_loot_bonus, raid_bonus, gold_income_bonus,
+  // *_production, pop_growth_bonus }), or {} when none is active.
+  //
+  // `activeBlessing`: player.activeBlessing = { id, startedAt, finishAt }.
+  // When `now` (ms) is provided, an expired blessing (now >= finishAt) is
+  // treated as inactive — the server clears lapsed blessings in catch-up,
+  // this keeps client displays honest in the gap before the next sync.
+  // Callers that have already filtered expiry may omit `now`.
+  function getBlessingEffects(activeBlessing, now) {
+    const out = {};
+    if (typeof BLESSING_DEFS === 'undefined') return out;
+    if (!activeBlessing || !activeBlessing.id) return out;
+    if (now != null && activeBlessing.finishAt && now >= activeBlessing.finishAt) return out;
+    const def = BLESSING_DEFS[activeBlessing.id];
+    if (!def) return out;
+    return { ...(def.effects || {}) };
+  }
+
   // ── Build / recruit time (race + research + building modifiers) ──
   // construction_speed / recruit_speed are % deltas, negative = faster
   // (floored at −80%). On top of that, buildings with buildTimeDivisor
@@ -270,6 +290,21 @@ var EconomyCore = (() => {
     const base = (s.attack || 0) * 3 + (s.defense || 0) * 2 + Math.floor((s.hp || 0) / 10) + (s.speed || 0) * 0.5;
     const tax  = (def.traits || []).reduce((sum, t) => sum + (PWR_TRAIT_TAXES[t] || 0), 0);
     return base * (1 + tax);
+  }
+
+  // Progression tier for card-frame tinting, keyed to PWR bands (2026-07-27):
+  //   early  PWR < 63   (basic + line troops)          → bronze frame (no class)
+  //   mid    PWR 63-89  (line cav/ranged, mid elites)  → blue
+  //   end    PWR >= 90  (top elites, monsters, dragons) → violet
+  // PWR is the single power metric now (armyWeight retired), so tier tracks
+  // combat value: a low-gated but powerful unit (Great Cannon) reads high, a
+  // deep-gated but modest one (Swordmasters) reads mid. Single source of truth
+  // for every unit-card UI (tech tree, battle sim, city/map/lord views).
+  function getUnitTier(def) {
+    const pwr = Math.round(getUnitPower(def));
+    if (pwr >= 90) return 'end';
+    if (pwr >= 63) return 'mid';
+    return 'early';
   }
 
   // units: [{unitId, count}], unitDefs: the UNIT_DEFS map (passed in so
@@ -418,9 +453,9 @@ var EconomyCore = (() => {
   return {
     RESOURCE_KEYS, STAT_BASE, SLOT_TABLE,
     getRates, getStats, getGoldRate, getMarchFoodCost, getPopGrowthRate,
-    getResearchEffects, getBuildTime, getRecruitTime, getCityBuildDivisor, getUnitTraining,
+    getResearchEffects, getBlessingEffects, getBuildTime, getRecruitTime, getCityBuildDivisor, getUnitTraining,
     getVeterancyPct, getGarrisonVeterancyPct,
-    getUnitPower, getArmyPower, getProjectedArmyPower, getUnitGoldCost,
+    getUnitPower, getUnitTier, getArmyPower, getProjectedArmyPower, getUnitGoldCost,
     getCityLevel, getSlotInfo, degradeExcessBuildings,
   };
 })();

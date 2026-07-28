@@ -8,12 +8,18 @@
 //  next model in line starts fresh.
 //
 //  Refunds the model's gold cost scaled by its remaining
-//  HP: a fresh model refunds full price, a model at 10%
-//  HP refunds 10%. Only the front model can be damaged.
+//  HP, capped at 90% for a fresh model: a full-HP model
+//  refunds 90% of its price, a model at 10% HP refunds 9%
+//  (0.9 × 0.10). Disbanding always costs you at least 10% —
+//  soldiers aren't a savings account. Only the front model
+//  can be damaged.
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { UNIT_DEFS } from '../engine-loader.js';
+
+// Best-case refund fraction of a unit's gold cost (at full HP). Tunable.
+const DISBAND_REFUND_MAX = 0.9;
 
 export async function handleArmyDisband(req, res) {
   const { lordId, unitId, modelIdx = 0 } = req.body || {};
@@ -44,7 +50,7 @@ export async function handleArmyDisband(req, res) {
   const hpFrac = (modelIdx === 0 && stack.currentHp != null && maxHp > 0)
     ? Math.min(1, Math.max(0, stack.currentHp / maxHp))
     : 1;
-  const refund = Math.floor((def?.goldCost || 0) * hpFrac);
+  const refund = Math.floor((def?.goldCost || 0) * DISBAND_REFUND_MAX * hpFrac);
 
   stack.count -= 1;
   // If the front (damaged) model was removed, clear the HP tracking so
