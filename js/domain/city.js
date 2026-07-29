@@ -35,7 +35,7 @@ const CityService = (() => {
   const MAX_CITIES  = 5;
 
   // Cost to found city N (1-indexed). First city is always free.
-  // 2nd: 25k, 3rd: 50k, 4th: 100k, 5th: 200k (×2 each time).
+  // 2nd: 8k, 3rd: 16k, 4th: 32k, 5th: 64k (×2 each time).
   function getFoundCost(existingCount) {
     if (existingCount === 0) return 0;
     return 8000 * Math.pow(2, existingCount - 1);

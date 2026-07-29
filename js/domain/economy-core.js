@@ -127,6 +127,11 @@ var EconomyCore = (() => {
     for (const [bookId, level] of Object.entries(research || {})) {
       const def = RESEARCH_DEFS[bookId];
       if (!def || !level) continue;
+      // Every book today carries bonuses, but a book that only UNLOCKED
+      // something (the Library's stated third job) would legitimately have
+      // none. Without this guard that book throws a TypeError here — i.e.
+      // on every economy calculation, client and server. Cheap insurance.
+      if (typeof def.bonuses !== 'function') continue;
       for (const [key, value] of Object.entries(def.bonuses(level))) {
         out[key] = (out[key] || 0) + value;
       }
@@ -193,7 +198,8 @@ var EconomyCore = (() => {
 
   // Recruit time — OGame-hangar rule: every level of the training building
   // ABOVE the unit's unlock level divides the time (÷1 at unlock, ÷2 one
-  // level later, …). Drill Manuals research applies as a % on top.
+  // level later, …). recruit_speed modifiers — Library books and an active
+  // God of War blessing, summed by the caller — apply as a % on top.
   function getRecruitTime(unitDef, count, researchEffects, trainingLevel = 0, unlockLevel = 0) {
     const mult    = Math.max(0.2, 1 + ((researchEffects || {}).recruit_speed || 0));
     const divisor = 1 + Math.max(0, (trainingLevel || 0) - (unlockLevel || 0));
@@ -225,6 +231,32 @@ var EconomyCore = (() => {
   function getGarrisonVeterancyPct(cityBuildings) {
     const levels = (cityBuildings?.guard_post || 0) + (cityBuildings?.fortress || 0);
     return VETERANCY_PER_LEVEL * levels;
+  }
+
+  // ── Raiding stance — hourly payout ────────────────────────────
+  // THE raid rate. Lived in three hand-synced copies until 2026-07-29
+  // (server/tick/catch-up.js, js/ui/lord-screen.js's preview, and
+  // scripts/generate-raid-guide.js) — they are all thin callers now, so a
+  // rate change lands in the payout, the in-game preview and the published
+  // guide at once. Do not re-inline it.
+  //
+  // Raiding is the PASSIVE channel: zero attention once started, but the
+  // lord is locked for the whole duration, nothing pays until the raid
+  // ENDS, and any enemy army arriving forfeits the lot. Rates raised
+  // ~6× (gold) / ~13× (resources) on 2026-07-29: the old 25+5×lvl paid a
+  // level-8 lord 65 gold/hr, against a 1,250 gold/hr Temple blessing and a
+  // Lumber Mill's 778 wood/hr — raiding a full day was worth less than one
+  // cheap expedition find, so nobody had a reason to ever use the stance.
+  // Expeditions still pay several times more per hour, which is the point:
+  // you are paid for attention and casualties, not for parking a lord.
+  const RAID_BASE      = { gold: 40, res: 60 };
+  const RAID_PER_LEVEL = { gold: 45, res: 55 };
+
+  function getRaidHourlyRewards(lordLevel) {
+    const lvl  = Math.max(1, lordLevel || 1);
+    const gold = Math.round(RAID_BASE.gold + lvl * RAID_PER_LEVEL.gold);
+    const res  = Math.round(RAID_BASE.res  + lvl * RAID_PER_LEVEL.res);
+    return { gold, food: res, wood: res, stone: res };
   }
 
   // ── Army power (PWR) — the recruit/hire cap currency ──────────
@@ -462,6 +494,7 @@ var EconomyCore = (() => {
     getRates, getStats, getGoldRate, getMarchFoodCost, getPopGrowthRate,
     getResearchEffects, getBlessingEffects, getBuildTime, getRecruitTime, getCityBuildDivisor, getUnitTraining,
     getVeterancyPct, getGarrisonVeterancyPct,
+    getRaidHourlyRewards, RAID_BASE, RAID_PER_LEVEL,
     getUnitPower, getUnitTier, getArmyPower, getProjectedArmyPower, getUnitGoldCost,
     getCityLevel, getSlotInfo, degradeExcessBuildings,
   };

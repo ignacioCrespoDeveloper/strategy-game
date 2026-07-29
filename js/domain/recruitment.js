@@ -27,6 +27,11 @@ const RecruitmentService = (() => {
   }
 
   // Returns units available for recruitment from `city`, given `lord`'s race.
+  //
+  // The filter is UnitUnlockService.check — the SAME evaluator
+  // server/actions/recruit.js enforces with, so this list can never offer a
+  // unit the server would reject (it used to compare building levels inline,
+  // while the server checked nothing at all).
   function getAvailableFromCity(lord, city) {
     const raceRoster = UNIT_ROSTER[lord.race];
     if (!raceRoster) return [];
@@ -35,21 +40,20 @@ const RecruitmentService = (() => {
     const available = [];
 
     Object.entries(raceRoster).forEach(([buildingId, levelMap]) => {
-      const bldLevel = city.buildings[buildingId] || 0;
-      if (bldLevel === 0) return;
-
       Object.keys(levelMap)
         .map(Number)
         .sort((a, b) => a - b)
         .forEach(minLevel => {
-          if (bldLevel >= minLevel) {
-            levelMap[minLevel].forEach(unitId => {
-              if (!seen.has(unitId)) {
-                seen.add(unitId);
-                available.push({ unitId, building: buildingId, minLevel });
-              }
+          levelMap[minLevel].forEach(unitId => {
+            if (seen.has(unitId)) return;
+            seen.add(unitId);
+            const { locked } = UnitUnlockService.check(unitId, {
+              race:      lord.race,
+              buildings: city.buildings || {},
+              lordLevel: lord.level,
             });
-          }
+            if (!locked) available.push({ unitId, building: buildingId, minLevel });
+          });
         });
     });
 

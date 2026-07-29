@@ -388,6 +388,60 @@ async function main() {
       }
     }
 
+    // ── Test 5b: Recruitment gate (server-side, not just client hiding) ──
+    // Everything here USED to succeed: /api/city/recruit checked only gold,
+    // the PWR cap and the legendary lord rule. It never consulted the roster,
+    // so any unit could be trained in any city by any race — including the
+    // goldCost-0/recruitTime-0 garrison units.
+    section('Test 5b: Recruitment gate — race, garrison units, building level');
+    {
+      const tryRecruit = (acct, unitId, count = 1) =>
+        api('/api/city/recruit', acct.token, { lordId: acct.lordId, cityId: acct.cityId, unitId, count });
+
+      const free = await tryRecruit(alice, 'garrison_soldier', 50);
+      assert('garrison units are refused (goldCost 0 + recruitTime 0 exploit)',
+        !free.ok && /cannot be trained/i.test(free.error || ''), JSON.stringify(free).slice(0, 200));
+
+      const merc = await tryRecruit(alice, 'bandits');
+      assert('mercenaries are refused (they JOIN via expeditions)',
+        !merc.ok && /cannot be trained/i.test(merc.error || ''), JSON.stringify(merc).slice(0, 200));
+
+      // Alice is human; Witch Elves are dark_elf.
+      const wrongRace = await tryRecruit(alice, 'witch_elves');
+      assert('foreign-race units are refused',
+        !wrongRace.ok && /is a .* unit/i.test(wrongRace.error || ''), JSON.stringify(wrongRace).slice(0, 200));
+
+      // Fresh city: town_hall 1 only, so the Barracks gate bites first.
+      const noBarracks = await tryRecruit(alice, 'halberdiers');
+      assert('units are refused without their training building',
+        !noBarracks.ok && /Requires Barracks Level 5/i.test(noBarracks.error || ''),
+        JSON.stringify(noBarracks).slice(0, 200));
+
+      // A tier-1 unit at barracks 1 is still refused here (no barracks at all),
+      // which proves the gate is the BUILDING and not a blanket denial.
+      const spear = await tryRecruit(alice, 'spearmen');
+      assert('an ungated unit is refused for the building reason only',
+        !spear.ok && /Requires Barracks Level 1/i.test(spear.error || ''),
+        JSON.stringify(spear).slice(0, 200));
+
+      // Research start is gated by the highest Library across the empire —
+      // a fresh city has none at all, so even a tier-1 book is refused.
+      const research = await api('/api/research/start', alice.token, { bookId: 'engineering_tomes' });
+      assert('research is refused without a Library',
+        !research.ok && /Requires a Library at level 1/i.test(research.error || ''),
+        JSON.stringify(research).slice(0, 200));
+
+      // Blessings: the Temple level caps the hours you may buy. No Temple at
+      // all, so any consecration is refused before the hours are even checked.
+      const bless = await api('/api/blessing/consecrate', alice.token, { blessingId: 'god_of_war', hours: 1 });
+      assert('blessing is refused without a Temple',
+        !bless.ok && /Requires a Temple/i.test(bless.error || ''), JSON.stringify(bless).slice(0, 200));
+
+      const gone = await api('/api/blessing/consecrate', alice.token, { blessingId: 'god_of_commerce', hours: 1 });
+      assert('the removed God of Commerce is no longer consecratable',
+        !gone.ok && /Unknown blessing/i.test(gone.error || ''), JSON.stringify(gone).slice(0, 200));
+    }
+
     // ── Test 6: Scout ─────────────────────────────────────────────────
     section("Test 6: Scout — Dave scouts his current tile (Bob's city), instant-finished");
     {

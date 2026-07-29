@@ -954,16 +954,16 @@ const MapView = (() => {
         const freshPlayer  = PlayerService.getById(_player.id);
         const playerCities = CityService.getPlayerCities(_player.id);
         const MAX_CITIES   = 5;
-        if (playerCities.length < MAX_CITIES) {
-          const cost      = playerCities.length === 0 ? 0 : 5000 * Math.pow(2, playerCities.length - 1);
-          const coins     = freshPlayer?.coins ?? 0;
-          const canAfford = cost === 0 || coins >= cost;
+        const cost      = CityService.getFoundCost(playerCities.length);
+        const coins     = freshPlayer?.coins ?? 0;
+        const canAfford = cost === 0 || coins >= cost;
+        // Hidden entirely when unaffordable — no disabled teaser.
+        if (playerCities.length < MAX_CITIES && canAfford) {
           const costLabel = cost === 0 ? 'Free' : `${gi('two-coins')} ${cost.toLocaleString()}`;
           foundBtnHtml = `
             <button class="btn-primary mip-found-city-btn"
                     id="mip-found-btn"
-                    style="width:100%;margin-top:0.75rem"
-                    ${canAfford ? '' : 'disabled title="Not enough gold"'}>
+                    style="width:100%;margin-top:0.75rem">
               ${gi('village')} Found City Here${cost > 0 ? ` — ${costLabel}` : ''}
             </button>`;
         }

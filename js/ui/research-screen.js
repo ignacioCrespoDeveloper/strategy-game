@@ -15,6 +15,9 @@
 const ResearchScreen = (() => {
   let _player          = null;
   let _lord            = null;
+  // Chosen rite length in hours. Clamped to the Temple ceiling at render
+  // time, so it survives a Temple being demolished without going stale.
+  let _blessingHours   = 1;
   let _root            = null;
   let _tab             = 'library';
   let _selectedBook    = null;
@@ -300,7 +303,7 @@ const ResearchScreen = (() => {
     const active   = _activeBlessing();
     const activeDef = active ? BLESSING_DEFS[active.id] : null;
     const eta      = active ? Math.max(0, Math.round((active.finishAt - TimeService.now()) / 1000)) : 0;
-    const dur      = TimeService.formatDuration(blessingDuration(templeLevel));
+    const maxHours = blessingMaxHours(templeLevel);
 
     const blessings = Object.values(BLESSING_DEFS);
     const selDef    = _selectedBlessing ? BLESSING_DEFS[_selectedBlessing] : null;
@@ -311,7 +314,7 @@ const ResearchScreen = (() => {
         <span class="rs-status-sep">·</span>
         <span>${active
           ? `Blessed by the <b>${activeDef?.name || active.id}</b> — lapses in <b id="rs-bless-cd">${TimeService.formatDuration(eta)}</b>`
-          : `No blessing consecrated — one active at a time (${dur} per rite)`}</span>
+          : `No blessing consecrated — one active at a time, up to <b>${maxHours}h</b> per rite`}</span>
       </div>
       <div class="bld3-grid">${blessings.map(def => _blessingTileHtml(def, active, templeLevel)).join('')}</div>
       ${selDef ? _blessingDetailHtml(selDef, active, templeLevel) : ''}
@@ -353,10 +356,25 @@ const ResearchScreen = (() => {
 
   function _blessingDetailHtml(def, active, templeLevel) {
     const isActive   = active?.id === def.id;
-    const offering   = { gold: blessingCost(templeLevel) };
+    const maxHours   = blessingMaxHours(templeLevel);
+    const hours      = Math.min(Math.max(1, _blessingHours), maxHours);
+    const offering   = { gold: blessingCost(hours) };
     const affordable = _canAfford(offering);
     const eta        = isActive ? Math.max(0, Math.round((active.finishAt - TimeService.now()) / 1000)) : 0;
-    const durLabel   = TimeService.formatDuration(blessingDuration(templeLevel));
+    const durLabel   = TimeService.formatDuration(blessingDuration(hours));
+
+    // Duration picker — the Temple level is the ceiling, the player chooses
+    // underneath it. Every hour costs the same, so this is purely "how long
+    // do I want this on for", not a value puzzle.
+    const hoursHtml = `
+      <div class="bld3-detail-req-title">Duration — your Temple allows up to ${maxHours}h:</div>
+      <div class="rs-hours">
+        ${Array.from({ length: maxHours }, (_, i) => i + 1).map(h => `
+          <button class="rs-hour ${h === hours ? 'rs-hour--on' : ''}"
+                  data-bless-hours="${h}"
+                  title="${h}h · ${blessingCost(h).toLocaleString()} gold">${h}h</button>
+        `).join('')}
+      </div>`;
 
     // Consecrate button state — same grammar as the Library detail panel.
     let btnLabel, btnClass, btnDisabled;
@@ -386,6 +404,8 @@ const ResearchScreen = (() => {
               <span class="bld2-prod-cur">${def.summary}</span>
             </div>
 
+            ${hoursHtml}
+
             <div class="bld3-detail-req-title">${isActive ? 'Renew this rite for:' : 'Consecrate this rite for:'}</div>
             <div class="bld2-cost-row">
               ${_costChips(offering)}
@@ -394,9 +414,12 @@ const ResearchScreen = (() => {
             ${active && !isActive ? `
               <div class="bld2-next-hint">Replaces the active ${gi('church')} ${BLESSING_DEFS[active.id]?.name || active.id}.</div>
             ` : ''}
+            ${isActive ? `
+              <div class="bld2-next-hint">Renewing restarts the rite at the duration you pick — it does not add to the time left.</div>
+            ` : ''}
           </div>
           <div class="bld3-detail-actions">
-            <button class="bld2-btn ${btnClass}" data-consecrate="${def.id}" ${btnDisabled ? 'disabled' : ''}>${btnLabel}</button>
+            <button class="bld2-btn ${btnClass}" data-consecrate="${def.id}" data-hours="${hours}" ${btnDisabled ? 'disabled' : ''}>${btnLabel}</button>
           </div>
         </div>
       </div>
@@ -475,10 +498,17 @@ const ResearchScreen = (() => {
       _rerender();
     });
 
+    document.querySelectorAll('.rs-hour[data-bless-hours]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        _blessingHours = Number(btn.dataset.blessHours) || 1;
+        _rerender();
+      });
+    });
+
     document.querySelectorAll('.bld2-btn[data-consecrate]:not([disabled])').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
-        const result = await ServerActions.blessingConsecrate(btn.dataset.consecrate);
+        const result = await ServerActions.blessingConsecrate(btn.dataset.consecrate, Number(btn.dataset.hours) || 1);
         if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
         _player = PlayerService.getById(_player.id);
         const def = BLESSING_DEFS[btn.dataset.consecrate];

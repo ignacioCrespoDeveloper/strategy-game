@@ -59,14 +59,14 @@ something.
 (The five `abilities` were originally bundled here; Nacho parked them
 2026-07-29 — signature moves deserve a bigger design than a flat stat hook.)
 
-### 3. Mounts — ✅ LADDER SHIPPED 2026-07-29 (art pending, from Nacho)
+### 3. Mounts — ✅ LADDER + ART + CARD REDESIGN SHIPPED 2026-07-29
 
 **Design call (Nacho, 2026-07-29):** three tiers, two mounts each, and
 mounts stay **flat stat pads — no special abilities**.
 
 | Tier | Mounts | Stat budget | Cost |
 |---|---|---|---|
-| Lv 5 | Warhorse · Dire Wolf | 4 points | 400 / 450 |
+| Lv 5 | Warhorse · War Boar | 4 points | 400 / 450 |
 | Lv 8 | War Chariot · War Bear | 7 points | 1100 / 1200 |
 | Lv 10 | Griffon · Dragon | 10 points | 2400 / 2800 |
 
@@ -90,33 +90,50 @@ degrades unknown ids to "no mount", verified).
 - **The Stance section is gone.** Raiding was the only stance left, so its
   block (progress, earnings, Cancel / Finish Now) merged into **Status** —
   the one place that already answered "what is this lord doing".
-- Locked mounts in the Mount tab now follow the **building-tile grammar**
-  (`city-view.js`): greyed + hatched art, a padlock "Locked" button, and a
-  "Requires lord level N" reason line.
+- The Mount tab shows **the full six-mount ladder, always**. There is no
+  picker mode any more — the grid used to be hidden behind a click, so
+  opening the tab with a mount on showed only that mount. Below level 5 all
+  six render, locked.
 - **Dark Elves ride a Black Dragon** — flavour only, via a `raceVariants`
   field + `getMountForRace()`. Variants may override name/icon/image/colour/
   description ONLY; effects, cost, unlockLevel and the stored `dragon` id
   always come from the base mount, so flavour can never become balance.
 
-**Art — paths are pre-wired**, so a file just has to land at the right name
-and it appears (no code change; a missing file quietly falls back to the
-icon glyph). All in `assets/mounts/`:
+**Card redesign (2026-07-29):** a mount card **is** a building card. The tile
+is literally `.bld3-tile` (`city-view.js`'s grid) — same 200px tracks, same
+150px art strip with the bottom fade, same name + value row — and the three
+mount states reuse the building states outright: locked → `--locked`,
+equipped → `--selected`, can't afford → `--cant`. Only the foot (stat chips
++ equip button, on the `.bld2-btn--*` colour grammar) is mount-specific.
+Restyling buildings now restyles mounts for free.
+
+The **Overview card renders the same tile in the same `.lm-mount-grid`**, so
+it comes out the exact width of a ladder card (223 × 264 px measured, both
+tabs) instead of the old bespoke quarter-width variant. `.lm-container`'s
+padding is pinned to `.lov-tab`'s for that reason — change one, change both.
+The wide "Equipped" strip above the ladder is **gone**: the equipped mount is
+already the gold-bordered card in the grid and the Overview carries the
+read-out, so it was a third copy of the same object.
+
+**Art — shipped 2026-07-29 (Nacho).** All in `assets/mounts/`; filenames
+follow the art, not the mount id, so the `image` strings are literal:
 
 | File | Mount | Status |
 |---|---|---|
-| `warhorse.png` | Warhorse (lv 5) | ✅ supplied |
-| `dragon_dark_elf.png` | Black Dragon — Dark Elves only | ✅ supplied |
-| `dire_wolf.png` | Dire Wolf (lv 5) | pending |
-| `war_chariot.png` | War Chariot (lv 8) | pending — placeholder glyph |
-| `war_bear.png` | War Bear (lv 8) | pending — placeholder glyph |
-| `griffon.png` | Griffon (lv 10) | pending |
-| `dragon.png` | Dragon (lv 10) | pending |
+| `warhorse.png` | Warhorse (lv 5) | ✅ |
+| `boar.webp` | War Boar (lv 5) | ✅ |
+| `chariot.webp` | War Chariot (lv 8) | ✅ |
+| `bear.webp` | War Bear (lv 8) | ✅ |
+| `dragon.webp` | Dragon (lv 10) | ✅ |
+| `blackdragon.webp` | Black Dragon — Dark Elves only | ✅ |
+| — | Griffon (lv 10) | **pending** — no `image` field, renders its glyph |
 
-Chariot and Bear are on the nearest glyphs the sprite had
-(`mounted-knight`, `bison`), so they want art most. `.png` is wired because
-that's what the first two arrived as — change the `image` strings if you
-switch format. They're ~700 KB each; converting to `.webp` would cut roughly
-80% off with no visible loss, worth doing before this goes public.
+The lv-5 sidegrade was **renamed Dire Wolf → War Boar** to match the art that
+landed for that slot. The stored id stays `dire_wolf` (it's persisted on
+lords in Supabase, same rule as the elf race ids) — name, icon, colour and
+description changed, stats/cost/level did not, so it isn't a balance change.
+`warhorse.png` is still ~700 KB; converting it to `.webp` like the rest would
+cut ~80% with no visible loss, worth doing before this goes public.
 
 ### 4. Account screen + Sessions — ✅ SCREEN SHIPPED 2026-07-29
 
@@ -201,10 +218,31 @@ For the record — all verified in code during the 2026-07-29 audit:
   as immediate ambushes (bandit camps retired, client camp UI deleted
   2026-07-29), ER-gated recruits with formula prices, reward retuning, PvE
   honor removed, 150 story vignettes (`story-quests.js`).
+  **Reward pump + ER-gated find quality, 2026-07-29:** Expedition Rating now
+  drives *both* halves of the roll — the same band that gates recruits also
+  weights which discovery *tier* turns up and how often you come back empty
+  (`RECRUIT_TIERS[].find` / `.nothing`). Find tier used to be pure lottery
+  (a flat T1 41% / T2 32% / T3 4% at every army size); it now spreads
+  T3 0.9% → 12.3% from Common to Legendary. `TIER_RANGES` raised
+  ~1.75×/2.15×/2.4× by tier, and the two legendary defs finally carry
+  `tier: 3` instead of silently paying tier-2 loot.
 - **Ambush stance removed** (active item 1 above) — 2026-07-29.
 - Unplanned extras: same-tile **troop exchange** (2026-07-28), **temple
   blessings** (5 gods, 2026-07-28), build/recruit/attack **cancel buttons**
   (2026-07-28).
+- **The recruitment gate — `/api/city/recruit` was never enforcing anything**
+  (2026-07-29). `handleRecruit` checked only gold, the Army Power cap and the
+  legendary lord-12 rule; it never consulted `UNIT_ROSTER`. Three exploits,
+  all reproduced before the fix: a dwarf lord could train Witch Elves; Black
+  Guard trained in a Barracks-1 city; and `city_guard`/`militia_archer`/
+  `garrison_soldier` are `goldCost: 0` **and** `recruitTime: 0`, so a crafted
+  POST filled an entire PWR cap for free at one second per batch. The
+  building gate players saw in the UI was pure client-side decoration.
+  New `js/domain/unit-unlock.js` — `UnitUnlockService.check` — is now THE
+  gate, run by the recruit UI filter, the Tech Tree status, and the server,
+  so the client can no longer offer what the server would reject. Guarded by
+  Test 5b in `scripts/test-battle-movement.js` and a `Recruitment gate`
+  section in `scripts/test-economy.js`.
 
 Still open from that era, tracked in README known issues: the same-tile
 quest credit-finish bug (#1), the intermittent post-PvP navigation bug (#2),

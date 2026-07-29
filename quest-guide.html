@@ -24,6 +24,7 @@
   .dim { color:var(--dim); }
   .headroom { color:#7fdf7f; }
   .warnval { color:#cf9a8a; font-weight:bold; }
+  .good { color:#7fdf7f; font-weight:bold; }
   .roster { font-size:.85rem; color:#b8ab90; }
   .scout-tag { color:#d89060; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; }
   .gpe { color:var(--gold); font-weight:bold; }
@@ -43,10 +44,10 @@
 </head>
 <body>
   <h1>🧭 Hexfront — Expedition Guide</h1>
-  <p class="sub">Every number read live from the engine. Regenerate with <code>node scripts/generate-quest-guide.js</code>. Generated 29/07/2026, 10:51:27.</p>
+  <p class="sub">Every number read live from the engine. Regenerate with <code>node scripts/generate-quest-guide.js</code>. Generated 29/07/2026, 18:17:56.</p>
   <p class="nav"><a href="army-guide.html">⚔ Army Matchups</a><a href="raid-guide.html">🏴 Raiding Guide</a></p>
 
-  <p class="note"><b>Expeditions pull in two directions at once.</b> <b>Expedition Rating</b> is a floor pushing your army bigger — it gates which recruits you attract, and scouts count double toward it. <b>Footprint</b> is a ceiling pushing back — past 600 PWR you get ambushed more, come back empty more, and the quiet finds stay hidden. Past 800 PWR an ambush fields <em>more</em> power than you brought. And a recruit that won't fit under your army cap is lost outright, not queued.</p>
+  <p class="note"><b>Expeditions pull in two directions at once.</b> <b>Expedition Rating</b> is a floor pushing your army bigger — it gates <em>both</em> the quality of what you find and which recruits you attract, and scouts count double toward it. <b>Footprint</b> is a ceiling pushing back — past 600 PWR you get ambushed more, come back empty more, and the quiet finds stay hidden. Past 800 PWR an ambush fields <em>more</em> power than you brought. And a recruit that won't fit under your army cap is lost outright, not queued.</p>
   <p class="note">So the answer is never "bring everything" — it is a <b>scout-heavy force at roughly half your cap, with a small line escort to screen the lord</b>. A pure-scout party loses its lord about 43% of the time it's ambushed; adding a couple of line troops drops that to ~4%.</p>
 
   <div class="formula">
@@ -61,7 +62,8 @@
   <table>
     <thead><tr><th>Term</th><th>Means</th></tr></thead>
     <tbody>
-      <tr><td class="rowhead">ER</td><td><b>Expedition Rating</b> — <code>Σ unitPWR × (scout ? 2 : 1)</code>. Scout-trait units count double. This is the ONLY thing that decides which recruit tier an expedition can attract, and it is why a small scout party outperforms a big line army at finding things.</td></tr>
+      <tr><td class="rowhead">ER</td><td><b>Expedition Rating</b> — <code>Σ unitPWR × (scout ? 2 : 1)</code>. Scout-trait units count double. One rating, two jobs: it decides which <b>recruit tier</b> can turn up <em>and</em> how rich the <b>ground you are shown</b> is (see Find quality below). It is why a small scout party outperforms a big line army at finding things.</td></tr>
+      <tr><td class="rowhead">Find tier</td><td>Every discovery carries a loot tier 1–3, which decides its payout band. <b>ER decides which tiers you are offered at all</b> — the roll draws the tier from your band first, then picks a find of that tier that suits the terrain. A Common-rated force is offered tier 1 only; Legendary is offered tier 3 on 25% of its finds.</td></tr>
       <tr><td class="rowhead">PWR</td><td>A unit's combat power (<code>EconomyCore.getUnitPower</code>). Your army's total PWR is capped at <code>200 + 80 × lordLevel</code>.</td></tr>
       <tr><td class="rowhead">Headroom</td><td>Cap − army PWR. Free capacity to <em>receive</em> a recruit. A recruit that doesn't fit is <b>lost outright</b>, not queued.</td></tr>
       <tr><td class="rowhead">Loudness</td><td>How conspicuous the army is: 0 below 600 PWR, rising to 1.0 at 1000. Higher means more ambushes, more empty expeditions, and smaller find rewards.</td></tr>
@@ -121,12 +123,12 @@
   <tr>
     <td class="rowhead">Human</td>
     <td class="cell t-rare">Rare</td>
-    <td class="cell num">494</td>
-    <td class="cell num">296 <span class="dim">/ 440</span></td>
-    <td class="cell num headroom">144</td>
+    <td class="cell num">503</td>
+    <td class="cell num">306 <span class="dim">/ 440</span></td>
+    <td class="cell num headroom">134</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">3× Empire Knights <span class="scout-tag">scout</span> + 2× Swordsmen<div class="dim">1385 gold</div></td>
+    <td class="roster">3× Empire Knights <span class="scout-tag">scout</span> + 2× Swordsmen<div class="dim">1415 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Orc</td>
@@ -273,7 +275,62 @@
   </table>
   </div>
 
-  <h2>Recruit tiers</h2>
+  <h2>What your Expedition Rating unlocks <span class="stage-meta">nothing is ever locked — ER shifts the odds</span></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr>
+      <th>Band</th>
+      <th title="Your Expedition Rating must fall in this range to sit in this band.">ER range</th>
+      <th title="Share of FINDS that come back tier 1, on a Standard expedition.">T1 finds</th>
+      <th title="Share of FINDS that come back tier 2, on a Standard expedition.">T2 finds</th>
+      <th title="Share of FINDS that come back tier 3 — the big payouts — on a Standard expedition.">T3 finds</th>
+      <th title="Share of FINDS that come back tier 3 on a Long expedition.">T3 on Long</th>
+      <th>Best recruit possible</th>
+    </tr></thead>
+    <tbody>
+  <tr>
+    <td class="cell t-legendary">Legendary</td>
+    <td class="cell num">800+</td>
+    <td class="cell num">5.0%</td>
+    <td class="cell num">70%</td>
+    <td class="cell num good">25%</td>
+    <td class="cell num">25%</td>
+    <td class="roster">up to Young Dragon <span class="dim">(167 PWR)</span></td>
+  </tr>
+  <tr>
+    <td class="cell t-rare">Rare</td>
+    <td class="cell num">450 – 799</td>
+    <td class="cell num">25%</td>
+    <td class="cell num">70%</td>
+    <td class="cell num ">5.0%</td>
+    <td class="cell num">5.0%</td>
+    <td class="roster">up to Ogre Bulls <span class="dim">(101 PWR)</span></td>
+  </tr>
+  <tr>
+    <td class="cell t-uncommon">Uncommon</td>
+    <td class="cell num">200 – 449</td>
+    <td class="cell num">25%</td>
+    <td class="cell num">74%</td>
+    <td class="cell num ">1.0%</td>
+    <td class="cell num">1.0%</td>
+    <td class="roster">up to Crossbowmen <span class="dim">(52 PWR)</span></td>
+  </tr>
+  <tr>
+    <td class="cell t-common">Common</td>
+    <td class="cell num">0 – 199</td>
+    <td class="cell num">100%</td>
+    <td class="cell num">0.0%</td>
+    <td class="cell num ">0.0%</td>
+    <td class="cell num">0.0%</td>
+    <td class="roster">up to Bandit Archers <span class="dim">(39 PWR)</span></td>
+  </tr></tbody>
+  </table>
+  </div>
+  <p class="note"><b>Tiers unlock — they are not merely weighted.</b> A <b>Common</b> force (ER under 200) finds tier 1 and <em>nothing else</em>: tier 2 and tier 3 are closed to it outright. Reaching <b>Uncommon</b> opens tier 2 and a 1.0% sliver of tier 3; <b>Rare</b> widens tier 3 to 5.0%; <b>Legendary</b> takes it to 25% and all but retires tier 1.</p>
+  <p class="note"><b>Why gate it rather than weight it?</b> A tier-3 find pays 25–50k resources before scaling. Handed to a level-2 lord that is roughly twenty times their whole economy — it doesn't reward the player, it erases the early game. In the other direction a tier-1 find pays 800–1500, which at endgame is rounding error and reads as a wasted expedition. So the tiers phase in <em>and</em> out, and Expedition Rating is the only thing that moves you between them.</p>
+  <p class="note">Two details worth knowing. The recruit <em>pool</em> is hard-limited to your band as well — a unit either walks into your camp or it doesn't. And terrain no longer decides how good a find is, only <em>which</em> find of that tier you get: ER draws the tier first, then terrain picks from it, so a marsh still can't hand you a marble quarry. Percentages are for plains at loudness 0 and are shares of finds — expeditions that come back empty, get ambushed or attract recruits are excluded, since those aren't finds.</p>
+
+  <h2>ER tiers ① — the recruits they attract</h2>
   <div class="tablewrap">
   <table>
     <thead><tr><th>Tier</th><th>ER needed</th><th>Headroom to reserve</th><th>Pool</th></tr></thead>
@@ -305,6 +362,77 @@
   </table>
   </div>
   <p class="note">Reserve = the PWR of the tier's heaviest unit. Bring less free capacity than that and the best find in the tier walks away.</p>
+
+  <h2>ER tiers ② — the ground they are shown</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr>
+      <th>Tier</th><th>ER needed</th>
+      <th title="Weight multiplier on tier-1 discoveries — the modest finds.">Poor finds</th>
+      <th title="Weight multiplier on tier-2 discoveries.">Good finds</th>
+      <th title="Weight multiplier on tier-3 discoveries — the big payouts.">Rich finds</th>
+      <th title="Weight multiplier on coming back empty-handed.">Nothing</th>
+    </tr></thead>
+    <tbody>
+  <tr>
+    <td class="cell t-legendary">Legendary</td>
+    <td class="cell num">800</td>
+    <td class="cell num">5.0%</td>
+    <td class="cell num">70%</td>
+    <td class="cell num good">25%</td>
+    <td class="cell num ">×0.70</td>
+  </tr>
+  <tr>
+    <td class="cell t-rare">Rare</td>
+    <td class="cell num">450</td>
+    <td class="cell num">25%</td>
+    <td class="cell num">70%</td>
+    <td class="cell num good">5.0%</td>
+    <td class="cell num ">×0.85</td>
+  </tr>
+  <tr>
+    <td class="cell t-uncommon">Uncommon</td>
+    <td class="cell num">200</td>
+    <td class="cell num">25%</td>
+    <td class="cell num">74%</td>
+    <td class="cell num good">1.0%</td>
+    <td class="cell num ">×1.00</td>
+  </tr>
+  <tr>
+    <td class="cell t-common">Common</td>
+    <td class="cell num">0</td>
+    <td class="cell num">100%</td>
+    <td class="cell num">—</td>
+    <td class="cell num ">—</td>
+    <td class="cell num warnval">×1.25</td>
+  </tr></tbody>
+  </table>
+  </div>
+  <p class="note"><b>The same rating, applied twice.</b> ER used to gate recruits and nothing else, so what you <em>found</em> was pure lottery — a naked level-1 lord had the same odds of a tier-3 vault as an 800-ER scout column. Now the band that decides who joins you also decides how rich the ground is. Multipliers stack on top of terrain, so ER buys better odds on ground that could have held the find — it never conjures a marble quarry out of a marsh.</p>
+
+  <h2>What each find tier pays <span class="stage-meta">before level, length, depletion and footprint scaling</span></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Find tier</th><th>Gold</th><th>Each resource</th></tr></thead>
+    <tbody>
+  <tr>
+    <td class="rowhead">Tier 1</td>
+    <td class="cell num">200–500</td>
+    <td class="cell num">800–5000</td>
+  </tr>
+  <tr>
+    <td class="rowhead">Tier 2</td>
+    <td class="cell num">500–1400</td>
+    <td class="cell num">5000–25000</td>
+  </tr>
+  <tr>
+    <td class="rowhead">Tier 3</td>
+    <td class="cell num">1400–3600</td>
+    <td class="cell num">25000–50000</td>
+  </tr></tbody>
+  </table>
+  </div>
+  <p class="note">Lord level adds +12% per level above 1, and expedition length multiplies on top (×1.8 on Long). A level-10 lord on a Long expedition therefore multiplies these by ~3.7×.</p>
 
   <h2>Expedition length — your bet</h2>
   <div class="tablewrap">

@@ -97,13 +97,19 @@ const TechTreeScreen = (() => {
   }
 
   // Returns 'available' | 'locked'
-  // Only unlocked when viewing your own race AND you have the required building
-  function _unitStatus(bldId, minLevel) {
+  // Only unlocked when viewing your own race AND some city of yours passes
+  // the full recruitment gate — the same UnitUnlockService the recruit
+  // button and server/actions/recruit.js run, so this can never disagree
+  // with what actually happens when you press Recruit.
+  function _unitStatus(unitId, bldId) {
     if (!_player || !bldId) return 'locked';
     if (_race !== 'bandits' && _lord?.race !== _race) return 'locked';
     const cities = CityService.getPlayerCities(_player.id);
-    if (cities.some(c => (c.buildings[bldId] || 0) >= minLevel)) return 'available';
-    return 'locked';
+    return cities.some(c => !UnitUnlockService.check(unitId, {
+      race:      _lord?.race,
+      buildings: c.buildings,
+      lordLevel: _lord?.level,
+    }).locked) ? 'available' : 'locked';
   }
 
   function _bldCard(def) {
@@ -221,7 +227,7 @@ const TechTreeScreen = (() => {
       const bldDef = BUILDING_DEFS[bldId];
       const cards  = entries.map(({ id, minLevel }) => {
         const unit   = UNIT_DEFS[id];
-        const status = _unitStatus(bldId, minLevel);
+        const status = _unitStatus(id, bldId);
         return unit ? _unitCard(unit, bldDef?.name || bldId, minLevel, status) : '';
       }).join('');
       sections.push(`

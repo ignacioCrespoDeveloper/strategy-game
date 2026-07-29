@@ -420,6 +420,7 @@ var DISCOVERY_DEFS = {
     description: 'Crumbling stone walls hint at a civilization long forgotten. Scholars would pay dearly for access.',
     icon:        gi('capitol'),
     category:    'event',
+    tier:        2,
     baseWeight:  8,
     baseDuration: 14 * 24 * 3600,
     terrainMultipliers: {
@@ -466,6 +467,7 @@ var DISCOVERY_DEFS = {
     description: 'A traveling trader rests here with exotic wares and willing ears.',
     icon:        gi('camel'),
     category:    'trade',
+    tier:        1,
     baseWeight:  8,
     baseDuration: 12 * 3600,
     terrainMultipliers: {
@@ -527,6 +529,12 @@ var DISCOVERY_DEFS = {
   },
 
   // ── Legendary ─────────────────────────────────────────────────
+  // Both carry tier 3 explicitly. They used to carry no `tier` at all, which
+  // meant rollRewards fell back to tier 2 and the two rarest finds in the game
+  // paid MIDDLING loot — a legendary that pays less than a stone deposit is a
+  // punchline, not a jackpot. The tier also feeds the ER weighting in
+  // DiscoveryRoll.rollDef, so these are now doubly gated behind a real
+  // expedition rather than being a flat lottery any lord could win.
 
   ancient_relic: {
     id:          'ancient_relic',
@@ -535,6 +543,7 @@ var DISCOVERY_DEFS = {
     description: 'An artifact of unknown origin, humming with faint arcane energy. Extremely rare.',
     icon:        gi('crystal-ball'),
     category:    'legendary',
+    tier:        3,
     baseWeight:  2,
     baseDuration: 30 * 24 * 3600,
     terrainMultipliers: {
@@ -549,6 +558,7 @@ var DISCOVERY_DEFS = {
     description: 'Strange luminescent crystals, formed over centuries in the murky depths. None have seen their like before.',
     icon:        gi('crystal-growth'),
     category:    'legendary',
+    tier:        3,
     baseWeight:  3,
     baseDuration: 21 * 24 * 3600,
     terrainMultipliers: {

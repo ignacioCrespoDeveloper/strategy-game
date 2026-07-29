@@ -24,8 +24,14 @@
 //
 //  Design rule (keep it!): the Library owns ECONOMY / LOGISTICS /
 //  UNLOCKS. Combat-stat bonuses belong to lord talents, morale/tempo
-//  buffs to the (future) Temple blessings — never stack a third
-//  combat-power system in here.
+//  buffs to Temple blessings — never stack a third combat-power system
+//  in here.
+//
+//  Catalog trimmed 2026-07-29 to these two while the progression is
+//  re-tuned: the three *_production tomes and Drill Manuals were cut,
+//  and both survivors dropped to tier 1 so the Library is useful the
+//  moment it is built. RESEARCH_TIERS keeps tiers 2 and 3 defined for
+//  the books coming next — a new book only needs a `tier` to use them.
 // =============================================
 
 // Research cost/time curve: base · 1.8^(level-1)
@@ -38,58 +44,22 @@ var RESEARCH_DEFS = {
 
   // ── Tier 1 — Library Lv 1 ───────────────────────────────────────
 
-  agronomy_tomes: {
-    id:          'agronomy_tomes',
-    name:        'Agronomy Tomes',
-    icon:        gi('wheat'),
-    image:       'assets/tomes/AgronomyTomes.webp',
-    tier:        1,
-    maxLevel:    5,
-    description: 'Crop rotation, irrigation and husbandry. Each volume raises food production across your empire.',
-    cost:         level => ({ wood: _rscale(400, level), stone: _rscale(200, level), food: _rscale(100, level) }),
-    researchTime: level => _rscale(300, level),
-    bonuses:      level => ({ food_production: 0.04 * level }),
-  },
-
-  forestry_tomes: {
-    id:          'forestry_tomes',
-    name:        'Forestry Tomes',
-    icon:        gi('wood-pile'),
-    image:       'assets/tomes/ForestryTomes.webp',
-    tier:        1,
-    maxLevel:    5,
-    description: 'Coppicing, seasoning and sawmill technique. Each volume raises wood production across your empire.',
-    cost:         level => ({ wood: _rscale(300, level), stone: _rscale(250, level), food: _rscale(150, level) }),
-    researchTime: level => _rscale(300, level),
-    bonuses:      level => ({ wood_production: 0.04 * level }),
-  },
-
-  masonry_tomes: {
-    id:          'masonry_tomes',
-    name:        'Masonry Tomes',
-    icon:        gi('war-pick'),
-    image:       'assets/tomes/MasonryTomes.webp',
-    tier:        1,
-    maxLevel:    5,
-    description: 'Quarrying, dressing and load-bearing arches. Each volume raises stone production across your empire.',
-    cost:         level => ({ wood: _rscale(350, level), stone: _rscale(150, level), food: _rscale(150, level) }),
-    researchTime: level => _rscale(300, level),
-    bonuses:      level => ({ stone_production: 0.04 * level }),
-  },
-
-  // ── Tier 2 — Library Lv 4 ───────────────────────────────────────
-
   engineering_tomes: {
-    id:          'engineering_tomes',
-    name:        'Engineering Tomes',
+    id:          'engineering_tomes',   // id kept: renaming it would orphan
+                                        // every player's researched levels
+    name:        'Slave Chronicles',
     icon:        gi('hammer-nails'),
     image:       'assets/tomes/EngineeringTomes.webp',
-    tier:        2,
+    tier:        1,
     maxLevel:    5,
-    description: 'Cranes, scaffolds and formwork. Each volume cuts construction time in every city.',
+    description: 'Ledgers of every gang, quarry and work-song since the first stone was dressed. Read them and your overseers know exactly how many bodies a wall costs — each volume cuts construction time in every city.',
     cost:         level => ({ wood: _rscale(1200, level), stone: _rscale(900, level), food: _rscale(400, level) }),
     researchTime: level => _rscale(1200, level),
-    bonuses:      level => ({ construction_speed: -0.04 * level }),
+    // Re-tuned 2026-07-29 alongside Cartography: was −4%/level (−20% at
+    // cap), which stacked with the dwarf bonus and the Town Hall divisor
+    // into near-instant builds. Now an odd ladder — 1/3/5/7/9% — so the
+    // first volume is a nudge and the cap is under half what it was.
+    bonuses:      level => ({ construction_speed: -0.01 * (2 * level - 1) }),
   },
 
   cartography: {
@@ -97,25 +67,16 @@ var RESEARCH_DEFS = {
     name:        'Cartography',
     icon:        gi('treasure-map'),
     image:       'assets/tomes/CartographyTomes.webp',
-    tier:        2,
-    maxLevel:    5,
+    tier:        1,
+    maxLevel:    7,
     description: 'Surveyed roads and provisioning charts. Each volume cuts the food cost of marching between tiles.',
-    cost:         level => ({ wood: _rscale(900, level), stone: _rscale(600, level), food: _rscale(800, level) }),
+    // Re-tuned 2026-07-29: was 5 levels of −8% (−40% total) for a token
+    // stone/food price — the cheapest tome in the catalog also gutted the
+    // single logistics cost that limits how far armies roam. Now 7 levels
+    // of −1% (−7% total), and the survey work is paid for in quarried
+    // stone and provisions rather than pocket change.
+    cost:         level => ({ wood: _rscale(900, level), stone: _rscale(1800, level), food: _rscale(2400, level) }),
     researchTime: level => _rscale(1200, level),
-    bonuses:      level => ({ march_food_cost: -0.08 * level }),
-  },
-
-  // ── Tier 3 — Library Lv 8 ───────────────────────────────────────
-
-  drill_manuals: {
-    id:          'drill_manuals',
-    name:        'Drill Manuals',
-    icon:        gi('crossed-swords'),
-    tier:        3,
-    maxLevel:    5,
-    description: 'Standardized drills and muster rolls. Each volume cuts unit recruitment time in every city.',
-    cost:         level => ({ wood: _rscale(3000, level), stone: _rscale(2200, level), food: _rscale(1600, level) }),
-    researchTime: level => _rscale(3600, level),
-    bonuses:      level => ({ recruit_speed: -0.04 * level }),
+    bonuses:      level => ({ march_food_cost: -0.01 * level }),
   },
 };

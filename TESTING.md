@@ -95,6 +95,8 @@ rather than only exercising the credits-based shortcuts.
 | 3 | Multi-defender battle | Dave → Bob + Carol (co-defending) + Bob's city garrison | `/api/pvp/resolve` (instant) — asserts `report._meta.defenderGroups` has both lords and `report._meta.garrison` is set |
 | 4 | Lord capture → ransom / release | Whoever Dave eliminates in #3 | `/api/lord/ransom` (owner pays) and `/api/lord/release` (captor frees for free) — **RNG-dependent**, see below |
 | 5 | Quest (Search Area) | Eve | `search_area` → `/api/lord/instant-action` → `/api/lord/quest-resolve` |
+| 5b | Recruitment gate | Alice | Six `/api/city/recruit` + `/api/research/start` calls that must all be **refused** — see below |
+
 | 6 | Scout | Dave scouts Bob's tile | `scout` → `/api/lord/instant-action` → `/api/lord/scout-resolve` |
 | 7 | Raiding | Dave on a neutral tile | `/api/lord/raid-start` → `/api/lord/raid-instant` (full-duration payout, no real wait) |
 | 8 | Raid interrupted by an arriving enemy | Eve arrives on Dave's raid tile | A **distance-0 move** (Eve "moves" to the tile she's already on) — this is the one legitimate way to force `pendingArrivalCheck` without a real wait, since `/api/lord/instant-action` explicitly bypasses that check (see gotcha below) |
@@ -126,6 +128,38 @@ rather than only exercising the credits-based shortcuts.
   'raiding'`. Test 8 instead checks for the `pvp_result` activity-feed entry
   `_resolveCore` unconditionally writes for both sides — present regardless
   of who wins, absent if no fight ran at all.
+
+### Test 5b — the recruitment gate (added 2026-07-29)
+
+Every assertion here is a **negative**: the endpoint must refuse. Until
+`js/domain/unit-unlock.js` landed, `server/actions/recruit.js` checked only
+gold, the Army Power cap and the legendary lord-12 rule — it never consulted
+`UNIT_ROSTER`, so all six of these calls *succeeded*:
+
+| call | must fail with |
+|---|---|
+| `garrison_soldier` ×50 | `cannot be trained` — these are `goldCost: 0` **and** `recruitTime: 0`, so a crafted POST could fill an entire PWR cap for free, one second at a time |
+| `bandits` | `cannot be trained` — mercenaries JOIN via expeditions, they are not purchasable |
+| `witch_elves` as a human lord | `is a Dark Elves unit` |
+| `halberdiers` in a town-hall-only city | `Requires Barracks Level 5` |
+| `spearmen` in the same city | `Requires Barracks Level 1` — proves the gate is the building, not a blanket denial |
+| `/api/research/start` `engineering_tomes` | `Requires a Library at level 4` |
+
+The gate is enforced by `UnitUnlockService.check`, the **same** evaluator the
+recruit UI filters with, so the client can never disagree with the server.
+Run this after touching `unit-unlock.js`, `UNIT_ROSTER`, or
+`server/actions/recruit.js`.
+
+### Baseline
+
+**32 passed, 0 failed, 2 skipped** (2026-07-29). The 2 skips are Test 4's
+RNG-dependent ransom/release (see below).
+
+Tests 2 and 3 are **mildly flaky** and can fail on an unlucky run — Test 2's
+`pendingPvpAttack cleared` depends on the fight resolving inside the wait
+window, and Test 3's `defenderGroups has both Bob and Carol` needs Bob to
+come through Test 2 still able to defend. Both were observed failing on one
+run and passing on the next with identical code. Re-run before investigating.
 
 ### RNG-dependent outcomes (Test 4)
 

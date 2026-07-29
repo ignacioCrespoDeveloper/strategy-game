@@ -1,77 +1,77 @@
 {
-  "generatedAt": 1785316376792,
+  "generatedAt": 1785349227878,
   "reps": 96,
   "goldBudget": 60000,
   "pwrCap": 1000,
   "raceRate": {
-    "human": 0.5237116228070176,
-    "dwarf": 0.5034265350877193,
-    "orc": 0.4668311403508772,
-    "high_elf": 0.49499725877192985,
-    "dark_elf": 0.5110334429824561
+    "human": 0.5328262061403509,
+    "dwarf": 0.504797149122807,
+    "orc": 0.46559758771929827,
+    "high_elf": 0.49390076754385964,
+    "dark_elf": 0.5028782894736842
   },
   "archRate": {
-    "swarm": 0.5382127192982457,
-    "elite": 0.5302631578947369,
-    "balanced": 0.5028508771929825,
-    "blocks": 0.4286732456140351
+    "swarm": 0.5384868421052632,
+    "elite": 0.531359649122807,
+    "balanced": 0.5020833333333333,
+    "blocks": 0.4280701754385965
   },
   "comboRate": {
-    "human/swarm": 0.6356907894736842,
-    "human/elite": 0.6798245614035088,
-    "human/balanced": 0.36951754385964913,
-    "human/blocks": 0.40981359649122806,
-    "dwarf/swarm": 0.4761513157894737,
-    "dwarf/elite": 0.47286184210526316,
-    "dwarf/balanced": 0.5285087719298246,
-    "dwarf/blocks": 0.5361842105263158,
-    "orc/swarm": 0.6439144736842105,
-    "orc/elite": 0.45586622807017546,
-    "orc/balanced": 0.38980263157894735,
-    "orc/blocks": 0.37774122807017546,
-    "high_elf/swarm": 0.33223684210526316,
-    "high_elf/elite": 0.5183662280701754,
-    "high_elf/balanced": 0.6543311403508771,
-    "high_elf/blocks": 0.4750548245614035,
-    "dark_elf/swarm": 0.6030701754385965,
-    "dark_elf/elite": 0.5243969298245614,
-    "dark_elf/balanced": 0.5720942982456141,
-    "dark_elf/blocks": 0.34457236842105265
+    "human/swarm": 0.6384320175438597,
+    "human/elite": 0.6938048245614035,
+    "human/balanced": 0.37527412280701755,
+    "human/blocks": 0.4237938596491228,
+    "dwarf/swarm": 0.484375,
+    "dwarf/elite": 0.46875,
+    "dwarf/balanced": 0.5304276315789473,
+    "dwarf/blocks": 0.5356359649122807,
+    "orc/swarm": 0.640625,
+    "orc/elite": 0.4662828947368421,
+    "orc/balanced": 0.3848684210526316,
+    "orc/blocks": 0.3706140350877193,
+    "high_elf/swarm": 0.32922149122807015,
+    "high_elf/elite": 0.5191885964912281,
+    "high_elf/balanced": 0.6502192982456141,
+    "high_elf/blocks": 0.4769736842105263,
+    "dark_elf/swarm": 0.5997807017543859,
+    "dark_elf/elite": 0.5087719298245614,
+    "dark_elf/balanced": 0.5696271929824561,
+    "dark_elf/blocks": 0.3333333333333333
   },
   "raceVsRate": {
     "human": {
       "human": 0.5,
-      "dwarf": 0.5807291666666666,
-      "orc": 0.5130208333333334,
-      "high_elf": 0.5358072916666666,
-      "dark_elf": 0.4830729166666667
+      "dwarf": 0.5875651041666666,
+      "orc": 0.5110677083333334,
+      "high_elf": 0.560546875,
+      "dark_elf": 0.4967447916666667
     },
     "dwarf": {
-      "human": 0.4192708333333333,
+      "human": 0.4124348958333333,
       "dwarf": 0.5,
-      "orc": 0.5074869791666666,
-      "high_elf": 0.6419270833333334,
-      "dark_elf": 0.4475911458333333
+      "orc": 0.5169270833333334,
+      "high_elf": 0.6321614583333334,
+      "dark_elf": 0.4612630208333333
     },
     "orc": {
-      "human": 0.4869791666666667,
-      "dwarf": 0.4925130208333333,
+      "human": 0.4889322916666667,
+      "dwarf": 0.4830729166666667,
       "orc": 0.5,
-      "high_elf": 0.3987630208333333,
-      "dark_elf": 0.4641927083333333
+      "high_elf": 0.3854166666666667,
+      "dark_elf": 0.4791666666666667
     },
     "high_elf": {
-      "human": 0.4641927083333333,
-      "dwarf": 0.3580729166666667,
-      "orc": 0.6012369791666666,
+      "human": 0.439453125,
+      "dwarf": 0.3678385416666667,
+      "orc": 0.6145833333333334,
       "high_elf": 0.5,
-      "dark_elf": 0.552734375
+      "dark_elf": 0.5491536458333334
     },
     "dark_elf": {
-      "human": 0.5169270833333334,
-      "dwarf": 0.5524088541666666,
-      "orc": 0.5358072916666666,
-      "high_elf": 0.447265625,
+      "human": 0.5032552083333334,
+      "dwarf": 0.5387369791666666,
+      "orc": 0.5208333333333334,
+      "high_elf": 0.4508463541666667,
       "dark_elf": 0.5
     }
   },
@@ -82,7 +82,7 @@
       "arch": "swarm",
       "pwr": 963,
       "gold": 4835,
-      "winRate": 0.6356907894736842,
+      "winRate": 0.6384320175438597,
       "units": [
         {
           "unitId": "spearmen",
@@ -152,7 +152,7 @@
       "arch": "elite",
       "pwr": 963,
       "gold": 4835,
-      "winRate": 0.6798245614035088,
+      "winRate": 0.6938048245614035,
       "units": [
         {
           "unitId": "steam_tank",
@@ -222,7 +222,7 @@
       "arch": "balanced",
       "pwr": 979,
       "gold": 5820,
-      "winRate": 0.36951754385964913,
+      "winRate": 0.37527412280701755,
       "units": [
         {
           "unitId": "spearmen",
@@ -257,7 +257,7 @@
       "arch": "blocks",
       "pwr": 984,
       "gold": 5430,
-      "winRate": 0.40981359649122806,
+      "winRate": 0.4237938596491228,
       "units": [
         {
           "unitId": "spearmen",
@@ -287,7 +287,7 @@
       "arch": "swarm",
       "pwr": 966,
       "gold": 5055,
-      "winRate": 0.4761513157894737,
+      "winRate": 0.484375,
       "units": [
         {
           "unitId": "dwarf_warriors",
@@ -357,7 +357,7 @@
       "arch": "elite",
       "pwr": 966,
       "gold": 5055,
-      "winRate": 0.47286184210526316,
+      "winRate": 0.46875,
       "units": [
         {
           "unitId": "irondrakes",
@@ -427,7 +427,7 @@
       "arch": "balanced",
       "pwr": 991,
       "gold": 4760,
-      "winRate": 0.5285087719298246,
+      "winRate": 0.5304276315789473,
       "units": [
         {
           "unitId": "dwarf_warriors",
@@ -452,7 +452,7 @@
       "arch": "blocks",
       "pwr": 994,
       "gold": 4920,
-      "winRate": 0.5361842105263158,
+      "winRate": 0.5356359649122807,
       "units": [
         {
           "unitId": "dwarf_warriors",
@@ -482,7 +482,7 @@
       "arch": "swarm",
       "pwr": 980,
       "gold": 5105,
-      "winRate": 0.6439144736842105,
+      "winRate": 0.640625,
       "units": [
         {
           "unitId": "goblins",
@@ -557,7 +557,7 @@
       "arch": "elite",
       "pwr": 988,
       "gold": 6295,
-      "winRate": 0.45586622807017546,
+      "winRate": 0.4662828947368421,
       "units": [
         {
           "unitId": "arachnarok_spider",
@@ -632,7 +632,7 @@
       "arch": "balanced",
       "pwr": 995,
       "gold": 7050,
-      "winRate": 0.38980263157894735,
+      "winRate": 0.3848684210526316,
       "units": [
         {
           "unitId": "goblins",
@@ -667,7 +667,7 @@
       "arch": "blocks",
       "pwr": 990,
       "gold": 5445,
-      "winRate": 0.37774122807017546,
+      "winRate": 0.3706140350877193,
       "units": [
         {
           "unitId": "goblins",
@@ -697,7 +697,7 @@
       "arch": "swarm",
       "pwr": 963,
       "gold": 5010,
-      "winRate": 0.33223684210526316,
+      "winRate": 0.32922149122807015,
       "units": [
         {
           "unitId": "he_spearmen",
@@ -762,7 +762,7 @@
       "arch": "elite",
       "pwr": 990,
       "gold": 5725,
-      "winRate": 0.5183662280701754,
+      "winRate": 0.5191885964912281,
       "units": [
         {
           "unitId": "sun_dragon",
@@ -822,7 +822,7 @@
       "arch": "balanced",
       "pwr": 993,
       "gold": 5940,
-      "winRate": 0.6543311403508771,
+      "winRate": 0.6502192982456141,
       "units": [
         {
           "unitId": "he_spearmen",
@@ -857,7 +857,7 @@
       "arch": "blocks",
       "pwr": 955,
       "gold": 5175,
-      "winRate": 0.4750548245614035,
+      "winRate": 0.4769736842105263,
       "units": [
         {
           "unitId": "he_spearmen",
@@ -887,7 +887,7 @@
       "arch": "swarm",
       "pwr": 990,
       "gold": 4690,
-      "winRate": 0.6030701754385965,
+      "winRate": 0.5997807017543859,
       "units": [
         {
           "unitId": "bleakswords",
@@ -952,7 +952,7 @@
       "arch": "elite",
       "pwr": 998,
       "gold": 6835,
-      "winRate": 0.5243969298245614,
+      "winRate": 0.5087719298245614,
       "units": [
         {
           "unitId": "black_dragon",
@@ -1002,7 +1002,7 @@
       "arch": "balanced",
       "pwr": 979,
       "gold": 6605,
-      "winRate": 0.5720942982456141,
+      "winRate": 0.5696271929824561,
       "units": [
         {
           "unitId": "bleakswords",
@@ -1037,7 +1037,7 @@
       "arch": "blocks",
       "pwr": 970,
       "gold": 5185,
-      "winRate": 0.34457236842105265,
+      "winRate": 0.3333333333333333,
       "units": [
         {
           "unitId": "bleakswords",
@@ -1068,46 +1068,46 @@
       "lordLevel": 3,
       "pwrCap": 440,
       "raceRate": {
-        "human": 0.4492872807017544,
-        "dwarf": 0.5882675438596491,
-        "orc": 0.43469024122807015,
-        "high_elf": 0.5139117324561403,
-        "dark_elf": 0.5138432017543859
+        "human": 0.4458607456140351,
+        "dwarf": 0.5817571271929824,
+        "orc": 0.4381167763157895,
+        "high_elf": 0.516515899122807,
+        "dark_elf": 0.5177494517543859
       },
       "raceVsRate": {
         "human": {
           "human": 0.5,
-          "dwarf": 0.21549479166666666,
-          "orc": 0.7027994791666666,
-          "high_elf": 0.3828125,
-          "dark_elf": 0.4580078125
+          "dwarf": 0.2216796875,
+          "orc": 0.6943359375,
+          "high_elf": 0.3815104166666667,
+          "dark_elf": 0.4453125
         },
         "dwarf": {
-          "human": 0.7845052083333334,
+          "human": 0.7783203125,
           "dwarf": 0.5,
-          "orc": 0.6774088541666666,
-          "high_elf": 0.61328125,
-          "dark_elf": 0.3440755208333333
+          "orc": 0.6647135416666666,
+          "high_elf": 0.6083984375,
+          "dark_elf": 0.3369140625
         },
         "orc": {
-          "human": 0.2972005208333333,
-          "dwarf": 0.3225911458333333,
+          "human": 0.3056640625,
+          "dwarf": 0.3352864583333333,
           "orc": 0.5,
-          "high_elf": 0.4622395833333333,
-          "dark_elf": 0.6077473958333334
+          "high_elf": 0.4599609375,
+          "dark_elf": 0.6051432291666666
         },
         "high_elf": {
-          "human": 0.6171875,
-          "dwarf": 0.38671875,
-          "orc": 0.5377604166666666,
+          "human": 0.6184895833333334,
+          "dwarf": 0.3916015625,
+          "orc": 0.5400390625,
           "high_elf": 0.5,
-          "dark_elf": 0.5244140625
+          "dark_elf": 0.5283203125
         },
         "dark_elf": {
-          "human": 0.5419921875,
-          "dwarf": 0.6559244791666666,
-          "orc": 0.3922526041666667,
-          "high_elf": 0.4755859375,
+          "human": 0.5546875,
+          "dwarf": 0.6630859375,
+          "orc": 0.3948567708333333,
+          "high_elf": 0.4716796875,
           "dark_elf": 0.5
         }
       },
@@ -1118,7 +1118,7 @@
           "arch": "swarm",
           "pwr": 433,
           "gold": 1755,
-          "winRate": 0.44764254385964913,
+          "winRate": 0.4491502192982456,
           "units": [
             {
               "unitId": "spearmen",
@@ -1143,7 +1143,7 @@
           "arch": "elite",
           "pwr": 399,
           "gold": 1745,
-          "winRate": 0.4673793859649123,
+          "winRate": 0.4613486842105263,
           "units": [
             {
               "unitId": "empire_knights",
@@ -1168,7 +1168,7 @@
           "arch": "balanced",
           "pwr": 433,
           "gold": 1755,
-          "winRate": 0.43722587719298245,
+          "winRate": 0.4359923245614035,
           "units": [
             {
               "unitId": "spearmen",
@@ -1193,7 +1193,7 @@
           "arch": "blocks",
           "pwr": 433,
           "gold": 1755,
-          "winRate": 0.4449013157894737,
+          "winRate": 0.4369517543859649,
           "units": [
             {
               "unitId": "spearmen",
@@ -1218,7 +1218,7 @@
           "arch": "swarm",
           "pwr": 435,
           "gold": 1530,
-          "winRate": 0.7606907894736842,
+          "winRate": 0.7612390350877193,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -1243,7 +1243,7 @@
           "arch": "elite",
           "pwr": 414,
           "gold": 1455,
-          "winRate": 0.653234649122807,
+          "winRate": 0.6392543859649122,
           "units": [
             {
               "unitId": "longbeards",
@@ -1268,7 +1268,7 @@
           "arch": "balanced",
           "pwr": 411,
           "gold": 1445,
-          "winRate": 0.17516447368421054,
+          "winRate": 0.16365131578947367,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -1293,7 +1293,7 @@
           "arch": "blocks",
           "pwr": 435,
           "gold": 1530,
-          "winRate": 0.7639802631578947,
+          "winRate": 0.7628837719298246,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -1318,7 +1318,7 @@
           "arch": "swarm",
           "pwr": 428,
           "gold": 1885,
-          "winRate": 0.29714912280701755,
+          "winRate": 0.3067434210526316,
           "units": [
             {
               "unitId": "goblins",
@@ -1353,7 +1353,7 @@
           "arch": "elite",
           "pwr": 433,
           "gold": 1905,
-          "winRate": 0.4761513157894737,
+          "winRate": 0.48355263157894735,
           "units": [
             {
               "unitId": "boar_boyz",
@@ -1388,7 +1388,7 @@
           "arch": "balanced",
           "pwr": 420,
           "gold": 1715,
-          "winRate": 0.26096491228070173,
+          "winRate": 0.25877192982456143,
           "units": [
             {
               "unitId": "goblins",
@@ -1418,7 +1418,7 @@
           "arch": "blocks",
           "pwr": 440,
           "gold": 1905,
-          "winRate": 0.7044956140350878,
+          "winRate": 0.7033991228070176,
           "units": [
             {
               "unitId": "goblins",
@@ -1448,7 +1448,7 @@
           "arch": "swarm",
           "pwr": 427,
           "gold": 1620,
-          "winRate": 0.8149671052631579,
+          "winRate": 0.8182565789473685,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -1478,7 +1478,7 @@
           "arch": "elite",
           "pwr": 406,
           "gold": 1670,
-          "winRate": 0.45860745614035087,
+          "winRate": 0.4525767543859649,
           "units": [
             {
               "unitId": "silver_helms",
@@ -1508,7 +1508,7 @@
           "arch": "balanced",
           "pwr": 399,
           "gold": 1640,
-          "winRate": 0.37966008771929827,
+          "winRate": 0.40625,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -1533,7 +1533,7 @@
           "arch": "blocks",
           "pwr": 399,
           "gold": 1640,
-          "winRate": 0.4024122807017544,
+          "winRate": 0.38898026315789475,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -1558,7 +1558,7 @@
           "arch": "swarm",
           "pwr": 428,
           "gold": 1610,
-          "winRate": 0.3503289473684211,
+          "winRate": 0.37198464912280704,
           "units": [
             {
               "unitId": "bleakswords",
@@ -1588,7 +1588,7 @@
           "arch": "elite",
           "pwr": 437,
           "gold": 1760,
-          "winRate": 0.6633771929824561,
+          "winRate": 0.6546052631578947,
           "units": [
             {
               "unitId": "dark_riders",
@@ -1618,7 +1618,7 @@
           "arch": "balanced",
           "pwr": 428,
           "gold": 1610,
-          "winRate": 0.3651315789473684,
+          "winRate": 0.37417763157894735,
           "units": [
             {
               "unitId": "bleakswords",
@@ -1648,7 +1648,7 @@
           "arch": "blocks",
           "pwr": 436,
           "gold": 1755,
-          "winRate": 0.6765350877192983,
+          "winRate": 0.6702302631578947,
           "units": [
             {
               "unitId": "bleakswords",
@@ -1679,46 +1679,46 @@
       "lordLevel": 6,
       "pwrCap": 680,
       "raceRate": {
-        "human": 0.3969298245614035,
-        "dwarf": 0.5229577850877193,
-        "orc": 0.5554413377192983,
-        "high_elf": 0.5405016447368421,
-        "dark_elf": 0.48416940789473684
+        "human": 0.40529057017543857,
+        "dwarf": 0.4712856359649123,
+        "orc": 0.5712719298245614,
+        "high_elf": 0.5621573464912281,
+        "dark_elf": 0.48999451754385964
       },
       "raceVsRate": {
         "human": {
           "human": 0.5,
-          "dwarf": 0.3678385416666667,
-          "orc": 0.3121744791666667,
-          "high_elf": 0.3626302083333333,
-          "dark_elf": 0.4677734375
+          "dwarf": 0.4150390625,
+          "orc": 0.3056640625,
+          "high_elf": 0.3544921875,
+          "dark_elf": 0.4749348958333333
         },
         "dwarf": {
-          "human": 0.6321614583333334,
+          "human": 0.5849609375,
           "dwarf": 0.5,
-          "orc": 0.4778645833333333,
-          "high_elf": 0.50390625,
-          "dark_elf": 0.4951171875
+          "orc": 0.4313151041666667,
+          "high_elf": 0.4322916666666667,
+          "dark_elf": 0.4150390625
         },
         "orc": {
-          "human": 0.6878255208333334,
-          "dwarf": 0.5221354166666666,
+          "human": 0.6943359375,
+          "dwarf": 0.5686848958333334,
           "orc": 0.5,
-          "high_elf": 0.5501302083333334,
-          "dark_elf": 0.5032552083333334
+          "high_elf": 0.55078125,
+          "dark_elf": 0.5247395833333334
         },
         "high_elf": {
-          "human": 0.6373697916666666,
-          "dwarf": 0.49609375,
-          "orc": 0.4498697916666667,
+          "human": 0.6455078125,
+          "dwarf": 0.5677083333333334,
+          "orc": 0.44921875,
           "high_elf": 0.5,
-          "dark_elf": 0.6090494791666666
+          "dark_elf": 0.6328125
         },
         "dark_elf": {
-          "human": 0.5322265625,
-          "dwarf": 0.5048828125,
-          "orc": 0.4967447916666667,
-          "high_elf": 0.3909505208333333,
+          "human": 0.5250651041666666,
+          "dwarf": 0.5849609375,
+          "orc": 0.4752604166666667,
+          "high_elf": 0.3671875,
           "dark_elf": 0.5
         }
       },
@@ -1729,7 +1729,7 @@
           "arch": "swarm",
           "pwr": 663,
           "gold": 2930,
-          "winRate": 0.5463267543859649,
+          "winRate": 0.549890350877193,
           "units": [
             {
               "unitId": "spearmen",
@@ -1784,7 +1784,7 @@
           "arch": "elite",
           "pwr": 680,
           "gold": 2985,
-          "winRate": 0.6104714912280702,
+          "winRate": 0.6195175438596491,
           "units": [
             {
               "unitId": "great_cannon",
@@ -1839,7 +1839,7 @@
           "arch": "balanced",
           "pwr": 634,
           "gold": 3205,
-          "winRate": 0.20942982456140352,
+          "winRate": 0.2099780701754386,
           "units": [
             {
               "unitId": "spearmen",
@@ -1869,7 +1869,7 @@
           "arch": "blocks",
           "pwr": 640,
           "gold": 3455,
-          "winRate": 0.22149122807017543,
+          "winRate": 0.24177631578947367,
           "units": [
             {
               "unitId": "spearmen",
@@ -1899,7 +1899,7 @@
           "arch": "swarm",
           "pwr": 656,
           "gold": 3240,
-          "winRate": 0.36211622807017546,
+          "winRate": 0.35910087719298245,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -1952,15 +1952,10 @@
           "key": "dwarf/elite",
           "race": "dwarf",
           "arch": "elite",
-          "pwr": 674,
-          "gold": 3670,
-          "winRate": 0.503015350877193,
+          "pwr": 656,
+          "gold": 3240,
+          "winRate": 0.35663377192982454,
           "units": [
-            {
-              "unitId": "organ_gun",
-              "name": "Organ Gun",
-              "count": 1
-            },
             {
               "unitId": "hammerers",
               "name": "Hammerers",
@@ -1995,6 +1990,16 @@
               "unitId": "thunderers",
               "name": "Thunderers",
               "count": 1
+            },
+            {
+              "unitId": "quarrellers",
+              "name": "Quarrellers",
+              "count": 1
+            },
+            {
+              "unitId": "dwarf_warriors",
+              "name": "Dwarf Warriors",
+              "count": 1
             }
           ]
         },
@@ -2002,14 +2007,14 @@
           "key": "dwarf/balanced",
           "race": "dwarf",
           "arch": "balanced",
-          "pwr": 643,
-          "gold": 3520,
-          "winRate": 0.49890350877192985,
+          "pwr": 659,
+          "gold": 3480,
+          "winRate": 0.571546052631579,
           "units": [
             {
               "unitId": "dwarf_warriors",
               "name": "Dwarf Warriors",
-              "count": 3
+              "count": 4
             },
             {
               "unitId": "hammerers",
@@ -2017,8 +2022,8 @@
               "count": 3
             },
             {
-              "unitId": "organ_gun",
-              "name": "Organ Gun",
+              "unitId": "dwarf_cannon",
+              "name": "Cannon",
               "count": 2
             }
           ]
@@ -2027,9 +2032,9 @@
           "key": "dwarf/blocks",
           "race": "dwarf",
           "arch": "blocks",
-          "pwr": 671,
-          "gold": 3440,
-          "winRate": 0.727796052631579,
+          "pwr": 644,
+          "gold": 3250,
+          "winRate": 0.5978618421052632,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -2037,8 +2042,8 @@
               "count": 3
             },
             {
-              "unitId": "organ_gun",
-              "name": "Organ Gun",
+              "unitId": "dwarf_cannon",
+              "name": "Cannon",
               "count": 2
             },
             {
@@ -2059,7 +2064,7 @@
           "arch": "swarm",
           "pwr": 666,
           "gold": 2870,
-          "winRate": 0.5564692982456141,
+          "winRate": 0.5822368421052632,
           "units": [
             {
               "unitId": "goblins",
@@ -2114,7 +2119,7 @@
           "arch": "elite",
           "pwr": 667,
           "gold": 3130,
-          "winRate": 0.6049890350877193,
+          "winRate": 0.6233552631578947,
           "units": [
             {
               "unitId": "boar_boyz",
@@ -2169,7 +2174,7 @@
           "arch": "balanced",
           "pwr": 667,
           "gold": 3300,
-          "winRate": 0.5367324561403509,
+          "winRate": 0.5350877192982456,
           "units": [
             {
               "unitId": "goblins",
@@ -2199,7 +2204,7 @@
           "arch": "blocks",
           "pwr": 667,
           "gold": 3300,
-          "winRate": 0.5235745614035088,
+          "winRate": 0.5444078947368421,
           "units": [
             {
               "unitId": "goblins",
@@ -2229,7 +2234,7 @@
           "arch": "swarm",
           "pwr": 662,
           "gold": 2870,
-          "winRate": 0.5290570175438597,
+          "winRate": 0.5386513157894737,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -2274,7 +2279,7 @@
           "arch": "elite",
           "pwr": 676,
           "gold": 3340,
-          "winRate": 0.3442982456140351,
+          "winRate": 0.35827850877192985,
           "units": [
             {
               "unitId": "white_lions",
@@ -2319,7 +2324,7 @@
           "arch": "balanced",
           "pwr": 678,
           "gold": 3590,
-          "winRate": 0.6483004385964912,
+          "winRate": 0.6779057017543859,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -2349,7 +2354,7 @@
           "arch": "blocks",
           "pwr": 678,
           "gold": 3590,
-          "winRate": 0.6403508771929824,
+          "winRate": 0.6737938596491229,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -2377,9 +2382,9 @@
           "key": "dark_elf/swarm",
           "race": "dark_elf",
           "arch": "swarm",
-          "pwr": 634,
-          "gold": 2785,
-          "winRate": 0.47286184210526316,
+          "pwr": 668,
+          "gold": 2750,
+          "winRate": 0.6650219298245614,
           "units": [
             {
               "unitId": "bleakswords",
@@ -2389,12 +2394,12 @@
             {
               "unitId": "dreadspears",
               "name": "Dreadspears",
-              "count": 1
+              "count": 2
             },
             {
               "unitId": "darkshards",
               "name": "Darkshards",
-              "count": 1
+              "count": 2
             },
             {
               "unitId": "shades",
@@ -2412,11 +2417,6 @@
               "count": 1
             },
             {
-              "unitId": "witch_elves",
-              "name": "Witch Elves",
-              "count": 1
-            },
-            {
               "unitId": "cold_one_knights",
               "name": "Cold One Knights",
               "count": 1
@@ -2427,9 +2427,9 @@
           "key": "dark_elf/elite",
           "race": "dark_elf",
           "arch": "elite",
-          "pwr": 668,
-          "gold": 3065,
-          "winRate": 0.6595394736842105,
+          "pwr": 660,
+          "gold": 3025,
+          "winRate": 0.5364583333333334,
           "units": [
             {
               "unitId": "cold_one_knights",
@@ -2437,14 +2437,9 @@
               "count": 2
             },
             {
-              "unitId": "witch_elves",
-              "name": "Witch Elves",
-              "count": 1
-            },
-            {
               "unitId": "har_ganeth_executioners",
               "name": "Executioners",
-              "count": 1
+              "count": 2
             },
             {
               "unitId": "shades",
@@ -2477,9 +2472,9 @@
           "key": "dark_elf/balanced",
           "race": "dark_elf",
           "arch": "balanced",
-          "pwr": 669,
-          "gold": 2960,
-          "winRate": 0.4454495614035088,
+          "pwr": 654,
+          "gold": 2880,
+          "winRate": 0.38103070175438597,
           "units": [
             {
               "unitId": "bleakswords",
@@ -2487,8 +2482,8 @@
               "count": 3
             },
             {
-              "unitId": "witch_elves",
-              "name": "Witch Elves",
+              "unitId": "har_ganeth_executioners",
+              "name": "Executioners",
               "count": 2
             },
             {
@@ -2509,7 +2504,7 @@
           "arch": "blocks",
           "pwr": 654,
           "gold": 2880,
-          "winRate": 0.3588267543859649,
+          "winRate": 0.3774671052631579,
           "units": [
             {
               "unitId": "bleakswords",
@@ -2540,46 +2535,46 @@
       "lordLevel": 10,
       "pwrCap": 1000,
       "raceRate": {
-        "human": 0.5237116228070176,
-        "dwarf": 0.5034265350877193,
-        "orc": 0.4668311403508772,
-        "high_elf": 0.49499725877192985,
-        "dark_elf": 0.5110334429824561
+        "human": 0.5328262061403509,
+        "dwarf": 0.504797149122807,
+        "orc": 0.46559758771929827,
+        "high_elf": 0.49390076754385964,
+        "dark_elf": 0.5028782894736842
       },
       "raceVsRate": {
         "human": {
           "human": 0.5,
-          "dwarf": 0.5807291666666666,
-          "orc": 0.5130208333333334,
-          "high_elf": 0.5358072916666666,
-          "dark_elf": 0.4830729166666667
+          "dwarf": 0.5875651041666666,
+          "orc": 0.5110677083333334,
+          "high_elf": 0.560546875,
+          "dark_elf": 0.4967447916666667
         },
         "dwarf": {
-          "human": 0.4192708333333333,
+          "human": 0.4124348958333333,
           "dwarf": 0.5,
-          "orc": 0.5074869791666666,
-          "high_elf": 0.6419270833333334,
-          "dark_elf": 0.4475911458333333
+          "orc": 0.5169270833333334,
+          "high_elf": 0.6321614583333334,
+          "dark_elf": 0.4612630208333333
         },
         "orc": {
-          "human": 0.4869791666666667,
-          "dwarf": 0.4925130208333333,
+          "human": 0.4889322916666667,
+          "dwarf": 0.4830729166666667,
           "orc": 0.5,
-          "high_elf": 0.3987630208333333,
-          "dark_elf": 0.4641927083333333
+          "high_elf": 0.3854166666666667,
+          "dark_elf": 0.4791666666666667
         },
         "high_elf": {
-          "human": 0.4641927083333333,
-          "dwarf": 0.3580729166666667,
-          "orc": 0.6012369791666666,
+          "human": 0.439453125,
+          "dwarf": 0.3678385416666667,
+          "orc": 0.6145833333333334,
           "high_elf": 0.5,
-          "dark_elf": 0.552734375
+          "dark_elf": 0.5491536458333334
         },
         "dark_elf": {
-          "human": 0.5169270833333334,
-          "dwarf": 0.5524088541666666,
-          "orc": 0.5358072916666666,
-          "high_elf": 0.447265625,
+          "human": 0.5032552083333334,
+          "dwarf": 0.5387369791666666,
+          "orc": 0.5208333333333334,
+          "high_elf": 0.4508463541666667,
           "dark_elf": 0.5
         }
       },
@@ -2590,7 +2585,7 @@
           "arch": "swarm",
           "pwr": 963,
           "gold": 4835,
-          "winRate": 0.6356907894736842,
+          "winRate": 0.6384320175438597,
           "units": [
             {
               "unitId": "spearmen",
@@ -2660,7 +2655,7 @@
           "arch": "elite",
           "pwr": 963,
           "gold": 4835,
-          "winRate": 0.6798245614035088,
+          "winRate": 0.6938048245614035,
           "units": [
             {
               "unitId": "steam_tank",
@@ -2730,7 +2725,7 @@
           "arch": "balanced",
           "pwr": 979,
           "gold": 5820,
-          "winRate": 0.36951754385964913,
+          "winRate": 0.37527412280701755,
           "units": [
             {
               "unitId": "spearmen",
@@ -2765,7 +2760,7 @@
           "arch": "blocks",
           "pwr": 984,
           "gold": 5430,
-          "winRate": 0.40981359649122806,
+          "winRate": 0.4237938596491228,
           "units": [
             {
               "unitId": "spearmen",
@@ -2795,7 +2790,7 @@
           "arch": "swarm",
           "pwr": 966,
           "gold": 5055,
-          "winRate": 0.4761513157894737,
+          "winRate": 0.484375,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -2865,7 +2860,7 @@
           "arch": "elite",
           "pwr": 966,
           "gold": 5055,
-          "winRate": 0.47286184210526316,
+          "winRate": 0.46875,
           "units": [
             {
               "unitId": "irondrakes",
@@ -2935,7 +2930,7 @@
           "arch": "balanced",
           "pwr": 991,
           "gold": 4760,
-          "winRate": 0.5285087719298246,
+          "winRate": 0.5304276315789473,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -2960,7 +2955,7 @@
           "arch": "blocks",
           "pwr": 994,
           "gold": 4920,
-          "winRate": 0.5361842105263158,
+          "winRate": 0.5356359649122807,
           "units": [
             {
               "unitId": "dwarf_warriors",
@@ -2990,7 +2985,7 @@
           "arch": "swarm",
           "pwr": 980,
           "gold": 5105,
-          "winRate": 0.6439144736842105,
+          "winRate": 0.640625,
           "units": [
             {
               "unitId": "goblins",
@@ -3065,7 +3060,7 @@
           "arch": "elite",
           "pwr": 988,
           "gold": 6295,
-          "winRate": 0.45586622807017546,
+          "winRate": 0.4662828947368421,
           "units": [
             {
               "unitId": "arachnarok_spider",
@@ -3140,7 +3135,7 @@
           "arch": "balanced",
           "pwr": 995,
           "gold": 7050,
-          "winRate": 0.38980263157894735,
+          "winRate": 0.3848684210526316,
           "units": [
             {
               "unitId": "goblins",
@@ -3175,7 +3170,7 @@
           "arch": "blocks",
           "pwr": 990,
           "gold": 5445,
-          "winRate": 0.37774122807017546,
+          "winRate": 0.3706140350877193,
           "units": [
             {
               "unitId": "goblins",
@@ -3205,7 +3200,7 @@
           "arch": "swarm",
           "pwr": 963,
           "gold": 5010,
-          "winRate": 0.33223684210526316,
+          "winRate": 0.32922149122807015,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -3270,7 +3265,7 @@
           "arch": "elite",
           "pwr": 990,
           "gold": 5725,
-          "winRate": 0.5183662280701754,
+          "winRate": 0.5191885964912281,
           "units": [
             {
               "unitId": "sun_dragon",
@@ -3330,7 +3325,7 @@
           "arch": "balanced",
           "pwr": 993,
           "gold": 5940,
-          "winRate": 0.6543311403508771,
+          "winRate": 0.6502192982456141,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -3365,7 +3360,7 @@
           "arch": "blocks",
           "pwr": 955,
           "gold": 5175,
-          "winRate": 0.4750548245614035,
+          "winRate": 0.4769736842105263,
           "units": [
             {
               "unitId": "he_spearmen",
@@ -3395,7 +3390,7 @@
           "arch": "swarm",
           "pwr": 990,
           "gold": 4690,
-          "winRate": 0.6030701754385965,
+          "winRate": 0.5997807017543859,
           "units": [
             {
               "unitId": "bleakswords",
@@ -3460,7 +3455,7 @@
           "arch": "elite",
           "pwr": 998,
           "gold": 6835,
-          "winRate": 0.5243969298245614,
+          "winRate": 0.5087719298245614,
           "units": [
             {
               "unitId": "black_dragon",
@@ -3510,7 +3505,7 @@
           "arch": "balanced",
           "pwr": 979,
           "gold": 6605,
-          "winRate": 0.5720942982456141,
+          "winRate": 0.5696271929824561,
           "units": [
             {
               "unitId": "bleakswords",
@@ -3545,7 +3540,7 @@
           "arch": "blocks",
           "pwr": 970,
           "gold": 5185,
-          "winRate": 0.34457236842105265,
+          "winRate": 0.3333333333333333,
           "units": [
             {
               "unitId": "bleakswords",

@@ -8,7 +8,6 @@ const LordScreen = (() => {
   let _activeTab       = 'overview';
   let _tickTimer       = null;
   let _resolvingSearch = false;
-  let _mountPickerOpen = false;
   // Troop-exchange mode (Army tab): partner lord id + the model-level
   // preview state. Client-side only until Confirm posts /api/army/transfer.
   let _exchangeWith    = null;
@@ -24,7 +23,6 @@ const LordScreen = (() => {
     _player          = player;
     _lord            = LordService.getById(lord.id);
     _activeTab       = openTab || 'overview';
-    _mountPickerOpen = false;
     _exchangeWith    = null;
     _exchangeState   = null;
 
@@ -383,16 +381,11 @@ const LordScreen = (() => {
           App.navigate('map', { player: PlayerService.getById(_player.id), lord: LordService.getById(_lord.id), mode: 'move-lord' });
         });
         // The Mount card sits where the Stance section used to; the whole card
-        // (and its Change button) jumps to the Mount tab.
+        // jumps to the Mount tab (as does the empty slot's Equip button).
         document.querySelectorAll('#ls-content [data-action="open-mount-tab"]').forEach(el => {
           el.addEventListener('click', (e) => {
             e.stopPropagation();
             _activeTab = 'mount';
-            // "Change" means "show me the grid" — and it only ever renders when
-            // a mount IS equipped, which is exactly when `!_lord.mountId` is
-            // false. Keying the picker off the mount alone made Change land on
-            // the equipped card again and need a second click.
-            _mountPickerOpen = el.classList.contains('lm-change-btn') || !_lord.mountId;
             document.querySelectorAll('.ls-tab').forEach(b => b.classList.toggle('ls-tab--active', b.dataset.tab === 'mount'));
             _renderTab();
             _startCountdown();
@@ -471,14 +464,11 @@ const LordScreen = (() => {
     return Math.round(EconomyCore.getArmyPower(army.units, UNIT_DEFS));
   }
 
-  // Display-only mirror of server/tick/catch-up.js's _raidHourlyRewards —
-  // the server is what actually pays out (at completion, never here), this
-  // is purely for showing an "earned so far" preview while a raid is active.
+  // Preview of the raid payout. Reads the SAME EconomyCore rate the server
+  // pays out with (at completion, never here), so the "earned so far" number
+  // and the real payout can never disagree.
   function _raidHourlyRewardsPreview(lord) {
-    const lvl  = lord.level || 1;
-    const gold = Math.round(25 + lvl * 5);
-    const res  = Math.round(15 + lvl * 3);
-    return { gold, food: res, wood: res, stone: res };
+    return EconomyCore.getRaidHourlyRewards(lord.level);
   }
 
   // Army power if `addCount` more of `unitId` were added to this lord's army.
@@ -665,29 +655,29 @@ const LordScreen = (() => {
     // now reports inside Status, so the section was an empty placeholder most
     // of the time — the mount card took the space instead. Clicking anywhere
     // on the card opens the Mount tab.
+    //
+    // It renders the SAME card as the Mount tab's ladder, inside the same
+    // .lm-mount-grid — so it lands on one grid track and comes out exactly the
+    // width of a card over there (2026-07-29). It used to be a bespoke compact
+    // card at 25% width, which meant the equipped mount looked like a different
+    // object depending on which tab you were standing in.
+    //
+    // Here it's cut to art + name + "Equipped" (noFoot): Overview is a readout,
+    // and the stat chips and Change button are both duplicated one tab over.
+    // The whole card is the click target into that tab, so nothing is lost.
     const mountUnlocked = (_lord.level || 1) >= MOUNT_MIN_LEVEL;
     const chosenMount   = (typeof MOUNT_POOL !== 'undefined' && _lord.mountId)
       ? getMountForRace(_lord.mountId, _lord.race)
       : null;
-    const mountHtml = !mountUnlocked ? `
-      <div class="lm-slot-card lm-slot-card--locked">
-        <div class="lm-slot-plus">+</div>
-        <div class="lm-slot-label">${gi('padlock')} Unlocks at level ${MOUNT_MIN_LEVEL}</div>
-      </div>`
-      : chosenMount ? `
-      <div class="lm-slot-card lm-slot-card--filled" style="border-color:${chosenMount.color}50" data-action="open-mount-tab">
-        <div class="lm-slot-icon">${_mountVisual(chosenMount, 'lm-slot-icon-glyph')}</div>
-        <div class="lm-slot-body">
-          <div class="lm-slot-name" style="color:${chosenMount.color}">${chosenMount.name}</div>
-          <div class="lm-stat-chips">${_mountEffectChips(chosenMount.effects)}</div>
-        </div>
-        <button class="lm-change-btn" data-action="open-mount-tab">Change</button>
-      </div>`
-      : `
-      <div class="lm-slot-card lm-slot-card--empty" data-action="open-mount-tab">
-        <div class="lm-slot-plus">+</div>
-        <div class="lm-slot-label">Equip a mount</div>
-      </div>`;
+    const mountCard = !mountUnlocked ? _mountEmptyTileHtml(true)
+      : chosenMount ? _mountTileHtml(chosenMount, {
+          equipped: true,
+          link:     true,
+          value:    'Equipped',
+          noFoot:   true,
+        })
+      : _mountEmptyTileHtml(false);
+    const mountHtml = `<div class="lm-mount-grid">${mountCard}</div>`;
 
     // ── Army ──────────────────────────────────────────────────────
     // Army Power is the single capacity stat — both the informational
@@ -1139,12 +1129,15 @@ const LordScreen = (() => {
           const wouldExceedPower = _projectedArmyPower(_lord.id, unitId, 1) > maxPower;
           const disabled   = queueFull || !canAfford || wouldExceedPower;
           const btnLabel   = queueFull ? 'Queue Full' : wouldExceedPower ? gi('hazard-sign') + ' Power Limit' : canAfford ? 'Recruit' : 'No gold';
-          // Displayed time mirrors the server: hangar divisor from this
-          // city's training-building level + Drill Manuals research.
+          // Displayed time mirrors server/actions/recruit.js exactly: hangar
+          // divisor from this city's training-building level, plus recruit_speed
+          // summed across Library research AND an active God of War blessing.
           const training   = EconomyCore.getUnitTraining(_lord.race, unitId);
+          const _researchFx = EconomyCore.getResearchEffects(player.research);
+          const _blessingFx = EconomyCore.getBlessingEffects(player.activeBlessing, TimeService.now());
           const recruitSecs = EconomyCore.getRecruitTime(
             def, 1,
-            EconomyCore.getResearchEffects(player.research),
+            { ..._researchFx, recruit_speed: (_researchFx.recruit_speed || 0) + (_blessingFx.recruit_speed || 0) },
             training ? (city.buildings?.[training.buildingId] || 0) : 0,
             training ? training.minLevel : 0,
           );
@@ -1303,11 +1296,6 @@ const LordScreen = (() => {
         </div>`;
     }
 
-    const _CATEGORY_LABELS = {
-      nothing: 'Exploration', resource: 'Resource', combat: 'Combat',
-      event: 'Event', trade: 'Trade', legendary: 'Legendary', intelligence: 'Intelligence',
-      recruits: 'Recruits',
-    };
     const _TIER_ROMAN = { 1: 'I', 2: 'II', 3: 'III' };
 
     const entries = log.map((entry, idx) => {
@@ -1321,16 +1309,24 @@ const LordScreen = (() => {
       const icon      = def ? def.icon : gi('uncertainty');
       const defName   = isNothing ? 'Nothing Found' : (def ? def.name : 'Quest');
       const name      = entry.storyTitle || defName;
-      // When a story quest supplied a custom headline, still surface the
-      // underlying discovery type (e.g. "Goblin Camp") as a small tag so
-      // players don't lose that at-a-glance identification — matters most
-      // for combat, to gauge a fight before committing to it.
-      const typeTagHtml = (entry.storyTitle && def) ? `<span class="qd-type-tag">${icon} ${defName}</span>` : '';
       const code      = `RPT-${String(log.length - idx).padStart(3, '0')}`;
 
-      // ── Outcome kind — drives the badge, left-accent border, and card colour ──
+      // ── Outcome kind — drives the badge and the card's accent ──
+      // Order matters: the two newest outcomes (ambush, recruits) carry their
+      // own marker and must be read BEFORE the generic fallbacks, or an
+      // ambush files as an ordinary "Found" with loot attached and a
+      // recruitment renders as a card with nothing in it.
       let kind, kindLabel;
-      if (entry.wasAttack) {
+      if (entry.outcome === 'ambush') {
+        const won = entry.ambush?.won;
+        kind      = won ? 'win' : 'loss';
+        kindLabel = entry.ambush?.lordFell ? 'Lord Fell' : won ? 'Ambush Won' : 'Ambush Lost';
+      } else if (entry.outcome === 'recruits') {
+        const joined = entry.recruits?.joined || 0;
+        kind      = joined > 0 ? 'recruits' : 'nothing';
+        kindLabel = joined > 0 ? 'Recruited' : 'Turned Away';
+      } else if (entry.wasAttack) {
+        // Legacy: the retired attack-a-camp flow.
         const won = entry.combatOutcome === 'victory';
         kind      = won ? 'win' : 'loss';
         kindLabel = won ? 'Victory' : 'Defeat';
@@ -1342,8 +1338,14 @@ const LordScreen = (() => {
         kind = 'found'; kindLabel = 'Found';
       }
 
-      const categoryLabel = _CATEGORY_LABELS[def?.category] || 'Unknown';
-      const tierLabel      = def?.tier ? _TIER_ROMAN[def.tier] || def.tier : '—';
+      // Tier rides the title as a numeral ("The Honey Cliffs II") instead of
+      // sitting in a chip row. It was one of three chips under the quote —
+      // alongside Category, which the outcome pill already tells you, and
+      // Reported, which repeated the "18h ago" in the summary row directly
+      // above. Only the tier carried anything the card wasn't saying twice.
+      const tierHtml = def?.tier
+        ? ` <span class="qd-title-tier">${_TIER_ROMAN[def.tier] || def.tier}</span>`
+        : '';
 
       // ── Quote / scout report — the journey. Lore — the thing itself. ──
       const quoteHtml = entry.narrative ? `<blockquote class="qd-quote">${entry.narrative}</blockquote>` : '';
@@ -1354,7 +1356,69 @@ const LordScreen = (() => {
 
       // ── Outcome / spoils body ──
       let bodyHtml = '';
-      if (entry.wasAttack) {
+      if (entry.outcome === 'ambush') {
+        const a   = entry.ambush || {};
+        const cls = a.won ? 'qd-banner--win' : 'qd-banner--loss';
+        const sub = a.lordFell
+          ? 'Your lord was cut down and is recovering.'
+          : a.won
+            ? 'The attackers were beaten off and stripped of what they carried.'
+            : 'Your column was driven off and left the field.';
+        const spoils = (entry.rewards || []).filter(r => _RES_ICONS[r.type] && r.amount > 0);
+        bodyHtml = `
+          <div class="qd-banner ${cls}">
+            <span class="qd-banner-icon">${a.won ? gi('crossed-swords') : gi('skull-crossed-bones')}</span>
+            <div class="qd-banner-body">
+              <div class="qd-banner-title">${kindLabel}${a.campName ? ` — ${a.campName}` : ''}</div>
+              <div class="qd-banner-sub">${sub}</div>
+            </div>
+          </div>
+          ${spoils.length ? `
+            <div class="qd-spoils">
+              <div class="qd-spoils-label">Taken from the dead</div>
+              <div class="qd-spoils-list">${spoils.map(_spoilChip).join('')}</div>
+            </div>` : ''}
+          ${entry.lordId && entry.lordId === _lord.id
+            ? `<button class="qd-battle-link" data-view-battles="1">${gi('scroll-unfurled')} View Battle Report</button>`
+            : `<div class="qd-hint">${gi('scroll-unfurled')} Full battle report in the Battles tab.</div>`}`;
+      } else if (entry.outcome === 'recruits') {
+        const r      = entry.recruits || {};
+        const joined = r.joined || 0;
+        const lost   = r.lost   || 0;
+
+        // Show what actually joined as the same unit cards the Army tab uses —
+        // portrait, tier frame, hover stats and all. One card per model, so
+        // "3 joined" looks like the three models it added. unitId is absent on
+        // entries logged before it was carried through, so this degrades to the
+        // banner alone rather than rendering broken cards.
+        const rDef = r.unitId ? UNIT_DEFS[r.unitId] : null;
+        const recruitCardsHtml = (rDef && joined > 0)
+          ? `<div class="qd-spoils">
+               <div class="qd-spoils-label">Joined the column</div>
+               <div class="la-unit-cards">${
+                 Array.from({ length: joined }, (_, i) =>
+                   _buildUnitCard(rDef, { removable: false, modelIdx: i })).join('')
+               }</div>
+             </div>`
+          : '';
+
+        bodyHtml = `
+          <div class="qd-banner ${joined > 0 ? 'qd-banner--recruits' : 'qd-banner--nothing'}">
+            <span class="qd-banner-icon">${gi('crossed-swords')}</span>
+            <div class="qd-banner-body">
+              <div class="qd-banner-title">${joined > 0 ? `${joined}× ${r.unitName} joined` : `${r.unitName} refused`}</div>
+              <div class="qd-banner-sub">${
+                lost > 0 && joined > 0
+                  ? `${lost} more turned away — your army was at ${r.armyPwr}/${r.cap} PWR.`
+                  : lost > 0
+                    ? `No room to take them on: a ${r.unitName} needs ${r.unitPwr} PWR free and you had ${r.headroom}.`
+                    : `${r.tierLabel} tier — your army stands at ${r.armyPwr}/${r.cap} PWR.`
+              }</div>
+            </div>
+          </div>
+          ${recruitCardsHtml}
+          ${lost > 0 ? `<div class="qd-hint">${gi('hazard-sign')} Recruits that don't fit are lost, not queued. Leave PWR free before questing.</div>` : ''}`;
+      } else if (entry.wasAttack) {
         const won = entry.combatOutcome === 'victory';
         const cls = won ? 'qd-banner--win' : 'qd-banner--loss';
         const sub = won
@@ -1387,12 +1451,7 @@ const LordScreen = (() => {
       } else if (!isNothing && entry.rewards && entry.rewards.length > 0) {
         const rows = entry.rewards
           .filter(r => _RES_ICONS[r.type] && r.amount > 0)
-          .map(r => `
-            <div class="qd-spoils-row">
-              <span class="qd-spoils-icon">${_RES_ICONS[r.type]}</span>
-              <span class="qd-spoils-name">${r.type}</span>
-              <span class="qd-spoils-value">+${r.amount}</span>
-            </div>`)
+          .map(_spoilChip)
           .join('');
         if (rows) {
           bodyHtml = `
@@ -1402,6 +1461,13 @@ const LordScreen = (() => {
             </div>`;
         }
       } else if (isNothing) {
+        // Even an empty expedition pays XP for the time spent — show it. The
+        // card used to render the banner ALONE, so the most frequent outcome
+        // in the game looked like it paid nothing whatsoever.
+        const nothingRows = (entry.rewards || [])
+          .filter(r => _RES_ICONS[r.type] && r.amount > 0)
+          .map(_spoilChip)
+          .join('');
         bodyHtml = `
           <div class="qd-banner qd-banner--nothing">
             <span class="qd-banner-icon">—</span>
@@ -1409,7 +1475,12 @@ const LordScreen = (() => {
               <div class="qd-banner-title">Nothing Found</div>
               <div class="qd-banner-sub">The area yielded no discoveries this time. Try again later or explore a different tile.</div>
             </div>
-          </div>`;
+          </div>
+          ${nothingRows ? `
+            <div class="qd-spoils">
+              <div class="qd-spoils-label">Earned regardless</div>
+              <div class="qd-spoils-list">${nothingRows}</div>
+            </div>` : ''}`;
       }
 
       return `
@@ -1427,19 +1498,16 @@ const LordScreen = (() => {
             <div class="qd-panel-header">
               <div class="qd-panel-heading">
                 <span class="qd-dossier-code">Field Report · ${code}</span>
-                <h3 class="qd-panel-title">${icon} ${name}</h3>
+                <h3 class="qd-panel-title">${icon} ${name}${tierHtml}</h3>
                 <div class="qd-panel-byline">${entry.lordName ? `Scouted by <strong>${entry.lordName}</strong> · ` : ''}${terrain.icon} ${terrain.name} · (${entry.tileX ?? '?'}, ${entry.tileY ?? '?'})</div>
-                ${typeTagHtml}
               </div>
-              <span class="qd-pill qd-pill--lg qd-pill--${kind}">${kindLabel}</span>
+              <!-- No outcome pill here on purpose. The <summary> row stays
+                   visible while the panel is open and already carries one ~50px
+                   above, at nearly the same x — and the banner below states the
+                   outcome a third time, with detail. One stamp per card. -->
             </div>
             ${quoteHtml}
             ${loreHtml}
-            <div class="qd-stats">
-              <div class="qd-stat"><span class="qd-stat-label">Category</span><span class="qd-stat-value">${categoryLabel}</span></div>
-              <div class="qd-stat"><span class="qd-stat-label">Tier</span><span class="qd-stat-value">${tierLabel}</span></div>
-              <div class="qd-stat"><span class="qd-stat-label">Reported</span><span class="qd-stat-value">${ago}</span></div>
-            </div>
             ${bodyHtml}
             <button class="qd-dismiss" data-log-id="${entry.id}">✕ Dismiss report</button>
           </div>
@@ -1457,6 +1525,17 @@ const LordScreen = (() => {
   }
 
   const _RES_ICONS = { gold: gi('two-coins'), wood: gi('wood-pile'), stone: gi('war-pick'), food: gi('wheat'), xp: gi('round-star') };
+
+  // One reward → one chip. Both spoils lists (quest finds and ambush pickings)
+  // render through here so they can't drift apart again.
+  function _spoilChip(r) {
+    return `
+      <div class="qd-spoil">
+        <span class="qd-spoil-icon">${_RES_ICONS[r.type]}</span>
+        <span class="qd-spoil-name">${r.type}</span>
+        <span class="qd-spoil-value">+${r.amount}</span>
+      </div>`;
+  }
 
   // _campPreviewHtml() rendered a discovered camp's defender roster so the
   // player could size it up before attacking. There is nothing to size up any
@@ -1551,58 +1630,108 @@ const LordScreen = (() => {
 
   // Mount artwork if set (MOUNT_POOL[id].image), else the icon glyph. When art
   // IS set the glyph stays in the DOM hidden, so a missing/typo'd asset path
-  // falls back to it instead of showing a broken image.
-  function _mountVisual(m, iconClass) {
-    const glyph = `<span class="${iconClass}" style="color:${m.color}${m.image ? ';display:none' : ''}">${m.icon}</span>`;
+  // falls back to it instead of showing a broken image. The Griffon ships with
+  // no `image` at all (art pending) and takes the glyph path directly.
+  function _mountVisual(m) {
+    const glyph = `<span class="bld3-tile-icon" style="color:${m.color}${m.image ? ';display:none' : ''}">${m.icon}</span>`;
     return m.image
-      ? `<img src="${m.image}" class="lm-mount-img" alt="${m.name}" loading="lazy"
+      ? `<img src="${m.image}" class="bld3-tile-img" alt="${m.name}" loading="lazy"
               onerror="this.style.display='none';this.nextElementSibling.style.display=''">${glyph}`
       : glyph;
   }
 
+  // One mount card.
+  //
+  // Built out of the BUILDING tile classes (.bld3-tile*, see city-view.js)
+  // rather than a parallel set of its own — the two grids are the same object:
+  // art strip with a bottom fade, name + value row under it, one state per
+  // card. The three mount states map 1:1 onto the building states, so they
+  // reuse them outright instead of re-inventing the look:
+  //
+  //   locked (level gate)  → .bld3-tile--locked    (greyed art)
+  //   equipped             → .bld3-tile--selected  (gold border + glow)
+  //   can't afford         → .bld3-tile--cant      (diagonal hatch)
+  //
+  // Restyling the building grid therefore restyles mounts for free, which is
+  // the whole point. Only the foot (stat chips + action) is mount-specific.
+  //
+  // noFoot drops that foot entirely, leaving art + name + value — the Overview
+  // card's shape (2026-07-29). Without it the tile ends on .bld3-tile-info,
+  // which already carries its own bottom padding, so it needs no extra CSS.
+  //
+  // opts: { locked, equipped, cant, link, value, buttonHtml, reasonHtml, noFoot }
+  function _mountTileHtml(m, opts) {
+    const o = opts || {};
+    const classes = [
+      'bld3-tile', 'lm-mount-tile',
+      o.equipped ? 'bld3-tile--selected' : '',
+      o.locked   ? 'bld3-tile--locked'   : '',
+      o.cant     ? 'bld3-tile--cant'     : '',
+      o.link     ? 'lm-mount-tile--link' : '',
+    ].filter(Boolean).join(' ');
+
+    return `
+      <div class="${classes}"${o.link ? ' data-action="open-mount-tab"' : ''}>
+        <span class="bld3-tile-art">
+          ${_mountVisual(m)}
+          <span class="bld3-tile-art-fade"></span>
+          ${o.locked ? '<span class="lm-locked-veil"></span>' : ''}
+        </span>
+        <span class="bld3-tile-info">
+          <span class="bld3-tile-name">${m.name}</span>
+          <span class="bld3-tile-level">${o.value || ''}</span>
+        </span>
+        ${o.noFoot ? '' : `
+        <div class="lm-mount-foot">
+          <div class="lm-stat-chips">${_mountEffectChips(m.effects)}</div>
+          ${o.buttonHtml || ''}
+          ${o.reasonHtml || ''}
+        </div>`}
+      </div>`;
+  }
+
+  // The no-mount card — same tile, same size, in place of a mount. Two
+  // flavours: below MOUNT_MIN_LEVEL it reads as locked (matching a locked
+  // building tile), above it as an empty slot that opens the Mount tab.
+  function _mountEmptyTileHtml(locked) {
+    return `
+      <div class="bld3-tile lm-mount-tile ${locked ? 'bld3-tile--locked' : 'lm-mount-tile--link'}"${locked ? '' : ' data-action="open-mount-tab"'}>
+        <span class="bld3-tile-art">
+          <span class="bld3-tile-icon">${locked ? gi('padlock') : gi('horse-head')}</span>
+          <span class="bld3-tile-art-fade"></span>
+          ${locked ? '<span class="lm-locked-veil"></span>' : ''}
+        </span>
+        <span class="bld3-tile-info">
+          <span class="bld3-tile-name">No mount</span>
+          <span class="bld3-tile-level">${locked ? `Lv ${MOUNT_MIN_LEVEL}` : '—'}</span>
+        </span>
+        <div class="lm-mount-foot">
+          ${locked
+            ? `<div class="lm-mount-reason">${gi('padlock')} Requires lord level ${MOUNT_MIN_LEVEL}</div>`
+            : `<button class="lm-choose-btn lm-choose-btn--change" data-action="open-mount-tab">Equip a mount</button>`}
+        </div>
+      </div>`;
+  }
+
   function _mountTabHtml() {
     const level     = _lord.level || 1;
-    const unlocked  = level >= MOUNT_MIN_LEVEL;
     const chosenId  = _lord.mountId;
-    const chosen    = chosenId ? getMountForRace(chosenId, _lord.race) : null;
-    const picking   = unlocked && _mountPickerOpen;
     const coins     = _player?.coins || 0;
-
-    let slotHtml = '';
-    if (!unlocked) {
-      slotHtml = `
-        <div class="lm-slot-card lm-slot-card--locked">
-          <div class="lm-slot-plus">+</div>
-          <div class="lm-slot-label">${gi('padlock')} Unlocks at level ${MOUNT_MIN_LEVEL}</div>
-        </div>`;
-    } else if (chosen && !picking) {
-      slotHtml = `
-        <div class="lm-slot-card lm-slot-card--filled" style="border-color:${chosen.color}50" data-action="open-picker">
-          <div class="lm-slot-icon">${_mountVisual(chosen, 'lm-slot-icon-glyph')}</div>
-          <div class="lm-slot-body">
-            <div class="lm-slot-name" style="color:${chosen.color}">${chosen.name}</div>
-            <div class="lm-stat-chips">${_mountEffectChips(chosen.effects)}</div>
-          </div>
-          <button class="lm-change-btn">Change</button>
-        </div>`;
-    } else if (!picking) {
-      slotHtml = `
-        <div class="lm-slot-card lm-slot-card--empty" data-action="open-picker">
-          <div class="lm-slot-plus">+</div>
-          <div class="lm-slot-label">Equip a mount</div>
-        </div>`;
-    }
 
     // The whole ladder is always visible — locked tiers included, with their
     // stats on show. A mount you can't reach yet is a reason to keep levelling,
     // so hiding it would throw away the only thing the level gate buys.
-    // Locked cards follow the building-tile grammar (city-view.js): greyed
-    // art, a padlock "Locked" button, and the requirement spelled out beneath.
+    //
+    // (The wide "Equipped" summary strip that used to sit above the grid went
+    // on 2026-07-29. The equipped mount is already the gold-bordered card in
+    // the ladder and the Overview tab carries the read-out, so the strip was
+    // a third copy of the same card — and the only thing on the tab that
+    // wasn't building-card grammar.)
     const ladder = Object.values(MOUNT_POOL)
       .map(m => getMountForRace(m.id, _lord.race))
       .sort((a, b) => (a.unlockLevel || 0) - (b.unlockLevel || 0) || (a.cost || 0) - (b.cost || 0));
 
-    const pickerHtml = picking ? `
+    const pickerHtml = `
       <div class="lm-mount-grid">
         ${ladder.map(m => {
           const reqLevel   = m.unlockLevel || MOUNT_MIN_LEVEL;
@@ -1614,54 +1743,35 @@ const LordScreen = (() => {
                            : isEquipped ? 'Equipped'
                            : canAfford ? 'Equip'
                            : 'No gold';
-          return `
-          <div class="lm-mount-card${isLocked ? ' lm-mount-card--locked' : ''}" style="border-color:${m.color}${isLocked ? '20' : '40'}">
-            <div class="lm-mount-visual">
-              ${_mountVisual(m, 'lm-mount-icon-lg')}
-              ${isLocked ? '<div class="lm-locked-veil"></div>' : ''}
-            </div>
-            <div class="lm-mount-header">
-              <span class="lm-mount-name" style="color:${m.color}">${m.name}</span>
-              <span class="lm-mount-cost${!isLocked && !canAfford ? ' lm-mount-cost--short' : ''}">${gi('two-coins')}${m.cost || 0}</span>
-            </div>
-            <div class="lm-stat-chips">${_mountEffectChips(m.effects)}</div>
-            <button class="lm-choose-btn${isLocked ? ' lm-choose-btn--locked' : ''}" data-mount-id="${m.id}" style="${isLocked ? '' : `border-color:${m.color};color:${m.color}`}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>
-            ${isLocked ? `<div class="lm-mount-reason">${gi('padlock')} Requires lord level ${reqLevel}</div>` : ''}
-          </div>`;
+          // Button states mirror the building panel's .bld2-btn--* set, so
+          // "can't yet" reads the same here as it does in a city.
+          const btnState   = isLocked ? 'lm-choose-btn--locked'
+                           : isEquipped ? 'lm-choose-btn--equipped'
+                           : canAfford ? 'lm-choose-btn--ready'
+                           : 'lm-choose-btn--cant';
+          return _mountTileHtml(m, {
+            locked:   isLocked,
+            equipped: isEquipped,
+            cant:     !isLocked && !isEquipped && !canAfford,
+            value:    `${gi('two-coins')}${m.cost || 0}`,
+            buttonHtml: `<button class="lm-choose-btn ${btnState}" data-mount-id="${m.id}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>`,
+            reasonHtml: isLocked ? `<div class="lm-mount-reason">${gi('padlock')} Requires lord level ${reqLevel}</div>` : '',
+          });
         }).join('')}
-      </div>
-      <button class="lm-cancel-btn">Cancel</button>
-    ` : '';
+      </div>`;
 
     return `
       <div class="lm-container">
         <div class="lm-section">
-          <div class="lm-section-title">${gi('horse-head')} Mount</div>
-          ${slotHtml}
+          <div class="lm-section-title">${gi('horse-head')} All mounts — one equipped at a time, swap any time for the new mount's price</div>
           ${pickerHtml}
         </div>
       </div>`;
   }
 
   function _bindMountEvents() {
-    document.querySelectorAll('.lm-slot-card[data-action="open-picker"]').forEach(el => {
-      el.addEventListener('click', () => {
-        _mountPickerOpen = true;
-        _renderTab();
-      });
-    });
-
-    document.querySelector('.lm-change-btn')?.addEventListener('click', e => {
-      e.stopPropagation();
-      _mountPickerOpen = true;
-      _renderTab();
-    });
-
-    document.querySelector('.lm-cancel-btn')?.addEventListener('click', () => {
-      _mountPickerOpen = false;
-      _renderTab();
-    });
-
+    // No open/change/cancel handlers any more — the ladder is always on
+    // screen, so the only thing to bind is equipping.
     document.querySelectorAll('.lm-choose-btn[data-mount-id]').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
@@ -1672,7 +1782,6 @@ const LordScreen = (() => {
         HUD.refresh();
         const mount = getMountForRace(btn.dataset.mountId, _lord.race);
         _toast(`${mount?.name || 'Mount'} equipped!`);
-        _mountPickerOpen = false;
         _renderTab();
       });
     });
@@ -1699,7 +1808,7 @@ const LordScreen = (() => {
         <div class="bh-empty">
           <div class="bh-empty-icon">${gi('plain-dagger')}</div>
           <p class="bh-empty-msg">No battles recorded yet.</p>
-          <p class="bh-empty-hint">Attack a camp from the Quests tab.</p>
+          <p class="bh-empty-hint">Expedition ambushes and enemy attacks are recorded here.</p>
         </div>`;
     }
 
@@ -1817,8 +1926,19 @@ const LordScreen = (() => {
       return;
     }
 
+    // Each result is isolated. The rewards are ALREADY applied server-side by
+    // the time we get here, so a presentation failure must never cost the
+    // player the re-render that shows them — that is precisely what happened
+    // when _applyAmbushResult threw on the missing BattleHistoryService.add:
+    // the screen kept showing the pre-quest army until you navigated away and
+    // back. Report the failure, keep going, always re-render.
     for (const pending of discoveries) {
-      _applyQuestResult(pending);
+      try {
+        _applyQuestResult(pending);
+      } catch (err) {
+        console.error('Quest result could not be displayed:', pending?.defId, err);
+        _toast('Quest resolved — the report could not be rendered');
+      }
     }
     _refreshDiscoveryBadge();
     _renderTab();
@@ -1886,10 +2006,20 @@ const LordScreen = (() => {
         ? `All ${r.lost} turned away — needed ${r.unitPwr} PWR free, had ${r.headroom}`
         : `${r.joined}× ${r.unitName} joined (${r.tierLabel})`;
 
+    // `outcome` is what lets the log render this as a recruitment rather than
+    // a generic find — without it the card has no rewards to show and comes
+    // out blank.
     DiscoveryService.addLog(_player.id, {
       definitionId: pending.defId,
       tileX: _lord.x, tileY: _lord.y, terrain: terrainId,
       rewards: [], narrative, storyTitle,
+      outcome: 'recruits',
+      // unitId is what lets the log render real unit cards for what joined,
+      // the same cards the Army tab shows — without it the entry can only
+      // print a name.
+      recruits: { unitId: r.unitId, unitName: r.unitName, count: r.count, joined: r.joined, lost: r.lost,
+                  tierLabel: r.tierLabel, armyPwr: r.armyPwr, cap: r.cap,
+                  headroom: r.headroom, unitPwr: r.unitPwr },
       lordId: _lord.id, lordName: _lord.name,
     });
 
@@ -1923,13 +2053,21 @@ const LordScreen = (() => {
     const name       = storyTitle || campName || def.name;
 
     if (report && typeof BattleHistoryService !== 'undefined') {
-      BattleHistoryService.add(_lord.id, { report, campName: campName || def.name, at: TimeService.now() });
+      BattleHistoryService.saveAmbush(_lord.id, {
+        report, campName: campName || def.name,
+        campLevel: ambush.campLevel, lordLevel: _lord.level || null,
+        at: ambush.at,   // when the fight happened, not when we heard about it
+      });
     }
 
+    // `outcome` marks this as a battle so the log can show who won rather
+    // than filing it as an ordinary find with some loot attached.
     DiscoveryService.addLog(_player.id, {
       definitionId: defId,
       tileX: _lord.x, tileY: _lord.y, terrain: terrainId,
       rewards: rewards || [], narrative, storyTitle,
+      outcome: 'ambush',
+      ambush: { won, lordFell, campName: campName || def.name },
       lordId: _lord.id, lordName: _lord.name,
     });
 
@@ -1981,13 +2119,25 @@ const LordScreen = (() => {
     const reportName = storyTitle || def.name;
 
     if (category === 'nothing') {
+      // An empty expedition still pays the flat "you were out there" XP, which
+      // the server now folds into rewards. Passing [] here threw that away and
+      // the commonest outcome in the game read as a total waste of time.
+      const xp = (rewards || []).find(r => r.type === 'xp')?.amount || 0;
       DiscoveryService.addLog(_player.id, {
         definitionId: defId,
         tileX: record?.tileX ?? _lord.x, tileY: record?.tileY ?? _lord.y,
-        terrain: terrainId, rewards: [], narrative, storyTitle,
+        terrain: terrainId, rewards: rewards || [], narrative, storyTitle,
         lordId: _lord.id, lordName: _lord.name,
       });
-      _toast(storyTitle ? `${storyTitle} — see Quests tab` : 'Quest complete — nothing found');
+      ActivityService.log(_player.id, {
+        type: 'discovery', icon: def.icon || gi('fog'),
+        title: `${reportName} — nothing found`,
+        detail: xp > 0 ? `+${xp} XP for the expedition` : null,
+        lordId: _lord.id, lordName: _lord.name,
+      });
+      _toast(storyTitle
+        ? `${storyTitle} — see Quests tab`
+        : xp > 0 ? `Nothing found — +${xp} XP` : 'Quest complete — nothing found');
       return;
     }
 

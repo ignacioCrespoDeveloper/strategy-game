@@ -46,6 +46,7 @@ load('js/data/blessings.js');        // BLESSING_DEFS, blessingDuration, blessin
 load('js/data/races.js');            // RACES
 load('js/domain/world.js');          // TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS (WorldService itself is unused here)
 load('js/domain/economy-core.js');   // EconomyCore — THE shared economy math (needs BUILDING_DEFS)
+load('js/domain/unit-unlock.js');    // UnitUnlockService — THE recruitment gate (needs UNIT_DEFS, EconomyCore)
 load('js/data/battle-defs.js');      // TERRAIN_BATTLE_MODS, CAMP_DEFS
 load('js/data/discoveries.js');      // DISCOVERY_DEFS
 load('js/domain/discovery-roll.js'); // DiscoveryRoll — THE shared quest roll math
@@ -62,10 +63,12 @@ export const RESEARCH_DEFS         = _ctx.RESEARCH_DEFS;
 export const RESEARCH_TIERS        = _ctx.RESEARCH_TIERS;
 export const BLESSING_DEFS         = _ctx.BLESSING_DEFS;
 export const BLESSING_MIN_TEMPLE   = _ctx.BLESSING_MIN_TEMPLE;
+export const blessingMaxHours      = _ctx.blessingMaxHours;
 export const blessingDuration      = _ctx.blessingDuration;
 export const blessingCost          = _ctx.blessingCost;
 export const RACES                 = _ctx.RACES;
 export const EconomyCore           = _ctx.EconomyCore;
+export const UnitUnlockService     = _ctx.UnitUnlockService;
 export const TERRAIN_RESOURCE_MODS = _ctx.TERRAIN_RESOURCE_MODS;
 export const TERRAIN_STAT_MODS     = _ctx.TERRAIN_STAT_MODS;
 export const TERRAIN_BATTLE_MODS   = _ctx.TERRAIN_BATTLE_MODS;

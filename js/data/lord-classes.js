@@ -334,7 +334,7 @@ var TALENT_POOL = {
 //  instead of all at once, so there is something new to reach for across
 //  the whole second half of the level curve:
 //
-//    Lv 5   Warhorse    · Dire Wolf     — 4 stat points,  ~400g
+//    Lv 5   Warhorse    · War Boar      — 4 stat points,  ~400g
 //    Lv 8   War Chariot · War Bear      — 7 stat points, ~1150g
 //    Lv 10  Griffon     · Dragon        — 10 stat points, ~2600g
 //
@@ -353,12 +353,12 @@ var TALENT_POOL = {
 //                server/actions/lord-mounts.js, shown as a locked card
 //                in the Mount tab so the whole ladder is visible early.
 //  image       → mount artwork, shown instead of `icon` when the file
-//                loads. The paths below are PRE-WIRED to
-//                assets/mounts/<id>.png — drop the files in and they
-//                appear with no code change; until then _mountVisual()'s
-//                onerror quietly falls back to the icon glyph. Several
-//                icons are only the nearest glyph the sprite had
-//                (chariot, bear) and are placeholders until art lands.
+//                loads. Art landed 2026-07-29 (Nacho) for every mount but
+//                the Griffon, which has no `image` at all and renders its
+//                sprite glyph instead — that is the intended state until
+//                the art arrives, not a broken path. Filenames follow the
+//                art, not the mount id (chariot.webp, bear.webp,
+//                boar.webp), so keep these paths literal.
 // =============================================
 
 var MOUNT_MIN_LEVEL = 5;
@@ -380,13 +380,18 @@ var MOUNT_POOL = {
     },
   },
 
+  // Was the Dire Wolf until 2026-07-29, renamed to match the art that
+  // landed for this slot. The stored id stays `dire_wolf` — it is persisted
+  // on lords in Supabase, so renaming it would orphan every equipped mount.
+  // Presentation is the only thing that changed; stats, cost and level are
+  // untouched, so this is not a balance change.
   dire_wolf: {
     id:          'dire_wolf',
-    name:        'Dire Wolf',
-    icon:        gi('wolf-head'),
-    image:       'assets/mounts/dire_wolf.png',
-    color:       '#4070d0',
-    description: 'A massive wolf bred for speed and the hunt. Outruns any pursuer.',
+    name:        'War Boar',
+    icon:        gi('boar-tusks'),
+    image:       'assets/mounts/boar.webp',
+    color:       '#6e8494',
+    description: 'A tusked boar in riveted plate, bred to charge and never turn. Slower to start than a horse, impossible to stop once it is running.',
     unlockLevel: 5,
     cost:        450,
     effects: {
@@ -400,7 +405,7 @@ var MOUNT_POOL = {
     id:          'war_chariot',
     name:        'War Chariot',
     icon:        gi('mounted-knight'),
-    image:       'assets/mounts/war_chariot.png',
+    image:       'assets/mounts/chariot.webp',
     color:       '#c06a30',
     description: 'A scythed war-chariot drawn by a matched team. Builds terrifying momentum on open ground.',
     unlockLevel: 8,
@@ -420,7 +425,7 @@ var MOUNT_POOL = {
     id:          'war_bear',
     name:        'War Bear',
     icon:        gi('bison'),
-    image:       'assets/mounts/war_bear.png',
+    image:       'assets/mounts/bear.webp',
     color:       '#8a6a4a',
     description: 'A mountain bear broken to the saddle and armoured at the shoulders. Absorbs a charge and answers it.',
     unlockLevel: 8,
@@ -436,7 +441,8 @@ var MOUNT_POOL = {
     id:          'griffon',
     name:        'Griffon',
     icon:        gi('eagle-emblem'),
-    image:       'assets/mounts/griffon.png',
+    // No `image` on purpose — griffon art hasn't been drawn yet, so the
+    // card falls back to the sprite glyph. Add the path when it lands.
     color:       '#30a0b0',
     description: 'A majestic aerial predator, striking from above with deadly talons.',
     unlockLevel: 10,
@@ -452,7 +458,7 @@ var MOUNT_POOL = {
     id:          'dragon',
     name:        'Dragon',
     icon:        gi('dragon-head'),
-    image:       'assets/mounts/dragon.png',
+    image:       'assets/mounts/dragon.webp',
     color:       '#c04030',
     description: 'An ancient wyrm that suffers a rider only because it chooses to. Armies break at the sight of it.',
     unlockLevel: 10,
@@ -469,7 +475,7 @@ var MOUNT_POOL = {
       dark_elf: {
         name:        'Black Dragon',
         icon:        gi('dragon-spiral'),
-        image:       'assets/mounts/dragon_dark_elf.png',
+        image:       'assets/mounts/blackdragon.webp',
         color:       '#8030a0',
         description: 'A Black Dragon dragged from the caves beneath Naggaroth and broken to the saddle. It hates its rider only slightly less than everything else.',
       },

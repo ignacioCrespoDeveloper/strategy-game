@@ -4255,34 +4255,11 @@ body.nav-open #screen-root {
   gap: 0.3rem;
   flex-shrink: 0;
 }
-.disc-negotiate-btn {
-  padding: 0.35rem 0.7rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.72rem;
-  font-weight: 600;
-  border: 1px solid #3a6090;
-  background: linear-gradient(180deg, #1a2f4a 0%, #112040 100%);
-  color: #80b0e0;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.disc-negotiate-btn:hover { color: #a0d0ff; }
-.disc-negotiated-row {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-  align-items: flex-end;
-  flex-shrink: 0;
-}
-.disc-negotiated-badge {
-  font-size: 0.64rem;
-  color: #70a040;
-  background: rgba(80,160,40,0.1);
-  border: 1px solid rgba(80,160,40,0.3);
-  border-radius: 4px;
-  padding: 0.2em 0.5em;
-  text-align: right;
-}
+/* .disc-negotiate-btn / .disc-negotiated-row / .disc-negotiated-badge were
+   the camp "negotiate for mercenaries" controls. Camps were retired on
+   2026-07-29 and nothing renders these any more. They were also the only
+   blue and green chrome in the app — a second and third accent the One
+   Accent Rule doesn't permit. Removed. */
 .disc-dismiss-btn {
   padding: 0.25rem 0.5rem;
   border-radius: var(--radius-sm);
@@ -6824,12 +6801,14 @@ body.nav-open #screen-root {
 .disc-coords    { color: var(--text-secondary); }
 .disc-expiry    { color: var(--text-muted); }
 .disc-expiry--soon { color: #e09030; font-weight: 600; }
-.disc-ago       { color: #777788; font-style: italic; }
+.disc-ago       { color: var(--text-muted); font-style: italic; }
 
+/* Was rgba(255,255,255,0.35) — roughly 2.6:1 on the panel, under the 4.5:1
+   floor for body copy. */
 .disc-row-desc {
   font-size: 0.72rem;
-  color: rgba(255,255,255,0.35);
-  line-height: 1.35;
+  color: var(--text-muted);
+  line-height: 1.45;
   margin-top: 0.1rem;
 }
 
@@ -7578,21 +7557,31 @@ body.nav-open #screen-root {
   gap: 0.4rem;
 }
 
+/* Flat obsidian at rest, gold on reaction — the same grammar as the rank
+   rows and clan cards. The old card carried a 3px coloured left rail per
+   outcome, which the design system doesn't use anywhere else and which put
+   four competing hues (gold / red / orange / white) down the left edge of a
+   scrolling list. The outcome now reads from the pill, where it belongs. */
 .qd-card {
   border-radius: var(--radius-md);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-left: 3px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-surface);
   overflow: hidden;
+  transition: border-color var(--transition), background var(--transition);
 }
-.qd-card--win    { border-left-color: #c9973a; }
-.qd-card--loss   { border-left-color: #a03030; }
-.qd-card--camp   { border-left-color: #c86828; }
-.qd-card--found  { border-left-color: #c9973a; }
-.qd-card--nothing {
-  opacity: 0.5;
-  border-color: transparent;
-  border-left-color: transparent;
+.qd-card:hover        { border-color: var(--border-base); }
+.qd-card[open]        { border-color: var(--border-accent); background: var(--bg-raised); }
+/* An empty expedition is still a record, just a quieter one — dimmer text
+   rather than opacity, so it stays readable at AA. */
+.qd-card--nothing            { background: transparent; }
+.qd-card--nothing .qd-row-title { color: var(--text-secondary); font-weight: 500; }
+/* The collapsed row already de-emphasises an empty result; the open panel has
+   to agree with it. A gold headline and a gold quote rule on "you found
+   nothing" is the loudest treatment in the log spent on its least important
+   entry — and it made a null read like a win at a glance. */
+.qd-card--nothing .qd-panel-title { color: var(--text-secondary); }
+.qd-card--nothing .qd-quote {
+  border-left-color: var(--border-muted);
   background: transparent;
 }
 
@@ -7601,13 +7590,14 @@ body.nav-open #screen-root {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.5rem 0.7rem;
+  padding: 0.55rem 0.75rem;
   cursor: pointer;
   list-style: none;
   user-select: none;
 }
 .qd-row::-webkit-details-marker { display: none; }
-.qd-card[open] .qd-row { border-bottom: 1px solid rgba(255,255,255,0.07); }
+.qd-row:focus-visible { outline: 2px solid var(--gold); outline-offset: -2px; }
+.qd-card[open] .qd-row { border-bottom: 1px solid var(--border-muted); }
 
 .qd-row-icon { font-size: 1.1rem; flex-shrink: 0; line-height: 1; }
 .qd-row-body {
@@ -7617,15 +7607,18 @@ body.nav-open #screen-root {
   flex-direction: column;
   gap: 0.1rem;
 }
+/* Carved Label Rule — titles take Cinzel with tracking, as on rank rows,
+   clan cards and city section headings. */
 .qd-row-title {
-  font-size: 0.78rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
   font-weight: 600;
+  letter-spacing: 0.03em;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.qd-card--nothing .qd-row-title { color: var(--text-secondary); }
 .qd-row-sub {
   font-size: 0.65rem;
   color: var(--text-muted);
@@ -7637,30 +7630,31 @@ body.nav-open #screen-root {
   font-size: 0.62rem;
   color: var(--text-muted);
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ── Outcome pill — mirrors .bh-outcome-badge on the Battles tab ── */
+/* ── Outcome pill — the one place the outcome is colour-coded ──
+   Gold = something gained, red = something lost, steel = nothing happened.
+   Danger red is state, not decoration, which is the only exception the
+   One Accent Rule allows. */
 .qd-pill {
+  font-family: var(--font-display);
   font-size: 0.58rem;
   font-weight: 700;
-  padding: 0.15em 0.55em;
-  border-radius: 4px;
+  padding: 0.2em 0.6em;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   flex-shrink: 0;
   white-space: nowrap;
 }
-.qd-pill--win     { background: rgba(201,151,58,0.2);  color: #c9973a; }
-.qd-pill--loss    { background: rgba(160,48,48,0.2);   color: #e07070; }
-.qd-pill--camp    { background: rgba(200,104,40,0.2);  color: #e0904a; }
-.qd-pill--found   { background: rgba(201,151,58,0.2);  color: #c9973a; }
-.qd-pill--nothing { background: rgba(255,255,255,0.06); color: var(--text-muted); }
-.qd-pill--lg {
-  font-size: 0.64rem;
-  padding: 0.3em 0.75em;
-  border: 1px solid currentColor;
-  background: transparent;
-}
+.qd-pill--win      { background: rgba(200,147,58,0.14); border-color: rgba(200,147,58,0.4); color: var(--gold-light); }
+.qd-pill--found    { background: rgba(200,147,58,0.14); border-color: rgba(200,147,58,0.4); color: var(--gold-light); }
+.qd-pill--recruits { background: rgba(200,147,58,0.14); border-color: rgba(200,147,58,0.4); color: var(--gold-light); }
+.qd-pill--camp     { background: rgba(200,147,58,0.10); border-color: rgba(200,147,58,0.28); color: var(--gold); }
+.qd-pill--loss     { background: rgba(184,58,42,0.16);  border-color: rgba(184,58,42,0.45); color: var(--text-danger); }
+.qd-pill--nothing  { background: var(--bg-raised);      border-color: var(--border-muted);  color: var(--text-muted); }
 
 /* ── Expanded dossier panel ── */
 .qd-panel {
@@ -7696,18 +7690,14 @@ body.nav-open #screen-root {
 }
 .qd-panel-byline strong { color: var(--text-primary); font-weight: 600; }
 
-/* Underlying discovery type, shown when a story quest supplies a custom
-   headline — keeps the mechanical identity (e.g. "Goblin Camp") visible. */
-.qd-type-tag {
-  display: inline-block;
-  margin-top: 0.35rem;
-  font-size: 0.66rem;
+/* Tier as a numeral trailing the title — "The Honey Cliffs II". Sized down
+   and set in the muted tone so it reads as a rank on the name rather than a
+   second word in it, and so it can't compete with the gold headline. */
+.qd-title-tier {
+  font-size: 0.78em;
   font-weight: 600;
+  letter-spacing: 0.08em;
   color: var(--text-muted);
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 999px;
-  padding: 0.12rem 0.55rem;
 }
 
 .qd-quote {
@@ -7731,36 +7721,10 @@ body.nav-open #screen-root {
   color: var(--text-secondary);
 }
 
-/* ── Stat row (Category / Tier / Reported) — outlined chips, same grammar
-   as the FOUND/Victory pill above rather than a grid of filled boxes. ── */
-.qd-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.qd-stat {
-  display: flex;
-  align-items: baseline;
-  gap: 0.4rem;
-  padding: 0.3rem 0.7rem;
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--border-gold);
-  background: transparent;
-}
-.qd-stat-label {
-  font-family: var(--font-display);
-  font-size: 0.6rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-.qd-stat-value {
-  font-family: var(--font-display);
-  font-size: 0.74rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  color: var(--text-gold-light);
-}
+/* The Category / Tier / Reported chip row lived here. Tier moved onto the
+   title as a numeral; Category was already stated by the outcome pill and
+   Reported by the summary row's timestamp, so removing the row cost the card
+   nothing it wasn't saying twice. .qd-spoil inherits its chip shape. */
 
 /* ── Outcome banner (combat / nothing found) ── */
 .qd-banner {
@@ -7772,10 +7736,19 @@ body.nav-open #screen-root {
   border: 1px solid var(--border-base);
   background: var(--bg-raised);
 }
-.qd-banner--win     { border-color: rgba(201,151,58,0.35); background: rgba(201,151,58,0.06); }
-.qd-banner--loss    { border-color: rgba(160,48,48,0.35);  background: rgba(160,48,48,0.05); }
-.qd-banner--camp    { border-color: rgba(200,104,40,0.35); background: rgba(200,104,40,0.05); }
-.qd-banner--nothing { border-color: var(--border-muted); opacity: 0.65; }
+/* Gold for a gain, danger-red for a loss, steel for nothing — the same
+   three-way reading as the pill. The old orange `--camp` variant was a
+   fourth hue for a state the game no longer produces; camps are retired
+   and legacy entries now fall back to the gold "found" treatment. */
+.qd-banner--win      { border-color: rgba(200,147,58,0.35); background: rgba(200,147,58,0.06); }
+.qd-banner--recruits { border-color: rgba(200,147,58,0.35); background: rgba(200,147,58,0.06); }
+.qd-banner--camp     { border-color: rgba(200,147,58,0.22); background: rgba(200,147,58,0.04); }
+.qd-banner--loss     { border-color: rgba(184,58,42,0.38);  background: rgba(184,58,42,0.06); }
+/* Muted via colour, not opacity — dimming the whole block took its text
+   under the 4.5:1 floor. */
+.qd-banner--nothing  { border-color: var(--border-muted);   background: var(--bg-surface); }
+.qd-banner--nothing .qd-banner-title { color: var(--text-secondary); }
+.qd-banner--nothing .qd-banner-sub   { color: var(--text-muted); }
 .qd-banner-icon {
   font-size: 1.6rem;
   line-height: 1;
@@ -7812,30 +7785,45 @@ body.nav-open #screen-root {
   text-transform: uppercase;
   color: var(--text-gold);
 }
+/* Spoils read as chips. They used to be a full-width ruled ledger — rows of
+   12pt text stretched across 1400px with a hairline under each, which gave
+   "+50 food" the visual weight of a table and left a river of dead space
+   between the name and the value. */
 .qd-spoils-list {
   display: flex;
-  flex-direction: column;
-  border-top: 1px solid rgba(200,147,58,0.15);
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
-.qd-spoils-row {
+.qd-spoil {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
-  padding: 0.5rem 0.1rem;
-  border-bottom: 1px solid rgba(200,147,58,0.15);
+  gap: 0.45rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-muted);
+  background: var(--bg-deep);
 }
-.qd-spoils-icon { font-size: 1rem; flex-shrink: 0; }
-.qd-spoils-name {
-  flex: 1;
-  font-size: 0.68rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+.qd-spoil-icon {
+  display: inline-flex;
+  flex-shrink: 0;
   color: var(--text-secondary);
 }
-.qd-spoils-value {
+.qd-spoil-icon svg { width: 0.85em; height: 0.85em; }
+.qd-spoil-name {
   font-family: var(--font-display);
-  font-size: 0.9rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+/* Gold lands on the amount and nowhere else in this chip. Unlike the
+   Category/Tier chips — which are metadata and stay steel — the number IS the
+   payoff of the expedition, so it earns the accent. */
+.qd-spoil-value {
+  font-family: var(--font-display);
+  font-size: 0.74rem;
   font-weight: 700;
+  letter-spacing: 0.02em;
   color: var(--text-gold-light);
 }
 
@@ -9493,9 +9481,24 @@ body.nav-open #screen-root {
   letter-spacing: 0.04em;
 }
 
-/* ── Mount Tab (lord-screen) ───────────────────────────────────── */
+/* ── Mount cards (lord-screen) ─────────────────────────────────────
+   A mount card IS a building card. The tile itself is `.bld3-tile` — the
+   same class the city's building grid uses (search "Building card grid"
+   further down this file): same 200px tracks, same 150px art strip with the
+   bottom fade, same name + value row, same three states. Only the foot
+   (stat chips + equip action) is defined here, because buildings have no
+   equivalent of it.
+   That reuse is deliberate, not a shortcut — restyling buildings has to
+   restyle mounts too, or the two grids drift apart again. The states map
+   1:1 and are set in lord-screen.js: locked → .bld3-tile--locked, equipped
+   → .bld3-tile--selected, can't afford → .bld3-tile--cant.
+   ------------------------------------------------------------------ */
 
-.lm-container { padding: 12px 16px; }
+/* Matches .lov-tab's padding on purpose: the Overview tab's mount card sits
+   in a .lm-mount-grid too, so identical padding + identical tracks make it
+   come out exactly the width of a card in the Mount tab. Change one, change
+   the other. */
+.lm-container { padding: 1.2rem 1.4rem; }
 
 .lm-section-title {
   font-size: 0.72rem;
@@ -9506,114 +9509,50 @@ body.nav-open #screen-root {
   margin-bottom: 10px;
 }
 
-/* Slot card — the "+" placeholder / equipped-mount summary */
-.lm-slot-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  background: rgba(255,255,255,0.03);
-  border: 1px dashed rgba(255,255,255,0.15);
-  border-radius: 10px;
-}
-.lm-slot-card--empty,
-.lm-slot-card--locked {
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-  padding: 26px 16px;
-}
-.lm-slot-card--empty { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
-.lm-slot-card--empty:hover { border-color: rgba(200,147,58,0.5); background: rgba(200,147,58,0.05); }
-.lm-slot-card--locked { opacity: 0.55; }
-.lm-slot-card--filled { border-style: solid; cursor: pointer; }
-.lm-slot-plus {
-  font-size: 1.8rem;
-  font-weight: 300;
-  line-height: 1;
-  color: var(--text-muted, #888);
-  margin-bottom: 4px;
-}
-.lm-slot-label { font-size: 0.82rem; color: var(--text-muted, #aaa); }
-.lm-slot-icon {
-  font-size: 2rem;
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  border-radius: 8px;
-}
-.lm-slot-icon-glyph { font-size: 2rem; line-height: 1; }
-.lm-slot-body { flex: 1; display: flex; flex-direction: column; gap: 3px; }
-.lm-slot-name { font-size: 1rem; font-weight: 700; }
-.lm-change-btn {
-  flex-shrink: 0;
-  padding: 5px 12px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 5px;
-  color: var(--text-secondary, #ccc);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.lm-change-btn:hover { background: rgba(255,255,255,0.12); }
-
-/* Stat bonus chips (shared by slot + picker cards) */
-.lm-stat-chips { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
-.lm-stat-chip {
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 2px 7px;
-  border-radius: 999px;
-  background: rgba(74,170,74,0.15);
-  color: #6fbf6f;
-  border: 1px solid rgba(74,170,74,0.3);
-}
-
-/* Mount picker grid */
+/* Same tracks and gap as .bld3-grid — the Overview card's width depends on
+   this matching, so keep the two in step. */
 .lm-mount-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.9rem;
 }
-.lm-mount-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 10px;
-  padding: 12px;
+
+/* The card body comes from .bld3-tile; these are the mount-only bits.
+   Doubled up with .bld3-tile so these beat it on specificity — the building
+   block is defined further down the file and would otherwise win the tie. */
+.lm-mount-tile.bld3-tile { cursor: default; }
+.lm-mount-tile--link.bld3-tile { cursor: pointer; }
+/* A ladder card isn't itself a click target (its button is), so it doesn't
+   get the building tile's hover-lift — that would promise a click that does
+   nothing. The Overview card IS clickable and keeps it, as does the gold
+   equipped state. */
+.lm-mount-tile:not(.lm-mount-tile--link):not(.bld3-tile--selected):hover {
+  border-color: var(--border-base);
+  box-shadow: none;
+}
+/* Pinned to the bottom so the buttons line up across a row of cards whose
+   locked ones carry an extra reason line. */
+.lm-mount-foot {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding: 0 0.85rem 0.75rem;
 }
 
 /* A tier the lord hasn't reached yet. Shown on purpose — the stats are the
-   incentive to keep levelling — but drained of colour so it reads as out of
-   reach at a glance, and never wearing the gold reserved for live actions.
-   Same grammar as a locked building tile (.bld3-tile--locked / .bld2-btn--locked
-   / .bld2-reason in city-view.js): greyed art, padlock button, reason beneath. */
-.lm-mount-card--locked { background: rgba(255,255,255,0.015); }
-.lm-mount-card--locked .lm-mount-visual { position: relative; }
-.lm-mount-card--locked .lm-mount-img,
-.lm-mount-card--locked .lm-mount-icon-lg {
-  filter: grayscale(0.8) brightness(0.6);
-  opacity: 0.55;
-}
-.lm-mount-card--locked .lm-mount-name,
-.lm-mount-card--locked .lm-mount-cost { opacity: 0.7; }
-.lm-mount-card--locked .lm-stat-chips { opacity: 0.8; }
+   incentive to keep levelling — so it stops short of the building tile's
+   0.45: at that opacity the stat chips, the only reason the card is on
+   screen at all, stop being readable. The greyed art comes from
+   .bld3-tile--locked .bld3-tile-img. */
+.lm-mount-tile.bld3-tile--locked { opacity: 0.7; }
 
 /* Diagonal hatch over locked art — lifted from .bld2-locked-veil. */
 .lm-locked-veil {
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
-  border-radius: 8px;
   background: repeating-linear-gradient(
     -45deg,
     transparent,
@@ -9624,74 +9563,84 @@ body.nav-open #screen-root {
 }
 
 .lm-mount-reason {
-  margin-top: 0.1rem;
   font-size: 0.7rem;
   color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 0.3rem;
 }
-/* Beats the later `.lm-choose-btn:disabled { opacity: 0.5 }` on specificity —
-   the padlock label has to stay readable, it's the whole point of the card.
-   Mirrors .bld2-btn--locked. */
-.lm-mount-card--locked .lm-choose-btn--locked:disabled {
+
+/* Stat bonus chips */
+.lm-stat-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.lm-stat-chip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(74,170,74,0.15);
+  color: #6fbf6f;
+  border: 1px solid rgba(74,170,74,0.3);
+}
+
+/* Equip action — same button grammar as the building panel's .bld2-btn--*,
+   so "ready / can't / locked" reads identically in a city and on a lord. */
+.lm-choose-btn {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+.lm-choose-btn--ready {
+  background: linear-gradient(180deg, #2a4f2a 0%, #1a3a1a 100%);
+  border-color: #4a8a4a;
+  color: #8ae08a;
+}
+.lm-choose-btn--ready:hover {
+  background: linear-gradient(180deg, #3a6a3a 0%, #2a4f2a 100%);
+  color: #b0ffb0;
+}
+.lm-choose-btn--equipped {
+  background: rgba(200,147,58,0.1);
+  border-color: var(--border-accent);
+  color: var(--text-gold);
+  cursor: default;
+  letter-spacing: 0.06em;
+}
+.lm-choose-btn--cant {
   background: var(--bg-raised);
   border-color: var(--border-muted);
   color: var(--text-muted);
-  opacity: 0.85;
   cursor: not-allowed;
+  opacity: 0.6;
 }
-.lm-mount-visual {
-  width: 100%;
-  height: 110px;
-  border-radius: 8px;
-  background: rgba(0,0,0,0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-  margin-bottom: 2px;
+.lm-choose-btn--locked {
+  background: var(--bg-raised);
+  border-color: var(--border-muted);
+  color: var(--text-muted);
+  cursor: not-allowed;
+  font-size: 0.72rem;
+  opacity: 0.7;
 }
-.lm-mount-icon-lg { font-size: 3rem; line-height: 1; }
-.lm-mount-img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.lm-mount-header { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.lm-mount-name { font-size: 0.95rem; font-weight: 700; }
-.lm-mount-cost {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: var(--text-gold-light, #e0c080);
-  flex-shrink: 0;
+/* The Overview card's action — a jump to the Mount tab, not a purchase, so
+   it stays neutral rather than wearing the green of a live buy. */
+.lm-choose-btn--change {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.15);
+  color: var(--text-secondary, #ccc);
 }
-.lm-mount-cost--short { color: #d06060; }
-.lm-choose-btn {
-  margin-top: 4px;
-  padding: 6px 10px;
-  background: transparent;
-  border: 1px solid;
-  border-radius: 5px;
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.lm-choose-btn:hover:not(:disabled) { background: rgba(255,255,255,0.06); }
-.lm-choose-btn:disabled { opacity: 0.5; cursor: default; }
+.lm-choose-btn--change:hover { background: rgba(255,255,255,0.12); }
 
-.lm-cancel-btn {
-  margin-top: 10px;
-  padding: 5px 14px;
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.15);
-  border-radius: 5px;
-  color: var(--text-muted, #aaa);
-  font-size: 0.78rem;
-  cursor: pointer;
-}
-.lm-cancel-btn:hover { background: rgba(255,255,255,0.06); }
-
-/* (.lm-slot-card--sm lived here: the compact left-rail variant of the mount
-   slot. The mount card moved out of the sidebar and into the Overview tab
-   on 2026-07-29, so the full-size card is the only one left.) */
+/* (.lm-slot-card* / .lm-change-btn / .lm-mount-card* lived here: the bespoke
+   mount card and its compact Overview variant. Both were replaced by the
+   building-tile classes on 2026-07-29 — a mount is a picture, a name and a
+   state, which is exactly what a building tile already was.) */
 
 /* ── Recruit modal — locked (read-only) field ─────────────────── */
 
@@ -11898,6 +11847,32 @@ body.nav-open #screen-root {
   overflow-y: auto;
   padding-top: 0.9rem;
 }
+/* Blessing duration picker — one chip per hour the Temple allows. */
+.rs-hours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-bottom: 0.5rem;
+}
+.rs-hour {
+  min-width: 2.4rem;
+  padding: 0.22rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.rs-hour:hover { border-color: var(--text-gold); color: var(--text-primary); }
+.rs-hour--on {
+  color: #12100a;
+  background: var(--text-gold);
+  border-color: var(--text-gold);
+  font-weight: 700;
+}
+
 .rs-status {
   display: flex;
   align-items: center;

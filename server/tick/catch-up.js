@@ -43,17 +43,9 @@ function _maxHp(lord) {
 // lord rests idle on one of the player's own city tiles. Tunable.
 const _GARRISON_REGEN_PER_MIN = 0.01;
 
-// Raiding stance hourly reward rate — scales with lord level. Landed
-// between passive city income (~7-65 gold/hr) and the effective rate of
-// actively-played search quests (well above that), since raiding requires
-// zero further input once started but locks the lord and risks losing
-// everything accrued to any passing army.
-function _raidHourlyRewards(lord) {
-  const lvl  = lord.level || 1;
-  const gold = Math.round(25 + lvl * 5);
-  const res  = Math.round(15 + lvl * 3);
-  return { gold, food: res, wood: res, stone: res };
-}
+// The raiding stance's hourly rate lives in EconomyCore.getRaidHourlyRewards
+// — the same function the in-game preview and the published raid guide call,
+// so all three can never drift apart again. It used to be a private copy here.
 
 // ── Server-side quest resolution helpers ──────────────────────
 // Used when engine data is passed into catchUp().
@@ -121,6 +113,18 @@ function _armyPower(armies, lordId, engine) {
 // Full search_area resolution. Returns a pending discovery object to be stored on the lord
 // and drained by the client (online) or the sync endpoint (offline).
 const _SEARCH_AREA_XP = 8; // mirrors LORD_ACTIONS.search_area.xpReward in lord.js
+
+// Folds the flat expedition XP into a rewards array as a SINGLE xp entry.
+// Two separate xp entries would render as two chips on the same card, which
+// reads like a bug; the player only cares about the total.
+function _mergeXpReward(rewards, extraXp) {
+  const out = (rewards || []).map(r => ({ ...r }));
+  if (!(extraXp > 0)) return out;
+  const existing = out.find(r => r.type === 'xp');
+  if (existing) existing.amount += extraXp;
+  else out.push({ type: 'xp', amount: extraXp });
+  return out;
+}
 // ── Ambush ────────────────────────────────────────────────────
 // A combat find is resolved AS A BATTLE, right now, instead of being parked
 // on the map as a camp to attack later. Same encounter data (CAMP_DEFS +
@@ -242,7 +246,11 @@ function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
     category: 'combat',
     record:   null,          // no map camp any more — the fight already happened
     rewards,
-    ambush:   { won, report, campLevel: details.level, campName: encounter.name, lordFell: !lordSurv },
+    // `at` is the moment the fight actually happened, NOT when the client
+    // finds out. An expedition that resolved three hours ago while the browser
+    // was closed must file in the Battles tab under its real time, and it
+    // doubles as the de-dupe key for BattleHistoryService.saveAmbush.
+    ambush:   { won, report, campLevel: details.level, campName: encounter.name, lordFell: !lordSurv, at: nowMs },
   };
 }
 
@@ -321,7 +329,12 @@ function _resolveSearchArea(lord, armies, cities, nowMs, engine, action) {
   const armyPower = _armyPower(armies, lord.id, engine);
   const loudness  = DiscoveryRoll.loudnessOf(armyPower);
 
-  const def = DiscoveryRoll.rollDef(DISCOVERY_DEFS, terrainId, talentEffects.goldDiscoveryBonus || 0, lengthId, loudness);
+  // Expedition Rating: the SAME rating that gates which recruits will join now
+  // also decides the quality of what gets found — see RECRUIT_TIERS.find. A
+  // scout-heavy column is shown the good ground; a rabble is shown a ditch.
+  const er = DiscoveryRoll.expeditionRating((armies[lord.id] || {}).units, UNIT_DEFS);
+
+  const def = DiscoveryRoll.rollDef(DISCOVERY_DEFS, terrainId, talentEffects.goldDiscoveryBonus || 0, lengthId, loudness, er);
   if (!def) return null;
 
   if (def.category === 'nothing') {
@@ -339,10 +352,6 @@ function _resolveSearchArea(lord, armies, cities, nowMs, engine, action) {
     expiresAt:    def.baseDuration > 0 ? nowMs + def.baseDuration * 1000 : null,
   };
 
-  // Combat = ambush, fought immediately. Falls back to the old
-  // camp-on-the-map behaviour only if the engine was built without a
-  // BattleEngine (nothing in production does that, but catchUp is called with
-  // partial engines in tests and must never throw).
   // Recruits: the units ARE the reward, so no loot roll — rollRewards has no
   // BASE_REWARDS entry for these defs and would return nothing anyway.
   if (def.category === 'recruits') {
@@ -462,22 +471,43 @@ export function catchUp(state, nowMs, engine = null) {
         // The flat "you ran an expedition" XP scales with how long it ran, so a
         // Long push is worth its 30 minutes even when it finds nothing.
         const lenMul = engine.DiscoveryRoll ? engine.DiscoveryRoll.lengthOf(done.length).reward : 1;
-        lord.xp = (lord.xp || 0) + Math.round(_SEARCH_AREA_XP * xpMult * lenMul);
+        const baseXp = Math.round(_SEARCH_AREA_XP * xpMult * lenMul);
 
         const pending = _resolveSearchArea(lord, armies, cities, nowMs, engine, done);
         if (pending) {
+          // Fold the flat expedition XP INTO the reported rewards instead of
+          // crediting it off to the side. It used to be applied straight to
+          // lord.xp above, so an expedition that found nothing reported an
+          // empty rewards array and the player was never told they had earned
+          // anything at all — the commonest outcome in the game looked like a
+          // total waste of the lord's time. Merged into the existing xp entry
+          // rather than pushed as a second one, so the card shows ONE xp chip.
+          // Note this is now the ONLY place the base XP is credited: it lands
+          // via the apply loop below, so it must not also be added directly.
+          pending.rewards = _mergeXpReward(pending.rewards, baseXp);
+
           // Apply gold / resource rewards to player immediately.
+          // God of Destruction blessing: a heavier haul from every expedition.
+          // Applied to material loot only — XP is the lord's own effort and is
+          // deliberately left alone, same as the raid path leaves XP untouched.
+          const questMult = 1 + (blessingFx.quest_bonus || 0);
           for (const r of (pending.rewards || [])) {
-            if      (r.type === 'gold') player.coins = Math.floor((player.coins || 0) + r.amount);
+            if      (r.type === 'gold') player.coins = Math.floor((player.coins || 0) + r.amount * questMult);
             else if (r.type === 'xp')  lord.xp = (lord.xp || 0) + r.amount;
             else if (['food','wood','stone'].includes(r.type)) {
               player.resources = player.resources || {};
-              player.resources[r.type] = Math.floor((player.resources[r.type] || 0) + r.amount);
+              player.resources[r.type] = Math.floor((player.resources[r.type] || 0) + r.amount * questMult);
             }
           }
           _checkLevelUp(lord, engine);
           lord.pendingDiscoveries = lord.pendingDiscoveries || [];
           lord.pendingDiscoveries.push(pending);
+        } else {
+          // No discovery to report (lord off-map, or an engine built without
+          // DiscoveryRoll). The lord still spent the time, so it still earns
+          // the base XP — there is just nothing to show it on.
+          lord.xp = (lord.xp || 0) + baseXp;
+          _checkLevelUp(lord, engine);
         }
       }
 
@@ -537,7 +567,7 @@ export function catchUp(state, nowMs, engine = null) {
 
       if (nowMs >= lord.stance.finishAt) {
         const hours = Math.max(0, (lord.stance.finishAt - lord.stance.startedAt) / 3_600_000);
-        const rates = _raidHourlyRewards(lord);
+        const rates = engine.EconomyCore.getRaidHourlyRewards(lord.level);
         // God of Destruction blessing: heavier plunder from every raid.
         const raidMult   = 1 + (blessingFx.raid_bonus || 0);
         const goldEarned = Math.floor(rates.gold * hours * raidMult);

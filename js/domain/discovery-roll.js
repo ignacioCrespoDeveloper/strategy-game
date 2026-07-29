@@ -67,25 +67,62 @@ var DiscoveryRoll = (() => {
     }, 0);
   }
 
-  // Recruit tiers. `er` is the rating needed; `pool` is what can turn up.
-  // Ordered strongest-first so recruitTierFor can return the first match.
+  // ONE ER ladder, TWO consequences. `er` is the rating needed; then:
+  //   pool     → which recruits can turn up (rollRecruits)
+  //   tierOdds → the EXACT probability of each find tier (rollDef stage 2)
+  //   nothing  → how often the expedition comes back empty (rollDef stage 1)
+  // Ordered strongest-first so erTierFor can return the first match.
+  //
+  // `tierOdds` IS A PROBABILITY DISTRIBUTION, NOT A WEIGHT MULTIPLIER. Each
+  // row sums to 1 and is read directly: a Common force finds tier 1 and
+  // nothing else; a Rare force finds tier 3 on 5% of its finds. Publish these
+  // numbers freely — they are exactly what the roll does, on every terrain.
+  // (They were multipliers until 2026-07-29, which made the real split an
+  // emergent product of terrain and baseWeight that nobody could state.)
+  //
+  // WHY TIERS ARE GATED RATHER THAN MERELY WEIGHTED (Nacho's call, and the
+  // measurements back it): tier 3 pays 25–50k resources before scaling. Handed
+  // to a level-2 lord that is ~20× their entire economy — it doesn't reward
+  // them, it erases the early game. In the other direction a tier-1 find pays
+  // 800–1500, which at endgame is rounding error and reads as a wasted
+  // expedition. So the tiers phase in AND out: each band unlocks the tier
+  // above and sheds the one below, and ER is the only thing that moves you.
   //
   // Thresholds interlock with the army PWR cap (200 + level×80, max 1000, or
   // 1100 with the commanding talent) AND with footprint: reaching Legendary
   // needs ~400 PWR of scouts (ER 800) which stays under the 600-PWR quiet
   // threshold, or ~800 PWR of line troops which does not. That is the whole
-  // design in one number — you can buy the good recruits with scouts cheaply,
-  // or with raw mass expensively and loudly.
+  // design in one number — you can buy the good finds and the good recruits
+  // with scouts cheaply, or with raw mass expensively and loudly. Mass gets
+  // you the same ER band but eats the footprint penalty for it, so scouts
+  // remain strictly the better way to buy the same number.
   const RECRUIT_TIERS = [
-    { id: 'legendary', label: 'Legendary', er: 800, pool: ['ogre_warrior', 'ironguts', 'ogre_champion', 'young_dragon'] },
-    { id: 'rare',      label: 'Rare',      er: 450, pool: ['dragon_guard', 'forest_troll', 'ogre_bulls'] },
-    { id: 'uncommon',  label: 'Uncommon',  er: 200, pool: ['goblin_archers', 'goblin_wolf_riders', 'mercenary_spearmen', 'crossbowmen', 'mercenary_crossbows'] },
-    { id: 'common',    label: 'Common',    er: 0,   pool: ['goblin_rabble', 'goblin_spearmen', 'bandits', 'bandit_archers'] },
+    { id: 'legendary', label: 'Legendary', er: 800,
+      tierOdds: { 1: 0.05, 2: 0.70, 3: 0.25 }, nothing: 0.70,
+      pool: ['ogre_warrior', 'ironguts', 'ogre_champion', 'young_dragon'] },
+    { id: 'rare',      label: 'Rare',      er: 450,
+      tierOdds: { 1: 0.25, 2: 0.70, 3: 0.05 }, nothing: 0.85,
+      pool: ['dragon_guard', 'forest_troll', 'ogre_bulls'] },
+    { id: 'uncommon',  label: 'Uncommon',  er: 200,
+      tierOdds: { 1: 0.25, 2: 0.74, 3: 0.01 }, nothing: 1.00,
+      pool: ['goblin_archers', 'goblin_wolf_riders', 'mercenary_spearmen', 'crossbowmen', 'mercenary_crossbows'] },
+    { id: 'common',    label: 'Common',    er: 0,
+      tierOdds: { 1: 1.00, 2: 0,    3: 0    }, nothing: 1.25,
+      pool: ['goblin_rabble', 'goblin_spearmen', 'bandits', 'bandit_archers'] },
   ];
 
-  function recruitTierFor(er) {
+  function erTierFor(er) {
     return RECRUIT_TIERS.find(t => (er || 0) >= t.er) || RECRUIT_TIERS[RECRUIT_TIERS.length - 1];
   }
+  // Kept as the name every recruit-facing caller already uses; identical band.
+  const recruitTierFor = erTierFor;
+
+  // Which categories carry a loot tier and are therefore reshaped by ER.
+  // combat/recruits/nothing/intelligence are excluded: they have their own
+  // multipliers (risk, footprint) and no tier to weight by.
+  const TIERED_CATEGORIES = new Set(['resource', 'event', 'trade', 'legendary']);
+  // Same fallback rollRewards uses, so weighting and payout never disagree.
+  const tierOf = def => def?.tier || 2;
 
   // How many turn up. Cheap rabble arrives in numbers; a dragon arrives alone.
   function _recruitCount(unitDef) {
@@ -199,17 +236,55 @@ var DiscoveryRoll = (() => {
 
   // Loot ranges by def.tier: [min, max] for plain resources and for gold.
   //
-  // Raised ~2.5× on 2026-07-28. Measured beforehand at L10 on a long
-  // expedition: a successful FIND averaged 95 gold while a won AMBUSH averaged
-  // 557 — the outcome that costs you units paid 6× the outcome that doesn't,
-  // which is exactly backwards. At 95 gold against a 490-gold Greatswords,
-  // a find was also worth ~1/5th of one soldier for 30 minutes of a lord's
-  // time. Tune HERE; every length/level/depletion/footprint multiplier
-  // compounds on top of these numbers.
+  // Raised ~2.5× on 2026-07-28, then ~1.75×/2.15×/2.4× again on 2026-07-29.
+  // The 07-28 pass fixed finds paying a sixth of what ambushes did; this pass
+  // is a deliberate pump of the whole activity plus a widening of the SPREAD
+  // between tiers, because tier is no longer a lottery — ER decides it (see
+  // RECRUIT_TIERS.find). A flat raise would have pumped the reward without
+  // rewarding the decision, so tier 3 climbs hardest and tier 1 least: the
+  // gap between a proper scouting force and a rabble IS the pump.
+  //
+  // Anchor: at L10 on a Long expedition a tier-3 gold find now averages ~2.4k
+  // after level and length scaling, against a 510-gold Greatswords and a city
+  // that produces ~31 gold/hour. Cities were never the gold source (see
+  // raid-guide.html) — lords in the field are, and this is what that costs.
+  // Tune HERE; every length/level/depletion/footprint multiplier compounds on
+  // top of these numbers.
+  // RESOURCES and GOLD are deliberately on DIFFERENT scales — this is the
+  // single most important thing to understand before retuning either.
+  //   · Resources (food/wood/stone) buy BUILDINGS, whose cost grows ×1.6 per
+  //     level forever. Demand is unbounded, and a maxed lumber mill only makes
+  //     ~780/hour, so an expedition find has to be in the thousands to matter
+  //     at all. Hence 800 → 50,000 across the three tiers.
+  //   · Gold buys UNITS and nothing else (units have no resourceCost), and an
+  //     army is hard-capped at 200 + level×80 PWR ≈ 5–10k gold to fill. Demand
+  //     is therefore BOUNDED, and putting gold on the resource curve would let
+  //     one find buy a dozen armies. Gold stays modest on purpose.
+  // A find pays one or the other, never both (see BASE_REWARDS), so the two
+  // ladders never need to agree — they answer to different sinks.
+  //
+  // THE BANDS ARE CONTIGUOUS ON PURPOSE — each tier's ceiling is the next
+  // tier's floor (res: 800 → 5,000 → 25,000 → 50,000). This is lifted from
+  // OGame's expedition variants, whose multipliers run S 10–50, M 52–100,
+  // L 102–200: a lucky S is worth an unlucky M, so no roll ever lands in a
+  // dead zone between brackets.
+  //
+  // The previous ladder left a 3.3× hole between T1's 1,500 ceiling and T2's
+  // 5,000 floor. That hurt most at Uncommon, where 25% of finds are T1: a
+  // quarter of that band's results paid ~1,090 against ~9,300 for the rest, so
+  // they read as duds rather than as small wins. Closing the gap means a lucky
+  // low-tier roll brushes the tier above instead of feeling like a wasted
+  // expedition. Note the spread now WIDENS as tiers get commoner (T1 6.3×,
+  // T2 5×, T3 2×), which is also OGame's shape — the frequent outcome is the
+  // swingy one, the rare outcome is reliably big.
+  //
+  // If you retune these, keep them contiguous: min(tier N+1) === max(tier N).
+  // Tune HERE; every length/level/depletion/footprint multiplier compounds on
+  // top of these numbers.
   const TIER_RANGES = {
-    1: { res: [50,  150], gold: [75,  200]  },
-    2: { res: [100, 300], gold: [125, 375]  },
-    3: { res: [250, 600], gold: [375, 1000] },
+    1: { res: [800,   5000],  gold: [200,  500]  },
+    2: { res: [5000,  25000], gold: [500,  1400] },
+    3: { res: [25000, 50000], gold: [1400, 3600] },
   };
 
   const RES_TYPES = ['gold', 'food', 'wood', 'stone'];
@@ -222,43 +297,157 @@ var DiscoveryRoll = (() => {
   }
 
   // ── Which discovery does this search turn up? ──────────────────
-  // Weight = baseWeight × terrainMultiplier, × (1 + goldBonus) for gold-type
-  // defs. A multiplier of 0 makes a def impossible on that terrain; an absent
-  // terrain key defaults to 1.0. Entries at weight <= 0 are dropped entirely,
-  // which is also what keeps the baseWeight-0 intelligence defs (enemy_city,
-  // enemy_lord — written directly by the Scout action) out of random rolls.
-  function rollDef(discoveryDefs, terrainId, goldBonus, lengthId, loudness) {
+  //
+  // TWO-STAGE ROLL (restructured 2026-07-29). Stage 1 decides WHAT KIND of
+  // thing happens — nothing / ambush / recruits / a find — by weight. Stage 2,
+  // only if it's a find, decides WHICH TIER from the ER band's odds. Stage 3
+  // picks a specific def inside that tier by terrain weight.
+  //
+  // WHY IT IS SPLIT THIS WAY: tier used to be an EMERGENT property of the
+  // single weighted roll — ER multiplied each def's weight, so the tier split
+  // was whatever terrain and baseWeight happened to produce, and it drifted
+  // with terrain. That made the design intent inexpressible: you could not say
+  // "a Common force never finds tier 3" or "a Rare force finds tier 3 5% of
+  // the time" and have it be TRUE, only approximately true on plains. Rolling
+  // the tier from an explicit distribution makes those statements exact and
+  // terrain-independent, which is what lets the guide publish real numbers.
+  // It is also how OGame does it: the S/M/L variant is drawn first at fixed
+  // 89/10/1 odds, and only then is the payout computed.
+  //
+  // Terrain still decides WHICH find inside a tier (and can still veto a def
+  // entirely with a 0 multiplier) — it just no longer decides how good the
+  // tier is. `er` is trailing and optional so a call that omits it lands in
+  // the Common band rather than throwing.
+  function _defWeight(def, terrainId, goldBonus, len, loud, band) {
+    const mults  = def.terrainMultipliers || {};
+    const mult   = (terrainId in mults) ? mults[terrainId] : 1.0;
+    let   weight = def.baseWeight * mult;
+    if (goldBonus && GOLD_DISC_IDS.has(def.id)) weight *= (1 + goldBonus);
+    // Expedition length reshapes the tails: a long push is markedly more
+    // likely to be jumped and less likely to come back empty. `legendary`
+    // still applies to the two legendary-category defs, which now biases
+    // WITHIN the tier-3 pool rather than against the whole catalog.
+    if (def.category === 'legendary') weight *= len.legendary;
+    if (def.category === 'nothing')   weight *= len.nothing * (1 + FOOTPRINT.nothing * loud) * band.nothing;
+    if (def.category === 'combat')    weight *= len.risk    * (1 + FOOTPRINT.combat  * loud);
+    return weight;
+  }
+
+  // Sorts every rollable def into the non-find outcomes and the three tier
+  // pools. Entries at weight <= 0 are dropped, which is also what keeps the
+  // baseWeight-0 intelligence defs (enemy_city, enemy_lord — written directly
+  // by the Scout action) out of random rolls.
+  function _buckets(discoveryDefs, terrainId, goldBonus, lengthId, loudness, er) {
     const len  = lengthOf(lengthId);
     const loud = Math.max(0, Math.min(1, loudness || 0));
-    const entries = Object.values(discoveryDefs || {})
-      .map(def => {
-        const mults = def.terrainMultipliers || {};
-        const mult  = (terrainId in mults) ? mults[terrainId] : 1.0;
-        let   weight = def.baseWeight * mult;
-        if (goldBonus && GOLD_DISC_IDS.has(def.id)) weight *= (1 + goldBonus);
-        // Expedition length reshapes the tails: a long push is far more likely
-        // to turn up something legendary, less likely to come back empty, and
-        // markedly more likely to be jumped. `risk` scales the combat weight
-        // rather than gating a separate pre-roll, so there stays exactly ONE
-        // roll deciding what an expedition runs into.
-        if (def.category === 'legendary') weight *= len.legendary;
-        if (def.category === 'nothing')   weight *= len.nothing * (1 + FOOTPRINT.nothing * loud);
-        if (def.category === 'combat')    weight *= len.risk    * (1 + FOOTPRINT.combat  * loud);
-        return { def, weight };
-      })
-      .filter(e => e.weight > 0);
+    const band = erTierFor(er);
+    const other = [];
+    const byTier = { 1: [], 2: [], 3: [] };
 
-    if (entries.length === 0) return null;
+    for (const def of Object.values(discoveryDefs || {})) {
+      const weight = _defWeight(def, terrainId, goldBonus, len, loud, band);
+      if (!(weight > 0)) continue;
+      if (TIERED_CATEGORIES.has(def.category)) byTier[tierOf(def)].push({ def, weight });
+      else other.push({ def, weight });
+    }
 
+    let findWeight = 0;
+    for (const t of [1, 2, 3]) for (const e of byTier[t]) findWeight += e.weight;
+    return { other, byTier, band, findWeight };
+  }
+
+  // Which tiers this band can actually draw HERE — a band's odds are useless
+  // if the terrain holds no def of that tier (no marble quarry in a marsh), so
+  // the surviving tiers are renormalised among themselves.
+  function _availableTiers(band, byTier) {
+    return [1, 2, 3].filter(t => byTier[t].length > 0 && (band.tierOdds[t] || 0) > 0);
+  }
+
+  function _pickTier(band, byTier) {
+    const avail = _availableTiers(band, byTier);
+    if (avail.length === 0) {
+      // The band allows no tier that exists on this ground. Rather than report
+      // an empty expedition, fall back to the LOWEST tier present — a find the
+      // player was not really entitled to is a smaller sin than a dead roll.
+      const any = [1, 2, 3].filter(t => byTier[t].length > 0);
+      return any.length ? any[0] : null;
+    }
+    let total = 0;
+    avail.forEach(t => total += band.tierOdds[t]);
+    let rand = Math.random() * total;
+    for (const t of avail) {
+      rand -= band.tierOdds[t];
+      if (rand <= 0) return t;
+    }
+    return avail[avail.length - 1];
+  }
+
+  function _pickWeighted(entries) {
     let total = 0;
     entries.forEach(e => total += e.weight);
-
     let rand = Math.random() * total;
     for (const e of entries) {
       rand -= e.weight;
       if (rand <= 0) return e.def;
     }
     return entries[entries.length - 1].def;
+  }
+
+  function rollDef(discoveryDefs, terrainId, goldBonus, lengthId, loudness, er) {
+    const { other, byTier, band, findWeight } = _buckets(discoveryDefs, terrainId, goldBonus, lengthId, loudness, er);
+
+    let total = findWeight;
+    other.forEach(e => total += e.weight);
+    if (!(total > 0)) return null;
+
+    // Stage 1 — the find pool competes as a SINGLE bucket against nothing,
+    // ambush and recruits, so how often you find anything still depends on
+    // terrain and length, but no longer on your ER band's tier odds.
+    let rand = Math.random() * total;
+    for (const e of other) {
+      rand -= e.weight;
+      if (rand <= 0) return e.def;
+    }
+
+    // Stage 2 + 3 — tier from the band, then the def from within it.
+    const tier = _pickTier(band, byTier);
+    if (tier == null) return null;
+    return _pickWeighted(byTier[tier]);
+  }
+
+  // ── Exact outcome probabilities for a given force ─────────────
+  // Returns { nothing, combat, recruits, tier1, tier2, tier3, find } as
+  // fractions of 1, mirroring rollDef stage for stage — so the guide and the
+  // confirm panel can state real odds instead of quoting raw multipliers,
+  // which tell a player nothing about how often something actually happens.
+  function outcomeOdds(discoveryDefs, terrainId, lengthId, loudness, er) {
+    const { other, byTier, band, findWeight } = _buckets(discoveryDefs, terrainId, 0, lengthId, loudness, er);
+    const out = { nothing: 0, combat: 0, recruits: 0, tier1: 0, tier2: 0, tier3: 0, find: 0 };
+
+    let total = findWeight;
+    other.forEach(e => total += e.weight);
+    if (!(total > 0)) return out;
+
+    for (const e of other) {
+      const p = e.weight / total;
+      const c = e.def.category;
+      if      (c === 'nothing')  out.nothing  += p;
+      else if (c === 'combat')   out.combat   += p;
+      else if (c === 'recruits') out.recruits += p;
+    }
+    out.find = findWeight / total;
+
+    // Same renormalisation _pickTier uses, so published odds match the roll.
+    const avail = _availableTiers(band, byTier);
+    if (avail.length > 0) {
+      let oddsTotal = 0;
+      avail.forEach(t => oddsTotal += band.tierOdds[t]);
+      avail.forEach(t => { out['tier' + t] = out.find * (band.tierOdds[t] / oddsTotal); });
+    } else {
+      const any = [1, 2, 3].filter(t => byTier[t].length > 0);
+      if (any.length) out['tier' + any[0]] = out.find;
+    }
+    return out;
   }
 
   // ── How hard is the camp? ─────────────────────────────────────
@@ -391,8 +580,11 @@ var DiscoveryRoll = (() => {
     RES_TYPES.forEach(t => {
       if (!base[t] || base[t] <= 0) return;
       // lost_treasure keeps a hand-tuned gold band; everything else uses tier.
+      // It is a tier-2 def that should out-pay its tier — a buried chest of
+      // coins and gemstones, so it sits above the tier-2 gold band and below
+      // tier 3. Scaled with TIER_RANGES on 2026-07-29 so it keeps that slot.
       const [min, max] = (t === 'gold')
-        ? (def.id === 'lost_treasure' ? [200, 500] : ranges.gold)
+        ? (def.id === 'lost_treasure' ? [800, 2000] : ranges.gold)
         : ranges.res;
       rewards.push({ type: t, amount: Math.floor(_randInt(min, max) * scalar) });
     });
@@ -406,11 +598,11 @@ var DiscoveryRoll = (() => {
   }
 
   return {
-    rollDef, rollCampLevel, rollCampDetails, rollAmbushDetails, rollRewards,
+    rollDef, outcomeOdds, rollCampLevel, rollCampDetails, rollAmbushDetails, rollRewards,
     lengthOf, depletionFor, loudnessOf, ambushRatioFor,
-    expeditionRating, recruitTierFor, rollRecruits,
+    expeditionRating, recruitTierFor, erTierFor, rollRecruits,
     LENGTHS, DEFAULT_LENGTH, DEPLETION, RECRUIT_TIERS, SCOUT_ER_MULT,
     FOOTPRINT, QUIET_PWR, LOUD_PWR, OVERMATCH_PWR, OVERMATCH_MAX,
-    GOLD_DISC_IDS, BASE_REWARDS, TIER_RANGES,
+    GOLD_DISC_IDS, BASE_REWARDS, TIER_RANGES, LEVEL_SCALAR_PER_LEVEL,
   };
 })();

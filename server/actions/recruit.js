@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { UNIT_DEFS, TALENT_POOL, EconomyCore } from '../engine-loader.js';
+import { UNIT_DEFS, TALENT_POOL, EconomyCore, UnitUnlockService } from '../engine-loader.js';
 
 // Army capacity is gated by Army Power alone — EconomyCore.getArmyPower is
 // the single source of truth (linear per-model cost + combat-trait tax).
@@ -57,14 +57,21 @@ export async function handleRecruit(req, res) {
   const def = UNIT_DEFS[unitId];
   if (!def) return res.status(400).json({ ok: false, error: 'Unknown unit.' });
 
-  const army = armies[lordId] || { units: [] };
-
-  if (def.category === 'legendary' && (lord.level || 1) < 12) {
-    return res.status(400).json({
-      ok: false,
-      error: `Only a lord of level 12 or higher can command a ${def.name}.`,
-    });
+  // THE recruitment gate — race, trainability, training-building level and
+  // the legendary lord rule, all from the one evaluator the client filters
+  // with. This is authoritative: the client merely hides what this would
+  // reject. Before it existed, handleRecruit checked only gold and the PWR
+  // cap, so any unit could be trained in any city by any race.
+  const gate = UnitUnlockService.check(unitId, {
+    race:      lord.race,
+    buildings: city.buildings || {},
+    lordLevel: lord.level || 1,
+  });
+  if (gate.locked) {
+    return res.status(400).json({ ok: false, error: gate.reasons.join(' ') });
   }
+
+  const army = armies[lordId] || { units: [] };
 
   // Power cap check must also account for units still sitting in the queue
   // (not yet added to the army) — otherwise stacking several batches in a
@@ -104,13 +111,22 @@ export async function handleRecruit(req, res) {
   // empty (then it starts now, same as before this was a multi-slot queue).
   const now          = Date.now();
   const recruitMult  = TALENT_POOL?.[lord.talentId]?.effects?.recruitTimeMult ?? 1;
-  // Recruit time: base × Drill Manuals research ÷ hangar divisor (every
+  // Recruit time: base × recruit_speed modifiers ÷ hangar divisor (every
   // level of THIS city's training building above the unit's unlock level),
   // then the lord's talent mult.
   const training     = EconomyCore.getUnitTraining(lord.race, unitId);
+  // recruit_speed comes from BOTH the Library's books and an active God of
+  // War blessing — they stack. getRecruitTime reads a single flat-key object,
+  // so sum the two here. (js/ui/lord-screen.js mirrors this for display.)
+  const researchFx   = EconomyCore.getResearchEffects(player.research);
+  const blessingFx   = EconomyCore.getBlessingEffects(player.activeBlessing, now);
+  const recruitFx    = {
+    ...researchFx,
+    recruit_speed: (researchFx.recruit_speed || 0) + (blessingFx.recruit_speed || 0),
+  };
   const baseSecs     = EconomyCore.getRecruitTime(
     def, count,
-    EconomyCore.getResearchEffects(player.research),
+    recruitFx,
     training ? (city.buildings?.[training.buildingId] || 0) : 0,
     training ? training.minLevel : 0,
   );

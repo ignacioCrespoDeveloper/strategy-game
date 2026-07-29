@@ -1459,46 +1459,50 @@ var UNIT_DEFS = {
 //   Tier 4 (monster, weight 5)              → monster bldg       (town_hall 7 via bldg.requires)
 //   Tier 5 (legendary, weight 12)           → dragon_lair        (town_hall 9 + lord lv12 checked at recruit)
 
-// Deep gates (2026-07-27 review, apex spread 2026-07-27): elite/pinnacle
-// units sit HIGH in their building and now span Lv 8-10 rather than clumping
-// at Lv 8 — the strongest roster units (Black Guard, Dragon Princes, Dread
-// Knights, Steam Tank…) gate at Lv 10, so leveling a Barracks/Stables stays
-// meaningful deep into the game. Every level above a unit's gate also trains
-// it faster (the hangar rule in EconomyCore.getRecruitTime). Mid-level slots
-// left open are reserved for the planned TWW3 tier units.
+// Deep gates (2026-07-27 review; gates raised again 2026-07-29): elite and
+// pinnacle units sit HIGH in their building and now span Lv 8-12 — the very
+// top of each ladder (Black Guard, Phoenix Guard, Irondrakes) gates at Lv 12,
+// so leveling a Barracks/Workshop stays meaningful deep into the game. Every
+// level above a unit's gate also trains it faster (the hangar rule in
+// EconomyCore.getRecruitTime). Mid-level slots left open are reserved for the
+// planned TWW3 tier units.
+//
+// Levels within a building MUST read ascending — the Tech Tree and the
+// recruit list both render in roster order, so a Lv 12 unit listed before a
+// Lv 8 one would display out of order. scripts/test-economy.js enforces it.
 var UNIT_ROSTER = {
   dark_elf: {
-    barracks:      { 1: ['dreadspears'], 3: ['bleakswords'], 5: ['har_ganeth_executioners'], 6: ['witch_elves'], 10: ['black_guard_naggarond'] },
+    barracks:      { 1: ['dreadspears'], 3: ['bleakswords'], 6: ['har_ganeth_executioners'], 8: ['witch_elves'], 12: ['black_guard_naggarond'] },
     archery_range: { 1: ['darkshards'], 4: ['shades'], 8: ['reaper_bolt_throwers'] },
     stables:       { 2: ['dark_riders'], 5: ['cold_one_knights'], 10: ['dread_knights'] },
     monster_pit:   { 3: ['war_hydra'] },
     dragon_lair:   { 1: ['black_dragon'] },
   },
   human: {
-    barracks:             { 1: ['spearmen'], 3: ['swordsmen'], 5: ['halberdiers'], 9: ['greatswords'] },
+    barracks:             { 1: ['spearmen'], 3: ['swordsmen'], 5: ['halberdiers'], 10: ['greatswords'] },
     gunpowder_workshop:   { 1: ['handgunners'], 4: ['outriders'] },
     stables:              { 2: ['empire_knights'], 5: ['reiksguard'], 10: ['demigryph_knights'] },
-    engineering_workshop: { 3: ['great_cannon'], 5: ['war_wagons'], 10: ['steam_tank'] },
+    engineering_workshop: { 2: ['war_wagons'], 5: ['great_cannon'], 10: ['steam_tank'] },
   },
   dwarf: {
     barracks:             { 1: ['dwarf_warriors'], 3: ['longbeards'], 7: ['hammerers'], 10: ['ironbreakers'] },
     archery_range:        { 3: ['quarrellers'] },
-    engineering_workshop: { 1: ['thunderers'], 5: ['dwarf_cannon'], 6: ['gyrocopter'], 7: ['organ_gun'], 10: ['irondrakes'] },
+    engineering_workshop: { 1: ['thunderers'], 5: ['dwarf_cannon'], 6: ['gyrocopter'], 10: ['organ_gun'], 12: ['irondrakes'] },
     slayer_lodge:         { 3: ['slayers'], 6: ['giant_slayers'] },
   },
   high_elf: {
-    barracks:      { 1: ['he_spearmen'], 5: ['white_lions'], 8: ['swordmasters_of_hoeth'], 9: ['phoenix_guard'] },
+    barracks:      { 1: ['he_spearmen'], 5: ['white_lions'], 8: ['swordmasters_of_hoeth'], 12: ['phoenix_guard'] },
     archery_range: { 1: ['archers'], 3: ['lothern_sea_guard'], 7: ['sisters_of_avelorn'] },
     stables:       { 2: ['silver_helms'], 10: ['dragon_princes'] },
     eagle_tower:   { 3: ['eagle_claw_bolt_thrower'] },
     dragon_lair:   { 1: ['sun_dragon'], 3: ['frostheart_phoenix'] },
   },
   orc: {
-    barracks:             { 1: ['orc_boyz', 'goblins'], 4: ['orc_big_uns'], 10: ['black_orcs'] },
+    barracks:             { 1: ['goblins'], 3: ['orc_boyz'], 5: ['orc_big_uns'], 10: ['black_orcs'] },
     archery_range:        { 1: ['orc_goblin_archers'], 4: ['savage_orc_arrer_boyz'] },
-    stables:              { 1: ['orc_wolf_riders'], 2: ['boar_boyz'], 8: ['savage_orc_boar_big_uns'] },
-    monster_pit:          { 3: ['trolls'], 6: ['arachnarok_spider'], 8: ['giant'] },
-    engineering_workshop: { 3: ['rock_lobber'], 5: ['snotling_pump_wagons'] },
+    stables:              { 1: ['orc_wolf_riders'], 3: ['boar_boyz'], 8: ['savage_orc_boar_big_uns'] },
+    monster_pit:          { 3: ['trolls'], 6: ['giant'], 8: ['arachnarok_spider'] },
+    engineering_workshop: { 3: ['snotling_pump_wagons'], 5: ['rock_lobber'] },
   },
   // Add new races here — no other files change.
 };

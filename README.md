@@ -169,8 +169,9 @@ compositions) are served at the server root. See `TESTING.md` for details.
 > **Recently resolved** (2026-07-28/29): unit healing shipped (15% battle-win
 > heal + 1%/min idle garrison regen in `catch-up.js`); quests reworked into
 > OGame-style **Expeditions** (shared `discovery-roll.js` roll math, lengths,
-> tile depletion, army footprint, immediate ambushes, ER-gated recruits —
-> bandit camps retired); the `scout` trait implemented via Expedition Rating;
+> tile depletion, army footprint, immediate ambushes, ER-gated recruits **and
+> ER-gated find quality** with a ~2× reward pump on top — bandit camps
+> retired); the `scout` trait implemented via Expedition Rating;
 > the non-functional **Ambush stance removed from the game** (ambush lives on
 > only as the expedition outcome — scouting can no longer be intercepted).
 

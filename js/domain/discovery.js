@@ -177,6 +177,25 @@ const DiscoveryService = (() => {
         _saveAll(all);
       }
 
+      // An ambush fought while the browser was closed must still land in the
+      // lord's Battles tab — the quest card below promises "Full battle report
+      // in the Battles tab" either way. This path used to drop evt.ambush.report
+      // on the floor entirely, so an offline-resolved ambush produced a log
+      // card pointing at a report that was never saved. Same helper the live
+      // path uses, so both produce identical rows. (Fixed 2026-07-29.)
+      if (isAmbush && evt.ambush.report && evt.lordId && typeof BattleHistoryService !== 'undefined') {
+        BattleHistoryService.saveAmbush(evt.lordId, {
+          report:    evt.ambush.report,
+          campName:  evt.ambush.campName,
+          campLevel: evt.ambush.campLevel,
+          at:        evt.ambush.at,
+        });
+      }
+
+      // Carry the SAME outcome markers the online path writes (see
+      // lord-screen.js's _applyAmbushResult / _applyRecruitsResult), so a
+      // quest resolved while the browser was closed renders identically to
+      // one watched live instead of degrading to a generic "Found" card.
       addLog(playerId, {
         definitionId: evt.defId,
         tileX:    evt.record?.tileX   ?? null,
@@ -184,6 +203,9 @@ const DiscoveryService = (() => {
         terrain:  evt.record?.terrain ?? 'plains',
         rewards:  evt.rewards || [],
         recordId: isCombat ? evt.record.id : undefined,
+        outcome:  isAmbush ? 'ambush' : evt.recruits ? 'recruits' : undefined,
+        ambush:   isAmbush ? { won: evt.ambush.won, lordFell: evt.ambush.lordFell, campName: evt.ambush.campName } : undefined,
+        recruits: evt.recruits || undefined,
         lordId:   evt.lordId   || undefined,
         lordName: evt.lordName || undefined,
       });
@@ -193,6 +215,12 @@ const DiscoveryService = (() => {
       const name      = def?.name || 'A discovery';
       const rewardStr = (evt.rewards || []).filter(r => r.type !== 'xp')
         .map(r => `+${r.amount} ${r.type}`).join(', ');
+      // XP is normally left out of the summary — it's the least interesting
+      // line when there is loot to report. But an expedition that found
+      // NOTHING still earns it, and suppressing it there left the entry with
+      // no detail at all, reading as a wasted trip.
+      const xpAmount = (evt.rewards || []).find(r => r.type === 'xp')?.amount || 0;
+      const xpStr    = xpAmount > 0 ? `+${xpAmount} XP for the expedition` : null;
       if (typeof ActivityService !== 'undefined') {
         ActivityService.log(playerId, {
           type:  'discovery',
@@ -211,7 +239,7 @@ const DiscoveryService = (() => {
                     ? `${evt.recruits.joined} joined · ${evt.recruits.lost} turned away — army at ${evt.recruits.armyPwr}/${evt.recruits.cap} PWR`
                     : `${evt.recruits.tierLabel} tier · army at ${evt.recruits.armyPwr}/${evt.recruits.cap} PWR`)
                 : isCombat ? `Hostile camp at (${evt.record.tileX}, ${evt.record.tileY}) — attack from the map`
-                : rewardStr || null,
+                : rewardStr || xpStr || null,
           // lordId drives the Activity screen's "View quest" button — without
           // it the entry can only fall back to matching on lordName.
           lordId:   evt.lordId   || null,

@@ -110,6 +110,12 @@ const ActionConfirmView = (() => {
   // The only action with a parameter to choose, so the length picker lives
   // here and every number below reacts to it.
 
+  // Highest find tier this force can be offered at all — used only to phrase
+  // the "you are capped at tier N" note honestly.
+  function _bestTierFor(odds) {
+    return odds.tier3 > 0 ? 3 : odds.tier2 > 0 ? 2 : 1;
+  }
+
   function _questPanelHtml(lengthId) {
     const L    = DiscoveryRoll.lengthOf(lengthId);
     const secs = LordService.getActionDuration(_lord, 'search_area', L.id);
@@ -137,11 +143,28 @@ const ActionConfirmView = (() => {
                     : loudness < 0.67  ? 'Loud'
                     :                    'Unmissable';
 
+    // Expedition Rating band — needed BEFORE the rows because it now reshapes
+    // the discovery roll itself (find quality and the odds of coming back
+    // empty), not just which recruits will join. See RECRUIT_TIERS in
+    // discovery-roll.js. Leaving it below would have made the "chance of
+    // nothing" figure below silently wrong.
+    const er   = Math.round(DiscoveryRoll.expeditionRating(army.units, UNIT_DEFS));
+    const tier = DiscoveryRoll.erTierFor(er);
+    const next = [...DiscoveryRoll.RECRUIT_TIERS].reverse().find(t => t.er > er);
+
+    // Real odds, not multipliers. `outcomeOdds` runs the same two-stage maths
+    // rollDef does, so these percentages are what actually happens on this
+    // tile with this force — "18% of finds come back tier 3" is a number a
+    // player can act on; "rare finds ×2.60" is not.
+    const terrainId = _lord.x != null ? WorldService.getTerrain(_lord.x, _lord.y).id : 'plains';
+    const odds      = DiscoveryRoll.outcomeOdds(DISCOVERY_DEFS, terrainId, L.id, loudness, er);
+    const pctOfFind = key => odds.find > 0 ? (100 * odds[key] / odds.find) : 0;
+    const fmtOdds   = v => v <= 0 ? 'never' : v >= 10 ? `${v.toFixed(0)}%` : `${v.toFixed(1)}%`;
+
     const rows = [
       { label: `${gi('stopwatch')} Duration`,        value: TimeService.formatDuration(secs) },
       { label: `${gi('two-coins')} Reward`,          value: `×${(L.reward * (1 - F.reward * loudness)).toFixed(2)}` },
-      { label: `${gi('crystal-ball')} Rare finds`,   value: `×${L.legendary}` },
-      { label: `${gi('fog')} Chance of nothing`,     value: `×${(L.nothing * (1 + F.nothing * loudness)).toFixed(2)}`, warn: loudness > 0 },
+      { label: `${gi('fog')} Chance of nothing`,     value: `${Math.round(odds.nothing * 100)}%`, warn: loudness > 0 || tier.nothing > 1 },
       { label: `${gi('hazard-sign')} Ambush risk`,   value: `×${(L.risk * (1 + F.combat * loudness)).toFixed(2)}`, warn: loudness > 0 },
       {
         label: `${gi('crossed-swords')} Footprint`,
@@ -165,12 +188,9 @@ const ActionConfirmView = (() => {
       },
     ];
 
-    // Expedition Rating — what quality of recruit this force can attract, and
-    // whether there's room to actually keep one. Both halves matter: recruits
-    // that don't fit under the army cap are lost outright.
-    const er       = Math.round(DiscoveryRoll.expeditionRating(army.units, UNIT_DEFS));
-    const tier     = DiscoveryRoll.recruitTierFor(er);
-    const next     = [...DiscoveryRoll.RECRUIT_TIERS].reverse().find(t => t.er > er);
+    // Expedition Rating — what quality of FIND and of recruit this force can
+    // attract, and whether there's room to actually keep a recruit. All three
+    // matter: recruits that don't fit under the army cap are lost outright.
     const cap      = LordService.getArmyPowerCap(_lord);
     const headroom = Math.round(cap - armyPower);
     const heaviest = (tier.pool || []).reduce((m, id) => {
@@ -184,6 +204,15 @@ const ActionConfirmView = (() => {
       {
         label: `${gi('spy')} Expedition Rating`,
         value: next ? `${er} — ${tier.label} (${next.er} for ${next.label})` : `${er} — ${tier.label}`,
+      },
+      {
+        // The half of ER that used to be invisible: the same band that gates
+        // recruits also decides which tiers of find this force is offered at
+        // all. Shown as a share of FINDS, which is the question a player is
+        // actually asking — "when I find something, how good will it be".
+        label: `${gi('two-coins')} Find quality`,
+        value: `T1 ${fmtOdds(pctOfFind('tier1'))} · T2 ${fmtOdds(pctOfFind('tier2'))} · T3 ${fmtOdds(pctOfFind('tier3'))}`,
+        warn: pctOfFind('tier3') <= 0,
       },
       {
         label: `${gi('crossed-swords')} Room to recruit`,
@@ -201,6 +230,9 @@ const ActionConfirmView = (() => {
         : loudness > 0
         ? `<div class="acf-warn">${gi('hazard-sign')} A column this size can't sneak. It gets jumped more often, comes back empty more often, and the quiet finds stay hidden. Leave troops at home — or bring scouts, which carry far less weight for what they find.</div>`
         : `<div class="acf-note">${gi('spy')} Small enough to move unseen — full value from every find.</div>`}
+      ${pctOfFind('tier3') <= 0
+        ? `<div class="acf-note">${gi('spy')} ${tier.label} rating — this force will only ever be shown tier ${_bestTierFor(odds)} ground. The richer sites are not merely rarer for it, they are closed to it.${next ? ` ${next.er - er} more Expedition Rating reaches ${next.label} and opens the next tier — and scouts count double toward it.` : ''}</div>`
+        : ''}
       ${cantHold
         ? `<div class="acf-warn">${gi('hazard-sign')} Only ${headroom} PWR free — a ${heaviest.name} needs ${heaviestPwr} and would be turned away. Recruits that don't fit are lost, not queued. Disband or leave someone behind to make room.</div>`
         : ''}

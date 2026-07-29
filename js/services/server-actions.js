@@ -128,10 +128,11 @@ const ServerActions = (() => {
   }
 
   // POST /api/blessing/consecrate — consecrate a Temple blessing.
-  // Pays a gold offering and (re)starts the single active blessing.
+  // Pays a gold offering (charged per hour) and (re)starts the single active
+  // blessing for `hours`. The server caps hours at the highest Temple level.
   // Hydrates the player (coins + activeBlessing changed).
-  async function blessingConsecrate(blessingId) {
-    const result = await _post('/api/blessing/consecrate', { blessingId });
+  async function blessingConsecrate(blessingId, hours = 1) {
+    const result = await _post('/api/blessing/consecrate', { blessingId, hours });
     if (result.ok && result.player) {
       const players             = StorageService.get('players') || {};
       players[result.player.id] = _mergePlayer(result.player);

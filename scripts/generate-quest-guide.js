@@ -25,7 +25,7 @@
 //  single worst thing you can do — hence the solver below.
 // =============================================
 
-import { UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore, DiscoveryRoll } from '../server/engine-loader.js';
+import { UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore, DiscoveryRoll, DISCOVERY_DEFS } from '../server/engine-loader.js';
 import { writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -182,6 +182,63 @@ const tierRows = TIERS.map(t => `
     <td class="roster">${(t.pool || []).map(id => `${esc(UNIT_DEFS[id]?.name || id)} <span class="dim">(${Math.round(pwr(UNIT_DEFS[id] || {}))} PWR · ${UNIT_DEFS[id]?.goldCost || 0}g)</span>`).join(', ')}</td>
   </tr>`).join('');
 
+// ── What each ER band actually unlocks ────────────────────────
+// Exact odds from DiscoveryRoll.outcomeOdds (the same weights rollDef uses),
+// on plains at loudness 0. The point of this table is to show that the bands
+// are SOFT: every tier stays reachable at every rating, so "Common" is worse
+// odds, not a locked door.
+const ODDS_TERRAIN = 'plains';
+const bandRange = (t, i) => {
+  const above = TIERS[i - 1];               // next band up (TIERS is best-first)
+  return above ? `${t.er} – ${above.er - 1}` : `${t.er}+`;
+};
+const oddsFor = (t, lengthId) =>
+  DiscoveryRoll.outcomeOdds(DISCOVERY_DEFS, ODDS_TERRAIN, lengthId, 0, t.er);
+// Odds of a tier AS A SHARE OF FINDS, which is what a player actually feels —
+// "when I do find something, how good is it" — rather than a share of all rolls.
+const pctOfFinds = (o, key) => o.find > 0 ? (100 * o[key] / o.find) : 0;
+const fmtPct = v => v >= 10 ? v.toFixed(0) : v.toFixed(1);
+
+const unlockRows = TIERS.map((t, i) => {
+  const std  = oddsFor(t, 'standard');
+  const long = oddsFor(t, 'long');
+  const best = (t.pool || []).map(id => UNIT_DEFS[id]).filter(Boolean)
+    .reduce((m, d) => (!m || pwr(d) > pwr(m) ? d : m), null);
+  return `
+  <tr>
+    <td class="cell ${tierClass[t.id]}">${t.label}</td>
+    <td class="cell num">${bandRange(t, i)}</td>
+    <td class="cell num">${fmtPct(pctOfFinds(std, 'tier1'))}%</td>
+    <td class="cell num">${fmtPct(pctOfFinds(std, 'tier2'))}%</td>
+    <td class="cell num ${pctOfFinds(std, 'tier3') >= 10 ? 'good' : ''}">${fmtPct(pctOfFinds(std, 'tier3'))}%</td>
+    <td class="cell num">${fmtPct(pctOfFinds(long, 'tier3'))}%</td>
+    <td class="roster">${best ? `up to ${esc(best.name)} <span class="dim">(${Math.round(pwr(best))} PWR)</span>` : '—'}</td>
+  </tr>`;
+}).join('');
+
+// The same ER ladder's OTHER half — the declared find-tier distribution.
+const pctFlat = v => v <= 0 ? '—' : v >= 0.1 ? `${(v * 100).toFixed(0)}%` : `${(v * 100).toFixed(1)}%`;
+const findRows = TIERS.map(t => `
+  <tr>
+    <td class="cell ${tierClass[t.id]}">${t.label}</td>
+    <td class="cell num">${t.er}</td>
+    <td class="cell num">${pctFlat(t.tierOdds[1])}</td>
+    <td class="cell num">${pctFlat(t.tierOdds[2])}</td>
+    <td class="cell num ${t.tierOdds[3] > 0 ? 'good' : ''}">${pctFlat(t.tierOdds[3])}</td>
+    <td class="cell num ${t.nothing > 1 ? 'warnval' : ''}">×${t.nothing.toFixed(2)}</td>
+  </tr>`).join('');
+
+// Payout bands the find tiers actually pay, straight from the engine.
+const payRows = [1, 2, 3].map(tier => {
+  const r = DiscoveryRoll.TIER_RANGES[tier];
+  return `
+  <tr>
+    <td class="rowhead">Tier ${tier}</td>
+    <td class="cell num">${r.gold[0]}–${r.gold[1]}</td>
+    <td class="cell num">${r.res[0]}–${r.res[1]}</td>
+  </tr>`;
+}).join('');
+
 const lenRows = Object.values(DiscoveryRoll.LENGTHS).map(L => `
   <tr>
     <td class="rowhead">${L.label}</td>
@@ -263,6 +320,7 @@ const html = `<!doctype html>
   .dim { color:var(--dim); }
   .headroom { color:#7fdf7f; }
   .warnval { color:#cf9a8a; font-weight:bold; }
+  .good { color:#7fdf7f; font-weight:bold; }
   .roster { font-size:.85rem; color:#b8ab90; }
   .scout-tag { color:#d89060; font-size:.7rem; text-transform:uppercase; letter-spacing:.06em; }
   .gpe { color:var(--gold); font-weight:bold; }
@@ -285,7 +343,7 @@ const html = `<!doctype html>
   <p class="sub">Every number read live from the engine. Regenerate with <code>node scripts/generate-quest-guide.js</code>. Generated ${new Date().toLocaleString('en-GB')}.</p>
   <p class="nav"><a href="army-guide.html">⚔ Army Matchups</a><a href="raid-guide.html">🏴 Raiding Guide</a></p>
 
-  <p class="note"><b>Expeditions pull in two directions at once.</b> <b>Expedition Rating</b> is a floor pushing your army bigger — it gates which recruits you attract, and scouts count double toward it. <b>Footprint</b> is a ceiling pushing back — past 600 PWR you get ambushed more, come back empty more, and the quiet finds stay hidden. Past 800 PWR an ambush fields <em>more</em> power than you brought. And a recruit that won't fit under your army cap is lost outright, not queued.</p>
+  <p class="note"><b>Expeditions pull in two directions at once.</b> <b>Expedition Rating</b> is a floor pushing your army bigger — it gates <em>both</em> the quality of what you find and which recruits you attract, and scouts count double toward it. <b>Footprint</b> is a ceiling pushing back — past 600 PWR you get ambushed more, come back empty more, and the quiet finds stay hidden. Past 800 PWR an ambush fields <em>more</em> power than you brought. And a recruit that won't fit under your army cap is lost outright, not queued.</p>
   <p class="note">So the answer is never "bring everything" — it is a <b>scout-heavy force at roughly half your cap, with a small line escort to screen the lord</b>. A pure-scout party loses its lord about 43% of the time it's ambushed; adding a couple of line troops drops that to ~4%.</p>
 
   <div class="formula">
@@ -300,7 +358,8 @@ const html = `<!doctype html>
   <table>
     <thead><tr><th>Term</th><th>Means</th></tr></thead>
     <tbody>
-      <tr><td class="rowhead">ER</td><td><b>Expedition Rating</b> — <code>Σ unitPWR × (scout ? ${DiscoveryRoll.SCOUT_ER_MULT} : 1)</code>. Scout-trait units count double. This is the ONLY thing that decides which recruit tier an expedition can attract, and it is why a small scout party outperforms a big line army at finding things.</td></tr>
+      <tr><td class="rowhead">ER</td><td><b>Expedition Rating</b> — <code>Σ unitPWR × (scout ? ${DiscoveryRoll.SCOUT_ER_MULT} : 1)</code>. Scout-trait units count double. One rating, two jobs: it decides which <b>recruit tier</b> can turn up <em>and</em> how rich the <b>ground you are shown</b> is (see Find quality below). It is why a small scout party outperforms a big line army at finding things.</td></tr>
+      <tr><td class="rowhead">Find tier</td><td>Every discovery carries a loot tier 1–3, which decides its payout band. <b>ER decides which tiers you are offered at all</b> — the roll draws the tier from your band first, then picks a find of that tier that suits the terrain. A Common-rated force is offered tier 1 only; Legendary is offered tier 3 on ${pctFlat(DiscoveryRoll.RECRUIT_TIERS[0].tierOdds[3])} of its finds.</td></tr>
       <tr><td class="rowhead">PWR</td><td>A unit's combat power (<code>EconomyCore.getUnitPower</code>). Your army's total PWR is capped at <code>200 + 80 × lordLevel</code>.</td></tr>
       <tr><td class="rowhead">Headroom</td><td>Cap − army PWR. Free capacity to <em>receive</em> a recruit. A recruit that doesn't fit is <b>lost outright</b>, not queued.</td></tr>
       <tr><td class="rowhead">Loudness</td><td>How conspicuous the army is: 0 below ${DiscoveryRoll.QUIET_PWR} PWR, rising to 1.0 at ${DiscoveryRoll.LOUD_PWR}. Higher means more ambushes, more empty expeditions, and smaller find rewards.</td></tr>
@@ -314,7 +373,26 @@ const html = `<!doctype html>
   <h2>Best expedition army <span class="stage-meta">smallest force that reaches the best tier it can still hold</span></h2>
   ${STAGES.map(stageSection).join('')}
 
-  <h2>Recruit tiers</h2>
+  <h2>What your Expedition Rating unlocks <span class="stage-meta">nothing is ever locked — ER shifts the odds</span></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr>
+      <th>Band</th>
+      <th title="Your Expedition Rating must fall in this range to sit in this band.">ER range</th>
+      <th title="Share of FINDS that come back tier 1, on a Standard expedition.">T1 finds</th>
+      <th title="Share of FINDS that come back tier 2, on a Standard expedition.">T2 finds</th>
+      <th title="Share of FINDS that come back tier 3 — the big payouts — on a Standard expedition.">T3 finds</th>
+      <th title="Share of FINDS that come back tier 3 on a Long expedition.">T3 on Long</th>
+      <th>Best recruit possible</th>
+    </tr></thead>
+    <tbody>${unlockRows}</tbody>
+  </table>
+  </div>
+  <p class="note"><b>Tiers unlock — they are not merely weighted.</b> A <b>Common</b> force (ER under ${TIERS[TIERS.length - 2].er}) finds tier 1 and <em>nothing else</em>: tier 2 and tier 3 are closed to it outright. Reaching <b>Uncommon</b> opens tier 2 and a ${pctFlat(TIERS[2].tierOdds[3])} sliver of tier 3; <b>Rare</b> widens tier 3 to ${pctFlat(TIERS[1].tierOdds[3])}; <b>Legendary</b> takes it to ${pctFlat(TIERS[0].tierOdds[3])} and all but retires tier 1.</p>
+  <p class="note"><b>Why gate it rather than weight it?</b> A tier-3 find pays 25–50k resources before scaling. Handed to a level-2 lord that is roughly twenty times their whole economy — it doesn't reward the player, it erases the early game. In the other direction a tier-1 find pays 800–1500, which at endgame is rounding error and reads as a wasted expedition. So the tiers phase in <em>and</em> out, and Expedition Rating is the only thing that moves you between them.</p>
+  <p class="note">Two details worth knowing. The recruit <em>pool</em> is hard-limited to your band as well — a unit either walks into your camp or it doesn't. And terrain no longer decides how good a find is, only <em>which</em> find of that tier you get: ER draws the tier first, then terrain picks from it, so a marsh still can't hand you a marble quarry. Percentages are for ${ODDS_TERRAIN} at loudness 0 and are shares of finds — expeditions that come back empty, get ambushed or attract recruits are excluded, since those aren't finds.</p>
+
+  <h2>ER tiers ① — the recruits they attract</h2>
   <div class="tablewrap">
   <table>
     <thead><tr><th>Tier</th><th>ER needed</th><th>Headroom to reserve</th><th>Pool</th></tr></thead>
@@ -322,6 +400,30 @@ const html = `<!doctype html>
   </table>
   </div>
   <p class="note">Reserve = the PWR of the tier's heaviest unit. Bring less free capacity than that and the best find in the tier walks away.</p>
+
+  <h2>ER tiers ② — the ground they are shown</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr>
+      <th>Tier</th><th>ER needed</th>
+      <th title="Weight multiplier on tier-1 discoveries — the modest finds.">Poor finds</th>
+      <th title="Weight multiplier on tier-2 discoveries.">Good finds</th>
+      <th title="Weight multiplier on tier-3 discoveries — the big payouts.">Rich finds</th>
+      <th title="Weight multiplier on coming back empty-handed.">Nothing</th>
+    </tr></thead>
+    <tbody>${findRows}</tbody>
+  </table>
+  </div>
+  <p class="note"><b>The same rating, applied twice.</b> ER used to gate recruits and nothing else, so what you <em>found</em> was pure lottery — a naked level-1 lord had the same odds of a tier-3 vault as an 800-ER scout column. Now the band that decides who joins you also decides how rich the ground is. Multipliers stack on top of terrain, so ER buys better odds on ground that could have held the find — it never conjures a marble quarry out of a marsh.</p>
+
+  <h2>What each find tier pays <span class="stage-meta">before level, length, depletion and footprint scaling</span></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Find tier</th><th>Gold</th><th>Each resource</th></tr></thead>
+    <tbody>${payRows}</tbody>
+  </table>
+  </div>
+  <p class="note">Lord level adds +${Math.round(100 * DiscoveryRoll.LEVEL_SCALAR_PER_LEVEL)}% per level above 1, and expedition length multiplies on top (×${DiscoveryRoll.LENGTHS.long.reward} on Long). A level-10 lord on a Long expedition therefore multiplies these by ~${((1 + DiscoveryRoll.LEVEL_SCALAR_PER_LEVEL * 9) * DiscoveryRoll.LENGTHS.long.reward).toFixed(1)}×.</p>
 
   <h2>Expedition length — your bet</h2>
   <div class="tablewrap">

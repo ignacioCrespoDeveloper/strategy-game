@@ -30,8 +30,12 @@ import { fileURLToPath } from 'url';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const esc  = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-// Mirrors server/tick/catch-up.js _raidHourlyRewards (module-private there).
-const raidRates = lvl => ({ gold: Math.round(25 + lvl * 5), res: Math.round(15 + lvl * 3) });
+// THE rate, straight from EconomyCore — the same call the server pays out
+// with and the lord screen previews. This used to be a hand-synced copy.
+const raidRates = lvl => {
+  const r = EconomyCore.getRaidHourlyRewards(lvl);
+  return { gold: r.gold, res: r.food };
+};
 
 const DURATIONS = STANCE_DEFS.raiding?.durations || [3600, 14400, 28800, 86400];
 const fmtDur = s => s >= 86400 ? `${Math.round(s / 86400)}d` : s >= 3600 ? `${Math.round(s / 3600)}h` : `${Math.round(s / 60)}m`;
@@ -150,7 +154,7 @@ const html = `<!doctype html>
     <tbody>${payoutRows}</tbody>
   </table>
   </div>
-  <p class="note">Formula: <code>gold = 25 + 5 × level</code>, <code>each resource = 15 + 3 × level</code> per hour — food, wood and stone all accrue at the same rate, so "×3" is the combined resource total. A God of Destruction blessing multiplies the whole payout by its <code>raid_bonus</code>.</p>
+  <p class="note">Formula: <code>gold = ${EconomyCore.RAID_BASE.gold} + ${EconomyCore.RAID_PER_LEVEL.gold} × level</code>, <code>each resource = ${EconomyCore.RAID_BASE.res} + ${EconomyCore.RAID_PER_LEVEL.res} × level</code> per hour — food, wood and stone all accrue at the same rate, so "×3" is the combined resource total. A God of Destruction blessing multiplies the whole payout by its <code>raid_bonus</code>.</p>
 
   <h2>Finishing early with credits</h2>
   <div class="tablewrap">
