@@ -239,8 +239,8 @@ const TRAIT_DEFS = {
   berserk: {
     id:          'berserk',
     name:        'Berserk',
-    description: 'Fights with reckless fury — deals increasing damage the more wounded it becomes.',
-    hook:        'onAttack.bonusWhenWounded',
+    description: 'Fights with reckless fury, heedless of its own life — deals 30% more damage in melee.',
+    hook:        'onAttack.meleeFury',
   },
 
   duelist: {
@@ -253,15 +253,15 @@ const TRAIT_DEFS = {
   aggressive: {
     id:          'aggressive',
     name:        'Aggressive',
-    description: 'Eager for battle — gains an attack bonus in the opening rounds of combat.',
-    hook:        'onRoundStart.earlyRoundAttackBonus',
+    description: 'Always spoiling for a scrap — deals 20% more damage in melee.',
+    hook:        'onAttack.meleeAggression',
   },
 
   impact: {
     id:          'impact',
     name:        'Impact',
-    description: 'A charge that knocks enemy formations off balance, disrupting their footing.',
-    hook:        'onCavalryPhase.knockbackBonus',
+    description: 'The charge lands like a rockslide — significantly stronger charge damage.',
+    hook:        'onCavalryPhase.impactCharge',
   },
 
   poison: {

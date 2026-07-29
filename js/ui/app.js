@@ -64,6 +64,9 @@ const App = (() => {
             // OverviewScreen._flushSyncEvents. (Shared with syncNow() so both
             // sync paths surface offline quest results identically.)
             DiscoveryService.ingestSyncEvents(session.user.id, events);
+            // Same deal for raid payouts that landed while offline — the feed
+            // entry is the only report a completed raid ever produces.
+            ActivityService.ingestSyncEvents(session.user.id, events);
           }
         }
       } catch (_) {
@@ -115,7 +118,7 @@ const App = (() => {
   // that landed 5 seconds ago until the next unrelated action or poll tick.
   const _SYNC_ON_ENTER = new Set([
     'map', 'city', 'lord-screen', 'overview', 'activity',
-    'tech-tree', 'attack-confirm', 'rankings', 'clan', 'research',
+    'tech-tree', 'attack-confirm', 'action-confirm', 'rankings', 'clan', 'research',
   ]);
 
   async function _goto(screen, data) {
@@ -194,6 +197,11 @@ const App = (() => {
         Nav.show(data.player, data.lord, 'map');
         AttackConfirmView.render(root, data);
         break;
+      case 'action-confirm':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'overview');
+        ActionConfirmView.render(root, data);
+        break;
       case 'battle-simulator':
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'battle-simulator');
@@ -208,6 +216,11 @@ const App = (() => {
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'clan');
         ClanScreen.render(root, data);
+        break;
+      case 'account':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'account');
+        AccountScreen.render(root, data);
         break;
       default:
         Nav.hide();

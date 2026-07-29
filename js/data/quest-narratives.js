@@ -57,7 +57,7 @@ var QUEST_DEF_NARRATIVES = {
     "Your outriders found the warcamp the hard way — nearly stumbling into a patrol. They pulled back and reported: a full orc warband, war standards raised, preparing to march on something.",
   ],
   dark_elf_raiders: [
-    "Silent movement in the shadows resolved itself into something worse — a dark elf raiding party, resting before their next strike. Black armour, blades like obsidian, and cold eyes that missed nothing.",
+    "Silent movement in the shadows resolved itself into something worse — a Dark Elven raiding party, resting before their next strike. Black armour, blades like obsidian, and cold eyes that missed nothing.",
     "Your scouts picked up the trail of corpses first — a farmstead, a courier, a small patrol, all taken apart with the precision that only druchii show. The raiding party was camped nearby, confident no one would find them.",
   ],
   dwarf_expedition: [

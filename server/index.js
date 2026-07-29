@@ -14,7 +14,7 @@ import 'dotenv/config';
 import express              from 'express';
 import { fileURLToPath }    from 'url';
 import { dirname, join }    from 'path';
-import { resolvePvpAttack, scanTile, scanPresence, scanIncomingAttacks } from './combat-resolver.js';
+import { resolvePvpAttack, scanPresence, scanIncomingAttacks } from './combat-resolver.js';
 import { runDispatch } from './tick/event-dispatcher.js';
 import { BattleEngine, UNIT_DEFS } from './engine-loader.js';
 import { syncPlayerState }         from './sync.js';
@@ -26,19 +26,25 @@ import { handleRecruit }           from './actions/recruit.js';
 import { handleLordAction }        from './actions/lord-action.js';
 import { handleLordCreate }        from './actions/lord-create.js';
 import { handleCityFound }         from './actions/city-found.js';
-import { handleHireMerc }          from './actions/hire-merc.js';
+// hire-merc.js is gone: buying mercenaries required a discovered bandit camp
+// to buy them FROM, and camps were retired with the expedition rework.
+// Mercenaries now join via the expedition Recruits outcome instead, gated by
+// Expedition Rating rather than gold. Removed 2026-07-29.
 import { handleLordRevive }        from './actions/lord-revive.js';
 import { handleLordRansom }        from './actions/lord-ransom.js';
 import { handleLordRelease }       from './actions/lord-release.js';
 import { handleLordPrisonList }    from './actions/lord-prison-list.js';
 import { handleArmyDisband }       from './actions/army-disband.js';
+import { handleArmyTransfer }      from './actions/army-transfer.js';
 import { handleInstantBuild }      from './actions/instant-build.js';
 import { handleInstantRecruit }    from './actions/instant-recruit.js';
 import { handleCancelBuild }       from './actions/cancel-build.js';
 import { handleCancelRecruit }     from './actions/cancel-recruit.js';
 import { handleCancelAction }      from './actions/cancel-action.js';
 import { runRankingUpdate }        from './tick/ranking-updater.js';
-import { handlePveAttack }         from './actions/pve-attack.js';
+// pve-attack.js is gone: combat expedition finds resolve as an immediate
+// ambush inside catch-up.js now, so no camp is ever written to the map and
+// there is nothing left to attack. Removed 2026-07-29.
 import { handleInstantAction }     from './actions/instant-action.js';
 import { handleSetRace }           from './actions/set-race.js';
 import { handleLordTalents }       from './actions/lord-talents.js';
@@ -100,25 +106,14 @@ app.post('/api/sync', _safe(syncPlayerState));
 
 app.post('/api/pvp/resolve',         _safe(resolvePvpAttack));
 
-// ── Tile scan API ─────────────────────────────────────────────
+// POST /api/scan/presence — live, strength-free "there is a lord here" layer
+// for the whole map, carrying owner identity (already public) but never army
+// size. Cities have an equivalent already via the global world_state table.
+// Anything beyond existence + owner requires a scout report.
 //
-//  POST /api/scan/tile
-//  Headers: Authorization: Bearer <supabase_access_token>
-//  Body:    { tileX, tileY }
-//
-//  Returns: { ok, discoveries: [{ type, tileX, tileY, ttl, rawData }] }
-//
-//  Called client-side when a Search Area action completes.
-//  The server uses the service role key to read all players' lords on
-//  the given tile and returns only those that pass the canBeAttacked()
-//  visibility check. The client never has access to enemy army sizes
-//  (RLS prevents it), so this check must be server-side.
-//
-app.post('/api/scan/tile', _safe(scanTile));
-
-// POST /api/scan/presence — live, zero-stats "is there a lord here"
-// existence layer for the whole map. Cities have an equivalent already
-// via the global world_state table; this covers lords.
+// (The old POST /api/scan/tile lived here. It was the second entry point for
+// the client-supplied `knownTiers` fog-of-war ladder, had no caller left after
+// the Scout action took over, and went with that system.)
 app.post('/api/scan/presence', _safe(scanPresence));
 
 // POST /api/attack/incoming — derived list of enemy attack-marches heading
@@ -138,18 +133,17 @@ app.post('/api/city/recruit',  _safe(handleRecruit));
 app.post('/api/city/found',    _safe(handleCityFound));
 app.post('/api/lord/action',   _safe(handleLordAction));
 app.post('/api/lord/create',   _safe(handleLordCreate));
-app.post('/api/lord/hire-merc', _safe(handleHireMerc));
 app.post('/api/lord/revive',   _safe(handleLordRevive));
 app.post('/api/lord/ransom',       _safe(handleLordRansom));
 app.post('/api/lord/release',      _safe(handleLordRelease));
 app.post('/api/lord/prison-list',  _safe(handleLordPrisonList));
 app.post('/api/army/disband',        _safe(handleArmyDisband));
+app.post('/api/army/transfer',       _safe(handleArmyTransfer));
 app.post('/api/city/instant-build',  _safe(handleInstantBuild));
 app.post('/api/city/instant-recruit', _safe(handleInstantRecruit));
 app.post('/api/city/cancel-build',   _safe(handleCancelBuild));
 app.post('/api/city/cancel-recruit', _safe(handleCancelRecruit));
 app.post('/api/lord/cancel-action',  _safe(handleCancelAction));
-app.post('/api/lord/pve-attack',     _safe(handlePveAttack));
 app.post('/api/lord/instant-action', _safe(handleInstantAction));
 app.post('/api/player/set-race',     _safe(handleSetRace));
 app.post('/api/lord/talents',        _safe(handleLordTalents));

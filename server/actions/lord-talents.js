@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_BASE_STATS, TALENT_POOL } from '../engine-loader.js';
+import { LORD_BASE_STATS, TALENT_POOL, lordStatGain } from '../engine-loader.js';
 
 export async function handleLordTalents(req, res) {
   const { lordId, talentId, statKey, statPoints } = req.body || {};
@@ -46,8 +46,11 @@ export async function handleLordTalents(req, res) {
     if ((lord.talentPoints || 0) < pts) {
       return res.status(400).json({ ok: false, error: `Not enough talent points (have ${lord.talentPoints || 0}, need ${pts}).` });
     }
+    // Not `+ pts`: each stat has its own per-point gain (lordStatGain), because
+    // health is on a ~100-based scale and everything else on a 5–20 one, so a
+    // flat +1 made health a wasted point. Health moves +15 per point.
     lord.baseStats        = lord.baseStats || { ...LORD_BASE_STATS };
-    lord.baseStats[statKey] = (lord.baseStats[statKey] ?? LORD_BASE_STATS[statKey]) + pts;
+    lord.baseStats[statKey] = (lord.baseStats[statKey] ?? LORD_BASE_STATS[statKey]) + lordStatGain(statKey, pts);
     lord.talentPoints      = (lord.talentPoints || 0) - pts;
   }
 

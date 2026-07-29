@@ -2,7 +2,8 @@
 //  actions/lord-action.js — POST /api/lord/action
 //
 //  Body (move):        { lordId, action: 'move',        destX, destY, intent? }
-//  Body (search_area): { lordId, action: 'search_area' }
+//  Body (search_area): { lordId, action: 'search_area', length? }
+//                      length: 'short' | 'standard' | 'long' (default standard)
 //  Body (scout):        { lordId, action: 'scout' }
 //
 //  Validates and enqueues the action server-side,
@@ -11,7 +12,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL, EconomyCore } from '../engine-loader.js';
+import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL, EconomyCore, DiscoveryRoll } from '../engine-loader.js';
 
 // Base scout duration before the speed multiplier — mirrors move's own
 // distance*20*(5/speed) curve so speed behaves consistently everywhere.
@@ -33,24 +34,32 @@ function _isStanced(lord) {
   return !!(lord.stance?.id && lord.stance.id !== 'idle' && Date.now() < lord.stance.finishAt);
 }
 
-function _searchDuration(lordId, fatigueMap) {
+// ── Tile depletion (was: per-lord search fatigue) ──────────────
+// The 'search_fatigue' storage key is now keyed by TILE ("x,y"), not by lord.
+// It used to hold { [lordId]: {count,date} } and drive a punishing duration
+// ladder (5m → 15m → 30m as a lord quested more). Expedition length is now the
+// player's own choice, so the same counter instead drives DIMINISHING RETURNS
+// on the tile being searched: repeat expeditions on one spot strip it bare and
+// moving on restores full value. Old lord-keyed rows simply read as unknown
+// tiles (count 0) and age out on the next date rollover — no migration needed.
+function _tileKey(x, y) { return `${x},${y}`; }
+
+function _tileSearchCount(x, y, fatigueMap) {
   const today = new Date().toISOString().slice(0, 10);
-  const f     = fatigueMap?.[lordId];
-  const count = (f && f.date === today) ? f.count : 0;
-  if (count < 8)  return 300;
-  if (count < 15) return 900;
-  return 1800;
+  const f     = fatigueMap?.[_tileKey(x, y)];
+  return (f && f.date === today) ? f.count : 0;
 }
 
-function _incrementFatigue(lordId, fatigueMap) {
-  const today  = new Date().toISOString().slice(0, 10);
-  const curr   = fatigueMap?.[lordId];
-  const count  = (curr && curr.date === today) ? curr.count : 0;
-  return { ...(fatigueMap || {}), [lordId]: { count: count + 1, date: today } };
+function _incrementTile(x, y, fatigueMap) {
+  const today = new Date().toISOString().slice(0, 10);
+  const key   = _tileKey(x, y);
+  const curr  = fatigueMap?.[key];
+  const count = (curr && curr.date === today) ? curr.count : 0;
+  return { ...(fatigueMap || {}), [key]: { count: count + 1, date: today } };
 }
 
 export async function handleLordAction(req, res) {
-  const { lordId, action, destX, destY, intent } = req.body || {};
+  const { lordId, action, destX, destY, intent, length } = req.body || {};
   if (!lordId || !action) {
     return res.status(400).json({ ok: false, error: 'Missing lordId or action' });
   }
@@ -123,13 +132,27 @@ export async function handleLordAction(req, res) {
       return res.status(400).json({ ok: false, error: 'Your lord has no position. Found a city first.' });
     }
 
-    const cls      = LORD_CLASSES[lord.classId];
-    const mult     = cls?.passive?.effects?.searchDurationMult ?? 1;
-    const baseSecs = _searchDuration(lordId, extras.search_fatigue);
-    const secs     = Math.round(baseSecs * mult);
+    // Expedition length is the player's bet: longer = bigger payout, better
+    // rare odds, more risk. Unknown/absent values fall back to Standard rather
+    // than erroring, so an older client keeps working.
+    const len = DiscoveryRoll.lengthOf(length);
 
-    lord.actionQueue    = [{ actionId: 'search_area', startedAt: now, finishAt: now + secs * 1000 }];
-    updatedFatigue      = _incrementFatigue(lordId, extras.search_fatigue);
+    const cls  = LORD_CLASSES[lord.classId];
+    const mult = cls?.passive?.effects?.searchDurationMult ?? 1;
+    const secs = Math.round(len.secs * mult);
+
+    // Depletion is resolved HERE, at enqueue, not at resolution: the player is
+    // told what this tile is still worth before committing. It also keeps
+    // catch-up.js free of any storage dependency — it just reads the number
+    // stamped on the queue item.
+    const priorSearches = _tileSearchCount(lord.x, lord.y, extras.search_fatigue);
+    const depletion     = DiscoveryRoll.depletionFor(priorSearches);
+
+    lord.actionQueue = [{
+      actionId: 'search_area', startedAt: now, finishAt: now + secs * 1000,
+      length: len.id, depletion, priorSearches,
+    }];
+    updatedFatigue = _incrementTile(lord.x, lord.y, extras.search_fatigue);
 
   } else if (action === 'scout') {
     if (_isStanced(lord)) {

@@ -26,14 +26,16 @@ node scripts/test-balance.js
 ```
 
 Builds an army for every race × strategy archetype (swarm / elite /
-balanced-combined-arms) under the same gold budget and PWR cap, then runs a
-full round-robin through the REAL battle engine (48 fights per pair per
+balanced-combined-arms / blocks-regiments) under the same gold budget and
+PWR cap, at THREE progression stages (start / midgame / endgame), then runs
+a full round-robin through the REAL battle engine (96 fights per pair per
 direction — below ~40 reps the engine's randomness swings a combo's win
 rate by ±5 points, more than the effects being tuned). Thresholds it
-enforces (regression guards, tuned 2026-07-27 when all of them passed):
+enforces (regression guards; race band per Nacho's 2026-07-29 rule):
 
-- every race's pooled win rate within **35–65%**
-- no race+strategy combo above **72%** or below **25%**
+- every race's pooled win rate within **38–62%** at EVERY stage
+  (design target 40–60; the extra ±2 absorbs sampling noise)
+- no endgame race+strategy combo above **74%** or below **25%**
 
 Run it after touching `js/data/units.js` combat stats/traits,
 `EconomyCore.getUnitPower`'s trait tax table, or anything in
@@ -46,10 +48,25 @@ everyone before round 1.
 
 The script has a `DEFERRED_RACES` escape hatch: a race listed there
 reports an out-of-band result as a ⏭ skip instead of a failure. It is
-currently EMPTY (the dark elf review landed 2026-07-27 — root cause was
+currently EMPTY (the Dark Elves review landed 2026-07-27 — root cause was
 speed being over-weighted in the PWR formula, fixed to ×0.5 in
 `EconomyCore.getUnitPower`). Only add a race with an explicit design
 decision to defer it.
+
+## Army transfer core tests (fast, no server needed)
+
+```bash
+node scripts/test-army-transfer.js
+```
+
+Unit-tests the stack math behind `POST /api/army/transfer` (the same-tile
+troop exchange between two of a player's lords). `server/army-transfer-core.js`
+is deliberately import-free so these run with plain node in <1s: partial
+moves take fresh models first, the wounded front model only travels when
+asked for (or the whole stack moves), merging two wounded stacks keeps the
+lower HP (no damage-washing), and duplicate move rows can't overdraw a
+stack in aggregate. Run it after touching `army-transfer-core.js` or
+`server/actions/army-transfer.js`.
 
 ## Running it
 
@@ -125,31 +142,31 @@ called directly against a lord you've manually confirmed is captured
 (e.g. via the admin/service-role Supabase client already set up in the
 script) instead of depending on live combat RNG.
 
-## Known gap: ambush is untestable via the public API (found while writing this suite)
+## History note: the Ambush stance (found broken 2026-07-25, removed 2026-07-29)
 
-There is currently **no real way for ambush stance to ever be observed
-server-side**, for anyone, not just this test script:
+This suite originally documented a known gap: the Ambush stance could never
+be observed server-side by anyone. Entering it only mutated `localStorage`
+(`js/core/storage.js`'s `SERVER_KEYS` skips syncing `'lords'` writes), no
+`raid-start`-style endpoint existed to write it server-side, and
+`resolveScout()` — the only consumer — read the Supabase `lords` row that
+never carried it. The stance was a silent no-op sold to the player.
 
-- Entering ambush (`LordService.enterStance(lord, 'ambush', secs)`,
-  `js/domain/lord.js`) only ever mutates `localStorage` and saves via
-  `StorageService.set('lords', ...)`.
-- `StorageService`'s `SERVER_KEYS` set includes `'lords'`
-  (`js/core/storage.js`), and `set()` explicitly **skips queuing a Supabase
-  sync for any key in that set** — so an ambush stance change never reaches
-  the server at all.
-- `resolveScout()` (`server/combat-resolver.js`) — the only code that checks
-  for an ambushing lord — reads the *Supabase* `lords` row for other
-  players. Since ambush never gets there, this branch can never fire for a
-  real account today.
+The design call (2026-07-29) was to **remove the stance entirely** rather
+than build the missing endpoint: ambushes now exist only as the PvE
+expedition outcome (`server/tick/catch-up.js`'s `_resolveAmbush`), which
+Test 5's quest path exercises. `resolveScout()` no longer intercepts anyone —
+scouting is always safe and always returns intel.
 
-Compare this to raiding, which has a dedicated `server/actions/raid-start.js`
-endpoint that writes the stance server-side — ambush has no equivalent. This
-looks like an unfinished feature rather than an intentional restriction.
-**Not fixed as part of this test suite** (out of scope — this doc/script is
-about verification, not shipping a fix) but flagged here and in project
-memory so it doesn't get lost. If/when a real `/api/lord/ambush-start`-style
-endpoint gets built, add a Test 9 here: position an ambusher, then have
-another account `scout` onto that tile and assert `outcome === 'ambushed'`.
+## Known gap: `/api/army/transfer` has no integration test yet (2026-07-28)
+
+The same-tile troop exchange (`server/actions/army-transfer.js`) ships with
+unit tests only for its math core: `server/army-transfer-core.js` is
+deliberately import-free so damaged-model/merge edge cases can be tested with
+plain node (no server, no Supabase). The endpoint's *validation* layer (same
+tile, not downed/busy/stanced, PWR cap incl. training queues, legendary level
+gate) is untested end-to-end. A natural scenario for this suite: give one
+account two lords on one tile, transfer a stack, assert both `armies` rows via
+`readStorage()`, then assert a transfer to a lord one tile away is refused.
 
 ## Extending this suite
 

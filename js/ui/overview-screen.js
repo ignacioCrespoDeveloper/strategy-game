@@ -92,6 +92,11 @@ const OverviewScreen = (() => {
       lord_recovered:        e => `❤️ ${e.lordName} has recovered`,
       blessing_lapsed:       e => `⛪ ${(typeof BLESSING_DEFS !== 'undefined' && BLESSING_DEFS[e.blessingId]?.name) || 'Your blessing'} has lapsed`,
       lord_action_done:      e => e.destX != null ? `🗺️ ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
+      raid_complete:         e => {
+        const r     = e.resources || {};
+        const extra = ['food', 'wood', 'stone'].filter(k => r[k] > 0).map(k => `+${r[k]} ${k}`).join(', ');
+        return `🏴 ${e.lordName || 'Your lord'}'s raid ended: +${e.goldEarned || 0} gold${extra ? `, ${extra}` : ''}`;
+      },
       pvp_resolved:          e => {
         const icon = e.report?.winner === 'attacker' ? '⚔️' : e.report?.winner === 'draw' ? '🤝' : '💀';
         const lbl  = e.report?.winner === 'attacker' ? 'PvP Victory' : e.report?.winner === 'draw' ? 'PvP Draw' : 'PvP Defeat';
@@ -742,7 +747,7 @@ const OverviewScreen = (() => {
       : isRaiding   ? ' ov-lord-card--raiding'
       : '';
 
-    const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || lord.portrait || race.portrait;
+    const portraitSrc  = lord.portrait || pickLordPortrait(lord.race, lord.classId, lord.id) || race.portrait;
     const portraitHtml = portraitSrc
       ? `<div class="ov-lc-portrait">
            <img class="ov-lc-portrait-img" src="${portraitSrc}" alt="${lord.name}" loading="lazy" />
@@ -976,8 +981,7 @@ const OverviewScreen = (() => {
     if (!cityId) { errorEl.textContent = 'Please choose a starting city.'; return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Recruiting…'; }
 
-    const portrait = pickLordPortrait(_player?.race, classId);
-    const result = await ServerActions.createLord(name, classId, cityId, portrait);
+    const result = await ServerActions.createLord(name, classId, cityId);
     if (!result.ok) {
       errorEl.textContent = result.error || 'Server error';
       if (btn) { btn.disabled = false; btn.textContent = 'Create Lord'; }

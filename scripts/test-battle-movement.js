@@ -21,12 +21,10 @@
 //    - server/.env populated (SUPABASE_URL, SUPABASE_ANON_KEY,
 //      SUPABASE_SERVICE_ROLE_KEY) — same file the server itself uses
 //
-//  Ambush is NOT covered here — see "Known gaps" in TESTING.md.
-//  Entering ambush stance is a client-only mutation that never
-//  reaches Supabase (js/core/storage.js's SERVER_KEYS skips syncing
-//  'lords' writes), so there is currently no real endpoint that
-//  makes a lord observably ambush-stanced server-side. That's a
-//  product bug, not a gap in this script — see TESTING.md.
+//  The Ambush STANCE was removed from the game on 2026-07-29 (it was
+//  client-only and never observable server-side — see TESTING.md's
+//  history note). Ambushes now exist only as the PvE expedition
+//  outcome, which Test 5's quest path exercises.
 // =============================================================
 
 import { config } from 'dotenv';
@@ -153,6 +151,35 @@ async function moveTo(token, lordId, destX, destY, intent) {
   const body = { lordId, action: 'move', destX, destY };
   if (intent) body.intent = intent;
   return api('/api/lord/action', token, body);
+}
+
+// Give a lord an army outright, as test setup.
+//
+// These tests need a non-empty army on both sides — combat-resolver.js's
+// "army-less lords don't exist for combat" rule means a lord with no units
+// isn't even a valid defender. Every in-game route to one is unsuitable as a
+// fixture: city recruitment takes real minutes, and expedition Recruits are
+// random and gated by Expedition Rating.
+//
+// This used to call /api/lord/hire-merc (buy a mercenary for gold), but that
+// mechanic was removed with the bandit camps on 2026-07-29 — leaving the tests
+// driving an endpoint no player could reach. Writing the armies key directly
+// is the same approach the food top-up in createTestAccount already uses, and
+// it keeps these tests measuring COMBAT rather than how the army was acquired.
+async function giveArmy(acct, unitId, count) {
+  const armies = (await readStorage(acct.userId, 'armies')) || {};
+  const army   = armies[acct.lordId] || { lordId: acct.lordId, units: [] };
+  const stack  = army.units.find(u => u.unitId === unitId);
+  if (stack) stack.count += count;
+  else army.units.push({ unitId, count });
+  armies[acct.lordId] = army;
+
+  const { error } = await admin.from('storage').upsert(
+    { player_id: acct.userId, key: 'armies', value: armies },
+    { onConflict: 'player_id,key' },
+  );
+  if (error) throw new Error(`giveArmy(${acct.label}) failed: ${error.message}`);
+  return army;
 }
 
 // ── cleanup ──────────────────────────────────────────────────────
@@ -282,12 +309,9 @@ async function main() {
       // garrison to fight. Dave gets a bigger stack so the odds favor him
       // winning (and having a shot at capturing a defender) rather than
       // leaving this to a coin flip.
-      await api('/api/lord/hire-merc', bob.token, { lordId: bob.lordId, unitId: 'bandits' });
-      await api('/api/lord/hire-merc', carol.token, { lordId: carol.lordId, unitId: 'bandits' });
-      for (let i = 0; i < 5; i++) {
-        const hire = await api('/api/lord/hire-merc', dave.token, { lordId: dave.lordId, unitId: 'bandits' });
-        if (!hire.ok) { info(`hire-merc for Dave failed on attempt ${i + 1}: ${hire.error}`); break; }
-      }
+      await giveArmy(bob,   'bandits', 1);
+      await giveArmy(carol, 'bandits', 1);
+      await giveArmy(dave,  'bandits', 5);
       const daveArmy = await readStorage(dave.userId, 'armies');
       info(`Dave's army before attack: ${JSON.stringify(daveArmy?.[dave.lordId]?.units)}`);
 
@@ -404,7 +428,22 @@ async function main() {
       // army too ("army-less lords don't exist for combat" — same rule
       // Test 3 hit for the defenders) — without this, Eve's arrival
       // resolves as outcome:'no_army' and never touches Dave's raid at all.
-      await api('/api/lord/hire-merc', eve.token, { lordId: eve.lordId, unitId: 'bandits' });
+      await giveArmy(eve, 'bandits', 1);
+
+      // Eve quested back in Test 5, and a quest can now END IN A BATTLE — a
+      // combat find is resolved immediately as an ambush (catch-up.js's
+      // _resolveAmbush) instead of leaving a camp on the map. She questioned
+      // with no army, and a lord with nothing to screen it loses that fight
+      // often, which leaves her in an hour of 'defeated' downtime and unable
+      // to move. That would fail this test for a reason with nothing to do
+      // with raid-vs-arrival, so clear it first and measure what Test 8 is
+      // actually about. Revive costs credits; the test accounts have 9999.
+      const eveLordsPre = await readStorage(eve.userId, 'lords');
+      const eveDownUntil = eveLordsPre?.[eve.lordId]?.downtimeUntil || 0;
+      if (eveDownUntil > Date.now()) {
+        const rev = await api('/api/lord/revive', eve.token, { lordId: eve.lordId });
+        info(`Eve was downed by a quest ambush — revived: ${rev.ok ? 'yes' : 'no (' + rev.error + ')'}`);
+      }
 
       const eveMove = await moveTo(eve.token, eve.lordId, interceptTile.x, interceptTile.y);
       assert('Eve pre-positions near the future raid tile', eveMove.ok, eveMove.error);
@@ -440,9 +479,6 @@ async function main() {
       assert('Dave’s raid-vs-arrival combat actually resolved (pvp_result logged for Eve)', !!fightEntry, `activity_feed: ${JSON.stringify((eveFeed?.[eve.userId] || []).slice(0, 2))}`);
       info(`Dave's stance after Eve's arrival: ${stanceAfter} (idle = Eve won, raid forfeited; raiding = Dave won, raid continues)`);
     }
-
-    section('Ambush');
-    skip('ambush stance interaction', 'entering ambush is a client-only mutation that never reaches Supabase (see TESTING.md) — not reachable via any /api/* route today');
 
   } catch (err) {
     console.error('\nFATAL: test run aborted early:', err);

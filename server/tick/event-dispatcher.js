@@ -24,9 +24,10 @@ import {
   LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS,
   BUILDING_DEFS, RACES, EconomyCore,
   TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
+  pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT,
 } from '../engine-loader.js';
 
-const _ENGINE   = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS };
+const _ENGINE   = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT };
 const SYNC_KEYS = ['players', 'lords', 'cities', 'armies'];
 
 function _admin() {
@@ -79,10 +80,9 @@ async function _advancePlayer(admin, playerId) {
   }
 
   // Drain any pending scout resolutions (offline case — the player's browser
-  // was closed when the scout action completed). No knownTiers available
-  // here, so an offline-resolved scout always comes back at 'vague' tier
-  // (unless Rogue) — same limitation search_area's offline path already has
-  // for tier progression, not a new gap.
+  // was closed when the scout action completed). resolveScout stashes the
+  // report on the lord itself, so nothing depends on a client being here to
+  // receive it; sync.js delivers it whenever the player next connects.
   for (const lord of Object.values(result.lords)) {
     if (!lord?.pendingScoutResolve) continue;
     const { tileX, tileY } = lord.pendingScoutResolve;

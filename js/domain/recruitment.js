@@ -56,10 +56,11 @@ const RecruitmentService = (() => {
     return available;
   }
 
-  function getAvailableFromDiscoveries(playerId) {
-    return DiscoveryService.getActive(playerId)
-      .filter(r => CAMP_DEFS[r.definitionId]?.mercenaryRoster?.length > 0);
-  }
+  // getAvailableFromDiscoveries() lived here — it listed the mercenaries a
+  // player could hire from an active bandit-camp discovery. Camps no longer
+  // exist (combat finds resolve immediately as ambushes), and mercenaries now
+  // JOIN via the expedition Recruits outcome rather than being bought, so
+  // there is nothing for it to return. Removed 2026-07-29.
 
   // Complete any finished batches. Adds units to the lord's army.
   function tick(city) {
@@ -96,7 +97,7 @@ const RecruitmentService = (() => {
   }
 
   return {
-    getAvailableFromCity, getAvailableFromDiscoveries,
+    getAvailableFromCity,
     tick, timeRemaining, progress,
   };
 })();

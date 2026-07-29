@@ -357,9 +357,9 @@ var DISCOVERY_DEFS = {
 
   dark_elf_raiders: {
     id:          'dark_elf_raiders',
-    name:        'Dark Elf Raiders',
+    name:        'Dark Elven Raiders',
     intelType:   'bandit_camp',
-    description: 'A landing party of Dark Elf corsairs. Disciplined, cruel, and carrying prisoners they\'ll sell if left alone.',
+    description: 'A landing party of Dark Elven corsairs. Disciplined, cruel, and carrying prisoners they\'ll sell if left alone.',
     icon:        gi('evil-moon'),
     category:    'combat',
     baseWeight:  2,
@@ -485,6 +485,44 @@ var DISCOVERY_DEFS = {
     baseDuration: 10 * 3600,
     terrainMultipliers: {
       plains: 2.5, forest: 0.8, mountain: 0.3, marsh: 0.2, desert: 0.6,
+    },
+  },
+
+  // ── Recruits ──────────────────────────────────────────────────
+  // Fighters who join the lord's army outright. WHICH units turn up is not
+  // decided here — it comes from the expedition's Expedition Rating (see
+  // DiscoveryRoll.rollRecruits), so the same find yields rabble for a weak
+  // column and a monster for a scout-heavy one. These defs only control HOW
+  // OFTEN and WHERE the offer appears.
+  //
+  // Note there is no `tier` and no _BASE_REWARDS entry: recruits ARE the
+  // reward, so rollRewards deliberately returns nothing for them.
+
+  wandering_warband: {
+    id:          'wandering_warband',
+    name:        'Wandering Warband',
+    intelType:   'mercenary_camp',
+    description: 'Fighters between contracts, camped by the road and open to a better offer.',
+    icon:        gi('crossed-swords'),
+    category:    'recruits',
+    baseWeight:  9,
+    baseDuration: 0,
+    terrainMultipliers: {
+      plains: 2.0, forest: 1.5, mountain: 0.8, marsh: 0.6, desert: 0.7,
+    },
+  },
+
+  broken_company: {
+    id:          'broken_company',
+    name:        'Broken Company',
+    intelType:   'mercenary_camp',
+    description: 'The survivors of someone else\'s war, leaderless and looking for a banner to follow.',
+    icon:        gi('battle-axe'),
+    category:    'recruits',
+    baseWeight:  7,
+    baseDuration: 0,
+    terrainMultipliers: {
+      forest: 1.8, mountain: 1.5, plains: 1.2, marsh: 1.0, desert: 0.8,
     },
   },
 

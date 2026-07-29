@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hexfront — Raiding Guide</title>
+<style>
+  :root { --bg:#14100c; --panel:#1e1811; --line:#3a2f1f; --gold:#c9a227; --text:#d8cdb8; --dim:#8d8270; --raid:#b090d8; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:var(--bg); color:var(--text); font:15px/1.5 Georgia,'Times New Roman',serif; padding:2rem clamp(1rem,4vw,3rem); }
+  h1 { color:var(--raid); font-size:1.9rem; letter-spacing:.04em; }
+  .sub { color:var(--dim); margin:.3rem 0 1rem; font-style:italic; }
+  h2 { color:var(--gold); border-bottom:1px solid var(--line); padding-bottom:.3rem; margin:2.2rem 0 .7rem; font-size:1.35rem; }
+  .stage-meta { color:var(--dim); font-size:.8rem; font-weight:normal; font-style:italic; margin-left:.6rem; }
+  .note { color:var(--dim); font-size:.85rem; margin:.3rem 0 1rem; line-height:1.55; }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; background:var(--panel); width:100%; }
+  th { color:var(--dim); font-weight:normal; font-size:.78rem; text-transform:uppercase; letter-spacing:.07em; padding:.5rem .8rem; border-bottom:1px solid var(--line); text-align:left; }
+  td { padding:.5rem .8rem; border-bottom:1px solid #2a2216; }
+  tr:last-child td { border-bottom:none; }
+  .rowhead { color:#efe6d0; font-weight:bold; white-space:nowrap; }
+  .cell { font-family:Consolas,monospace; font-size:.95rem; }
+  .num { text-align:right; white-space:nowrap; }
+  .dim { color:var(--dim); }
+  .good { color:#7fdf7f; font-weight:bold; }
+  .warn { margin:.8rem 0; padding:.6rem .9rem; border-radius:4px; background:rgba(180,90,70,.12); border-left:3px solid #cf9a8a; color:#cf9a8a; font-size:.85rem; line-height:1.55; }
+  .nav { margin:.4rem 0 1.4rem; font-size:.85rem; }
+  .nav a { color:var(--gold); text-decoration:none; margin-right:1rem; border-bottom:1px dotted var(--gold); }
+</style>
+</head>
+<body>
+  <h1>🏴 Hexfront — Raiding Guide</h1>
+  <p class="sub">Rates read from the live engine. Regenerate with <code>node scripts/generate-raid-guide.js</code>. Generated 28/07/2026, 22:01:36.</p>
+  <p class="nav"><a href="army-guide.html">⚔ Army Matchups</a><a href="quest-guide.html">🧭 Expedition Guide</a></p>
+
+  <p class="note"><b>Raiding is the passive option.</b> Park a lord on a neutral tile and it earns per hour with no further input — but the lord is locked for the whole duration, nothing is paid until the raid <em>ends</em>, and any enemy lord with an army who arrives forces a battle. Lose that battle and every coin accrued is forfeit.</p>
+
+  <div class="warn">⚠ Rewards are paid <b>only on completion</b>. Cancelling forfeits everything earned so far — there is no partial payout. Finishing early with credits <em>does</em> pay in full.</div>
+
+  <h2>Income by lord level <span class="stage-meta">gold/hr · each resource/hr · then total per raid</span></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Lord</th><th>Gold/hr</th><th>Res/hr</th><th>1h raid</th><th>4h raid</th><th>8h raid</th><th>1d raid</th></tr></thead>
+    <tbody><tr><td class="rowhead">Level 1</td><td class="cell num">30</td><td class="cell num">18 each</td><td class="cell num">30<span class="dim"> + 18×3</span></td><td class="cell num">120<span class="dim"> + 72×3</span></td><td class="cell num">240<span class="dim"> + 144×3</span></td><td class="cell num">720<span class="dim"> + 432×3</span></td></tr><tr><td class="rowhead">Level 3</td><td class="cell num">40</td><td class="cell num">24 each</td><td class="cell num">40<span class="dim"> + 24×3</span></td><td class="cell num">160<span class="dim"> + 96×3</span></td><td class="cell num">320<span class="dim"> + 192×3</span></td><td class="cell num">960<span class="dim"> + 576×3</span></td></tr><tr><td class="rowhead">Level 5</td><td class="cell num">50</td><td class="cell num">30 each</td><td class="cell num">50<span class="dim"> + 30×3</span></td><td class="cell num">200<span class="dim"> + 120×3</span></td><td class="cell num">400<span class="dim"> + 240×3</span></td><td class="cell num">1200<span class="dim"> + 720×3</span></td></tr><tr><td class="rowhead">Level 6</td><td class="cell num">55</td><td class="cell num">33 each</td><td class="cell num">55<span class="dim"> + 33×3</span></td><td class="cell num">220<span class="dim"> + 132×3</span></td><td class="cell num">440<span class="dim"> + 264×3</span></td><td class="cell num">1320<span class="dim"> + 792×3</span></td></tr><tr><td class="rowhead">Level 8</td><td class="cell num">65</td><td class="cell num">39 each</td><td class="cell num">65<span class="dim"> + 39×3</span></td><td class="cell num">260<span class="dim"> + 156×3</span></td><td class="cell num">520<span class="dim"> + 312×3</span></td><td class="cell num">1560<span class="dim"> + 936×3</span></td></tr><tr><td class="rowhead">Level 10</td><td class="cell num">75</td><td class="cell num">45 each</td><td class="cell num">75<span class="dim"> + 45×3</span></td><td class="cell num">300<span class="dim"> + 180×3</span></td><td class="cell num">600<span class="dim"> + 360×3</span></td><td class="cell num">1800<span class="dim"> + 1080×3</span></td></tr></tbody>
+  </table>
+  </div>
+  <p class="note">Formula: <code>gold = 25 + 5 × level</code>, <code>each resource = 15 + 3 × level</code> per hour — food, wood and stone all accrue at the same rate, so "×3" is the combined resource total. A God of Destruction blessing multiplies the whole payout by its <code>raid_bonus</code>.</p>
+
+  <h2>Finishing early with credits</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Raid length</th><th>Credits if finished at once</th><th>Credits at halfway</th></tr></thead>
+    <tbody><tr>
+    <td class="rowhead">1h</td>
+    <td class="cell num">60</td>
+    <td class="cell num">30</td>
+  </tr><tr>
+    <td class="rowhead">4h</td>
+    <td class="cell num">240</td>
+    <td class="cell num">120</td>
+  </tr><tr>
+    <td class="rowhead">8h</td>
+    <td class="cell num">480</td>
+    <td class="cell num">240</td>
+  </tr><tr>
+    <td class="rowhead">1d</td>
+    <td class="cell num">1440</td>
+    <td class="cell num">720</td>
+  </tr></tbody>
+  </table>
+  </div>
+  <p class="note">Cost is <code>ceil(secondsRemaining / 60)</code>, minimum 1 — so it always costs exactly one credit per remaining minute, and finishing a 24h raid immediately is deliberately extortionate. Unlike cancelling, this pays the full reward.</p>
+
+  <h2>Raiding vs Expeditions <span class="stage-meta">the comparison that matters</span></h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Lord</th><th>Raid gold/hr</th><th>Raid res/hr</th><th>Expedition gold/hr</th><th>Expedition res/hr</th><th>Ratio</th><th>Best expedition rate</th></tr></thead>
+    <tbody><tr>
+    <td class="rowhead">Level 3</td>
+    <td class="cell num">40</td>
+    <td class="cell num">72</td>
+    <td class="cell num good">314</td>
+    <td class="cell num good">302</td>
+    <td class="cell num">7.8×</td>
+    <td class="cell num dim">600 <span class="dim">(Short)</span></td>
+  </tr><tr>
+    <td class="rowhead">Level 6</td>
+    <td class="cell num">55</td>
+    <td class="cell num">99</td>
+    <td class="cell num good">460</td>
+    <td class="cell num good">448</td>
+    <td class="cell num">8.4×</td>
+    <td class="cell num dim">888 <span class="dim">(Short)</span></td>
+  </tr><tr>
+    <td class="rowhead">Level 10</td>
+    <td class="cell num">75</td>
+    <td class="cell num">135</td>
+    <td class="cell num good">674</td>
+    <td class="cell num good">638</td>
+    <td class="cell num">9.0×</td>
+    <td class="cell num dim">1272 <span class="dim">(Short)</span></td>
+  </tr></tbody>
+  </table>
+  </div>
+  <p class="note">Expedition figures are <b>measured</b>, not derived — thousands of runs through the real <code>catchUp</code> using the recommended scout-heavy build from the <a href="quest-guide.html" style="color:var(--gold)">Expedition Guide</a>, on a fresh tile, all outcomes pooled (including empty ones and ambushes). The "Long" column is used for the head-to-head since it's the fairest like-for-like against an hourly rate; the last column shows the best rate any length achieves.</p>
+  <p class="note"><b>Expeditions pay several times what raiding does</b> — that is deliberate. Raiding costs no attention and carries no casualties; expeditions demand a click every few minutes, risk real units, and can get your lord killed. You are being paid for the attention and the risk.</p>
+
+  <h2>City income for scale</h2>
+  <div class="tablewrap">
+  <table>
+    <thead><tr><th>Population</th><th>Marketplace</th><th>Happiness</th><th>Gold/hr</th></tr></thead>
+    <tbody>
+  <tr>
+    <td class="rowhead">1000 pop</td>
+    <td class="cell num">—</td>
+    <td class="cell num">100%</td>
+    <td class="cell num">4</td>
+  </tr>
+  <tr>
+    <td class="rowhead">2000 pop</td>
+    <td class="cell num">—</td>
+    <td class="cell num">100%</td>
+    <td class="cell num">8</td>
+  </tr>
+  <tr>
+    <td class="rowhead">2000 pop</td>
+    <td class="cell num">L5</td>
+    <td class="cell num">100%</td>
+    <td class="cell num">11</td>
+  </tr>
+  <tr>
+    <td class="rowhead">5000 pop</td>
+    <td class="cell num">L10</td>
+    <td class="cell num">100%</td>
+    <td class="cell num">36</td>
+  </tr>
+  <tr>
+    <td class="rowhead">5000 pop</td>
+    <td class="cell num">L10</td>
+    <td class="cell num">60%</td>
+    <td class="cell num">21</td>
+  </tr></tbody>
+  </table>
+  </div>
+  <p class="note"><code>EconomyCore.getGoldRate</code> returns gold <b>per hour</b>: <code>pop × 0.004 × happiness%</code>, +8% per marketplace level. Cities are not a serious gold source — they exist to produce food, wood and stone. Gold comes from lords in the field.</p>
+
+  <h2>Risk</h2>
+  <p class="note">A raiding lord is a stationary target holding an ever-growing pile of loot. Any enemy lord with a non-empty army arriving on the tile triggers an automatic battle; losing it forfeits the raid and everything accrued. Longer raids are strictly more exposed — a 24h raid is 24× the window of a 1h one for the same hourly rate, so the duration choice is purely a bet on nobody finding you.</p>
+  <p class="note">Raiding also cannot be combined with anything else: the lord is locked out of expeditions, scouting and movement for the entire duration. At level 10 an hour of raiding earns 75 gold; an hour of expeditions earns roughly 674. The gap <em>is</em> the price of not having to be at the keyboard.</p>
+</body>
+</html>

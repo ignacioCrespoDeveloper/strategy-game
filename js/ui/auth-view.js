@@ -181,9 +181,14 @@ const AuthView = (() => {
       const card = e.target.closest('.rsp-card');
       if (!card) return;
       _selectedRace = card.dataset.race;
-      document.querySelectorAll('.rsp-card').forEach(c =>
-        c.classList.toggle('rsp-card--selected', c.dataset.race === _selectedRace)
-      );
+      // Selecting a card opens it into a dossier (description + signature
+      // units) and closes whichever was open — aria-expanded has to track that
+      // or the reveal is a purely visual event a screen reader never hears.
+      document.querySelectorAll('.rsp-card').forEach(c => {
+        const isSel = c.dataset.race === _selectedRace;
+        c.classList.toggle('rsp-card--selected', isSel);
+        c.setAttribute('aria-expanded', String(isSel));
+      });
       const race = RACES[_selectedRace];
       const btn  = document.getElementById('rsp-confirm');
       btn.disabled    = false;
@@ -195,6 +200,40 @@ const AuthView = (() => {
     document.getElementById('rsp-back').addEventListener('click', () => render(_root));
   }
 
+  // Two signature units per race (race.sampleUnits), drawn with exactly the
+  // .la-unit-card markup the lord's Army tab and the city garrison use — same
+  // bronze frame, same PWR tier tint via unitTierClass(), same category
+  // medallion via giUnitType() — so a unit reads identically here, in your
+  // army, and on your walls. Mirrors city-view.js's garrison-card block rather
+  // than reaching into lord-screen's private _buildUnitCard; these are showcase
+  // stills, so the HP bar is pinned full and there's no tooltip/remove wiring.
+  function _raceUnitsHtml(race) {
+    const cards = (race.sampleUnits || []).map(id => {
+      const def = UNIT_DEFS[id];
+      if (!def) return '';
+      const tierClass = unitTierClass(def);
+      const portrait = def.image
+        ? `<img src="${def.image}" class="la-uc-img" alt="${def.name}" loading="lazy">`
+        : `<div class="la-uc-img la-uc-img--fallback">${def.icon}</div>`;
+      return `
+        <div class="rsp-unit">
+          <div class="la-unit-card${tierClass ? ' ' + tierClass : ''}" title="${def.name}">
+            <div class="la-uc-top"><div class="la-uc-hpbar"><div class="la-uc-hpfill" style="width:100%"></div></div></div>
+            ${portrait}
+            ${giUnitType(def.category)}
+          </div>
+          <span class="rsp-unit-name">${def.name}</span>
+        </div>`;
+    }).filter(Boolean).join('');
+
+    if (!cards) return '';
+    return `
+      <div class="rsp-card-units">
+        <div class="rsp-units-label">Signature Units</div>
+        <div class="la-unit-cards rsp-unit-cards">${cards}</div>
+      </div>`;
+  }
+
   function _raceCardHtml(race) {
     const theme   = RACE_THEMES[race.id] || RACE_THEMES.human;
     const hasArt  = !!race.portrait;
@@ -203,14 +242,19 @@ const AuthView = (() => {
       : `background: ${theme.bg};`;
 
     return `
-      <div class="rsp-card" data-race="${race.id}">
+      <div class="rsp-card" data-race="${race.id}" aria-expanded="false">
         <div class="rsp-card-art" style="${artStyle}">
           ${!hasArt ? `<span class="rsp-card-icon" style="color:${theme.accent}">${race.icon}</span>` : ''}
           <div class="rsp-card-art-fade"></div>
         </div>
         <div class="rsp-card-body">
           <div class="rsp-card-name" style="--race-accent:${theme.accent}">${race.icon} ${race.name}</div>
-          <div class="rsp-card-desc">${race.description}</div>
+          <div class="rsp-card-detail">
+            <div class="rsp-card-detail-inner">
+              <div class="rsp-card-desc">${race.description}</div>
+              ${_raceUnitsHtml(race)}
+            </div>
+          </div>
           <div class="rsp-card-bonus">${race.bonusLabel}</div>
         </div>
       </div>

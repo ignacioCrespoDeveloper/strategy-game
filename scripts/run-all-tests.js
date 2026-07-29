@@ -34,6 +34,12 @@ const SUITES = [
     description: 'Simulated round-robin: every race × strategy archetype at equal gold/PWR through the real battle engine. Flags overpowered races/strategies. In-process, ~10s.',
   },
   {
+    id:          'army-transfer',
+    name:        'Army Transfer Core',
+    script:      'scripts/test-army-transfer.js',
+    description: 'Troop-exchange stack math (damaged front models, merges, rejections) behind /api/army/transfer. In-process, <1s.',
+  },
+  {
     id:          'battle',
     name:        'Battle / Movement Integration',
     script:      'scripts/test-battle-movement.js',

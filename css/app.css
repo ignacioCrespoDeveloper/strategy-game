@@ -39,6 +39,59 @@
   --danger-alert: #9a1a1a;
   --danger-deep:  #7a0000;
 
+  /* ── Lord activity identity ────────────────────────────────────
+     ONE colour per lord activity, shared by its button, status line, map
+     lord-card border, and portrait/map overlay. Before this, three of the
+     five disagreed with themselves — Quest was green as a button but gold
+     on the map, March was blue everywhere except a gold status line, Raid
+     was three different purples, and Scout was four different colours
+     (one of them by accident: the portrait's overlay class never matched
+     the rule setting the label colour, so it fell through to the default).
+     Change an activity's colour HERE, never at the call sites.
+
+       role          meaning
+       --X           primary text / label / button face
+       --X-bright    hover text
+       --X-dim       muted (countdown timers)
+       --X-border    resting border
+       --X-edge      hover border
+       --X-glow      icon drop-shadow                                   */
+
+  --quest:        #80c898;
+  --quest-bright: #a8e8c0;
+  --quest-dim:    #4a7a5a;
+  --quest-border: #4a7a5a;
+  --quest-edge:   #6aaa88;
+  --quest-glow:   rgba(128, 200, 152, 0.65);
+
+  --scout:        #d89060;
+  --scout-bright: #f0b088;
+  --scout-dim:    #a06840;
+  --scout-border: #9a5a2a;
+  --scout-edge:   #ca8a4a;
+  --scout-glow:   rgba(216, 144, 96, 0.65);
+
+  --attack:        #e05050;
+  --attack-bright: #f08080;
+  --attack-dim:    #8a3535;
+  --attack-border: #7a2020;
+  --attack-edge:   #b04040;
+  --attack-glow:   rgba(224, 80, 80, 0.65);
+
+  --march:        #8098c8;
+  --march-bright: #a0c0e8;
+  --march-dim:    #4a6a8a;
+  --march-border: #4a5a7a;
+  --march-edge:   #6a88aa;
+  --march-glow:   rgba(128, 152, 200, 0.65);
+
+  --raid:        #b090d8;
+  --raid-bright: #d0b0f8;
+  --raid-dim:    #6a4a9a;
+  --raid-border: #6a4a9a;
+  --raid-edge:   #8a6aca;
+  --raid-glow:   rgba(176, 144, 216, 0.65);
+
   /* Typography */
   --font-display: 'Cinzel', 'Georgia', serif;
   --font-body:    system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -973,20 +1026,97 @@ body.nav-open #screen-root {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  /* Bottom padding reserves the absolutely-positioned .auth-credits strip so
+     the centered card can never sit on top of it on a short viewport; the
+     side padding keeps the card off the screen edge on narrow phones. */
+  padding: 2rem 1rem 4rem;
 }
 
-/* Layered background: deep blue with radial vignette */
+/* ── Background: key art, sunk behind a readability scrim ──
+   The url() is listed ABOVE a gradient in the same background-image stack on
+   purpose: if the art is missing the browser drops that layer and the gradient
+   below it still renders, so the screen degrades to the old look instead of a
+   flat void. Keep both layers when swapping the art. */
 .auth-bg {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(ellipse 80% 60% at 50% 40%, #0e1c40 0%, var(--bg-deep) 70%);
-  background-color: var(--bg-deep);
   z-index: 0;
+  background-color: var(--bg-deep);
+  background-image:
+    url('../assets/ui/auth-bg.jpg'),
+    radial-gradient(ellipse 80% 60% at 50% 40%, #0e1c40 0%, var(--bg-deep) 70%);
+  background-size: cover, cover;
+  /* 35% vertical bias frames the upper composition and keeps the busiest
+     foreground detail below the card rather than directly behind it. */
+  background-position: 50% 35%, 50% 40%;
+  background-repeat: no-repeat;
+  /* Art is atmosphere, not subject: pull it back so gold chrome stays the
+     brightest thing on screen (One Accent Rule). Tuned against the real
+     painting — at brightness 0.62 the whole left third (hydra, brazier glow)
+     collapsed into mud, and the teal/ember contrast that makes the piece worth
+     using went with it. The card carries its own blur+scrim, so it does not
+     need the background darkened this far to stay legible. */
+  filter: saturate(0.96) contrast(1.06) brightness(0.74);
+  /* Overscan so the drift below never exposes an edge. */
+  transform: scale(1.08);
+  animation: auth-bg-drift 48s ease-in-out infinite alternate;
 }
 
-/* Subtle grid/map texture overlay */
+/* Barely-there parallax — enough to feel alive on a screen you sit and read,
+   not enough to notice as motion. Killed by the global prefers-reduced-motion
+   block near the top of this file. */
+@keyframes auth-bg-drift {
+  to { transform: scale(1.14) translate3d(-1.2%, -1%, 0); }
+}
+
+/* Readability scrim: darkens the centre so the card always has a calm field
+   behind it, and fades top/bottom to obsidian so the title and the credits
+   line never land on a bright patch of the painting. */
 .auth-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    /* Tight pool of shadow sized to the card itself, falling off fast — a wide
+       soft wash washed out the whole frame to buy contrast the card already
+       had. */
+    radial-gradient(ellipse 34% 44% at 50% 50%,
+      rgba(8, 12, 24, 0.85) 0%,
+      rgba(8, 12, 24, 0.5) 48%,
+      rgba(8, 12, 24, 0) 78%),
+    linear-gradient(180deg,
+      var(--bg-deep) 0%,
+      rgba(8, 12, 24, 0.2) 20%,
+      rgba(8, 12, 24, 0.26) 66%,
+      rgba(8, 12, 24, 0.94) 96%,
+      var(--bg-deep) 100%);
+}
+
+/* Portrait viewports crop a landscape painting down to two narrow bands above
+   and below the card, so the desktop treatment inverts: the centre pool is
+   pointless (the card covers it) and the top fade — tuned to give the desktop
+   composition headroom — lands squarely on the only art still visible. Bias the
+   crop toward the standard-bearer, which survives a narrow crop better than the
+   centre, and lighten the fades to keep those bands alive. */
+@media (max-width: 640px) {
+  .auth-bg {
+    background-position: 63% 34%, 50% 40%;
+  }
+
+  .auth-bg::before {
+    background:
+      linear-gradient(180deg,
+        rgba(8, 12, 24, 0.62) 0%,
+        rgba(8, 12, 24, 0.22) 22%,
+        rgba(8, 12, 24, 0.3) 72%,
+        rgba(8, 12, 24, 0.96) 100%);
+  }
+}
+
+/* Map-grid texture + edge vignette. The grid is masked out of the centre so it
+   reads as cartography at the margins instead of muddying the art behind the
+   card. */
+.auth-bg::after {
   content: '';
   position: absolute;
   inset: 0;
@@ -994,16 +1124,9 @@ body.nav-open #screen-root {
     linear-gradient(var(--border-muted) 1px, transparent 1px),
     linear-gradient(90deg, var(--border-muted) 1px, transparent 1px);
   background-size: 48px 48px;
-  opacity: 0.18;
-}
-
-/* Corner ornaments */
-.auth-bg::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 50% 40% at 50% 50%, transparent 60%, var(--bg-deep) 100%);
+  opacity: 0.1;
+  -webkit-mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, transparent 30%, #000 100%);
+  mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, transparent 30%, #000 100%);
 }
 
 .auth-card {
@@ -1011,7 +1134,15 @@ body.nav-open #screen-root {
   z-index: 1;
   width: 100%;
   max-width: 400px;
-  background: var(--bg-overlay);
+  /* Deliberately 10% more translucent than --bg-overlay, paired with a blur:
+     over key art the card should read as frosted obsidian with the painting
+     dissolving behind it, not as an opaque panel pasted on top. The blur is
+     what guarantees text contrast, so the two must stay together — raising the
+     alpha back to --bg-overlay flattens the depth, dropping the blur puts busy
+     brushwork behind the form labels. */
+  background: rgba(9, 13, 26, 0.82);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
   border: 1px solid var(--border-gold);
   border-radius: var(--radius-lg);
   padding: 2.5rem 2.5rem 2rem;
@@ -1051,13 +1182,26 @@ body.nav-open #screen-root {
   margin-bottom: 1.8rem;
 }
 
-/* game-icons.net CC BY 3.0 attribution — required, keep visible */
+/* game-icons.net CC BY 3.0 attribution — required, keep visible.
+   BUG FIX: this <p> is a sibling of .auth-card inside the flex-centred
+   .auth-screen, so it used to be laid out as a second flex ITEM — landing in a
+   column beside the card, vertically centred, floating in open space at the
+   middle-right of the viewport. `margin-top: 14px` was written for a stacked
+   layout that never applied. Taking it out of flow pins it where it belongs
+   without restructuring the markup. */
 .auth-credits {
-  margin-top: 14px;
+  position: absolute;
+  z-index: 2;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(90vw, 620px);
   font-size: 0.68rem;
   color: var(--text-muted);
   opacity: 0.7;
   text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
 }
 .auth-credits a { color: inherit; text-decoration: underline; }
 
@@ -1165,19 +1309,28 @@ body.nav-open #screen-root {
   transform: translateY(0);
 }
 
+/* Google's officially-sanctioned DARK button (#131314 / #8E918F / #E3E3E3 with
+   the full-colour G) rather than the white one — a white slab was the single
+   brightest object on an obsidian screen, out-shouting the gold primary CTA and
+   breaking the "gold is the only source of warmth" rule. Brand compliance is
+   intact: the dark variant is part of Google's own identity guidelines. */
 .auth-btn--google {
-  background: #fff;
-  color: #333;
+  background: #131314;
+  color: #e3e3e3;
   font-family: inherit;
   font-size: 0.85rem;
-  border: 1px solid rgba(255,255,255,0.2);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  border: 1px solid #8e918f;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .auth-btn--google:hover {
-  background: #f5f5f5;
+  background: #1c1c1d;
+  border-color: #a8aba9;
   filter: none;
 }
 
@@ -1196,6 +1349,25 @@ body.nav-open #screen-root {
   flex: 1;
   height: 1px;
   background: var(--border-muted);
+}
+
+/* Short viewports (iPhone SE, small laptops) — the taller REGISTER card plus the
+   reserved credits strip overflows 667px, and because the screen is flex-centred
+   with overflow hidden that overflow is silently clipped at BOTH edges rather
+   than scrolled. Reclaiming ~70px of vertical rhythm makes the tallest state fit
+   outright, which beats making a login screen scroll.
+
+   NOTE: this block must stay AFTER every .auth-* rule it overrides. A media
+   query adds no specificity, so when it sat higher in the file the plain
+   `.auth-card` declaration below simply won and none of this applied. */
+@media (max-height: 730px) {
+  .auth-screen  { padding: 1rem 1rem 2.5rem; }
+  .auth-card    { padding: 1.75rem 2rem 1.5rem; }
+  .auth-logo    { font-size: 2rem; margin-bottom: 0.35rem; }
+  .auth-title   { font-size: 1.65rem; }
+  .auth-tagline { margin-bottom: 1.15rem; }
+  .auth-tabs    { margin-bottom: 1.1rem; }
+  .auth-credits { bottom: 0.75rem; }
 }
 
 /* ── Race Selection Panel (registration step 2) ── */
@@ -1276,10 +1448,24 @@ body.nav-open #screen-root {
   box-shadow: 0 0 0 1px var(--gold-dark), 0 16px 56px rgba(200,147,58,0.32);
 }
 
-/* Art / portrait area — top 60% of the card */
+/* Art / portrait area. At rest the card is a POSTER — the art takes every pixel
+   the body doesn't need, and only the race name and bonus line sit under it.
+   Opening the dossier grows the body, and the art yields exactly that much.
+
+   This is a self-balancing split (art `flex: 1 1 auto`, body `flex: 0 0 auto`)
+   rather than a fixed 72%/40% pair, because the right ratio isn't a constant:
+   a 220px-wide card on a phone wraps the same description to far more lines
+   than a 300px card on a desktop, so any hard percentage that fits one clips
+   the other. Letting the body take what it needs and the art absorb the
+   remainder makes it correct at every width with no breakpoint.
+
+   The card's own width and position never change, so opening one card doesn't
+   shove its neighbours around — you can still compare five races at a glance,
+   which is the entire job of this screen. */
 .rsp-card-art {
   position: relative;
-  flex: 0 0 60%;
+  flex: 1 1 auto;
+  min-height: 6rem; /* floor, so a very tall dossier can't erase the portrait */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1302,8 +1488,11 @@ body.nav-open #screen-root {
 }
 
 /* Card body — bottom 40% */
+/* Sizes to its own content (see .rsp-card-art) — the art takes the rest. That
+   also kills the dead gap the old `flex: 1` body opened between the race name
+   and the bonus line while the dossier was closed. */
 .rsp-card-body {
-  flex: 1;
+  flex: 0 0 auto;
   padding: 0.5rem 1.1rem 1.2rem;
   display: flex;
   flex-direction: column;
@@ -1317,17 +1506,120 @@ body.nav-open #screen-root {
   color: var(--race-accent, var(--text-gold-light));
 }
 
+/* The line clamp is gone: the blurb is only ever rendered inside an OPEN card
+   now, which has the height to show it whole. (It previously clamped to 3 lines
+   and still fought `flex: 1` — the clamp drew its ellipsis on line 3 while a
+   4th line rendered underneath and bled through the label below.) */
 .rsp-card-desc {
   font-size: 0.73rem;
   color: var(--text-secondary);
   line-height: 1.55;
-  flex: 1;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 5;
-  -webkit-box-orient: vertical;
 }
 
+/* ── Dossier reveal ──
+   grid-template-rows 0fr → 1fr animates a genuinely auto-height block, which
+   max-height cannot do without hard-coding a guess that clips the longest race
+   description. The inner wrapper is required: 0fr only collapses if the grid
+   item itself clips (overflow hidden + min-height 0). */
+.rsp-card-detail {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 200ms ease;
+}
+
+.rsp-card-detail-inner {
+  overflow: hidden;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.rsp-card--selected .rsp-card-detail {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  /* Fade trails the opening slightly so content arrives in a space that already
+     exists, instead of appearing to force the card open. */
+  transition:
+    grid-template-rows 420ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 300ms ease 120ms;
+}
+
+/* Contents settle upward in sequence — blurb, then units. Extends the system's
+   existing lift language rather than adding a second motion idiom. Covered by
+   the global prefers-reduced-motion block at the top of this file. */
+.rsp-card-detail-inner > * {
+  transform: translateY(8px);
+  transition: transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.rsp-card--selected .rsp-card-detail-inner > *:nth-child(1) {
+  transform: none;
+  transition-delay: 110ms;
+}
+
+.rsp-card--selected .rsp-card-detail-inner > *:nth-child(2) {
+  transform: none;
+  transition-delay: 190ms;
+}
+
+/* ── Signature-unit strip ──
+   Reuses .la-unit-card wholesale (see _raceUnitsHtml in auth-view.js) so the
+   frame, tier tint and category medallion match the Army tab exactly. Only the
+   surrounding layout and the name caption are local. */
+.rsp-card-units {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.rsp-units-label {
+  font-family: var(--font-display);
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* Frames butt directly together — no gap — so the pair reads as one rack of
+   troops rather than two loose chips. The 2px bronze border on each card meets
+   its neighbour to form a single seam, which is how the Army tab's rows look
+   when a stack fills out. */
+.rsp-unit-cards {
+  gap: 0;
+}
+
+.rsp-unit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.28rem;
+  width: 3.6rem; /* exactly .la-unit-card, so the frames sit flush */
+}
+
+/* The Army tab identifies a unit by hover tooltip; on a one-shot, irreversible
+   race choice the name has to be readable without hovering.
+   min-height reserves two lines on EVERY card so a name that still wraps on a
+   narrow viewport can't push that card's bonus line out of alignment with the
+   rest of the row — the ragged baseline reads as a bug even though it isn't. */
+.rsp-unit-name {
+  font-size: 0.58rem;
+  line-height: 1.25;
+  min-height: 2.5em;
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 0 0.12rem; /* frames are flush; keep the captions from colliding */
+}
+
+/* Always visible, open or closed. Race choice is permanent, and hiding the
+   numbers behind a click turns a side-by-side comparison into a serial memory
+   test — click Orc, read, click Dwarf, try to recall what Orc said. The blurb
+   and unit preview are the reward for engaging; the mechanical trade-off is
+   decision-critical and stays on every card. */
 .rsp-card-bonus {
   font-size: 0.67rem;
   color: var(--text-muted);
@@ -1373,6 +1665,46 @@ body.nav-open #screen-root {
 }
 
 .rsp-back-btn:hover { color: var(--text-secondary); }
+
+/* Short viewports (~720p laptops). The dossier's height is driven by how many
+   lines the description wraps to, which doesn't shrink with the window — so on
+   a short track the body can demand more than the card has, the art bottoms out
+   against its floor, and the open card clips. Reclaiming the track's own
+   padding gives the cards back the height instead of truncating the content.
+
+   Must stay AFTER the .rsp-* rules above: a media query carries no extra
+   specificity, so placed higher it would simply lose to them. */
+@media (max-height: 780px) {
+  .rsp-track { padding: 1rem 4vw; }
+  .rsp-card-art { min-height: 4.5rem; }
+  .rsp-card-body { padding: 0.4rem 1rem 0.9rem; }
+  .rsp-card-units { gap: 0.3rem; }
+}
+
+/* Smallest phones (iPhone SE class). Here even the reclaimed padding isn't
+   enough: a ~220px card wraps the longest blurb to nine lines, which cannot
+   coexist with the unit rack and the bonus line on a 667px-tall screen. The
+   blurb is the one part that degrades gracefully — it's flavour, and it's the
+   only element that can be shortened without removing information the choice
+   actually depends on. The units and the bonus line stay whole.
+
+   Measured at 390x667: the open card overflowed by exactly 27px, with the unit
+   block the largest single item (147px). Clamping the blurb to 3 lines (-18px)
+   and shortening the unit portraits (-16px) clears it with room to spare, while
+   keeping the section label, both unit frames and the full bonus line intact. */
+@media (max-height: 700px) {
+  .rsp-card-desc {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .rsp-unit .la-uc-img,
+  .rsp-unit .la-uc-img--fallback {
+    height: 4.2rem;
+  }
+}
 
 /* =============================================
    PLACEHOLDER SCREEN (inter-milestone bridge)
@@ -3215,10 +3547,13 @@ body.nav-open #screen-root {
   gap: 0.3rem;
   pointer-events: none;
 }
-.lsl-portrait-activity-overlay--quest   { background: rgba(12, 9, 0, 0.75); }
-.lsl-portrait-activity-overlay--scout   { background: rgba(0, 12, 10, 0.75); }
+.lsl-portrait-activity-overlay--quest   { background: rgba(2, 14, 8, 0.75); }
+.lsl-portrait-activity-overlay--scout   { background: rgba(20, 10, 4, 0.75); }
 .lsl-portrait-activity-overlay--attack  { background: rgba(15, 0, 0, 0.80); }
 .lsl-portrait-activity-overlay--move    { background: rgba(0, 8, 18, 0.75); }
+/* Raiding has no portrait overlay today (lord-screen.js only renders
+   attack/quest/scout/move) — defined so the set stays complete if it does. */
+.lsl-portrait-activity-overlay--raiding { background: rgba(12, 4, 20, 0.80); }
 /* Reuse the ov-lord-activity-* classes for icon/label/dest/cd — already defined */
 .lsl-portrait-activity-overlay .ov-lord-activity-icon { font-size: 2.4rem; }
 .lsl-portrait-activity-overlay .ov-lord-activity-label { font-size: 0.78rem; letter-spacing: 0.14em; text-shadow: 0 0 8px rgba(0,0,0,0.9); }
@@ -4006,6 +4341,99 @@ body.nav-open #screen-root {
 }
 .la-army-power--over { color: #e05050; text-shadow: 0 0 10px rgba(220,80,80,0.4); }
 
+/* ── Troop exchange (Army tab, same-tile lord ↔ lord) ─────────── */
+.la-ex-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+.la-ex-open-btn {
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  color: #c8933a;
+  background: rgba(200,147,58,0.08);
+  border: 1px solid rgba(200,147,58,0.35);
+  border-radius: var(--radius-sm);
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.la-ex-open-btn:hover:not(:disabled) {
+  background: rgba(200,147,58,0.18);
+  border-color: rgba(200,147,58,0.6);
+}
+.la-ex-open-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.la-ex-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+  margin: 0.2rem 0 0.6rem;
+}
+.la-ex-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+@media (max-width: 640px) {
+  .la-ex-columns { grid-template-columns: 1fr; }
+}
+.la-ex-col {
+  background: rgba(0,0,0,0.18);
+  border: 1px solid rgba(200,147,58,0.2);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.6rem;
+}
+.la-ex-col-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.45rem;
+}
+.la-ex-col-name {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary, #ddd);
+}
+.la-ex-col-head .la-army-power { font-size: 0.8rem; }
+.la-ex-cards { min-height: 3rem; }
+.la-ex-card { display: inline-block; cursor: pointer; }
+.la-ex-card .la-unit-card { transition: transform 0.1s, box-shadow 0.15s; }
+.la-ex-card:hover .la-unit-card {
+  transform: translateY(-2px);
+  box-shadow: 0 0 8px rgba(200,147,58,0.5);
+}
+/* A model previewed on the side it did NOT start on */
+.la-ex-card--moved .la-unit-card {
+  outline: 2px solid #c8933a;
+  outline-offset: -1px;
+  box-shadow: 0 0 10px rgba(200,147,58,0.45);
+}
+.la-ex-empty {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.2rem 0;
+}
+.la-ex-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.7rem;
+}
+.la-ex-note {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 /* Map info panel additions */
 .mip-note {
   font-size: 0.66rem;
@@ -4026,9 +4454,9 @@ body.nav-open #screen-root {
   margin-bottom: 0.4rem;
 }
 .lov-status--idle      { color: var(--text-muted); }
-.lov-status--traveling { color: #c8933a; }
-.lov-status--searching { color: #5db85d; }
-.lov-status--scouting  { color: #b090d8; }
+.lov-status--traveling { color: var(--march); }
+.lov-status--searching { color: var(--quest); }
+.lov-status--scouting  { color: var(--scout); }
 .lov-progress-row {
   display: flex;
   align-items: center;
@@ -4147,6 +4575,141 @@ body.nav-open #screen-root {
   margin-top: 0.1rem;
 }
 
+/* ── Action confirmation screen (action-confirm-view.js) ─────────── */
+/* Reuses the .ac-* shell from attack-confirm-view; these are only the
+   pieces unique to lord actions (the parameter panel and its stat rows). */
+.acf-panel {
+  margin-top: 0.6rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid #3a3428;
+  border-left: 3px solid var(--gold, #c9a227);
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.acf-panel-title {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #8d8270;
+  margin-bottom: 0.4rem;
+}
+
+.acf-rows { margin-top: 0.5rem; }
+
+.acf-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.28rem 0;
+  border-bottom: 1px solid #2a2216;
+  font-size: 0.76rem;
+}
+
+.acf-row:last-child { border-bottom: none; }
+.acf-row-label { color: #8d8270; }
+.acf-row-value { color: #efe6d0; font-weight: 600; white-space: nowrap; }
+.acf-row--warn .acf-row-value { color: #cf9a8a; }
+
+.acf-warn {
+  margin-top: 0.55rem;
+  padding: 0.45rem 0.6rem;
+  border-radius: var(--radius-sm);
+  background: rgba(180, 90, 70, 0.12);
+  border-left: 2px solid #cf9a8a;
+  color: #cf9a8a;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.acf-note {
+  margin-top: 0.55rem;
+  color: #8d8270;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  font-style: italic;
+}
+
+.acf-hint {
+  margin-top: 0.5rem;
+  color: #b8ab90;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.acf-err { color: #e07060; font-size: 0.78rem; margin-right: auto; }
+
+/* Purple. Kept clear of the red used by destructive controls nearby
+   (Cancel (forfeit) in the active-raid block) and of the app's gold accent. */
+.lov-raid-btn {
+  align-self: flex-start;
+  margin-top: 0.1rem;
+  padding: 0.28rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--raid-border);
+  background: linear-gradient(180deg, #2a1a3a 0%, #1a1024 100%);
+  color: var(--raid);
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.lov-raid-btn:hover {
+  background: linear-gradient(180deg, #3a2a5a 0%, #281a38 100%);
+  border-color: var(--raid-edge);
+  color: var(--raid-bright);
+}
+
+/* ── Expedition length picker (Short / Standard / Long) ──────────── */
+.lov-len-picker {
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  margin: 0.35rem 0 0.1rem;
+}
+
+.lov-len-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.05rem;
+  min-width: 4.6rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid #3a3428;
+  background: linear-gradient(180deg, #221c14 0%, #171208 100%);
+  color: #8d8270;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.lov-len-btn:hover {
+  border-color: #6a5a3a;
+  color: #c9bfa8;
+}
+
+.lov-len-btn--active {
+  border-color: var(--gold, #c9a227);
+  background: linear-gradient(180deg, #3a2f14 0%, #241c0a 100%);
+  color: #efe6d0;
+}
+
+.lov-len-name { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; }
+.lov-len-time { font-size: 0.64rem; opacity: 0.8; }
+.lov-len-mult { font-size: 0.62rem; color: var(--gold, #c9a227); font-weight: 600; }
+
+.lov-lc-depletion {
+  font-size: 0.68rem;
+  color: #8d8270;
+  margin: 0.15rem 0 0.1rem;
+  line-height: 1.35;
+}
+
+.lov-lc-depletion--low { color: #cf9a8a; }
+
 /* Move to Map button */
 .lov-move-btn {
   align-self: flex-start;
@@ -4154,17 +4717,17 @@ body.nav-open #screen-root {
   font-size: 0.72rem;
   font-weight: 600;
   border-radius: var(--radius-sm);
-  border: 1px solid #4a5a7a;
+  border: 1px solid var(--march-border);
   background: linear-gradient(180deg, #1a2438 0%, #101828 100%);
-  color: #8098c8;
+  color: var(--march);
   cursor: pointer;
   letter-spacing: 0.02em;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .lov-move-btn:hover {
   background: linear-gradient(180deg, #2a3a5a 0%, #1a2848 100%);
-  border-color: #6a88aa;
-  color: #a0c0e8;
+  border-color: var(--march-edge);
+  color: var(--march-bright);
 }
 
 /* Search button inside location card */
@@ -4175,20 +4738,23 @@ body.nav-open #screen-root {
   font-size: 0.72rem;
   font-weight: 600;
   border-radius: var(--radius-sm);
-  border: 1px solid #4a7a5a;
+  border: 1px solid var(--quest-border);
   background: linear-gradient(180deg, #1a3a28 0%, #102418 100%);
-  color: #80c898;
+  color: var(--quest);
   cursor: pointer;
   letter-spacing: 0.02em;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .lov-search-btn:hover {
   background: linear-gradient(180deg, #2a5a3a 0%, #1a3828 100%);
-  border-color: #6aaa88;
-  color: #a8e8c0;
+  border-color: var(--quest-edge);
+  color: var(--quest-bright);
 }
 
 /* Scout button inside location card */
+/* Ember — the single scout colour (see --scout in :root). Deliberately NOT
+   gold: var(--gold) is the app's accent for titles, credits and selected
+   state, so a gold button here would read as "already chosen". */
 .lov-scout-btn {
   align-self: flex-start;
   margin-top: 0.1rem;
@@ -4196,17 +4762,17 @@ body.nav-open #screen-root {
   font-size: 0.72rem;
   font-weight: 600;
   border-radius: var(--radius-sm);
-  border: 1px solid #6a4a9a;
-  background: linear-gradient(180deg, #2a1a3a 0%, #1a1024 100%);
-  color: #b090d8;
+  border: 1px solid var(--scout-border);
+  background: linear-gradient(180deg, #3a2214 0%, #241408 100%);
+  color: var(--scout);
   cursor: pointer;
   letter-spacing: 0.02em;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .lov-scout-btn:hover {
-  background: linear-gradient(180deg, #3a2a5a 0%, #281a38 100%);
-  border-color: #8a6aca;
-  color: #d0b0f8;
+  background: linear-gradient(180deg, #5c3620 0%, #3a2214 100%);
+  border-color: var(--scout-edge);
+  color: var(--scout-bright);
 }
 
 /* â”€â”€ Unit card tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
@@ -4284,111 +4850,21 @@ body.nav-open #screen-root {
 }
 
 /* â”€â”€ Stance picker (embedded in status section) â”€â”€ */
+/* The only stance that reaches the UI now is Raiding, so this shares the
+   raid identity rather than carrying a third violet of its own. */
 .lov-status--stanced {
-  color: #b070e0;
-  border-left: 2px solid #7a40b0;
+  color: var(--raid);
+  border-left: 2px solid var(--raid-border);
   padding-left: 0.55rem;
 }
 
-.lov-stance-desc-inline {
-  font-size: 0.67rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-  margin: 0.3rem 0 0.4rem;
-}
+/* (The stance-picker family lived here — .lov-stance-desc-inline, -picker,
+   -pick-row, -pick-btn, -dur-sel, -start-btn, -pick-desc, -exit-btn. The
+   picker went when stances stopped being player-chosen, and the Stance
+   section itself went on 2026-07-29 when raiding moved into Status. Only
+   .lov-status--stanced above is still in use.) */
 
-.lov-stance-picker {
-  margin-top: 0.55rem;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: var(--radius-sm);
-  background: rgba(255,255,255,0.02);
-}
-.lov-stance-pick-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-wrap: wrap;
-}
-.lov-stance-pick-btn {
-  padding: 0.22rem 0.6rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.04);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.lov-stance-pick-btn:hover {
-  background: rgba(255,255,255,0.08);
-  border-color: rgba(255,255,255,0.3);
-  color: var(--text-primary);
-}
-.lov-stance-pick-btn--active {
-  background: rgba(100,60,180,0.25);
-  border-color: #7a50c0;
-  color: #c0a0ff;
-}
-.lov-stance-dur-sel {
-  padding: 0.2rem 0.4rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(255,255,255,0.15);
-  background: var(--bg-raised);
-  color: var(--text-secondary);
-  cursor: pointer;
-  flex: 1;
-  min-width: 0;
-}
-.lov-stance-start-btn {
-  padding: 0.22rem 0.65rem;
-  font-size: 0.68rem;
-  font-weight: 700;
-  font-family: var(--font-display);
-  letter-spacing: 0.05em;
-  border-radius: var(--radius-sm);
-  border: 1px solid #4a5a8a;
-  background: linear-gradient(180deg, #1a2248 0%, #101530 100%);
-  color: #a0b0e0;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.lov-stance-start-btn:hover:not([disabled]) {
-  background: linear-gradient(180deg, #2a3260 0%, #1a2248 100%);
-  border-color: #8090c0;
-  color: #c0d0f0;
-}
-.lov-stance-start-btn[disabled] { opacity: 0.35; cursor: not-allowed; }
-.lov-stance-pick-desc {
-  margin-top: 0.35rem;
-  font-size: 0.65rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-  min-height: 1em;
-}
-
-.lov-stance-exit-btn {
-  margin-top: 0.45rem;
-  padding: 0.22rem 0.65rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  border-radius: var(--radius-sm);
-  border: 1px solid #7a3a3a;
-  background: linear-gradient(180deg, #3a1a1a 0%, #241010 100%);
-  color: #e08080;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-}
-.lov-stance-exit-btn:hover {
-  background: linear-gradient(180deg, #5a2a2a 0%, #3a1818 100%);
-  border-color: #aa5050;
-  color: #f0a0a0;
-}
-
-/* ── Raiding status block (lord-screen stance tab) ─────────────── */
+/* ── Raiding status block (lord-screen Status section) ─────────── */
 .lov-raid-earnings {
   font-size: 0.68rem;
   color: var(--text-secondary);
@@ -5149,16 +5625,19 @@ body.nav-open #screen-root {
 }
 
 /* ── Lord card activity overlays (quest / scout / attack / march / raiding) ─────────── */
-.ov-lord-card--questing  { border-color: #3a2e00; }
-.ov-lord-card--scouting  { border-color: #0a3028; }
+/* Resting borders are hand-darkened rather than token-derived: CSS can't
+   darken a colour, and these need to sit near-black so the card reads as a
+   card first and an activity second. The hover state carries the identity. */
+.ov-lord-card--questing  { border-color: #142c1e; }
+.ov-lord-card--scouting  { border-color: #3a2214; }
 .ov-lord-card--attacking { border-color: #5a1a1a; }
 .ov-lord-card--marching  { border-color: #0a2030; }
-.ov-lord-card--raiding   { border-color: #4a1a4a; }
-.ov-lord-card--questing:hover  { border-color: #6a5600; box-shadow: 0 0 14px rgba(160,120,20,0.18); }
-.ov-lord-card--scouting:hover  { border-color: #1a6050; box-shadow: 0 0 14px rgba(30,160,130,0.18); }
-.ov-lord-card--attacking:hover { border-color: #8a2020; box-shadow: 0 0 14px rgba(160,30,30,0.18); }
-.ov-lord-card--marching:hover  { border-color: #1a4060; box-shadow: 0 0 14px rgba(30,100,160,0.18); }
-.ov-lord-card--raiding:hover   { border-color: #8a2a8a; box-shadow: 0 0 14px rgba(160,30,160,0.18); }
+.ov-lord-card--raiding   { border-color: #2a1a3a; }
+.ov-lord-card--questing:hover  { border-color: var(--quest-border);  box-shadow: 0 0 14px var(--quest-glow); }
+.ov-lord-card--scouting:hover  { border-color: var(--scout-border);  box-shadow: 0 0 14px var(--scout-glow); }
+.ov-lord-card--attacking:hover { border-color: var(--attack-border); box-shadow: 0 0 14px var(--attack-glow); }
+.ov-lord-card--marching:hover  { border-color: var(--march-border);  box-shadow: 0 0 14px var(--march-glow); }
+.ov-lord-card--raiding:hover   { border-color: var(--raid-border);   box-shadow: 0 0 14px var(--raid-glow); }
 
 .ov-lord-activity-overlay {
   position: absolute;
@@ -5172,21 +5651,34 @@ body.nav-open #screen-root {
   gap: 0.18rem;
   pointer-events: none;
 }
-.ov-lord-activity-overlay--quest   { background: rgba(12, 9, 0, 0.80); }
-.ov-lord-activity-overlay--scout   { background: rgba(0, 12, 10, 0.80); }
+/* Near-black scrims, tinted toward each activity's hue so the overlay agrees
+   with the label sitting on it. Kept dark enough for the label to clear AA. */
+.ov-lord-activity-overlay--quest   { background: rgba(2, 14, 8, 0.80); }
+.ov-lord-activity-overlay--scout   { background: rgba(20, 10, 4, 0.80); }
 .ov-lord-activity-overlay--attack  { background: rgba(15, 0, 0, 0.82); }
 .ov-lord-activity-overlay--move    { background: rgba(0, 8, 18, 0.80); }
-.ov-lord-activity-overlay--raiding { background: rgba(14, 0, 14, 0.82); }
+.ov-lord-activity-overlay--raiding { background: rgba(12, 4, 20, 0.82); }
 
 .ov-lord-activity-icon {
   font-size: 1.8rem;
   line-height: 1;
 }
-.ov-lord-activity-overlay--quest   .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(200,155,20,0.65)); }
-.ov-lord-activity-overlay--scout   .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(40,180,150,0.65)); }
-.ov-lord-activity-overlay--attack  .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(200,40,40,0.65)); }
-.ov-lord-activity-overlay--move    .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(50,130,200,0.65)); }
-.ov-lord-activity-overlay--raiding .ov-lord-activity-icon { filter: drop-shadow(0 0 8px rgba(180,40,180,0.65)); }
+/* Every rule below is written for BOTH overlay families: .ov-* (the map/
+   overview lord card) and .lsl-portrait-* (the lord screen's big portrait).
+   The portrait only ever carried the lsl- class, so when these rules named
+   .ov-* alone its label/icon/countdown fell through to the default gold —
+   which is why an activity could look one colour on the map and another on
+   the portrait. Keep both selectors on every rule. */
+.ov-lord-activity-overlay--quest      .ov-lord-activity-icon,
+.lsl-portrait-activity-overlay--quest .ov-lord-activity-icon { filter: drop-shadow(0 0 8px var(--quest-glow)); }
+.ov-lord-activity-overlay--scout      .ov-lord-activity-icon,
+.lsl-portrait-activity-overlay--scout .ov-lord-activity-icon { filter: drop-shadow(0 0 8px var(--scout-glow)); }
+.ov-lord-activity-overlay--attack      .ov-lord-activity-icon,
+.lsl-portrait-activity-overlay--attack .ov-lord-activity-icon { filter: drop-shadow(0 0 8px var(--attack-glow)); }
+.ov-lord-activity-overlay--move      .ov-lord-activity-icon,
+.lsl-portrait-activity-overlay--move .ov-lord-activity-icon { filter: drop-shadow(0 0 8px var(--march-glow)); }
+.ov-lord-activity-overlay--raiding      .ov-lord-activity-icon,
+.lsl-portrait-activity-overlay--raiding .ov-lord-activity-icon { filter: drop-shadow(0 0 8px var(--raid-glow)); }
 
 .ov-lord-activity-label {
   font-size: 0.68rem;
@@ -5194,11 +5686,16 @@ body.nav-open #screen-root {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.ov-lord-activity-overlay--quest   .ov-lord-activity-label { color: #c8a020; }
-.ov-lord-activity-overlay--scout   .ov-lord-activity-label { color: #3ab897; }
-.ov-lord-activity-overlay--attack  .ov-lord-activity-label { color: #cc3333; }
-.ov-lord-activity-overlay--move    .ov-lord-activity-label { color: #4a9abf; }
-.ov-lord-activity-overlay--raiding .ov-lord-activity-label { color: #c040c0; }
+.ov-lord-activity-overlay--quest      .ov-lord-activity-label,
+.lsl-portrait-activity-overlay--quest .ov-lord-activity-label { color: var(--quest); }
+.ov-lord-activity-overlay--scout      .ov-lord-activity-label,
+.lsl-portrait-activity-overlay--scout .ov-lord-activity-label { color: var(--scout); }
+.ov-lord-activity-overlay--attack      .ov-lord-activity-label,
+.lsl-portrait-activity-overlay--attack .ov-lord-activity-label { color: var(--attack); }
+.ov-lord-activity-overlay--move      .ov-lord-activity-label,
+.lsl-portrait-activity-overlay--move .ov-lord-activity-label { color: var(--march); }
+.ov-lord-activity-overlay--raiding      .ov-lord-activity-label,
+.lsl-portrait-activity-overlay--raiding .ov-lord-activity-label { color: var(--raid); }
 
 .ov-lord-activity-dest {
   font-size: 0.6rem;
@@ -5212,11 +5709,16 @@ body.nav-open #screen-root {
   font-family: 'Courier New', monospace;
   margin-top: 0.08rem;
 }
-.ov-lord-activity-overlay--quest   .ov-lord-activity-cd { color: #7a6010; }
-.ov-lord-activity-overlay--scout   .ov-lord-activity-cd { color: #22705c; }
-.ov-lord-activity-overlay--attack  .ov-lord-activity-cd { color: #885555; }
-.ov-lord-activity-overlay--move    .ov-lord-activity-cd { color: #2a6a8a; }
-.ov-lord-activity-overlay--raiding .ov-lord-activity-cd { color: #7a2a7a; }
+.ov-lord-activity-overlay--quest      .ov-lord-activity-cd,
+.lsl-portrait-activity-overlay--quest .ov-lord-activity-cd { color: var(--quest-dim); }
+.ov-lord-activity-overlay--scout      .ov-lord-activity-cd,
+.lsl-portrait-activity-overlay--scout .ov-lord-activity-cd { color: var(--scout-dim); }
+.ov-lord-activity-overlay--attack      .ov-lord-activity-cd,
+.lsl-portrait-activity-overlay--attack .ov-lord-activity-cd { color: var(--attack-dim); }
+.ov-lord-activity-overlay--move      .ov-lord-activity-cd,
+.lsl-portrait-activity-overlay--move .ov-lord-activity-cd { color: var(--march-dim); }
+.ov-lord-activity-overlay--raiding      .ov-lord-activity-cd,
+.lsl-portrait-activity-overlay--raiding .ov-lord-activity-cd { color: var(--raid-dim); }
 
 /* Army power + stance badge in lord card */
 .ov-lc-power {
@@ -7984,6 +8486,7 @@ body.nav-open #screen-root {
 .af-entry.af-discovery { border-left-color: #5a8a5a; }
 .af-entry.af-move    { border-left-color: #5a7aaa; }
 .af-entry.af-action  { border-left-color: #7a6a4a; }
+.af-entry.af-raid    { border-left-color: #b48c28; }
 
 .af-icon {
   font-size: 1rem;
@@ -8014,6 +8517,81 @@ body.nav-open #screen-root {
   transition: background 0.15s;
 }
 .af-report-btn:hover { background: rgba(180, 140, 40, 0.3); }
+
+/* ── Scout report dossier (expands inside an af-entry) ────────
+   The feed entry is the only place a scout's findings live, so this is the
+   full record: garrison roster, each lord's army, and the payout on a win. */
+.sr-panel {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.sr-block {
+  padding: 0.5rem 0.6rem;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
+}
+
+.sr-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.2rem;
+}
+
+.sr-title {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sr-sub   { font-size: 0.62rem; color: var(--text-muted); }
+.sr-empty { font-size: 0.65rem; font-style: italic; color: rgba(255,255,255,0.3); }
+
+.sr-units {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.1rem 0.8rem;
+  margin-top: 0.3rem;
+}
+
+.sr-unit {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.68rem;
+  padding: 0.1rem 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.sr-unit-name  { color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-unit-count { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+.sr-loot-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.45rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--border-muted);
+}
+.sr-loot {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  font-size: 0.7rem;
+  color: var(--text-gold);
+  font-variant-numeric: tabular-nums;
+}
 
 .af-meta {
   display: flex;
@@ -8073,12 +8651,12 @@ body.nav-open #screen-root {
 
 /* lord-screen: red status + progress bar when traveling to attack */
 .lov-status--attacking {
-  color: #e05050;
+  color: var(--attack);
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 .lov-fill--attack {
-  background: linear-gradient(90deg, #8a1a1a, #e05050) !important;
+  background: linear-gradient(90deg, var(--attack-border), var(--attack)) !important;
 }
 
 /* overview card: red progress bar + meta line when attacking */
@@ -8502,10 +9080,24 @@ body.nav-open #screen-root {
   gap: 0.6rem;
 }
 .ac-enemy-none {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--text-muted);
   font-style: italic;
   padding: 0.5rem;
+}
+/* Attacking without a scout report is allowed — this just makes the
+   information gap explicit before the player commits. */
+.ac-enemy-unscouted { color: var(--text-muted); font-style: italic; }
+.ac-loot-label {
+  margin-top: 0.5rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
 }
 .ac-enemy-top {
   display: flex;
@@ -8999,6 +9591,56 @@ body.nav-open #screen-root {
   flex-direction: column;
   gap: 7px;
 }
+
+/* A tier the lord hasn't reached yet. Shown on purpose — the stats are the
+   incentive to keep levelling — but drained of colour so it reads as out of
+   reach at a glance, and never wearing the gold reserved for live actions.
+   Same grammar as a locked building tile (.bld3-tile--locked / .bld2-btn--locked
+   / .bld2-reason in city-view.js): greyed art, padlock button, reason beneath. */
+.lm-mount-card--locked { background: rgba(255,255,255,0.015); }
+.lm-mount-card--locked .lm-mount-visual { position: relative; }
+.lm-mount-card--locked .lm-mount-img,
+.lm-mount-card--locked .lm-mount-icon-lg {
+  filter: grayscale(0.8) brightness(0.6);
+  opacity: 0.55;
+}
+.lm-mount-card--locked .lm-mount-name,
+.lm-mount-card--locked .lm-mount-cost { opacity: 0.7; }
+.lm-mount-card--locked .lm-stat-chips { opacity: 0.8; }
+
+/* Diagonal hatch over locked art — lifted from .bld2-locked-veil. */
+.lm-locked-veil {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    transparent,
+    transparent 8px,
+    rgba(0,0,0,0.10) 8px,
+    rgba(0,0,0,0.10) 10px
+  );
+}
+
+.lm-mount-reason {
+  margin-top: 0.1rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+/* Beats the later `.lm-choose-btn:disabled { opacity: 0.5 }` on specificity —
+   the padlock label has to stay readable, it's the whole point of the card.
+   Mirrors .bld2-btn--locked. */
+.lm-mount-card--locked .lm-choose-btn--locked:disabled {
+  background: var(--bg-raised);
+  border-color: var(--border-muted);
+  color: var(--text-muted);
+  opacity: 0.85;
+  cursor: not-allowed;
+}
 .lm-mount-visual {
   width: 100%;
   height: 110px;
@@ -9047,22 +9689,9 @@ body.nav-open #screen-root {
 }
 .lm-cancel-btn:hover { background: rgba(255,255,255,0.06); }
 
-/* Compact variant — left panel (lord-screen sidebar) */
-.lm-slot-card--sm {
-  padding: 0.9rem 1rem;
-  gap: 0.85rem;
-  border-radius: var(--radius-md);
-}
-.lm-slot-card--sm.lm-slot-card--empty,
-.lm-slot-card--sm.lm-slot-card--locked {
-  padding: 1.15rem 1rem;
-}
-.lm-slot-card--sm .lm-slot-plus { font-size: 1.7rem; margin-bottom: 3px; }
-.lm-slot-card--sm .lm-slot-label { font-size: 0.78rem; }
-.lm-slot-card--sm .lm-slot-icon { width: 50px; height: 50px; border-radius: 8px; }
-.lm-slot-card--sm .lm-slot-icon-glyph { font-size: 1.9rem; }
-.lm-slot-card--sm .lm-slot-name { font-size: 0.92rem; }
-.lm-slot-card--sm .lm-stat-chip { font-size: 0.7rem; padding: 2px 8px; }
+/* (.lm-slot-card--sm lived here: the compact left-rail variant of the mount
+   slot. The mount card moved out of the sidebar and into the Overview tab
+   on 2026-07-29, so the full-size card is the only one left.) */
 
 /* ── Recruit modal — locked (read-only) field ─────────────────── */
 
@@ -9761,32 +10390,31 @@ body.nav-open #screen-root {
   pointer-events: none;
 }
 
+/* Same pill grammar as the city artwork's status badge. */
 .rkv-portrait-rank {
   position: absolute;
-  left: 0.6rem;
-  bottom: 0.55rem;
+  left: 0.5rem;
+  bottom: 0.5rem;
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.18rem 0.6rem;
-  background: rgba(8,12,24,0.78);
-  border: 1px solid var(--border-accent);
+  padding: 0.15rem 0.45rem;
+  background: rgba(0,0,0,0.6);
   border-radius: var(--radius-pill);
-  font-family: var(--font-display);
-  font-size: 0.7rem;
-  letter-spacing: 0.08em;
+  font-size: 0.62rem;
+  font-weight: 700;
   color: var(--text-gold-light);
 }
 
 /* ── Left panel: identity ────────────────────────────── */
-.rkv-id { padding: 0.75rem 0.9rem 0.65rem; }
+.rkv-id { padding: 0.6rem 0.9rem 0.5rem; }
 
 .rkv-name {
-  margin: 0;
+  margin: 0 0 0.15rem;
   font-family: var(--font-display);
-  font-size: 1rem;
+  font-size: 0.95rem;
   color: var(--text-gold-light);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -9794,10 +10422,8 @@ body.nav-open #screen-root {
 }
 
 .rkv-id-sub {
-  margin-top: 0.25rem;
-  font-size: 0.72rem;
-  color: var(--text-secondary);
-  letter-spacing: 0.03em;
+  font-size: 0.7rem;
+  color: var(--text-muted);
 }
 
 .rkv-divider {
@@ -9806,63 +10432,61 @@ body.nav-open #screen-root {
   margin: 0 0.9rem;
 }
 
-/* ── Left panel: total score (doubles as the Overall switcher) ── */
+/* ── Left panel: total score (doubles as the Overall switcher) ──
+   Flat block, not a card — same weight as the city panel's
+   population row, so the sidebar stays quiet. */
 .rkv-total {
   display: block;
-  width: calc(100% - 1.5rem);
-  margin: 0.75rem auto;
-  padding: 0.65rem 0.8rem;
+  width: 100%;
+  padding: 0.5rem 0.9rem 0.6rem;
   text-align: left;
-  background: linear-gradient(135deg, rgba(200,147,58,0.1) 0%, rgba(200,147,58,0.02) 100%);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-md);
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
   color: inherit;
   cursor: pointer;
-  transition: border-color var(--transition), box-shadow var(--transition);
+  transition: background var(--transition), border-color var(--transition);
 }
-.rkv-total:hover { border-color: var(--border-gold); }
+.rkv-total:hover { background: rgba(255,255,255,0.04); }
 .rkv-total--active {
-  border-color: var(--border-gold);
-  box-shadow: 0 2px 14px rgba(200,147,58,0.18);
+  background: rgba(180,140,40,0.1);
+  border-left-color: var(--gold);
 }
 
 .rkv-total-label {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  font-family: var(--font-display);
-  font-size: 0.64rem;
-  font-weight: 700;
-  letter-spacing: 0.13em;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
 .rkv-total-value {
-  margin-top: 0.2rem;
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: -0.01em;
+  margin-top: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
   color: var(--text-primary);
 }
-.rkv-total-unit { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); }
+.rkv-total-unit { font-size: 0.68rem; font-weight: 400; color: var(--text-muted); }
 
 .rkv-total-sub {
-  margin-top: 0.15rem;
+  margin-top: 0.1rem;
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.7rem;
-  color: var(--text-secondary);
+  font-size: 0.68rem;
+  color: var(--text-muted);
 }
 
-/* ── Left panel: category breakdown (rows switch tabs too) ── */
+/* ── Left panel: category breakdown (rows switch tabs too) ──
+   Mirrors the city panel's .cvl-stats2 / .cvl-stat-row2. */
 .rkv-cats-header {
-  padding: 0.7rem 0.9rem 0.3rem;
-  font-family: var(--font-display);
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.13em;
+  padding: 0.3rem 0.9rem 0.15rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
@@ -9870,65 +10494,72 @@ body.nav-open #screen-root {
 .rkv-cats {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: 0 0.6rem 1rem;
+  gap: 0.45rem;
+  padding: 0.15rem 0.9rem 1rem;
 }
 
 .rkv-cat {
   display: grid;
-  grid-template-columns: 1.5rem 1fr auto;
-  gap: 0.5rem;
+  grid-template-columns: 1.1rem 1fr auto;
+  gap: 0.45rem;
   align-items: center;
-  padding: 0.5rem 0.45rem;
+  padding: 0.1rem 0.2rem;
   background: none;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 4px;
   color: inherit;
   text-align: left;
   cursor: pointer;
   transition: background var(--transition), border-color var(--transition);
 }
-.rkv-cat:hover { background: var(--bg-raised); }
+.rkv-cat:hover { background: rgba(255,255,255,0.04); }
 .rkv-cat--active {
-  background: rgba(200,147,58,0.07);
-  border-color: var(--border-accent);
+  background: rgba(180,140,40,0.1);
+  border-left-color: var(--gold);
+  padding-left: 0.3rem;
 }
 
-.rkv-cat-icon { font-size: 0.95rem; text-align: center; }
+.rkv-cat-icon { font-size: 0.85rem; line-height: 1; text-align: center; }
 
 .rkv-cat-body {
   display: flex;
   flex-direction: column;
-  gap: 0.12rem;
   min-width: 0;
 }
 
 .rkv-cat-label {
-  font-family: var(--font-display);
-  font-size: 0.76rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-primary);
+  font-size: 0.72rem;
+  color: var(--text-secondary);
 }
-.rkv-cat--active .rkv-cat-label { color: var(--text-gold-light); }
+.rkv-cat--active .rkv-cat-label { color: var(--text-primary); }
 
-.rkv-cat-sub { font-size: 0.63rem; color: var(--text-muted); }
+.rkv-cat-sub {
+  margin-top: 1px;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
+}
 
 .rkv-cat-right {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0.15rem;
+  gap: 0.1rem;
 }
 
-.rkv-cat-pts { font-size: 0.82rem; font-weight: 700; color: var(--text-gold); }
+.rkv-cat-pts {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
 
 .rkv-cat-rank {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  font-size: 0.62rem;
-  color: var(--text-muted);
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
 }
 
 /* ── Right pane: underline tab bar (same grammar as bld2-tabs) ── */
@@ -9973,12 +10604,7 @@ body.nav-open #screen-root {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 1rem 1.25rem 3rem;
-}
-.rkv-list-area .rank-list,
-.rkv-list-area .rank-empty {
-  max-width: 860px;
-  margin: 0 auto;
+  padding: 0.9rem 1.2rem 3rem;
 }
 .rkv-list-area .rank-list { animation: rkv-list-in 0.25s ease-out; }
 
@@ -10010,7 +10636,6 @@ body.nav-open #screen-root {
 .rank-list {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
 
 .rank-list-gap {
@@ -10021,43 +10646,41 @@ body.nav-open #screen-root {
   padding: 0.1rem 0;
 }
 
-.rank-empty, .clan-empty {
-  text-align: center;
-  color: var(--text-muted, #666);
+/* Quiet one-liner — these screens are flat, so a boxed empty state
+   would outweigh the content around it. */
+.rank-empty,
+.clan-empty {
+  margin: 0;
+  padding: 0.2rem 0.3rem;
+  font-size: 0.75rem;
   font-style: italic;
-  padding: 2rem 1rem;
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 8px;
+  color: rgba(255,255,255,0.3);
 }
 
+/* Hairline rows, not cards — same grammar as the clan roster and the
+   city view's overview rows. */
 .rank-row {
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 8px;
-  padding: 0.65rem 0.85rem;
+  padding: 0.45rem 0.3rem;
+  border-bottom: 1px solid var(--border-muted);
   display: grid;
   grid-template-columns: 2.2rem 1fr;
   gap: 0.5rem;
   align-items: start;
-  transition: background 0.12s;
+  transition: background var(--transition);
 }
-.rank-row:hover { background: #1a1a1a; }
-.rank-row--own  {
-  border-color: var(--text-gold, #c9973a);
-  background: #1a1600;
-  box-shadow: 0 0 0 1px rgba(201,151,58,0.15);
-}
+.rank-row:last-child { border-bottom: none; }
+.rank-row:hover { background: rgba(255,255,255,0.03); }
+.rank-row--own  { background: rgba(200,147,58,0.06); }
 
 .rank-row-medal {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   text-align: center;
-  color: var(--text-muted, #888);
+  color: var(--text-muted);
   font-weight: 700;
   line-height: 1.5;
 }
 
-.rank-row-body { display: flex; flex-direction: column; gap: 0.3rem; }
+.rank-row-body { display: flex; flex-direction: column; gap: 0.15rem; }
 
 .rank-row-top {
   display: flex;
@@ -10067,9 +10690,9 @@ body.nav-open #screen-root {
 }
 
 .rank-row-name {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: var(--text-base, #ccc);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 .rank-row--own .rank-row-name { color: var(--text-gold, #c9973a); }
 
@@ -10088,9 +10711,10 @@ body.nav-open #screen-root {
 }
 
 .rank-row-score {
-  font-size: 1rem;
-  font-weight: 800;
-  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
@@ -10130,7 +10754,7 @@ body.nav-open #screen-root {
 
 /* Rank movement over the last ~hour (see ranking.js's rank_score_1h snapshot) */
 .rank-delta {
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   font-weight: 700;
   padding: 0.05rem 0.35rem;
   border-radius: 3px;
@@ -10148,35 +10772,9 @@ body.nav-open #screen-root {
 
 /* Sub-text line for lord meta etc */
 .rank-row-sub {
-  font-size: 0.72rem;
-  color: var(--text-muted, #888);
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
 }
-
-/* ── Ranking sub-tabs (still used by the Clan screen) ───────── */
-.rank-tabs-row {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-  padding: 0 0 4px;
-}
-.rank-tab {
-  padding: 5px 12px;
-  background: transparent;
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 6px;
-  color: var(--text-muted, #888);
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.rank-tab:hover { background: rgba(255,255,255,0.05); color: var(--text-base, #ccc); }
-.rank-tab--active {
-  background: rgba(201,151,58,0.12);
-  border-color: rgba(201,151,58,0.4);
-  color: var(--text-gold, #c9973a);
-}
-.rank-tab-content { display: flex; flex-direction: column; gap: 0.4rem; }
 
 /* ── CP badge ───────────────────────────────────────────────── */
 .mip-lc-cp {
@@ -10188,12 +10786,17 @@ body.nav-open #screen-root {
 .mip-lc-cp--enemy { color: #e07070; }
 
 /* ── Intel badge ─────────────────────────────────────────────── */
-.mip-intel-badge {
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  white-space: nowrap;
+/* Scout freshness line on the tile panel. The map never repeats what a scout
+   found — it only says whether, and how long ago, this tile was scouted. */
+.mip-scouted-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0 0.1rem;
+  font-size: 0.68rem;
+  color: var(--scout);
 }
+.mip-scouted-row--none { color: var(--text-muted); }
 
 /* ── Enemy city card ─────────────────────────────────────────── */
 .mip-enemy-city-card { border-color: rgba(200,60,60,0.35); }
@@ -10231,26 +10834,18 @@ body.nav-open #screen-root {
 .mip-card-wide.ov-city-card .ov-cc-art { height: 88px; }
 .mip-card-wide.ov-lord-card .ov-lc-portrait { height: 94px; }
 
-/* ── Clan screen ──────────────────────────────────────────── */
+/* =====================================================
+   CLAN SCREEN — clv-* shell (split layout, same grammar as
+   the rankings screen's rkv-body/rkv-left/rkv-right) over the
+   clan-* row components below.
+   ===================================================== */
 .clan-screen {
   display: flex;
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
-  background: var(--bg-dark, #0e0e0e);
-  color: var(--text-base, #ccc);
-}
-.clan-header {
-  padding: 1.25rem 1.25rem 0.5rem;
-  border-bottom: 1px solid var(--border, #2a2a2a);
-  background: var(--bg-panel, #141414);
-}
-.clan-title {
-  font-family: 'Cinzel', serif;
-  font-size: 1.3rem;
-  color: var(--text-gold, #c9973a);
-  letter-spacing: 0.08em;
-  margin: 0;
+  background: var(--bg-deep);
+  color: var(--text-primary);
 }
 .clan-loading {
   display: flex;
@@ -10260,43 +10855,446 @@ body.nav-open #screen-root {
   color: var(--text-muted, #777);
   font-style: italic;
 }
-.clan-content {
+
+.clv-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.clv-left {
+  flex: 0 0 264px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-muted);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.clv-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Left panel: crest banner ────────────────────────── */
+.clv-crest {
+  position: relative;
+  width: 100%;
+  height: 150px;
+  flex-shrink: 0;
+  overflow: hidden;
+  border-bottom: 1px solid var(--border-muted);
+  background: #05020a;
+  background: linear-gradient(150deg,
+    hsl(var(--clv-hue, 40) 42% 16%) 0%,
+    hsl(var(--clv-hue, 40) 38% 7%) 62%,
+    #05020a 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.clv-crest--muted { filter: saturate(0.35); }
+
+/* Heraldic shield sitting behind the tag — a watermark, not an icon. */
+.clv-crest-mark {
+  position: absolute;
+  font-size: 7.5rem;
+  line-height: 1;
+  color: var(--gold);
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+.clv-crest-tag {
+  position: relative;
+  font-family: var(--font-display);
+  font-size: 1.9rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-gold-light);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+}
+
+.clv-crest-fade {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent 50%, rgba(8,12,24,0.85) 100%);
+  pointer-events: none;
+}
+
+/* Same pill grammar as the city artwork's status badge. */
+.clv-crest-badge {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.45rem;
+  background: rgba(0,0,0,0.6);
+  border-radius: var(--radius-pill);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--text-gold-light);
+}
+
+/* ── Left panel: identity ────────────────────────────── */
+.clv-id { padding: 0.6rem 0.9rem 0.5rem; }
+
+.clv-name {
+  margin: 0 0 0.15rem;
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text-gold-light);
+  letter-spacing: 0.07em;
+}
+
+.clv-id-sub {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.clv-divider {
+  height: 1px;
+  background: var(--border-muted);
+  margin: 0 0.9rem;
+}
+
+/* ── Left panel: headline figure (doubles as a tab switcher) ──
+   Flat block, not a card — same weight as the city panel's
+   population row, so the sidebar stays quiet. */
+.clv-total {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.9rem 0.6rem;
+  text-align: left;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.clv-total:hover { background: rgba(255,255,255,0.04); }
+.clv-total--active {
+  background: rgba(180,140,40,0.1);
+  border-left-color: var(--gold);
+}
+
+.clv-total-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.clv-total-value {
+  margin-top: 0.15rem;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.clv-total-unit { font-size: 0.68rem; font-weight: 400; color: var(--text-muted); }
+
+.clv-total-sub {
+  margin-top: 0.1rem;
+  font-size: 0.68rem;
+  color: var(--text-muted);
+}
+
+/* ── Left panel: counter rows (also switch tabs) ──────
+   Mirrors the city panel's .cvl-stats2 / .cvl-stat-row2. */
+.clv-stats-header {
+  padding: 0.3rem 0.9rem 0.15rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.clv-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.15rem 0.9rem 0.4rem;
+}
+
+.clv-stat {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.1rem 0.2rem;
+  background: none;
+  border: none;
+  border-left: 2px solid transparent;
+  border-radius: 4px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition);
+}
+.clv-stat:hover { background: rgba(255,255,255,0.04); }
+.clv-stat--active {
+  background: rgba(180,140,40,0.1);
+  border-left-color: var(--gold);
+  padding-left: 0.3rem;
+}
+
+.clv-stat-icon { font-size: 0.85rem; line-height: 1; text-align: center; }
+
+.clv-stat-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.clv-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+}
+.clv-stat--active .clv-stat-label { color: var(--text-primary); }
+
+.clv-stat-sub {
+  margin-top: 1px;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clv-stat-val {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.clv-stat-val--alert { color: var(--text-gold); }
+
+/* ── Left panel: active-war minis ────────────────────── */
+.clv-mini-empty {
+  margin: 0;
+  padding: 0.15rem 1.1rem 0.5rem;
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.25);
+}
+
+.clv-mini-wars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.15rem 0.9rem 0.5rem;
+}
+
+.clv-mini-war {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  width: 100%;
+  padding: 0.15rem 0.2rem 0.15rem 0.4rem;
+  background: none;
+  border: none;
+  border-left: 2px solid rgba(192,80,80,0.6);
+  border-radius: 4px;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.clv-mini-war:hover { background: rgba(255,255,255,0.04); }
+
+.clv-mini-war-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.clv-mini-war-vs   { font-size: 0.72rem; color: var(--text-secondary); }
+.clv-mini-war-time { font-size: 0.6rem; color: rgba(255,255,255,0.25); white-space: nowrap; }
+
+.clv-mini-war-score {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.clv-mini-war-score .clv-lead { color: var(--text-primary); }
+
+/* ── Left panel: bottom actions ──────────────────────── */
+.clv-actions {
+  margin-top: auto;
+  padding: 0.75rem 0.9rem 1rem;
+}
+.clv-cta { width: 100%; }
+
+/* ── Right pane: underline tab bar (same grammar as bld2-tabs) ── */
+.clv-tabs {
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-muted);
+  flex-shrink: 0;
+  padding: 0 0.5rem;
+}
+
+.clv-tab {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1rem;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--transition), border-color var(--transition);
+}
+.clv-tab:hover   { color: var(--text-secondary); }
+.clv-tab--active { color: var(--text-gold); border-bottom-color: var(--gold); }
+
+.clv-tab-soon {
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-pill);
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.clv-meta {
+  margin-left: auto;
+  padding: 0 0.9rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Right pane: scrollable content ──────────────────── */
+.clv-content {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  max-width: 700px;
-  margin: 0 auto;
-  padding: 1rem 1rem 3rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-  width: 100%;
-  box-sizing: border-box;
+  padding-bottom: 2rem;
+  animation: rkv-list-in 0.25s ease-out;
 }
-.clan-section-title {
-  font-size: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  color: var(--text-muted, #666);
-  text-transform: uppercase;
-  margin-bottom: 0.6rem;
-  padding-left: 0.1rem;
+@media (prefers-reduced-motion: reduce) {
+  .clv-content { animation: none; }
 }
 
-.clan-card {
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 10px;
-  overflow: hidden;
+/* ── Right pane: content sections ────────────────────
+   Same shape as the city view's overview tab (.cvov-section):
+   no cards, just padded blocks split by a hairline. */
+.clv-panel {
+  padding: 0.9rem 1.2rem;
+  border-bottom: 1px solid var(--border-muted);
 }
-.clan-card-header {
+.clv-panel:last-child { border-bottom: none; }
+
+.clv-panel-head {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem;
-  background: linear-gradient(135deg, #1a1500 0%, #0e0e0e 100%);
-  border-bottom: 1px solid #2a2510;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
 }
+.clv-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.clv-panel-note {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.25);
+  white-space: nowrap;
+}
+.clv-panel-body > .clan-empty { padding: 0.2rem 0; }
+
+/* ── Right pane: roadmap ("coming soon") tabs ────────── */
+.clv-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.45rem;
+  padding: 3rem 1.5rem;
+}
+.clv-soon-icon { font-size: 2.2rem; color: var(--gold-dark); }
+.clv-soon-title {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  letter-spacing: 0.07em;
+  color: var(--text-gold-light);
+}
+.clv-soon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.clv-soon-text {
+  margin: 0.4rem 0 0;
+  max-width: 46ch;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.clv-soon-list {
+  margin: 0.2rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.35);
+}
+
+/* ── Stacked layout on narrow screens ────────────────── */
+@media (max-width: 760px) {
+  .clv-body { flex-direction: column; overflow-y: auto; }
+  .clv-left {
+    flex: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border-muted);
+    overflow: visible;
+  }
+  .clv-crest { height: 118px; }
+  .clv-right { flex: none; overflow: visible; }
+  .clv-tabs { overflow-x: auto; position: sticky; top: 0; z-index: 2; }
+  .clv-meta { display: none; }
+  .clv-content { overflow: visible; padding: 0.75rem 0.75rem 3rem; }
+}
+
 .clan-tag {
   font-family: 'Cinzel', serif;
   font-weight: 700;
@@ -10305,12 +11303,16 @@ body.nav-open #screen-root {
 }
 .clan-name {
   flex: 1;
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--text-base, #ddd);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 .clan-member-count {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-muted, #888);
   font-variant-numeric: tabular-nums;
 }
@@ -10318,17 +11320,20 @@ body.nav-open #screen-root {
   display: flex;
   flex-direction: column;
 }
+/* Rows sit inside a .clv-panel section, which already supplies the
+   horizontal padding — so they only pad vertically and stay flush with
+   the section title above them. */
 .clan-member-row {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.55rem 1rem;
-  border-bottom: 1px solid #1a1a1a;
-  font-size: 0.85rem;
+  padding: 0.45rem 0.3rem;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 0.82rem;
 }
 .clan-member-row:last-child { border-bottom: none; }
 .clan-member-row--you { background: rgba(200,147,58,0.06); }
-.clan-member-name { color: var(--text-base, #ccc); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clan-member-name { color: var(--text-primary); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .clan-member-honor {
   display: flex;
   align-items: center;
@@ -10360,19 +11365,24 @@ body.nav-open #screen-root {
   cursor: pointer;
 }
 .clan-kick-btn:hover { background: linear-gradient(180deg, #5a2a2a 0%, #3a1818 100%); border-color: #aa5050; }
+/* Lives in the left panel's bottom action slot (.clv-actions). */
 .clan-leave-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
   width: 100%;
-  padding: 0.6rem;
-  font-size: 0.78rem;
+  padding: 0.55rem 0.6rem;
+  font-size: 0.72rem;
   font-weight: 600;
-  border: none;
-  border-top: 1px solid var(--border, #2a2a2a);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius-md);
   background: rgba(255,255,255,0.03);
   color: var(--text-secondary, #aaa);
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background var(--transition), color var(--transition), border-color var(--transition);
 }
-.clan-leave-btn:hover { background: rgba(200,80,80,0.1); color: #e08080; }
+.clan-leave-btn:hover { background: rgba(200,80,80,0.1); color: #e08080; border-color: #7a3a3a; }
 
 /* ── Clan Rankings tab ─────────────────────────────────────────── */
 .clan-rankings-list { display: flex; flex-direction: column; }
@@ -10380,12 +11390,17 @@ body.nav-open #screen-root {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  padding: 0.55rem 1rem;
-  border-bottom: 1px solid #1a1a1a;
-  font-size: 0.85rem;
+  padding: 0.45rem 0.3rem;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 0.82rem;
 }
 .clan-rank-row:last-child { border-bottom: none; }
+/* Holds either "#4" text or a podium/medal icon for the top three. */
 .clan-rank-pos {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
   color: var(--text-muted, #888);
   font-variant-numeric: tabular-nums;
   min-width: 2em;
@@ -10412,21 +11427,24 @@ body.nav-open #screen-root {
   text-align: right;
 }
 
+/* Capped so the fields don't stretch across a full-bleed section. */
 .clan-create-card {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
+  max-width: 620px;
 }
 .clan-input {
   flex: 1;
   min-width: 120px;
   padding: 0.5rem 0.7rem;
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-base);
   border-radius: var(--radius-sm, 4px);
-  color: var(--text-base, #ddd);
+  color: var(--text-primary);
   font-size: 0.85rem;
 }
+.clan-input:focus { outline: none; border-color: var(--border-gold); }
 .clan-input--tag { flex: 0 0 90px; text-transform: uppercase; }
 .clan-error {
   color: #e08080;
@@ -10438,18 +11456,19 @@ body.nav-open #screen-root {
 .clan-browse-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
 }
 .clan-browse-row {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.6rem 0.85rem;
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 8px;
+  padding: 0.45rem 0.3rem;
+  border-bottom: 1px solid var(--border-muted);
+  transition: background var(--transition);
 }
-.clan-browse-row .clan-name { font-size: 0.88rem; }
+.clan-browse-row:last-child { border-bottom: none; }
+.clan-browse-row:hover { background: rgba(255,255,255,0.03); }
+.clan-browse-row .clan-name { font-size: 0.82rem; }
+.clan-browse-row .clan-rank-points { font-size: 0.72rem; }
 .clan-join-btn {
   padding: 0.3rem 0.8rem;
   font-size: 0.72rem;
@@ -10463,27 +11482,27 @@ body.nav-open #screen-root {
 .clan-join-btn:hover { background: linear-gradient(180deg, #5a4a18 0%, #3a2e0c 100%); border-color: #aa9a4a; }
 .clan-join-btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .clan-pending-note {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: var(--text-gold, #c9973a);
-  margin-bottom: 0.5rem;
+  margin: 0 0 0.5rem;
+  padding-left: 0.3rem;
 }
 
 /* Applications */
 .clan-applications-list {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
 .clan-application-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  padding: 0.5rem 0.85rem;
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 8px;
+  padding: 0.4rem 0.3rem;
+  border-bottom: 1px solid var(--border-muted);
+  font-size: 0.82rem;
 }
+.clan-application-row:last-child { border-bottom: none; }
 .clan-application-actions { display: flex; gap: 0.4rem; }
 .clan-accept-btn, .clan-reject-btn {
   padding: 0.25rem 0.65rem;
@@ -10509,24 +11528,25 @@ body.nav-open #screen-root {
 .clan-war-list, .clan-war-history {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
 }
-.clan-war-history { margin-top: 0.5rem; opacity: 0.75; }
+.clan-war-history { opacity: 0.7; }
 .clan-war-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.6rem;
-  padding: 0.55rem 0.85rem;
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
-  border-radius: 8px;
+  padding: 0.45rem 0.3rem;
+  border-bottom: 1px solid var(--border-muted);
+  border-left: 2px solid transparent;
   font-size: 0.8rem;
 }
-.clan-war-row--active { border-color: #7a3a3a; }
+.clan-war-list  .clan-war-row:last-child,
+.clan-war-history .clan-war-row:last-child { border-bottom: none; }
+/* Only live wars carry the red edge — ended ones read as history. */
+.clan-war-row--active { border-left-color: rgba(192,80,80,0.6); padding-left: 0.45rem; }
 .clan-war-sides { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 .clan-war-side { color: var(--text-muted, #888); }
-.clan-war-side b { color: var(--text-base, #ddd); font-variant-numeric: tabular-nums; }
+.clan-war-side b { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 /* Same green/red pair as .clan-honor--pos/--neg elsewhere in this file. */
 .clan-war-side--mine    { color: #5db85d; }
 .clan-war-side--mine b  { color: #5db85d; }
@@ -10552,14 +11572,14 @@ body.nav-open #screen-root {
   display: flex;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-top: 0.6rem;
+  max-width: 620px;
 }
 .clan-select {
   padding: 0.4rem 0.6rem;
-  background: var(--bg-panel, #141414);
-  border: 1px solid var(--border, #2a2a2a);
+  background: var(--bg-deep);
+  border: 1px solid var(--border-base);
   border-radius: var(--radius-sm, 4px);
-  color: var(--text-base, #ddd);
+  color: var(--text-primary);
   font-size: 0.8rem;
   flex: 1;
   min-width: 130px;
@@ -10950,4 +11970,238 @@ body.nav-open #screen-root {
   border: 1px solid rgba(58, 138, 58, 0.4);
   border-radius: 999px;
   vertical-align: middle;
+}
+
+/* ── Account screen ─────────────────────────── */
+.acc-screen {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--bg-deep);
+}
+
+.acc-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 1.5rem 2rem 1rem;
+  border-bottom: 1px solid var(--border-muted);
+  flex-shrink: 0;
+}
+
+.acc-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-gold);
+  letter-spacing: 0.1em;
+}
+
+.acc-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem 2rem 4rem;
+}
+
+.acc-col {
+  max-width: 540px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  animation: acc-rise 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes acc-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.acc-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+/* Identity */
+.acc-id-top {
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+}
+
+.acc-crest {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: var(--bg-raised);
+  border: 2px solid var(--gold-dark);
+}
+
+.acc-crest-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
+}
+
+.acc-crest-icon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: var(--text-gold);
+}
+.acc-crest-icon .gi { width: 2rem; height: 2rem; }
+
+.acc-username {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-gold-light);
+  line-height: 1.2;
+}
+
+.acc-race-line {
+  margin-top: 0.35rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.acc-rows {
+  margin-top: 1.35rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--border-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.acc-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.acc-row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.acc-row-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+/* Change password */
+.acc-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1.1rem;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-gold);
+}
+
+.acc-label {
+  display: block;
+  margin: 0.9rem 0 0.35rem;
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.acc-label:first-of-type { margin-top: 0; }
+
+.acc-input {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: var(--bg-deep);
+  border: 1px solid var(--border-base);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.88rem;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.acc-input::placeholder { color: var(--text-muted); }
+
+.acc-input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(200, 147, 58, 0.12);
+}
+
+.acc-error {
+  min-height: 1.1rem;
+  margin-top: 0.6rem;
+  font-size: 0.78rem;
+  color: var(--text-danger);
+}
+
+.acc-submit-btn {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding: 0.6rem 1.25rem;
+  background: linear-gradient(180deg, #d4993e 0%, #b87e2a 100%);
+  border: none;
+  border-radius: var(--radius-md);
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: #1a0e04;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+
+.acc-submit-btn:hover:not(:disabled)  { filter: brightness(1.12); }
+.acc-submit-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(200, 147, 58, 0.25);
+}
+.acc-submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .acc-body { padding: 1.25rem 1rem 3rem; }
+  .acc-panel { padding: 1.25rem 1.1rem; }
+  .acc-id-top { gap: 0.9rem; }
+  .acc-crest { width: 60px; height: 60px; }
+  .acc-username { font-size: 1.15rem; }
+  .acc-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+  }
+  .acc-row-value { text-align: left; }
 }

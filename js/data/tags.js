@@ -75,7 +75,7 @@ const TAG_DEFS = {
   human: {
     id:          'human',
     name:        'Human',
-    description: 'Humanoid unit (Dark Elf, Human, Dwarf, etc.).',
+    description: 'Humanoid unit (Dark Elves, Human, Dwarf, etc.).',
   },
 
   // ── Recruitment origin ────────────────────────────────────────

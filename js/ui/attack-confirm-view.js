@@ -7,8 +7,13 @@ const AttackConfirmView = (() => {
   let _player     = null;
   let _targetX    = 0;
   let _targetY    = 0;
-  let _enemyData  = null;  // rawData from scanTile (not wrapped in intel record)
-  let _targetCity = null;  // tiered enemy_city data, {} for unscouted, null if no city on this tile
+  // The latest scout report for this tile, straight out of the Activity feed —
+  // that feed is the only place scout findings are ever stored, so this screen
+  // reads it rather than being handed intel by whoever navigated here. null
+  // means the tile was never scouted (or the report was dismissed/aged out),
+  // which is a perfectly valid state: you can always attack blind.
+  let _report     = null;
+  let _cityMeta   = null;  // always-public { name, ownerUsername } from world_state
   let _lords      = [];
 
   // ── Unit card (mirrors lord-screen's _buildUnitCard, same CSS classes) ──
@@ -40,75 +45,95 @@ const AttackConfirmView = (() => {
     }).filter(Boolean).join('')}</div>`;
   }
 
-  // ── City target card ──────────────────────────────────────────
-  // A tile can hold both a city and one or more lords (co-op defense) —
-  // this renders independently of _enemyCardHtml below. _targetCity is
-  // {} for an unscouted city (still attackable — no intel required) or
-  // tiered rawData from IntelligenceService once scouted.
+  // ── Target cards ──────────────────────────────────────────────
+  // A tile can hold both a city and one or more lords (co-op defense), so
+  // these render independently. Everything below the city's name/owner comes
+  // from the scout report and is simply absent when the tile was never
+  // scouted — attacking blind stays allowed, you just do it without numbers.
+
+  function _unitChipsHtml(units) {
+    return (units || []).map(u => {
+      const def = UNIT_DEFS[u.unitId] || {};
+      return `<div class="mip-enemy-unit-chip">${def.icon || gi('crossed-swords')} ${def.name || u.unitId} ×${u.count}</div>`;
+    }).join('');
+  }
+
+  function _staleHtml() {
+    if (!_report?.at) return '';
+    const mins = Math.floor((TimeService.now() - _report.at) / 60000);
+    const ago  = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
+    return `<div class="ac-enemy-stance">${gi('spy')} Scouted ${ago}</div>`;
+  }
 
   function _cityCardHtml() {
-    if (!_targetCity) return '';
-    const data    = _targetCity;
-    const hasName = !!data.name;
-    const garrisonHtml = data.garrisonUnits?.length > 0
-      ? data.garrisonUnits.map(r => {
-          const def = UNIT_DEFS[r.unitId];
-          return `<div class="mip-enemy-unit-chip">${def?.icon || gi('crossed-swords')} ${def?.name || r.unitId} ×${r.count}</div>`;
-        }).join('')
-      : (data.forceSize ? `<div class="mip-enemy-unit-chip">${gi('guarded-tower')} Garrison: ${data.forceSize}</div>` : '');
+    const city = _report?.city || null;
+    if (!city && !_cityMeta) return '';
+
+    const name  = city?.name || _cityMeta?.name || 'Unknown City';
+    const owner = city?.ownerUsername || _cityMeta?.ownerUsername || null;
+    const plunder = city?.plunder;
+    const lootHtml = plunder ? [
+      plunder.gold  > 0 ? `<div class="mip-enemy-unit-chip">${gi('two-coins')} ${plunder.gold.toLocaleString()}</div>` : '',
+      plunder.food  > 0 ? `<div class="mip-enemy-unit-chip">${gi('wheat')} ${plunder.food.toLocaleString()}</div>` : '',
+      plunder.wood  > 0 ? `<div class="mip-enemy-unit-chip">${gi('wood-pile')} ${plunder.wood.toLocaleString()}</div>` : '',
+      plunder.stone > 0 ? `<div class="mip-enemy-unit-chip">${gi('war-pick')} ${plunder.stone.toLocaleString()}</div>` : '',
+    ].filter(Boolean).join('') : '';
 
     return `
       <div class="ac-enemy-card ac-city-card">
         <div class="ac-enemy-top">
           <div class="ac-enemy-portrait"><div class="ac-enemy-portrait-icon">${gi('guarded-tower')}</div></div>
           <div class="ac-enemy-info">
-            <div class="ac-enemy-name">${hasName ? data.name : 'Unknown City'}</div>
-            <div class="ac-enemy-meta">${hasName ? 'Enemy City' : 'Never scouted — attacking anyway'}</div>
+            <div class="ac-enemy-name">${name}</div>
+            <div class="ac-enemy-meta">${owner ? `Enemy city · ${owner}` : 'Enemy city'}</div>
+            ${city
+              ? `<div class="ac-enemy-stance">${gi('guarded-tower')} Garrison ${city.garrisonCount} · ${city.garrisonPower} PWR</div>${_staleHtml()}`
+              : `<div class="ac-enemy-stance ac-enemy-unscouted">Never scouted — garrison unknown</div>`}
           </div>
         </div>
-        ${garrisonHtml ? `<div class="ac-enemy-units">${garrisonHtml}</div>` : ''}
+        ${city ? `<div class="ac-enemy-units">${_unitChipsHtml(city.garrison)}</div>` : ''}
+        ${lootHtml ? `<div class="ac-loot-label">Spoils if you win</div><div class="ac-enemy-units">${lootHtml}</div>` : ''}
       </div>`;
   }
 
-  // ── Enemy intel card ──────────────────────────────────────────
-
   function _enemyCardHtml() {
-    if (!_enemyData) {
-      // A city card may already be shown above this — only show the
-      // "no data" placeholder when there's truly nothing known at all.
-      return _targetCity ? '' : `<div class="ac-enemy-none">No enemy data available</div>`;
+    const lords = _report?.lords || [];
+    if (!lords.length) {
+      // Nothing known about defending lords. Either the tile was never
+      // scouted, or the scout found only a city — the map's own "Unknown
+      // Force" marker is what sent us here, so say so plainly.
+      if (_report?.city) return '';
+      return `<div class="ac-enemy-none">${gi('uncertainty')} Unknown force — scout this tile to see what defends it</div>`;
     }
-    const data  = _enemyData;
-    const race  = RACES[data.lordRace] || {};
-    const cls   = LORD_CLASSES[data.lordClass] || null;
-    const portraitSrc  = pickLordPortrait(data.lordRace, data.lordClass, data.lordId) || race.portrait;
-    const portraitHtml = portraitSrc
-      ? `<img src="${portraitSrc}" class="ac-enemy-portrait-img" alt="" onerror="this.style.display='none'">`
-      : `<div class="ac-enemy-portrait-icon">${race.icon || gi('crossed-swords')}</div>`;
 
-    const units = data.units || [];
-    const unitsHtml = units.map(u => {
-      const def = UNIT_DEFS[u.unitId] || {};
-      return `<div class="mip-enemy-unit-chip">${def.icon || gi('crossed-swords')} ${def.name || u.unitId} ×${u.count}</div>`;
-    }).join('');
+    return lords.map(data => {
+      const race = RACES[data.lordRace] || {};
+      const cls  = LORD_CLASSES[data.lordClass] || null;
+      const portraitSrc  = data.lordPortrait || pickLordPortrait(data.lordRace, data.lordClass, data.lordId) || race.portrait;
+      const portraitHtml = portraitSrc
+        ? `<img src="${portraitSrc}" class="ac-enemy-portrait-img" alt="" onerror="this.style.display='none'">`
+        : `<div class="ac-enemy-portrait-icon">${race.icon || gi('crossed-swords')}</div>`;
+      const unitsHtml = _unitChipsHtml(data.units);
 
-    return `
-      <div class="ac-enemy-card">
-        <div class="ac-enemy-top">
-          <div class="ac-enemy-portrait">${portraitHtml}</div>
-          <div class="ac-enemy-info">
-            <div class="ac-enemy-name">${data.lordName || 'Enemy Lord'}</div>
-            <div class="ac-enemy-meta">
-              ${race.name ? `${race.icon} ${race.name}` : ''}
-              ${data.lordLevel ? ` · Lv ${data.lordLevel}` : ''}
-              ${cls ? ` · ${cls.icon} ${cls.name}` : ''}
+      return `
+        <div class="ac-enemy-card">
+          <div class="ac-enemy-top">
+            <div class="ac-enemy-portrait">${portraitHtml}</div>
+            <div class="ac-enemy-info">
+              <div class="ac-enemy-name">${data.lordName || 'Enemy Lord'}</div>
+              <div class="ac-enemy-meta">
+                ${race.name ? `${race.icon} ${race.name}` : ''}
+                ${data.lordLevel ? ` · Lv ${data.lordLevel}` : ''}
+                ${cls ? ` · ${cls.icon} ${cls.name}` : ''}
+              </div>
+              ${data.playerUsername ? `<div class="ac-enemy-stance">${gi('person')} ${data.playerUsername}</div>` : ''}
+              ${data.armyPower != null ? `<div class="ac-enemy-stance">${gi('crossed-swords')} ${data.armyCount} troops · ${data.armyPower} PWR</div>` : ''}
+              ${_staleHtml()}
             </div>
-            ${data.playerUsername ? `<div class="ac-enemy-stance">${gi('person')} ${data.playerUsername}</div>` : ''}
-            ${data.armyCapacity != null ? `<div class="ac-enemy-stance">${gi('crossed-swords')} ${data.armyCapacity} army pts</div>` : ''}
           </div>
-        </div>
-        ${unitsHtml ? `<div class="ac-enemy-units">${unitsHtml}</div>` : ''}
-      </div>`;
+          ${unitsHtml ? `<div class="ac-enemy-units">${unitsHtml}</div>` : ''}
+        </div>`;
+    }).join('');
   }
 
   // ── Lord selector section ─────────────────────────────────────
@@ -129,7 +154,7 @@ const AttackConfirmView = (() => {
   function _attackerCardHtml(lord) {
     const race       = RACES[lord.race] || {};
     const cls        = LORD_CLASSES[lord.classId];
-    const portraitSrc  = pickLordPortrait(lord.race, lord.classId, lord.id) || race.portrait;
+    const portraitSrc  = lord.portrait || pickLordPortrait(lord.race, lord.classId, lord.id) || race.portrait;
     const portraitHtml = portraitSrc
       ? `<img src="${portraitSrc}" class="ac-atk-portrait-img" alt="${lord.name}" onerror="this.style.display='none'">`
       : `<div class="ac-atk-portrait-icon">${race.icon || gi('crossed-swords')}</div>`;
@@ -170,12 +195,17 @@ const AttackConfirmView = (() => {
 
   // ── Main render ───────────────────────────────────────────────
 
-  function render(root, { player, targetX, targetY, enemyData, targetCity }) {
+  function render(root, { player, targetX, targetY }) {
     _player     = player;
     _targetX    = targetX;
     _targetY    = targetY;
-    _enemyData  = enemyData || null;
-    _targetCity = targetCity || null;
+    // Read the intel here rather than accepting it from the caller: the
+    // Activity feed is the single store, so every entry point to this screen
+    // sees exactly the same thing.
+    _report     = ActivityService.latestScoutReport(player.id, targetX, targetY);
+    _cityMeta   = WorldService.getTile(targetX, targetY)
+      ? WorldService.getCityMeta(targetX, targetY)
+      : null;
     _lords      = LordService.getByPlayer(player.id).filter(l => !LordService.isDown(l) && l.actionQueue.length === 0 && l.x != null);
 
     const terrain = WorldService.getTerrain(targetX, targetY);

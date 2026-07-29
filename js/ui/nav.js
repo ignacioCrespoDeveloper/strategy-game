@@ -160,7 +160,9 @@ const Nav = (() => {
     });
 
     document.querySelector('[data-nav-page="account"]')?.addEventListener('click', () => {
-      _toast('Account settings — coming soon!');
+      const player = PlayerService.getSession();
+      const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
+      App.navigate('account', { player, lord });
     });
 
     document.getElementById('nav-logout-btn')?.addEventListener('click', () => {

@@ -37,6 +37,7 @@ const _ctx = vm.createContext({
 
 // ── Load order: deps before consumers ────────────────────────
 load('js/data/lord-classes.js');     // LORD_BASE_STATS, LORD_CLASSES
+load('js/data/lord-portraits.js');   // LORD_PORTRAIT_POOLS, rollLordPortrait (no deps)
 load('js/data/stances.js');          // STANCE_DEFS
 load('js/data/units.js');            // UNIT_DEFS
 load('js/data/buildings.js');        // BUILDING_DEFS
@@ -47,6 +48,7 @@ load('js/domain/world.js');          // TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS
 load('js/domain/economy-core.js');   // EconomyCore — THE shared economy math (needs BUILDING_DEFS)
 load('js/data/battle-defs.js');      // TERRAIN_BATTLE_MODS, CAMP_DEFS
 load('js/data/discoveries.js');      // DISCOVERY_DEFS
+load('js/domain/discovery-roll.js'); // DiscoveryRoll — THE shared quest roll math
 load('js/domain/battle-targeting.js');
 load('js/domain/battle-morale.js');  // needs TERRAIN_BATTLE_MODS
 load('js/domain/battle-traits.js');
@@ -70,10 +72,16 @@ export const TERRAIN_BATTLE_MODS   = _ctx.TERRAIN_BATTLE_MODS;
 export const BATTLE_WIN_HEAL_PCT   = _ctx.BATTLE_WIN_HEAL_PCT;
 export const LORD_BASE_STATS       = _ctx.LORD_BASE_STATS;
 export const LORD_CLASSES          = _ctx.LORD_CLASSES;
+export const LORD_MAX_LEVEL        = _ctx.LORD_MAX_LEVEL;
+export const lordStatGain          = _ctx.lordStatGain;
+export const rollLordPortrait      = _ctx.rollLordPortrait;
+export const pickLordPortrait      = _ctx.pickLordPortrait;
 export const STANCE_DEFS           = _ctx.STANCE_DEFS;
 export const TALENT_POOL           = _ctx.TALENT_POOL;
 export const MOUNT_POOL            = _ctx.MOUNT_POOL;
+export const getMountForRace       = _ctx.getMountForRace;
 export const lordRansomCost        = _ctx.lordRansomCost;
 export const DISCOVERY_DEFS        = _ctx.DISCOVERY_DEFS;
+export const DiscoveryRoll         = _ctx.DiscoveryRoll;
 export const CAMP_DEFS             = _ctx.CAMP_DEFS;
 export const CAMP_LEVEL_LOOT       = _ctx.CAMP_LEVEL_LOOT;

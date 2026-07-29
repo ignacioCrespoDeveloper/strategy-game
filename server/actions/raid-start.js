@@ -3,10 +3,9 @@
 //
 //  Body: { lordId, durationSecs }
 //
-//  Starts the Raiding stance server-side — real economic value, so unlike
-//  ambush/raid (which stay client-only stance changes) this can't be
-//  trusted to the client. See js/data/stances.js's 'raiding' entry for the
-//  full mechanic writeup.
+//  Starts the Raiding stance server-side — real economic value, so it
+//  can't be trusted to the client. See js/data/stances.js's 'raiding'
+//  entry for the full mechanic writeup.
 //
 //  Validates the lord is free, has an army, and is standing on a tile with
 //  NO city (own or enemy) — raiding only works on neutral/wild ground.

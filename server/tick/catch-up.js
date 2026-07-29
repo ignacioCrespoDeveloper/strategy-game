@@ -70,11 +70,18 @@ function _getTerrain(x, y) {
 // XP threshold for the next level. Mirrors lord.js xpToNext formula.
 function _xpToNextLevel(level) { return 50 * (2 * level + 1); }
 
+// Hard level cap — local copy of LORD_MAX_LEVEL from js/data/lord-classes.js.
+// This module is deliberately dependency-free (same reason _xpToNextLevel is
+// duplicated above rather than imported), so the constant is inlined. If the
+// canonical value changes, change it here too.
+const _LORD_MAX_LEVEL = 10;
+
 // Apply pending level-ups after an XP gain. Mirrors lord.js checkLevelUp().
 function _checkLevelUp(lord, engine) {
   const cls     = engine?.LORD_CLASSES?.[lord.classId];
   const clsKeys = new Set(Object.keys(cls?.modifiers || {}));
-  while ((lord.xp || 0) >= (lord.xpToNext || _xpToNextLevel(lord.level || 1))) {
+  while ((lord.level || 1) < _LORD_MAX_LEVEL &&
+         (lord.xp || 0) >= (lord.xpToNext || _xpToNextLevel(lord.level || 1))) {
     lord.xp           = Math.max(0, (lord.xp || 0) - (lord.xpToNext || _xpToNextLevel(lord.level || 1)));
     lord.level        = (lord.level || 1) + 1;
     lord.xpToNext     = _xpToNextLevel(lord.level);
@@ -85,6 +92,10 @@ function _checkLevelUp(lord, engine) {
         lord.baseStats[key] = (lord.baseStats[key] ?? baseStats[key]) + (clsKeys.has(key) ? 2 : 1);
       }
     }
+  }
+  // Clamp banked XP at the cap so the bar reads full, not overflowing.
+  if ((lord.level || 1) >= _LORD_MAX_LEVEL) {
+    lord.xp = Math.min(lord.xp || 0, lord.xpToNext || 0);
   }
 }
 
@@ -97,89 +108,224 @@ function _armyPower(armies, lordId, engine) {
   return engine.EconomyCore.getArmyPower(army.units, engine.UNIT_DEFS);
 }
 
-// Weighted random roll over DISCOVERY_DEFS. Mirrors DiscoveryService._roll().
-const _GOLD_DISC_IDS = new Set(['coin_cache','lost_treasure','buried_vault','merchant_caravan','traveling_merchant','ancient_relic','bog_crystal']);
-function _rollDef(DISCOVERY_DEFS, terrainId, goldBonus) {
-  const entries = Object.values(DISCOVERY_DEFS).map(def => {
-    const mults  = def.terrainMultipliers || {};
-    const mult   = (terrainId in mults) ? mults[terrainId] : 1.0;
-    let   weight = def.baseWeight * mult;
-    if (goldBonus && _GOLD_DISC_IDS.has(def.id)) weight *= (1 + goldBonus);
-    return { def, weight };
-  }).filter(e => e.weight > 0);
-  let total = 0;
-  entries.forEach(e => total += e.weight);
-  let rand = Math.random() * total;
-  for (const e of entries) { rand -= e.weight; if (rand <= 0) return e.def; }
-  return entries[entries.length - 1].def;
-}
-
-// Camp difficulty roll. Mirrors DiscoveryService._rollCampLevel/_rollCampDetails().
-function _rollCampDetails(CAMP_DEFS, defId, armyPower) {
-  const campDef = CAMP_DEFS?.[defId];
-  if (!campDef) return null;
-  const [minL, maxL] = campDef.levelRange;
-  const base  = armyPower < 100 ? 1 : armyPower < 300 ? 2 : armyPower < 700 ? 3 : armyPower < 1400 ? 4 : 5;
-  const level = Math.max(minL, Math.min(maxL, base + Math.floor(Math.random() * 3) - 1));
-  const defenders = campDef.defenderRosterByLevel?.[level] || campDef.defenderRosterByLevel?.[minL] || [{ unitId: 'bandits', count: 2 }];
-  return { level, type: defId, defenders };
-}
-
-// Loot roll for non-combat discoveries. Mirrors DiscoveryService._rollRewards().
-const _DISC_BASE_REWARDS = {
-  iron_vein: { stone: 1, xp: 15 }, cliff_face: { stone: 1, xp: 15 },
-  fertile_fields: { food: 1, xp: 15 }, river_crossing: { food: 1, xp: 15 },
-  coin_cache: { gold: 1, xp: 15 }, timber_cache: { wood: 1, xp: 30 },
-  abandoned_mine: { stone: 1, xp: 40 }, stone_deposit: { stone: 1, xp: 30 },
-  wild_game: { food: 1, xp: 20 }, lost_treasure: { gold: 1, xp: 60 },
-  ancient_forest: { wood: 1, xp: 70 }, deep_ore_shaft: { stone: 1, xp: 80 },
-  marble_quarry: { stone: 1, xp: 80 }, bountiful_hunt: { food: 1, xp: 60 },
-  buried_vault: { gold: 1, xp: 100 }, ancient_ruins: { xp: 80 },
-  abandoned_keep: { gold: 1, xp: 50 }, wandering_sage: { xp: 100 },
-  merchant_caravan: { gold: 1, xp: 20 }, traveling_merchant: { gold: 1, xp: 20 },
-  ancient_relic: { gold: 1, xp: 160 }, bog_crystal: { gold: 1, xp: 120 },
-};
-const _DISC_TIER_RANGES = {
-  1: { res: [20, 60],   gold: [30, 80]   },
-  2: { res: [40, 120],  gold: [50, 150]  },
-  3: { res: [100, 250], gold: [150, 400] },
-};
-function _rollDiscRewards(def, lordLevel) {
-  if (def.category === 'combat') return [];
-  const level  = Math.max(1, lordLevel || 1);
-  const scalar = 1 + 0.12 * (level - 1);
-  const tier   = def.tier || 2;
-  const ranges = _DISC_TIER_RANGES[tier] || _DISC_TIER_RANGES[2];
-  const base   = _DISC_BASE_REWARDS[def.id];
-  const rewards = [];
-  if (base) {
-    ['gold','food','wood','stone'].forEach(t => {
-      if (!base[t]) return;
-      const [min, max] = t === 'gold'
-        ? (def.id === 'lost_treasure' ? [80, 200] : ranges.gold)
-        : ranges.res;
-      rewards.push({ type: t, amount: Math.floor((min + Math.random() * (max - min + 1)) * scalar) });
-    });
-    if (base.xp > 0) rewards.push({ type: 'xp', amount: base.xp });
-  } else {
-    rewards.push({ type: 'xp', amount: 20 });
-  }
-  return rewards;
-}
+// The discovery roll, camp-difficulty roll and loot tables used to be
+// hand-mirrored here from js/domain/discovery.js. They now live in ONE place —
+// js/domain/discovery-roll.js (DiscoveryRoll) — and arrive via `engine`, the
+// same way every other piece of game data and math reaches this module.
+//
+// The two old copies had already drifted: this one scaled the UNFLOORED random
+// roll while the client floored it first, so the same discovery paid different
+// loot depending on which side computed it. DiscoveryRoll settles that on the
+// floor-then-scale form. Do not re-inline any of it here.
 
 // Full search_area resolution. Returns a pending discovery object to be stored on the lord
 // and drained by the client (online) or the sync endpoint (offline).
 const _SEARCH_AREA_XP = 8; // mirrors LORD_ACTIONS.search_area.xpReward in lord.js
-function _resolveSearchArea(lord, armies, nowMs, engine) {
+// ── Ambush ────────────────────────────────────────────────────
+// A combat find is resolved AS A BATTLE, right now, instead of being parked
+// on the map as a camp to attack later. Same encounter data (CAMP_DEFS +
+// CAMP_LEVEL_LOOT) and the same BattleEngine the old bandit-camp attack used
+// — see the retired flow in server/actions/pve-attack.js — just fired at
+// quest resolution.
+//
+// Win  → camp loot + XP, and the survivors get the standard victory patch-up.
+// Lose → real casualties; if the lord itself falls it takes the normal
+//        'defeated' hour of downtime. PvE can never CAPTURE a lord; capture
+//        only exists in the PvP path (combat-resolver.js).
+//
+// Deliberately awards NO honor. Honor is a purely PvP metric now, which is
+// what ranking-updater.js and ranking-screen.js already claimed it was.
+function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
+  const { CAMP_DEFS, CAMP_LEVEL_LOOT, UNIT_DEFS, EconomyCore, BattleEngine, DiscoveryRoll, BATTLE_WIN_HEAL_PCT } = engine;
+  if (!BattleEngine || !CAMP_LEVEL_LOOT) return null;
+
+  const ap      = _armyPower(armies, lord.id, engine);
+  // Ambush force scales to the army it jumped — see rollAmbushDetails. A
+  // fixed camp ladder made ambushes trivial (and pure profit) for big armies.
+  const details = DiscoveryRoll.rollAmbushDetails(CAMP_DEFS, UNIT_DEFS, def.id, ap);
+  if (!details) return null;
+
+  const campDef  = CAMP_DEFS[def.id] || {};
+  const baseLoot = CAMP_LEVEL_LOOT[details.level] || CAMP_LEVEL_LOOT[1];
+  // Loot rises with the same multiplier the roster did: a bigger fight is
+  // worth more, but it now costs blood in proportion rather than being free.
+  const mult     = (campDef.rewardMultiplier || 1.0) * (details.powerMult || 1);
+  const encounter = {
+    name:           `${campDef.displayName || def.name}${details ? ` (Level ${details.level})` : ''}`,
+    startingMorale: campDef.morale || 55,
+    loot: {
+      goldMin: Math.round(baseLoot.goldMin * mult), goldMax: Math.round(baseLoot.goldMax * mult),
+      resMin:  Math.round((baseLoot.resMin || 0) * mult), resMax: Math.round((baseLoot.resMax || 0) * mult),
+    },
+    xpReward:  { win: Math.round(baseLoot.xpWin * mult), loss: Math.round(baseLoot.xpLoss * mult) },
+    defenders: details.defenders,
+  };
+
+  const army = armies[lord.id] || { lordId: lord.id, units: [] };
+  // Veterancy from the player's training buildings, exactly as the old
+  // camp attack applied it. Camp defenders have no buildings.
+  const cityBuildings = Object.values(cities || {})
+    .filter(c => c?.playerId === lord.playerId)
+    .map(c => c.buildings)
+    .filter(Boolean);
+
+  const report = BattleEngine.resolve(BattleEngine.buildContext({
+    lord, army, encounter, terrain: terrainId,
+    veterancy: unitId => EconomyCore.getVeterancyPct(lord.race, unitId, cityBuildings),
+  }));
+  report._meta = {
+    campName:  encounter.name,
+    campIcon:  campDef.icon || '',
+    campLevel: details.level,
+    terrain:   terrainId,
+    ambush:    true,
+  };
+
+  const won = report.winner === 'attacker';
+
+  // Army casualties (lord's own stack is handled separately below).
+  const updated = { lordId: lord.id, units: (army.units || []).map(u => ({ ...u })) };
+  report.attacker.unitsStart.filter(s => s.sourceId !== lord.id).forEach(s => {
+    const surv  = report.attacker.unitsSurviving.find(u => u.sourceId === s.sourceId);
+    const stack = updated.units.find(u => u.unitId === s.sourceId);
+    if (!stack) return;
+    stack.count = surv?.count ?? 0;
+    if (surv && stack.count > 0) stack.currentHp = Math.round(surv.avgHp);
+  });
+  updated.units = updated.units.filter(u => u.count > 0);
+
+  if (won) {
+    updated.units.forEach(stack => {
+      const uMax = UNIT_DEFS?.[stack.unitId]?.combatStats?.hp;
+      if (!uMax) return;
+      const cur = stack.currentHp ?? uMax;
+      if (cur < uMax) stack.currentHp = Math.min(uMax, Math.round(cur + uMax * (BATTLE_WIN_HEAL_PCT || 0)));
+    });
+  }
+  updated.regenAt  = nowMs;
+  armies[lord.id]  = updated;
+
+  // Lord HP / downtime straight from the battle outcome.
+  const lordSurv = report.attacker.unitsSurviving.find(u => u.sourceId === lord.id);
+  if (lordSurv) {
+    lord.currentHp      = Math.max(1, Math.round(lordSurv.avgHp));
+    lord.downtimeUntil  = null;
+    lord.downtimeReason = null;
+    if (won) {
+      const lMax = _maxHp(lord);
+      if (lord.currentHp < lMax) lord.currentHp = Math.min(lMax, Math.round(lord.currentHp + lMax * (BATTLE_WIN_HEAL_PCT || 0)));
+    }
+  } else {
+    lord.currentHp      = 0;
+    lord.downtimeUntil  = nowMs + 60 * 60 * 1000;
+    lord.downtimeReason = 'defeated';
+    // No need to clear actionQueue: the caller already shifted this item off,
+    // and it reassigns lord.actionQueue from its own local `queue` after the
+    // loop — anything set here would just be overwritten.
+  }
+
+  // Rewards are RETURNED, never applied here — the search_area caller applies
+  // every pending.rewards entry to player/lord itself, exactly as it does for
+  // non-combat finds. Crediting gold here as well would pay the loot twice.
+  const rewards = [];
+  if (report.xpEarned > 0) rewards.push({ type: 'xp', amount: report.xpEarned });
+  if (won) {
+    const gold = report.loot?.gold || 0;
+    if (gold > 0) rewards.push({ type: 'gold', amount: gold });
+    Object.entries(report.loot?.resource || {}).forEach(([t, amt]) => {
+      if (amt > 0) rewards.push({ type: t, amount: amt });
+    });
+  }
+
+  return {
+    defId:    def.id,
+    category: 'combat',
+    record:   null,          // no map camp any more — the fight already happened
+    rewards,
+    ambush:   { won, report, campLevel: details.level, campName: encounter.name, lordFell: !lordSurv },
+  };
+}
+
+// ── Recruits ──────────────────────────────────────────────────
+// Fighters who join the army outright. Which tier turns up is gated by the
+// expedition's Expedition Rating, so a scout-heavy column attracts far better
+// company than a big dumb one — see DiscoveryRoll.rollRecruits.
+//
+// OVER-CAP RECRUITS ARE LOST, deliberately. If the army has no PWR headroom
+// the newcomers walk away, and the report says so with the exact numbers. That
+// is the whole reason to leave room before questing, and it also stops
+// expeditions being a way around the army cap. Mirrors the recruit gate in
+// server/actions/recruit.js — the cap is 200 + level×80 (+ talent bonus).
+function _armyPowerCap(lord, engine) {
+  const bonus = engine?.TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  return 200 + (lord.level || 1) * 80 + bonus;
+}
+
+function _resolveRecruits(lord, armies, engine) {
+  const { UNIT_DEFS, EconomyCore, DiscoveryRoll } = engine;
+  if (!UNIT_DEFS || !EconomyCore || !DiscoveryRoll) return null;
+
+  const army  = armies[lord.id] || { lordId: lord.id, units: [] };
+  const offer = DiscoveryRoll.rollRecruits(army.units, UNIT_DEFS);
+  if (!offer) return null;
+
+  const def = UNIT_DEFS[offer.unitId];
+  if (!def) return null;
+
+  const cap      = _armyPowerCap(lord, engine);
+  const current  = EconomyCore.getArmyPower(army.units, UNIT_DEFS);
+  const unitPwr  = EconomyCore.getUnitPower(def);
+  const headroom = cap - current;
+
+  // Take as many as fit; the rest are turned away.
+  const fit = Math.max(0, Math.min(offer.count, Math.floor(headroom / unitPwr)));
+
+  if (fit > 0) {
+    const units = (army.units || []).map(u => ({ ...u }));
+    const stack = units.find(u => u.unitId === offer.unitId);
+    if (stack) stack.count += fit;
+    else units.push({ unitId: offer.unitId, count: fit });
+    armies[lord.id] = { ...army, lordId: lord.id, units };
+  }
+
+  return {
+    ...offer,
+    joined:   fit,
+    lost:     offer.count - fit,
+    unitName: def.name,
+    unitPwr:  Math.round(unitPwr),
+    armyPwr:  Math.round(current),
+    cap,
+    headroom: Math.round(headroom),
+    goldValue: (def.goldCost || 0) * fit,
+  };
+}
+
+// `action` is the completed queue item — lord-action.js stamps the chosen
+// expedition length and the tile's depletion multiplier onto it at enqueue
+// time, so resolution needs no access to the search_fatigue storage key.
+// Absent on items queued before expedition lengths existed → Standard, 1.0.
+function _resolveSearchArea(lord, armies, cities, nowMs, engine, action) {
   if (lord.x == null || lord.y == null) return null;
-  const { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, UNIT_DEFS } = engine;
+  const { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, UNIT_DEFS, DiscoveryRoll } = engine;
+  if (!DiscoveryRoll) return null; // engine built without the roll module — nothing to resolve
+
+  const lengthId  = action?.length;
+  const depletion = action?.depletion;
 
   const terrainId     = _getTerrain(lord.x, lord.y);
   const talentEffects = (TALENT_POOL && lord.talentId) ? (TALENT_POOL[lord.talentId]?.effects || {}) : {};
-  const def           = _rollDef(DISCOVERY_DEFS, terrainId, talentEffects.goldDiscoveryBonus || 0);
+
+  // Footprint: how loud this expedition is. A big army gets jumped more, comes
+  // back empty more, and is shown less — see DiscoveryRoll's FOOTPRINT block.
+  const armyPower = _armyPower(armies, lord.id, engine);
+  const loudness  = DiscoveryRoll.loudnessOf(armyPower);
+
+  const def = DiscoveryRoll.rollDef(DISCOVERY_DEFS, terrainId, talentEffects.goldDiscoveryBonus || 0, lengthId, loudness);
+  if (!def) return null;
 
   if (def.category === 'nothing') {
-    return { defId: def.id, category: 'nothing', record: null, rewards: [] };
+    return { defId: def.id, category: 'nothing', record: null, rewards: [], lengthId, depletion, loudness };
   }
 
   const record = {
@@ -193,14 +339,34 @@ function _resolveSearchArea(lord, armies, nowMs, engine) {
     expiresAt:    def.baseDuration > 0 ? nowMs + def.baseDuration * 1000 : null,
   };
 
-  if (def.category === 'combat') {
-    const ap = _armyPower(armies, lord.id, engine);
-    record.campDetails = _rollCampDetails(CAMP_DEFS, def.id, ap);
-    return { defId: def.id, category: def.category, record, rewards: [] };
+  // Combat = ambush, fought immediately. Falls back to the old
+  // camp-on-the-map behaviour only if the engine was built without a
+  // BattleEngine (nothing in production does that, but catchUp is called with
+  // partial engines in tests and must never throw).
+  // Recruits: the units ARE the reward, so no loot roll — rollRewards has no
+  // BASE_REWARDS entry for these defs and would return nothing anyway.
+  if (def.category === 'recruits') {
+    const recruits = _resolveRecruits(lord, armies, engine);
+    if (recruits) {
+      return { defId: def.id, category: 'recruits', record: null, rewards: [], recruits, lengthId, depletion, loudness };
+    }
+    return { defId: def.id, category: 'nothing', record: null, rewards: [], lengthId, depletion, loudness };
   }
 
-  const rewards = _rollDiscRewards(def, lord.level);
-  return { defId: def.id, category: def.category, record, rewards };
+  // Combat = ambush, fought immediately. If the engine was built without a
+  // BattleEngine (never in production, but catchUp is called with partial
+  // engines in tests) the fight can't be resolved — report an empty expedition
+  // rather than writing a camp record. Camps are retired and nothing in the
+  // game can act on one, so leaving an orphan behind would be worse than a
+  // quiet miss.
+  if (def.category === 'combat') {
+    const ambush = _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine);
+    if (ambush) return { ...ambush, lengthId, depletion, loudness };
+    return { defId: 'nothing_found', category: 'nothing', record: null, rewards: [], lengthId, depletion, loudness };
+  }
+
+  const rewards = DiscoveryRoll.rollRewards(def, lord.level, { lengthId, depletion, loudness });
+  return { defId: def.id, category: def.category, record, rewards, lengthId, depletion, loudness };
 }
 
 // ── Main entry point ──────────────────────────────────────────
@@ -240,7 +406,16 @@ export function catchUp(state, nowMs, engine = null) {
   for (const lord of Object.values(lords)) {
     if (!lord?.id) continue;
 
-    // 1a. Clear expired downtime
+    // 1a. Portrait backfill — lords created before the portrait roll was
+    // persisted have none, and every view falls back to the deterministic
+    // id hash for them. Freeze that exact face onto the lord so it stops
+    // depending on the art pools, whose lengths shift as images are added.
+    if (!lord.portrait && engine?.pickLordPortrait) {
+      const backfilled = engine.pickLordPortrait(lord.race, lord.classId, lord.id);
+      if (backfilled) { lord.portrait = backfilled; changed = true; }
+    }
+
+    // 1b. Clear expired downtime
     if (lord.downtimeUntil && nowMs >= lord.downtimeUntil) {
       lord.downtimeUntil  = null;
       lord.downtimeReason = null;
@@ -252,7 +427,7 @@ export function catchUp(state, nowMs, engine = null) {
 
     if (lord.downtimeUntil && nowMs < lord.downtimeUntil) continue;
 
-    // 1b. HP regeneration — 2% of maxHp per minute
+    // 1c. HP regeneration — 2% of maxHp per minute
     const maxHp = _maxHp(lord);
     const curHp = lord.currentHp ?? maxHp;
     if (curHp < maxHp) {
@@ -265,7 +440,7 @@ export function catchUp(state, nowMs, engine = null) {
       }
     }
 
-    // 1c. Action queue
+    // 1d. Action queue
     const queue = lord.actionQueue || [];
     let queueChanged = false;
     while (queue.length > 0 && nowMs >= queue[0].finishAt) {
@@ -284,9 +459,12 @@ export function catchUp(state, nowMs, engine = null) {
         const talentEffects = (engine.TALENT_POOL && lord.talentId)
           ? (engine.TALENT_POOL[lord.talentId]?.effects || {}) : {};
         const xpMult = talentEffects.xpMultiplier || 1;
-        lord.xp = (lord.xp || 0) + Math.round(_SEARCH_AREA_XP * xpMult);
+        // The flat "you ran an expedition" XP scales with how long it ran, so a
+        // Long push is worth its 30 minutes even when it finds nothing.
+        const lenMul = engine.DiscoveryRoll ? engine.DiscoveryRoll.lengthOf(done.length).reward : 1;
+        lord.xp = (lord.xp || 0) + Math.round(_SEARCH_AREA_XP * xpMult * lenMul);
 
-        const pending = _resolveSearchArea(lord, armies, nowMs, engine);
+        const pending = _resolveSearchArea(lord, armies, cities, nowMs, engine, done);
         if (pending) {
           // Apply gold / resource rewards to player immediately.
           for (const r of (pending.rewards || [])) {
@@ -339,7 +517,7 @@ export function catchUp(state, nowMs, engine = null) {
     }
     if (queueChanged) lord.actionQueue = queue;
 
-    // 1d. Raiding stance — passive heal while active, full payout + heal on
+    // 1e. Raiding stance — passive heal while active, full payout + heal on
     // natural completion (reaching finishAt without ever losing a fight).
     // Forfeiture on loss is handled entirely in combat-resolver.js's
     // _resolveCore (clears lord.stance the moment the raider loses) — by the
@@ -365,14 +543,43 @@ export function catchUp(state, nowMs, engine = null) {
         const goldEarned = Math.floor(rates.gold * hours * raidMult);
         player.coins      = Math.floor((player.coins || 0) + goldEarned);
         player.resources  = player.resources || { food: 0, wood: 0, stone: 0 };
+        const resEarned = {};
         ['food', 'wood', 'stone'].forEach(r => {
-          player.resources[r] = Math.floor((player.resources[r] || 0) + rates[r] * hours * raidMult);
+          // Floor the GAIN (not the sum) so the number reported to the player
+          // is exactly the number that was added — stored resources are always
+          // integers, so this is arithmetically identical to the old form.
+          resEarned[r] = Math.floor(rates[r] * hours * raidMult);
+          player.resources[r] = (player.resources[r] || 0) + resEarned[r];
         });
+
+        // Raid payout report — built BEFORE the stance is reset, since it
+        // reads startedAt/finishAt.
+        //
+        // Stashed on the lord (not just pushed onto `events`) because catchUp
+        // runs from four places — sync.js, the dispatcher, action-base's
+        // loadAndCatchUp, and raid-instant.js — and only sync.js ever forwards
+        // its events array to the client. Every other caller still SAVES the
+        // completed state, so a raid that finished while the browser was
+        // closed would pay out silently and the notification would be lost.
+        // Persisting it here mirrors how pendingDiscoveries carries offline
+        // quest results; sync.js drains it into a raid_complete event exactly
+        // once (deduped by id against the inline event below).
+        const raidReport = {
+          id:           `raid_${lord.id}_${lord.stance.finishAt}`,
+          lordId:       lord.id,
+          lordName:     lord.name || '',
+          goldEarned,
+          resources:    resEarned,
+          durationSecs: Math.round((lord.stance.finishAt - lord.stance.startedAt) / 1000),
+          at:           lord.stance.finishAt,
+        };
+        lord.pendingRaidReports = [...(lord.pendingRaidReports || []), raidReport];
+
         lord.currentHp = maxHp;
         lord.hpRegenAt = nowMs;
         healUnits();
         lord.stance = { id: 'idle', startedAt: null, finishAt: null };
-        events.push({ type: 'raid_complete', lordId: lord.id, lordName: lord.name || '', goldEarned });
+        events.push({ type: 'raid_complete', ...raidReport });
         changed = true;
       } else {
         if (lord.currentHp !== maxHp) { lord.currentHp = maxHp; lord.hpRegenAt = nowMs; changed = true; }
@@ -380,7 +587,7 @@ export function catchUp(state, nowMs, engine = null) {
       }
     }
 
-    // 1e. Garrison unit regen — while the lord is idle (no queued action, not
+    // 1f. Garrison unit regen — while the lord is idle (no queued action, not
     // in a stance) and standing on one of THIS player's own city tiles, its
     // army's units recover HP over time. Positioning matters: bring a bloodied
     // army home to heal. The rest clock (army.regenAt) is reset on arrival

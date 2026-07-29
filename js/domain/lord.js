@@ -21,7 +21,7 @@ const LORD_ACTIONS = {
     id:               'scout',
     name:             'Scout',
     icon:             gi('spy'),
-    desc:             "Gather intelligence on this tile's enemy lord and city. Faster with higher speed. Scouting with an army risks an ambush by an enemy lord in Ambush or Raid stance here — scouting without an army is always safe.",
+    desc:             "Gather intelligence on this tile's enemy lord and city. Faster with higher speed.",
     duration:         _SCOUT_BASE_SECS, // overridden per-lord by getActionDuration
     xpReward:         0,
     requiresPosition: true,
@@ -72,14 +72,16 @@ const LordService = (() => {
     return result;
   }
 
-  // Returns the real action duration (seconds), applying fatigue tier, class passive, and talent.
-  // Fatigue tiers: 0-7 searches → 5m, 8-14 → 15m, 15+ → 30m.
+  // Returns the real action duration (seconds), applying the chosen expedition
+  // length, class passive, and talent. `lengthId` is 'short' | 'standard' |
+  // 'long' (see DiscoveryRoll.LENGTHS) and only applies to search_area;
+  // anything unrecognised falls back to Standard.
   // Takes the lowest searchDurationMult if both class passive and talent apply.
-  function getActionDuration(lord, actionId) {
+  function getActionDuration(lord, actionId, lengthId) {
     const def = LORD_ACTIONS[actionId];
     if (!def) return 0;
     if (actionId === 'search_area') {
-      const base          = DiscoveryService.getSearchDuration(lord.id);
+      const base          = DiscoveryService.getSearchDuration(lengthId);
       const cls           = LORD_CLASSES[lord.classId];
       const clsMult       = cls?.passive?.effects?.searchDurationMult;
       const talentMult    = getTalentEffects(lord).searchDurationMult;
@@ -222,6 +224,9 @@ const LordService = (() => {
     }
 
     if (actionId === 'level_up') {
+      if ((lord.level || 1) >= LORD_MAX_LEVEL) {
+        return { ok: false, error: `Level ${LORD_MAX_LEVEL} is the maximum — this lord cannot advance further.` };
+      }
       const xpNeeded = lord.xpToNext || 100;
       if ((lord.xp || 0) < xpNeeded) {
         return { ok: false, error: `Need ${xpNeeded} XP to level up. You have ${lord.xp || 0}.` };
@@ -288,7 +293,7 @@ const LordService = (() => {
     const clsKeys = new Set(Object.keys(cls?.modifiers || {}));
     let leveled   = 0;
 
-    while ((lord.xp || 0) >= (lord.xpToNext || 100)) {
+    while ((lord.level || 1) < LORD_MAX_LEVEL && (lord.xp || 0) >= (lord.xpToNext || 100)) {
       lord.xp           = Math.max(0, lord.xp - lord.xpToNext);
       lord.level        = (lord.level || 1) + 1;
       // XP curve: cumulative 50×N² → xpToNext at level N = 50×(2N+1)
@@ -301,6 +306,11 @@ const LordService = (() => {
       lord.currentHp = getEffectiveStats(lord).health; // full heal on level up
       lord.hpRegenAt = TimeService.now();
       leveled++;
+    }
+    // At the cap, clamp banked XP to the threshold so the XP bar reads full
+    // instead of overflowing past 100% with progress that can never be spent.
+    if ((lord.level || 1) >= LORD_MAX_LEVEL) {
+      lord.xp = Math.min(lord.xp || 0, lord.xpToNext || 0);
     }
     return leveled;
   }

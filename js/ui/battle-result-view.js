@@ -200,7 +200,7 @@ const BattleResultView = (() => {
       && (report.defender?.unitsStart || []).some(u => u.sourceId === viewerLord.id);
 
     const atkPortrait = viewerLord
-      ? pickLordPortrait(viewerLord.race, viewerLord.classId, viewerLord.id) || null
+      ? viewerLord.portrait || pickLordPortrait(viewerLord.race, viewerLord.classId, viewerLord.id) || null
       : null;
 
     // fullSide: report.attacker or report.defender (the whole side's unitsStart/
@@ -278,16 +278,16 @@ const BattleResultView = (() => {
     // instead) and for any battle history saved before this per-participant
     // metadata existed.
     // A participant's own portrait: the viewer's own lord always uses their
-    // already-computed atkPortrait (their own local race/classId — no need
-    // to round-trip through meta); anyone else's lord is derived from the
-    // race/classId this session's server change now stamps onto _meta, via
-    // the same deterministic pickLordPortrait() hash every client computes
-    // identically. Old reports without that metadata simply get no portrait
-    // (icon fallback), same as before this fix.
+    // already-computed atkPortrait (their own local record — no need to
+    // round-trip through meta); anyone else's lord uses the portrait the
+    // server stamps onto _meta, which is that lord's own stored face, and
+    // falls back to the deterministic race/classId hash for lords created
+    // before portraits were persisted. Old reports without that metadata
+    // simply get no portrait (icon fallback), same as before this fix.
     function lordPortraitFor(isMine, metaEntry) {
       if (isMine) return atkPortrait;
       if (!metaEntry?.race) return null;
-      return pickLordPortrait(metaEntry.race, metaEntry.classId, metaEntry.lordId) || null;
+      return metaEntry.portrait || pickLordPortrait(metaEntry.race, metaEntry.classId, metaEntry.lordId) || null;
     }
 
     const attackerIsMine = !viewerIsDefenderSide;

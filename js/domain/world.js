@@ -77,9 +77,9 @@ const WorldService = (() => {
   // Always-visible city metadata (name + owner) for ANY city tile, own or
   // enemy — sourced from the shared world_state tile entry, which carries
   // this denormalized because a regular client's RLS can't look up another
-  // player's 'cities' row on demand. Garrison composition is deliberately
-  // NOT here — that stays gated behind actually scouting the tile (see
-  // IntelligenceService / js/ui/map-view.js's tile panel).
+  // player's 'cities' row on demand. Population and garrison are deliberately
+  // NOT here — those only ever appear in a scout report in the Activity feed
+  // (server/combat-resolver.js's _gatherScoutReport), never on the map.
   // Returns null if there's no city on this tile at all.
   function getCityMeta(x, y) {
     const cities = StorageService.get('cities') || {};

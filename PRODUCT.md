@@ -8,7 +8,7 @@ web
 
 ## Users
 
-A solo player who controls a persistent "Lord" character inside a shared, server-authoritative multiplayer world. Play happens in short, async check-ins rather than one continuous sitting: send a Lord to explore a tile or complete a quest, then return later to collect the result. Within a session the player explores tiles, fights bandit camps, attacks or is attacked by other players' Lords (PvP), recruits armies, and founds/develops cities.
+A solo player who controls a persistent "Lord" character inside a shared, server-authoritative multiplayer world. Play happens in short, async check-ins rather than one continuous sitting: send a Lord on an expedition, then return later to collect the result. Within a session the player runs expeditions (which can turn up loot, recruits, or an ambush fought on the spot), attacks or is attacked by other players' Lords (PvP), raids tiles for passive income, recruits armies, and founds/develops cities.
 
 ## Product Purpose
 
@@ -16,7 +16,7 @@ Hexfront is a grand-strategy game where politics, economy, and warfare are meant
 
 ## Positioning
 
-A fantasy grand-strategy game built around a roster of distinct playable races — Human, Dwarf, Orc, High Elf, and Dark Elf confirmed so far, each with different economic/growth bonuses (e.g. Dwarves build faster and mine more stone/iron; Orcs out-breed everyone; Dark Elves out-produce iron and grow population fast) — set in a persistent, server-authoritative multiplayer world rather than a single local session. Race choice is meant to bend a player's economic/growth curve, not just reskin combat stats.
+A fantasy grand-strategy game built around a roster of distinct playable races — Human, Dwarf, Orc, High Elves, and Dark Elves confirmed so far, each with different economic/growth bonuses (e.g. Dwarves build faster and mine more stone/iron; Orcs out-breed everyone; Dark Elves out-produce iron and grow population fast) — set in a persistent, server-authoritative multiplayer world rather than a single local session. Race choice is meant to bend a player's economic/growth curve, not just reskin combat stats.
 
 Goblins currently exist in the codebase (units, quests, discoveries) as world/enemy content, not as a selectable player race — **undecided**: confirm whether Goblin should become a playable race alongside the others.
 
@@ -26,14 +26,14 @@ Goblins currently exist in the codebase (units, quests, discoveries) as world/en
 - Server: Express/Node backend (`server/`), Supabase for persistence and as the authority for players, lords, cities, and armies.
 - Core loop is async: quests/marches/attacks are enqueued client-side and resolve via server ticks or dedicated resolve endpoints (e.g. `/api/pvp/resolve`), not instantly in the browser.
 - Credits system lets a player pay to instant-finish an in-progress Lord action or recruitment.
-- Rankings are point-based across buildings, Lord level, quests, PvP wins, and conquests, shown in sub-tabs (Overall / Cities / Lords / PvP / Quests).
+- Rankings are point-based across buildings, Lord level, army power, and quests, shown in sub-tabs (Overall / Infrastructure / Lords / Militar / Honor). PvP wins and conquests deliberately award NO ranking points — honor is PvP's reward instead, and PvE grants no honor at all.
 
 ## Capabilities and Constraints
 
 - Multiplayer, server-authoritative: Express + Supabase backend, vanilla JS client with no build tooling.
-- Confirmed playable races: Human, Dwarf, Orc, High Elf, Dark Elf — each defined by flat production/growth bonuses (`js/data/races.js`), not combat stats.
+- Confirmed playable races: Human, Dwarf, Orc, High Elves, Dark Elves — each defined by flat production/growth bonuses (`js/data/races.js`), not combat stats.
 - Goblin: present in world content (enemies, quests) — not confirmed as a playable race (see Positioning).
-- Core systems live: tile exploration/quests, bandit-camp combat, PvP attack-move + resolve, city founding/development, unit recruitment, credits (pay-to-finish), rankings.
+- Core systems live: expeditions (length choice, Expedition Rating, footprint, tile depletion, ambushes, recruits), PvP attack-move + resolve, raiding, city founding/development, unit recruitment, credits (pay-to-finish), rankings. Bandit camps were retired in the 2026-07-29 expedition rework — combat finds are now fought where they happen.
 
 ## Product Principles
 

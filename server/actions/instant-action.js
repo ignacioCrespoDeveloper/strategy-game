@@ -10,9 +10,9 @@
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { catchUp } from '../tick/catch-up.js';
-import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS } from '../engine-loader.js';
+import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT } from '../engine-loader.js';
 
-const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS };
+const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT };
 
 export async function handleInstantAction(req, res) {
   const { lordId } = req.body || {};
@@ -64,8 +64,8 @@ export async function handleInstantAction(req, res) {
 
   if (action.actionId === 'scout') {
     // Backdate + catchUp only sets lord.pendingScoutResolve (catchUp is a
-    // single-player module — it can't do the cross-player ambush-check or
-    // intel-gathering itself). The client follows up with
+    // single-player module — it can't do the cross-player intel-gathering
+    // itself). The client follows up with
     // ServerActions.scoutResolve(), same as the normal countdown-expiry path,
     // which calls resolveScout() in combat-resolver.js to do that part.
     lord.actionQueue[0]     = { ...action, finishAt: Date.now() - 1 };

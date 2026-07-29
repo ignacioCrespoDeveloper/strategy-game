@@ -211,8 +211,18 @@ var BattleEngine = (() => {
     // with linear stack damage a 2-model knight charge became the hardest
     // single hit in the game and cavalry-rich rosters ran the table (the
     // suite's top three combos were all cavalry-heavy at ×1.5 too).
+    // impact (2026-07-29): the charge lands like a rockslide — ×1.8
+    // instead. Orc-exclusive via the boar lines (Boar Boyz, Savage Orc
+    // Boars): start-game autopsy showed orc boars surviving lost fights
+    // untouched while under-killing.
+    // WEDGE (2026-07-29 mass pass): +0.05 per living rider beyond the
+    // first, capped +0.2 — six knights hitting as one formation strike
+    // harder per lance than a lone rider. One of the two deliberate
+    // mass-scaling bonuses that give deep stacks a reason to exist
+    // (see shield_wall ranks in _applyDamage).
     if (phase === 'charge' && attacker.traits.includes('charge')) {
-      finalDmg *= 1.4 * terrainMods.chargeMult;
+      const wedge = Math.min(0.2, 0.05 * Math.max(0, attacker.count - 1));
+      finalDmg *= ((attacker.traits.includes('impact') ? 1.8 : 1.4) + wedge) * terrainMods.chargeMult;
     }
 
     // anti_large: bonus vs large enemies
@@ -226,13 +236,30 @@ var BattleEngine = (() => {
       finalDmg *= 1.4;
     }
 
-    // accurate: every arrow placed with elven precision — +30% damage in
-    // the ranged phase (2026-07-27; was flavor-only while the high elf
+    // accurate: every arrow placed with elven precision — +40% damage in
+    // the ranged phase (2026-07-27; was flavor-only while the High Elves'
     // "quality" identity starved for bodies in a morale-driven engine.
-    // ×1.2 lifted their start but left midgame at 21% — the trait is
-    // high-elf-exclusive, so it can safely carry more of their identity)
+    // ×1.2 lifted their start but left midgame at 21%; ×1.3→×1.4 on
+    // 2026-07-29 to lift their early/mid curve — the trait is
+    // High-Elves-exclusive, so it can safely carry more of their identity)
     if (phase === 'ranged' && attacker.traits.includes('accurate')) {
-      finalDmg *= 1.3;
+      finalDmg *= 1.4;
+    }
+
+    // aggressive: always spoiling for a scrap — +20% melee damage
+    // (2026-07-29). Orc-exclusive via the Boyz line (Orc Boyz, Big 'Uns):
+    // the green-tide melee identity, sized below berserk's +35%.
+    if (phase === 'melee' && attacker.traits.includes('aggressive')) {
+      finalDmg *= 1.2;
+    }
+
+    // berserk: an oath-sworn death-seeker swings without a thought for his
+    // own skin — +30% MELEE damage (2026-07-29). Dwarf-exclusive via the
+    // Slayer Lodge (Slayers, Giant Slayers), which unlocks mid-game: this
+    // is the dwarf-dense lever that lifts their collapsed midgame without
+    // touching the quarreller-wall start package.
+    if (phase === 'melee' && attacker.traits.includes('berserk')) {
+      finalDmg *= 1.35;
     }
 
     // stubborn: an unyielding formation is harder to kill, not just harder
@@ -241,7 +268,7 @@ var BattleEngine = (() => {
     // not crossbow bolts — applied to ranged fire too, the early-game
     // warrior wall had no counter at all (dwarf start win rate hit 91%).
     if (target.traits.includes('stubborn') && (phase === 'melee' || phase === 'charge')) {
-      finalDmg *= 0.9;
+      finalDmg *= 0.88;
     }
 
     // monster: a single model the size of a barn hits like one (2026-07-27).
@@ -308,13 +335,19 @@ var BattleEngine = (() => {
     }
 
     // shield_wall: -20% damage when target is frontline infantry in melee.
+    // RANKS (2026-07-29 mass pass): −2% more per living model beyond the
+    // first, capped −30% — a wall is only a wall with ranks behind it.
+    // The second of the two deliberate mass-scaling bonuses (see the
+    // charge wedge in _computeDamage) that give deep stacks a reason to
+    // exist alongside one-of-each variety.
     // Does NOT stack with heavy_armor — the plate already turned the blow
     // aside (heavy_armor now always applies at least partially, see
     // _computeDamage), so the shields add nothing on top. Stacked, an
     // Ironbreaker wall took ×0.75×0.8 from everything and hit 90% win
     // rate (2026-07-27).
     if (phase === 'melee' && target.traits.includes('shield_wall') && target.role === 'infantry' && !target.traits.includes('heavy_armor')) {
-      damage = Math.max(1, Math.ceil(damage * 0.8));
+      const ranks = Math.min(0.30, 0.20 + 0.02 * Math.max(0, target.count - 1));
+      damage = Math.max(1, Math.ceil(damage * (1 - ranks)));
     }
 
     let modelsKilled = 0;
@@ -390,21 +423,26 @@ var BattleEngine = (() => {
     const result = _applyDamage(target, damage, round, phase, attacker, trait, events, actorSide, heavyArmor);
 
     let modelsKilled = result.modelsKilled;
-    // Overkill spills into the next target in CONTACT phases only (melee,
-    // charge) — a sword keeps swinging, a monster keeps trampling, but a
-    // cannonball that killed its target is spent. Unrestricted, massed
-    // artillery volleys cleaved three stacks a round from behind an
-    // infantry wall (the 80%+ "castle" builds in the balance suite).
-    // Each hop carries HALF the leftover force — the swing loses momentum.
+    // Overkill spills into the next target. CONTACT phases (melee, charge)
+    // carry HALF the leftover force per hop, up to 8 hops — a sword keeps
+    // swinging, a monster keeps trampling, but the swing loses momentum.
     // At full carry, one monster attack chain-deleted 2-3 single-model
     // stacks per round and one-of-each armies melted.
-    let spill = (phase === 'melee' || phase === 'charge') ? Math.floor((result.overkill || 0) * 0.5) : 0;
-    for (let hops = 0; spill > 0 && hops < 8; hops++) {
+    // RANGED spills too since 2026-07-29, but weakly: ×0.3 and ONE hop —
+    // a volley that flattens its target still lands some stray shots on
+    // the unit behind it. Zero ranged spill made 1-model stacks free
+    // ablative armor against shooting (the "singles as armor" meta);
+    // unrestricted spill is the other cliff — massed artillery cleaved
+    // three stacks a round from behind a wall (the 80%+ "castle" builds).
+    const friction = (phase === 'melee' || phase === 'charge') ? 0.5 : phase === 'ranged' ? 0.3 : 0;
+    const maxHops  = phase === 'ranged' ? 1 : 8;
+    let spill = Math.floor((result.overkill || 0) * friction);
+    for (let hops = 0; spill > 0 && hops < maxHops; hops++) {
       const next = TargetingService.select(attacker, enemySide, round);
       if (!next) break;
       const spillResult = _applyDamage(next, spill, round, phase, attacker, trait, events, actorSide, heavyArmor);
       modelsKilled += spillResult.modelsKilled;
-      spill         = Math.floor((spillResult.overkill || 0) * 0.5);
+      spill         = Math.floor((spillResult.overkill || 0) * friction);
     }
 
     const chargeHit = phase === 'charge' && !result.dodged && attacker.traits.includes('charge');

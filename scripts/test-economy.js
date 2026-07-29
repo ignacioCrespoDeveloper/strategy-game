@@ -103,7 +103,7 @@ const baseRates = EconomyCore.getRates({ lumber_mill: 1 }, null, null);
 check('production is plain building output (33 wood at L1)', baseRates.wood === og(30, 1));
 
 const raceRates = EconomyCore.getRates({ lumber_mill: 1 }, RACES.dark_elf.bonuses, null);
-check('dark elf +30% wood applies', raceRates.wood === Math.floor(og(30, 1) * 1.3));
+check('Dark Elves +30% wood applies', raceRates.wood === Math.floor(og(30, 1) * 1.3));
 
 const terrRates = EconomyCore.getRates({ lumber_mill: 1 }, null, TERRAIN_RESOURCE_MODS.forest);
 check('forest +25% wood applies', terrRates.wood === Math.floor(og(30, 1) * 1.25));

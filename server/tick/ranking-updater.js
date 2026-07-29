@@ -19,23 +19,12 @@
 import { createClient } from '@supabase/supabase-js';
 import { UNIT_DEFS, EconomyCore } from '../engine-loader.js';
 
-// Quest scoring map (mirrors js/data/discoveries.js's categories/tiers) —
-// tier 1 = 9pts, tier 2+ = 18pts, legendary = 27pts.
-// skip = combat, nothing, intelligence (not in map → 0 pts)
-const QUEST_PTS = {
-  // resource tier 1
-  iron_vein: 9, cliff_face: 9, fertile_fields: 9, river_crossing: 9, coin_cache: 9,
-  // resource tier 2
-  timber_cache: 18, abandoned_mine: 18, stone_deposit: 18, wild_game: 18, lost_treasure: 18,
-  // resource tier 3
-  ancient_forest: 18, deep_ore_shaft: 18, marble_quarry: 18, bountiful_hunt: 18, buried_vault: 18,
-  // event
-  ancient_ruins: 9, abandoned_keep: 18, wandering_sage: 18,
-  // trade
-  merchant_caravan: 9, traveling_merchant: 18,
-  // legendary
-  ancient_relic: 27, bog_crystal: 27,
-};
+// QUEST_PTS lived here — a per-discovery scoring map (9/18/27 by tier). It
+// went with the expedition rework on 2026-07-29: expeditions already pay in
+// gold, resources and recruits, and a bad one kills units (which costs
+// armyPts), so scoring the log double-counted the wins and ignored the losses.
+// It also had to be hand-maintained against discoveries.js — the two new
+// `recruits` defs were never added to it and silently scored zero.
 
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -47,12 +36,20 @@ function _admin() {
   );
 }
 
+// Tier 1 is worth NOTHING on purpose (2026-07-28). Every player founds a city
+// immediately, so a flat 100 for tier 1 was a participation prize paid to
+// everyone equally — it moved nobody up or down the table and just inflated the
+// floor. City tier now only starts scoring once a town hall actually reaches
+// tier 2, so the category measures development rather than existence.
+// Keep in lockstep with js/domain/ranking.js's copy (see this file's header):
+// the client renders its own score and any drift shows the same account two
+// different numbers.
 function _cityTierBonus(buildings) {
   const th = buildings?.town_hall || 0;
   if (th >= 16) return 3000;
   if (th >= 11) return 1500;
   if (th >= 6)  return 500;
-  return 100;
+  return 0;
 }
 
 // Army points use the same PWR score as the recruit cap
@@ -70,7 +67,7 @@ function _lordTotalXp(l) {
   return 50 * (level * level - 1) + (l.xp || 0);
 }
 
-function _computeScore(playerId, player, lords, cities, armies, discoveryLog) {
+function _computeScore(playerId, player, lords, cities, armies) {
   const playerLords  = Object.values(lords).filter(l => l.playerId === playerId);
   const playerCities = Object.values(cities).filter(c => c.playerId === playerId);
 
@@ -83,18 +80,21 @@ function _computeScore(playerId, player, lords, cities, armies, discoveryLog) {
   const lordPts = playerLords.reduce((sum, l) => sum + Math.round(_lordTotalXp(l) / 3), 0);
   const armyPts = playerLords.reduce((sum, l) => sum + _armyPowerFor(armies[l.id]), 0);
 
-  const log = discoveryLog[playerId] || [];
-  const questPts = log.reduce((sum, e) => sum + (QUEST_PTS[e.definitionId] || 0), 0);
-
+  // Expeditions award NO ranking points (removed 2026-07-29) — they already
+  // pay in gold, resources and recruits, and a bad one kills units, which
+  // costs armyPts. See js/domain/ranking.js for the full reasoning; the two
+  // scorers must stay in step or a player's rank would change depending on
+  // whether the client or this background updater computed it last.
+  //
   // Militar (armyPts) is the ONLY military ranking source — PvP wins and
   // conquests no longer award points (honor is PvP's reward instead).
-  const total = buildingPts + tierPts + lordPts + armyPts + questPts;
+  const total = buildingPts + tierPts + lordPts + armyPts;
 
   const topLord = [...playerLords].sort((a, b) => (b.level || 1) - (a.level || 1))[0] || null;
 
   return {
     total,
-    breakdown: { buildingPts, tierPts, lordPts, armyPts, questPts },
+    breakdown: { buildingPts, tierPts, lordPts, armyPts },
     lordMeta: topLord
       ? { name: topLord.name, classId: topLord.classId, level: topLord.level || 1 }
       : null,
@@ -112,7 +112,7 @@ export async function runRankingUpdate() {
   const { data: rows, error } = await admin
     .from('storage')
     .select('player_id, key, value')
-    .in('key', ['players', 'lords', 'cities', 'armies', 'discovery_log', 'honor_points', 'rank_score', 'rank_score_1h']);
+    .in('key', ['players', 'lords', 'cities', 'armies', 'honor_points', 'rank_score', 'rank_score_1h']);
 
   if (error) {
     console.error('[ranking-updater] load error:', error.message);
@@ -134,13 +134,12 @@ export async function runRankingUpdate() {
     const lordsMap      = data.lords        || {};
     const citiesMap     = data.cities       || {};
     const armiesMap      = data.armies      || {};
-    const discoveryLog  = data.discovery_log || {};
 
     const player = playersMap[playerId];
     if (!player) continue;
 
     try {
-      const scoreObj = _computeScore(playerId, player, lordsMap, citiesMap, armiesMap, discoveryLog);
+      const scoreObj = _computeScore(playerId, player, lordsMap, citiesMap, armiesMap);
       const honorPoints = data.honor_points ?? 0;
 
       const value = {

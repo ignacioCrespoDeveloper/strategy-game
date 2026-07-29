@@ -228,7 +228,7 @@ var EconomyCore = (() => {
   }
 
   // ── Army power (PWR) — the recruit/hire cap currency ──────────
-  // ONE formula for every PWR display and gate (recruit, hire-merc,
+  // ONE formula for every PWR display and gate (recruit, expedition recruits,
   // lord screen, rankings, camp difficulty). Battle DAMAGE dampening
   // (battle-engine _stackDamageMult, count^0.8) is a separate,
   // deliberate mechanic and stays where it is.
@@ -243,7 +243,7 @@ var EconomyCore = (() => {
   //
   // Trait tax: traits like terror/fear/regeneration are real combat
   // power the raw stats never show; untaxed, trait-rich races dominated
-  // at equal PWR (dark elf 63.9%). Only traits the battle engine
+  // at equal PWR (Dark Elves 63.9%). Only traits the battle engine
   // actually implements as a benefit are taxed — flavor-only traits and
   // drawbacks (fragile, large) stay free. Weights are priced against
   // what the engine actually does with each trait (balance suite
@@ -263,9 +263,13 @@ var EconomyCore = (() => {
     anti_large:     0.14,  // damage bonus vs large (counters every monster)
     anti_infantry:  0.12,  // damage bonus vs infantry lines
     accurate:       0.10,  // +30% damage in the ranged phase
+    aggressive:     0.04,  // +15% damage in the melee phase (Orc Boyz)
+    berserk:        0.08,  // +35% damage in the melee phase (Slayers)
+    discipline:     0.06,  // steadies morale (full weight, morale-only stubborn)
     duelist:        0.08,  // 25% chance to parry a melee hit
     monster:        0.12,  // −5 enemy morale pre-battle + ×1.4 damage (mass)
     charge:         0.08,  // round-1 charge phase + damage bonus (cavalry)
+    impact:         0.05,  // charge lands at ×1.7 instead of ×1.4 (orc boars)
     bloodlust:      0.06,  // damage bonus vs wounded targets
     fire_attack:    0.08,  // burning suppresses regeneration
     frenzy:         0.08,  // +1 attack per round (max +4)
@@ -273,17 +277,20 @@ var EconomyCore = (() => {
     double_strike:  0.08,  // 30% chance of a second melee attack
     pyroblast:      0.08,  // round-1 magic splash
     fearless:       0.15,  // immune to fear/terror/monster morale hits
-    stubborn:       0.12,  // casualty morale reduced (−30% max) + −10% damage taken
+    stubborn:       0.10,  // casualty morale reduced (−30% max) + −10% damage taken
+                           // (deliberately underpriced .12→.10 on 2026-07-29 — the
+                           // dwarf-exclusive identity trait, mirroring 'accurate' for
+                           // High Elves; lifts the dwarf mid/end fade)
     flying:         0.05,  // targeting: bypasses the front line
     guardian:       0.05,  // targeting: screens the backline
   };
 
   // Speed is weighted ×0.5: in the battle engine it only decides strike
   // order within a phase, which is worth far less than a point of attack
-  // or 10 hp. At full weight the fastest roster (dark elves, speed 4-9
+  // or 10 hp. At full weight the fastest roster (Dark Elves, speed 4-9
   // on everything) systematically overpaid ~5-10 PWR per model while the
   // slowest (dwarfs, speed 1-2) underpaid — measured as a persistent
-  // dwarf-top / dark-elf-bottom skew in the balance suite (2026-07-27).
+  // dwarf-top / Dark-Elves-bottom skew in the balance suite (2026-07-27).
   function getUnitPower(def) {
     if (!def) return 0;
     const s    = def.combatStats || {};

@@ -16,9 +16,9 @@
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { catchUp }                    from '../tick/catch-up.js';
-import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS } from '../engine-loader.js';
+import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT } from '../engine-loader.js';
 
-const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS };
+const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT };
 
 export async function handleRaidInstant(req, res) {
   const { lordId } = req.body || {};
@@ -63,8 +63,13 @@ export async function handleRaidInstant(req, res) {
 
   const raidEvent = cu.events.find(e => e.type === 'raid_complete' && e.lordId === lordId);
 
+  // The payout report catchUp stashed on the lord is deliberately LEFT in
+  // place — the next /api/sync drains it into the Activity feed, so an
+  // instant-finished raid gets the same feed entry a natural one does. This
+  // response only powers the immediate toast.
   return res.json({
     ok: true, lord: cu.lords[lordId], player: cu.player, army: cu.armies[lordId],
     goldEarned: raidEvent?.goldEarned || 0,
+    resources:  raidEvent?.resources  || null,
   });
 }

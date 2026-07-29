@@ -15,9 +15,9 @@
 import { createClient }     from '@supabase/supabase-js';
 import { catchUp }           from './tick/catch-up.js';
 import { resolvePvpBattle, resolveArrivalCheck } from './combat-resolver.js';
-import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS } from './engine-loader.js';
+import { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT } from './engine-loader.js';
 
-const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS };
+const _ENGINE = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT };
 
 // Keys we load for catch-up (armies + cities + lords + player record).
 // honor_points is its own key (see combat-resolver.js) so it's included here
@@ -119,9 +119,46 @@ export async function syncPlayerState(req, res) {
           category: pending.category,
           record:   pending.record  || null,
           rewards:  pending.rewards || [],
+          // Present only for combat finds — the ambush was already fought
+          // server-side, so this carries its outcome to the client rather
+          // than a camp for the player to attack later.
+          ambush:   pending.ambush  || null,
+          recruits: pending.recruits || null,
         });
       }
       lord.pendingDiscoveries = [];
+      result.changed = true;
+    }
+
+    // Drain raid payout reports the same way — a raid that finished while the
+    // browser was closed may have been completed by ANY catchUp caller (the
+    // dispatcher, or a plain action endpoint), all of which throw their events
+    // array away. catch-up.js persists the report on the lord so it survives
+    // until a sync actually delivers it.
+    for (const lord of Object.values(result.lords)) {
+      if (!lord?.pendingRaidReports?.length) continue;
+      for (const report of lord.pendingRaidReports) {
+        // The catchUp above may have just completed this very raid and already
+        // pushed an inline event for it — keyed by report id so the client
+        // sees each completion exactly once.
+        if (result.events.some(e => e.type === 'raid_complete' && e.id === report.id)) continue;
+        result.events.push({ type: 'raid_complete', ...report });
+      }
+      lord.pendingRaidReports = [];
+      result.changed = true;
+    }
+
+    // Drain scout reports the same way. resolveScout() (combat-resolver.js) is
+    // the only writer — and only from the dispatcher's offline path, where the
+    // gathered intel has nowhere else to go. The online path returns its
+    // discoveries straight to lord-screen.js and stashes nothing, so a scout
+    // is never reported twice.
+    for (const lord of Object.values(result.lords)) {
+      if (!lord?.pendingScoutReports?.length) continue;
+      for (const report of lord.pendingScoutReports) {
+        result.events.push({ type: 'scout_result', ...report });
+      }
+      lord.pendingScoutReports = [];
       result.changed = true;
     }
 

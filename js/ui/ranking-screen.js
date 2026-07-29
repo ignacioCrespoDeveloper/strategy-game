@@ -105,6 +105,10 @@ const RankingScreen = (() => {
     const b = entry.breakdown || {};
     return (b.buildingPts || 0) + (b.tierPts || 0);
   }
+  // Lords = lord XP only. Expeditions stopped awarding points on 2026-07-29;
+  // `questPts` is still tolerated in the sum so historic leaderboard rows
+  // saved before that change don't suddenly drop in rank, but nothing writes
+  // it any more and it will vanish on its own as scores are recomputed.
   function _lordsPts(entry) {
     const b = entry.breakdown || {};
     return (b.lordPts || 0) + (b.questPts || 0);
@@ -200,7 +204,7 @@ const RankingScreen = (() => {
   function _portraitHtml() {
     const race = RACES[_lord?.race] || {};
     const src  = _lord
-      ? (pickLordPortrait(_lord.race, _lord.classId, _lord.id) || _lord.portrait || race.portrait)
+      ? (_lord.portrait || pickLordPortrait(_lord.race, _lord.classId, _lord.id) || race.portrait)
       : null;
     const overallRank = _rankForTab('overall');
 
@@ -237,7 +241,7 @@ const RankingScreen = (() => {
       {
         tab: 'lords', icon: gi('crown'), label: 'Lords',
         pts: `${_fmt(_lordsPts({ breakdown: b }))}`,
-        sub: `Lord Levels ${_fmt(b.lordPts || 0)} · Quests ${_fmt(b.questPts || 0)}`,
+        sub: `Lord Levels ${_fmt(b.lordPts || 0)}`,
       },
       {
         tab: 'honor', icon: gi('round-shield'), label: 'Honor',
@@ -340,7 +344,7 @@ const RankingScreen = (() => {
   }
 
   function _medalOf(i) {
-    return i === 0 ? gi('podium-winner') : i === 1 ? gi('medal', 'gi--silver') : i === 2 ? gi('medal', 'gi--bronze') : `#${i + 1}`;
+    return i === 0 ? gi('podium-winner', 'gi--gold') : i === 1 ? gi('medal', 'gi--silver') : i === 2 ? gi('medal', 'gi--bronze') : `#${i + 1}`;
   }
 
   function _cls(entry) {
@@ -393,7 +397,7 @@ const RankingScreen = (() => {
   function _lordsRow(entry, i)   {
     const m = entry.lordMeta;
     const lordSub = m ? `${m.name} · Level ${m.level}` : '';
-    const sub = `${lordSub}${lordSub ? ' · ' : ''}Quests ${entry.breakdown?.questPts || 0}pts`;
+    const sub = lordSub;
     return _row(entry, i, _lordsPts(entry), sub, 'lords');
   }
   function _militarRow(entry, i) {

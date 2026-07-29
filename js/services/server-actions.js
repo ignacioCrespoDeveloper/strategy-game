@@ -210,10 +210,12 @@ const ServerActions = (() => {
   }
 
   // POST /api/lord/action  (action: 'search_area')
-  // Enqueues a search_area action and increments fatigue server-side.
+  // Enqueues an expedition and depletes the tile server-side. `length` is
+  // 'short' | 'standard' | 'long' — the player's bet on duration vs payout vs
+  // risk (DiscoveryRoll.LENGTHS). Omitted → the server defaults to Standard.
   // On success, hydrates lords from server response.
-  async function lordSearch(lordId) {
-    const result = await _post('/api/lord/action', { lordId, action: 'search_area' });
+  async function lordSearch(lordId, length) {
+    const result = await _post('/api/lord/action', { lordId, action: 'search_area', length });
     if (result.ok && result.lord) {
       StorageService.hydrate({ lords: _mergeLord(result.lord) });
     }
@@ -233,9 +235,10 @@ const ServerActions = (() => {
   // POST /api/lord/create
   // Creates a new lord server-side (validates globally unique name, deducts cost).
   // Race is read from player.race server-side — do not pass raceId.
+  // The portrait is rolled server-side too (see actions/lord-create.js).
   // On success, hydrates lords + player from server response.
-  async function createLord(name, classId, cityId, portrait) {
-    const result = await _post('/api/lord/create', { name, classId, cityId, portrait });
+  async function createLord(name, classId, cityId) {
+    const result = await _post('/api/lord/create', { name, classId, cityId });
     if (result.ok) {
       const patch = {};
       if (result.lord) {
@@ -275,32 +278,16 @@ const ServerActions = (() => {
     return result;
   }
 
-  // POST /api/lord/hire-merc
-  // Instantly hires a mercenary unit server-side.
-  // On success, hydrates army + player from server response.
-  async function hireMerc(lordId, unitId) {
-    const result = await _post('/api/lord/hire-merc', { lordId, unitId });
-    if (result.ok) {
-      const patch = {};
-      if (result.army) {
-        const armies           = StorageService.get('armies') || {};
-        armies[result.army.lordId] = result.army;
-        patch.armies           = armies;
-      }
-      if (result.player) {
-        const players             = StorageService.get('players') || {};
-        players[result.player.id] = _mergePlayer(result.player);
-        patch.players             = players;
-      }
-      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
-    }
-    return result;
-  }
+  // hireMerc() lived here — it bought a mercenary from a discovered bandit
+  // camp. Camps are retired and mercenaries now JOIN via the expedition
+  // Recruits outcome (gated by Expedition Rating, not gold), so the wrapper,
+  // the /api/lord/hire-merc endpoint and server/actions/hire-merc.js are all
+  // gone. Removed 2026-07-29.
 
   // POST /api/lord/revive
   // Spends credits and clears lord downtime server-side.
   // Sends clientDowntimeUntil so the server can compute the cost even if
-  // pveAttack hadn't committed the fallen state to Supabase yet.
+  // a battle hadn't committed the fallen state to Supabase yet.
   async function reviveLord(lordId) {
     const lords     = StorageService.get('lords') || {};
     const localLord = lords[lordId];
@@ -465,36 +452,11 @@ const ServerActions = (() => {
     return result;
   }
 
-  // POST /api/lord/pve-attack
-  // Server-authoritative PvE combat resolution (bandit camps, quest combat).
-  // The server re-derives the encounter from the already-trustworthy discovery
-  // record (rolled server-side at search time) and runs BattleEngine itself —
-  // the client never computes or self-reports a battle outcome for PvE.
-  // Returns { ok, report, leveled, lord, army, player, honorPoints, honorDelta, discoveries }.
-  async function pveAttack(lordId, recordId) {
-    const result = await _post('/api/lord/pve-attack', { lordId, recordId });
-    if (result.ok) {
-      const patch = {};
-      if (result.lord) patch.lords = _mergeLord(result.lord);
-      if (result.army) {
-        const armies              = StorageService.get('armies') || {};
-        armies[result.army.lordId] = result.army;
-        patch.armies              = armies;
-      }
-      if (result.player) {
-        const players             = StorageService.get('players') || {};
-        players[result.player.id] = _mergePlayer(result.player);
-        patch.players             = players;
-      }
-      if (result.discoveries) {
-        const discoveries          = StorageService.get('discoveries') || {};
-        discoveries[result.player?.id] = result.discoveries;
-        patch.discoveries          = discoveries;
-      }
-      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
-    }
-    return result;
-  }
+  // pveAttack() lived here — it posted to /api/lord/pve-attack to fight a
+  // bandit camp the player had discovered. Both the wrapper and the endpoint
+  // are gone: a combat expedition find is now resolved as an ambush the moment
+  // it happens (server/tick/catch-up.js), so there is no camp to go and
+  // attack. Removed 2026-07-29.
 
   // POST /api/lord/instant-action
   // Spends credits server-side to instantly complete the lord's current action.
@@ -561,6 +523,21 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/army/transfer
+  // Atomic troop exchange between two of the player's lords standing on the
+  // same tile. toB/toA: [{ unitId, count, damaged? }] — damaged asks for the
+  // stack's wounded front model to travel too.
+  async function transferUnits(lordAId, lordBId, toB, toA) {
+    const result = await _post('/api/army/transfer', { lordAId, lordBId, toB, toA });
+    if (result.ok && result.armyA && result.armyB) {
+      const armies                = StorageService.get('armies') || {};
+      armies[result.armyA.lordId] = result.armyA;
+      armies[result.armyB.lordId] = result.armyB;
+      StorageService.hydrate({ armies });
+    }
+    return result;
+  }
+
   // Calls /api/sync and hydrates localStorage with the fresh server state.
   // Used by countdown timers when a queue item completes, so the server
   // writes the completion to Supabase immediately (instead of waiting for next login).
@@ -600,6 +577,7 @@ const ServerActions = (() => {
         if (events?.length) {
           const pid = (typeof PlayerService !== 'undefined') ? PlayerService.getSession()?.id : null;
           if (pid) DiscoveryService.ingestSyncEvents(pid, events);
+          if (pid) ActivityService.ingestSyncEvents(pid, events);
           window._pendingSyncEvents = (window._pendingSyncEvents || []).concat(events);
         }
 
@@ -677,7 +655,8 @@ const ServerActions = (() => {
   }
 
   // POST /api/lord/mounts
-  // Equip (or swap) a mount, unlocked at level 5. Not permanent — can be re-called to swap.
+  // Equip (or swap) a mount. Unlocks per-tier (lv 5/8/10, see MOUNT_POOL's
+  // unlockLevel); not permanent — can be re-called to swap.
   // Each swap costs gold (MOUNT_POOL[id].cost), so hydrates both lords and players.
   async function spendMount(lordId, mountId) {
     const result = await _post('/api/lord/mounts', { lordId, mountId });
@@ -723,14 +702,16 @@ const ServerActions = (() => {
 
   // POST /api/lord/scout-resolve
   // Called when a scout timer expires (browser open). Returns { outcome:
-  // 'intel'|'ambushed'|'none', discoveries?, report?, terrain? } — this
-  // endpoint does the actual ambush-check + intel-gathering server-side
-  // (cross-player data loadAndCatchUp's single-player load can't see).
-  // knownTiers: { [lordId|cityId]: 'vague'|'clear'|'precise' } — same
-  // contract as scanTile, lets the server progress tiers instead of
-  // re-sending full detail every scout.
-  async function scoutResolve(lordId, knownTiers) {
-    return _post('/api/lord/scout-resolve', { lordId, knownTiers });
+  // 'intel'|'pending'|'resolved_elsewhere', report? } — this endpoint does
+  // the report-gathering server-side (cross-player data loadAndCatchUp's
+  // single-player load can't see).
+  // 'resolved_elsewhere' means the background dispatcher beat us to it.
+  //
+  // The client sends NOTHING but the lord id — no claim about what it already
+  // knows — and the response only drives the toast. The report itself always
+  // arrives via /api/sync, which is what makes scouting untamperable.
+  async function scoutResolve(lordId) {
+    return _post('/api/lord/scout-resolve', { lordId });
   }
 
   // POST /api/lord/raid-start — durationSecs must be one of
@@ -840,5 +821,5 @@ const ServerActions = (() => {
     return _post('/api/clan/war-declare', { targetClanId, durationSecs });
   }
 
-  return { build, demolish, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, hireMerc, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, pveAttack, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
+  return { build, demolish, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, transferUnits, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
 })();

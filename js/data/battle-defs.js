@@ -160,7 +160,7 @@ var CAMP_DEFS = {
 
   dark_elf_raiders: {
     id:               'dark_elf_raiders',
-    displayName:      'Dark Elf Raiders',
+    displayName:      'Dark Elven Raiders',
     icon:             gi('evil-moon'),
     morale:           75,
     rewardMultiplier: 2.5,

@@ -61,18 +61,28 @@ var MoraleService = (() => {
     // force. This is the Dwarf identity — they die in place, they don't
     // run. (Started at 50% — that plus psychology immunity let dwarfs opt
     // out of the morale game entirely and hit 79% overall win rate.)
+    // Disciplined models (2026-07-29) count at FULL weight in the same
+    // pool, same 30% cap (morale only — no damage reduction, unlike
+    // stubborn): drilled ranks close the gaps and fight on — the Empire's
+    // identity trait. Implemented after the mid-game autopsy showed humans
+    // retreating at ~5 rounds with Reiksguard/War Wagons untouched: their
+    // thin state-troop line died and the side quit. (First cut at half
+    // weight didn't beat its own PWR tax — humans stayed at 35% mid.)
     // Coward models are the mirror (2026-07-27): panic spreads, so a
-    // goblin-heavy horde bleeds morale up to 30% FASTER per casualty.
+    // goblin-heavy horde bleeds morale up to 20% FASTER per casualty.
     // Free chaff mass was carrying orc swarm to 77% — cowardice is the
-    // price of dirt-cheap bodies.
+    // price of dirt-cheap bodies. (30% → 20% on 2026-07-29: with every
+    // other race's morale tech implemented — stubborn, fearless,
+    // discipline — the full 30% left coward-heavy start armies losing
+    // the morale race outright; orc start bottomed at 29%.)
     const totalModels  = side.units.reduce((sum, u) => sum + u.startCount, 0);
     const steadfast      = side.units.reduce((sum, u) =>
-      sum + ((u.traits.includes('stubborn') || u.traits.includes('fearless')) ? u.startCount : 0), 0);
+      sum + ((u.traits.includes('stubborn') || u.traits.includes('fearless') || u.traits.includes('discipline')) ? u.startCount : 0), 0);
     const coward         = side.units.reduce((sum, u) =>
       sum + (u.traits.includes('coward') ? u.startCount : 0), 0);
     const steadfastShare = totalModels > 0 ? steadfast / totalModels : 0;
     const cowardShare    = totalModels > 0 ? coward / totalModels : 0;
-    const lossPenalty    = Math.min(24, (lossFraction || 0) * 100) * (1 - 0.3 * steadfastShare + 0.3 * cowardShare);
+    const lossPenalty    = Math.min(24, (lossFraction || 0) * 100) * (1 - 0.3 * steadfastShare + 0.2 * cowardShare);
     side.morale -= lossPenalty;
 
     // Cavalry charge shock

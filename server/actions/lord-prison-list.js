@@ -6,7 +6,7 @@
 //  Returns every lord the caller currently holds captive. No denormalized
 //  per-player list is kept — capturedByPlayerId on the lord itself is the
 //  only source of truth, so this does the same kind of unfiltered
-//  cross-player scan server/combat-resolver.js's scanPresence/_gatherTileIntel
+//  cross-player scan server/combat-resolver.js's scanPresence/_gatherScoutReport
 //  already do routinely (fetch every player's 'lords' blob, filter in JS),
 //  rather than a second, driftable source of truth.
 //

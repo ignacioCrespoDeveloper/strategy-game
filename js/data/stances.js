@@ -25,18 +25,10 @@ var STANCE_DEFS = {
     futureModifiers: {},
   },
 
-  ambush: {
-    id:              'ambush',
-    name:            'Ambush',
-    icon:            gi('cloak-dagger'),
-    description:     'Lord lies in wait, concealed. Dramatically reduces visibility. Cannot move, recruit, explore or perform any other action while active.',
-    durations:       [3600, 7200, 14400], // 1h / 2h / 4h in seconds
-    restrictions:    ['move', 'recruit', 'explore', 'action'],
-    visibilityMult:  0.1,            // 90 % visibility reduction
-    futureModifiers: {
-      firstStrike:   true,           // placeholder — combat system will read this
-    },
-  },
+  // (An 'ambush' stance lived here — removed 2026-07-29. It was client-only
+  // and never observable server-side, so it sold the player a no-op. Ambushes
+  // now exist only as the PvE expedition outcome resolved in
+  // server/tick/catch-up.js's _resolveAmbush.)
 
   // 'raiding' is the economic stance: the lord parks on a neutral/wild tile
   // (no city present) and passively generates gold + resources + full HP
@@ -46,8 +38,7 @@ var STANCE_DEFS = {
   // the stance and everything accrued; winning it just continues the raid
   // uninterrupted. Server-authoritative end-to-end (see
   // server/actions/raid-start.js / raid-cancel.js / raid-instant.js) —
-  // unlike ambush above, this one has real economic value so it can't be a
-  // client-only stance change.
+  // it has real economic value so it can't be a client-only stance change.
   raiding: {
     id:              'raiding',
     name:            'Raiding',

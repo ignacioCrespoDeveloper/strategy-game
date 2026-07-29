@@ -42,6 +42,7 @@ import {
   BUILDING_DEFS,
   LORD_BASE_STATS,
   LORD_CLASSES,
+  LORD_MAX_LEVEL,
   STANCE_DEFS,
   MOUNT_POOL,
   TALENT_POOL,
@@ -112,54 +113,10 @@ function _visibilityScore(lord, armyUnits) {
   return Math.round(Math.min(100, Math.max(0, score)));
 }
 
-// Bucketed force-size label for a given unit list — used at 'vague' intel
-// tier so an approximate size is shown without leaking exact composition.
-function _forceLabel(units) {
-  const count = _armyTotal(units);
-  const tier  = _ARMY_TIERS.find(t => count >= t.min && count <= t.max) || _ARMY_TIERS[0];
-  return tier.label;
-}
-
-// Progressive fog-of-war tier: vague → clear → precise, same ramp for
-// enemy_lord and enemy_city. Rogue scanners always get precise instantly.
-// currentTier is whatever the caller already knows for this specific
-// entity (lordId/cityId) — passed up from the client's IntelligenceService.
-function _qualityTier(callerClassId, currentTier) {
-  if (callerClassId === 'rogue') return 'precise';
-  if (!currentTier)               return 'vague';
-  if (currentTier === 'vague')    return 'clear';
-  return 'precise';
-}
-
-// Truncate a fully-built enemy_lord rawData payload down to what the given
-// tier is allowed to reveal. Enforced server-side so a vague-tier response
-// never puts full army composition on the wire in the first place.
-function _truncateLordData(tier, raw) {
-  if (tier === 'vague') {
-    return { lordId: raw.lordId, forceSize: raw.forceSize };
-  }
-  if (tier === 'clear') {
-    return {
-      lordId: raw.lordId, lordName: raw.lordName, lordRace: raw.lordRace,
-      lordLevel: raw.lordLevel, lordClass: raw.lordClass,
-      playerUsername: raw.playerUsername, playerId: raw.playerId, forceSize: raw.forceSize,
-    };
-  }
-  return raw; // precise — full detail, including stance for rogue scanners
-}
-
-// Same idea for enemy_city — vague only reveals name + a bucketed garrison
-// size (never an exact count), clear adds full garrison composition,
-// precise adds exact population.
-function _truncateCityData(tier, raw) {
-  if (tier === 'vague') {
-    return { cityId: raw.cityId, name: raw.name, forceSize: raw.forceSize };
-  }
-  if (tier === 'clear') {
-    return { cityId: raw.cityId, name: raw.name, forceSize: raw.forceSize, garrisonUnits: raw.garrisonUnits };
-  }
-  return raw; // precise — + population, exact garrisonCount
-}
+// (_forceLabel lived here: a bucketed "Small/Medium Force" label for the old
+// vague intel tier. Nothing shows an approximate enemy size any more — the map
+// says "Unknown force" and a scout report gives exact numbers, with nothing in
+// between. _ARMY_TIERS is still used above for the attack visibility roll.)
 
 // Server-side mirror of CityService.getGarrison (js/domain/city.js) — the
 // client's version can't run here (RLS-scoped browser storage), so combat
@@ -336,7 +293,8 @@ export function _checkLevelUp(lord) {
   const cls     = LORD_CLASSES[lord.classId];
   const clsKeys = new Set(Object.keys(cls?.modifiers || {}));
   let leveled = 0;
-  while ((lord.xp || 0) >= (lord.xpToNext || _xpToNextLevel(lord.level || 1))) {
+  while ((lord.level || 1) < LORD_MAX_LEVEL &&
+         (lord.xp || 0) >= (lord.xpToNext || _xpToNextLevel(lord.level || 1))) {
     lord.xp           = Math.max(0, (lord.xp || 0) - (lord.xpToNext || _xpToNextLevel(lord.level || 1)));
     lord.level        = (lord.level || 1) + 1;
     lord.xpToNext     = _xpToNextLevel(lord.level);
@@ -347,6 +305,10 @@ export function _checkLevelUp(lord) {
       }
     }
     leveled++;
+  }
+  // Clamp banked XP at the cap so the bar reads full, not overflowing.
+  if ((lord.level || 1) >= LORD_MAX_LEVEL) {
+    lord.xp = Math.min(lord.xp || 0, lord.xpToNext || 0);
   }
   return leveled;
 }
@@ -672,52 +634,26 @@ function _applyLordHp(lordsObj, lordId, unitsSurviving, winner, side, capturerIn
   lordsObj[lordId] = lord;
 }
 
-// ── Tile scanner ─────────────────────────────────────────────
+// ── Scout report ─────────────────────────────────────────────
 //
-//  POST /api/scan/tile
-//  Body: { tileX, tileY, knownTiers?: { [lordId|cityId]: 'vague'|'clear'|'precise' } }
+//  Everything a scout learns about one tile, gathered in a single pass and
+//  returned whole. There is deliberately no tier/progression system and no
+//  client input: a scout either reaches the tile and sees it, or gets caught
+//  (resolveScout) and sees nothing. The report is a timestamped snapshot the
+//  server hands to the player's Activity feed — it is never stored as mutable
+//  client-side "known intel", so there is nothing for a browser to forge and
+//  nothing for the server to take on trust.
 //
-//  Called by Search Area quest resolution to advance intel on a tile.
-//  Returns enemy lords AND an enemy city (if present) on the given tile.
-//  Army-less lords are skipped entirely — they don't exist for detection
-//  purposes. Response payloads are truncated server-side to whatever tier
-//  the caller currently knows for that specific entity (knownTiers, keyed
-//  by lordId/cityId) — a 'vague'-tier response never contains full army
-//  composition or garrison detail, only a bucketed force-size label.
-//
-//  Response: { ok, discoveries: [{ type, tileX, tileY, ttl, rawData }] }
-
-// Both lord and city intel expire and need re-scouting. Cities are static
-// structures, so their intel decays slower than a mobile lord's.
-const _LORD_INTEL_TTL_MS = 30 * 60 * 1000;
-const _CITY_INTEL_TTL_MS = 90 * 60 * 1000;
-
-// Shared discovery-gathering core, used by both the scanTile HTTP endpoint
-// and resolveScout (the dedicated Scout action) — same tiered-truncation
-// contract either caller uses.
-async function _gatherTileIntel(admin, callerId, callerClassId, x, y, knownTiers) {
-  const tiers = (knownTiers && typeof knownTiers === 'object') ? knownTiers : {};
-  const discoveries = [];
-
-  // ── Enemy city on this tile ────────────────────────────────
-  const cityHit = await _findCityAtTile(admin, x, y, callerId);
-  if (cityHit) {
-    const garrison      = _getGarrison(cityHit.city);
-    const garrisonCount = garrison.reduce((s, r) => s + r.count, 0);
-    const rawFull = {
-      cityId:        cityHit.city.id,
-      name:          cityHit.city.name,
-      population:    Math.floor(cityHit.city.population || 0),
-      garrisonCount,
-      garrisonUnits: garrison,
-      forceSize:     _forceLabel(garrison),
-    };
-    const tier = _qualityTier(callerClassId, tiers[cityHit.city.id] || null);
-    discoveries.push({ type: 'enemy_city', tileX: x, tileY: y, ttl: _CITY_INTEL_TTL_MS, rawData: _truncateCityData(tier, rawFull) });
-  }
-
-  // ── Enemy lords on this tile ───────────────────────────────
-  const [lordResult, armyResult, playerResult] = await Promise.all([
+//  Shape:
+//    { city: null | { cityId, name, ownerId, ownerUsername, population,
+//                     garrison: [{unitId,count}], garrisonCount, garrisonPower,
+//                     plunder: { gold, food, wood, stone } },
+//      lords: [{ lordId, lordName, lordRace, lordLevel, lordClass, lordPortrait,
+//                playerId, playerUsername, units: [{unitId,count}], armyPower,
+//                stanceId, stanceName, lastActivity }] }
+async function _gatherScoutReport(admin, callerId, x, y) {
+  const [cityHit, lordResult, armyResult, playerResult] = await Promise.all([
+    _findCityAtTile(admin, x, y, callerId),
     admin.from('storage').select('player_id, value').eq('key', 'lords'),
     admin.from('storage').select('player_id, value').eq('key', 'armies'),
     admin.from('storage').select('player_id, value').eq('key', 'players'),
@@ -725,9 +661,48 @@ async function _gatherTileIntel(admin, callerId, callerClassId, x, y, knownTiers
 
   const armyByPlayer    = {};
   const profileByPlayer = {};
-  (armyResult.data || []).forEach(r => { armyByPlayer[r.player_id]   = r.value || {}; });
+  (armyResult.data || []).forEach(r => { armyByPlayer[r.player_id]     = r.value || {}; });
   (playerResult.data || []).forEach(r => { profileByPlayer[r.player_id] = (r.value || {})[r.player_id] || {}; });
 
+  // ── Enemy city on this tile ────────────────────────────────
+  let city = null;
+  if (cityHit) {
+    const garrison      = _getGarrison(cityHit.city);
+    const garrisonCount = garrison.reduce((s, r) => s + r.count, 0);
+    const garrisonPower = _armyPower(garrison);
+    const population    = Math.floor(cityHit.city.population || 0);
+    const owner         = profileByPlayer[cityHit.playerId] || {};
+
+    // What taking this city would actually be worth. Mirrors the real payout
+    // maths — _lootResources for the resource cut, _computeRewards for gold —
+    // minus the ±15% jitter the live roll applies, so two scouts of an
+    // unchanged city always report the same number. Resources are empire-wide
+    // (player.resources), so this is a slice of the OWNER'S whole stockpile,
+    // not a per-city stash: the same figure applies to any city they hold.
+    const ownerRes = owner.resources || {};
+    const plunder  = {
+      gold:  Math.max(_MIN_CITY_VICTORY_GOLD,
+                      Math.round(garrisonPower * _GOLD_PER_POWER) + Math.round(population * _CITY_GOLD_PCT)),
+      food:  Math.floor((ownerRes.food  || 0) * _RESOURCE_LOOT_PCT),
+      wood:  Math.floor((ownerRes.wood  || 0) * _RESOURCE_LOOT_PCT),
+      stone: Math.floor((ownerRes.stone || 0) * _RESOURCE_LOOT_PCT),
+    };
+
+    city = {
+      cityId:        cityHit.city.id,
+      name:          cityHit.city.name,
+      ownerId:       cityHit.playerId,
+      ownerUsername: owner.username || null,
+      population,
+      garrison,
+      garrisonCount,
+      garrisonPower,
+      plunder,
+    };
+  }
+
+  // ── Enemy lords on this tile ───────────────────────────────
+  const lords = [];
   for (const row of (lordResult.data || [])) {
     if (row.player_id === callerId) continue;
     const username = profileByPlayer[row.player_id]?.username || null;
@@ -739,82 +714,45 @@ async function _gatherTileIntel(admin, callerId, callerClassId, x, y, knownTiers
       const armyUnits = (armyObj[lord.id] || {}).units || [];
       if (_armyTotal(armyUnits) <= 0) continue; // army-less lords don't exist for detection
 
-      const stanceDef    = STANCE_DEFS[lord.stance?.id || 'idle'];
-      const unitsSummary = armyUnits.map(u => ({ unitId: u.unitId, count: u.count }));
-      const armyPoints   = _armyTotal(armyUnits);
-      const isRogue      = callerClassId === 'rogue';
-
-      const rawFull = {
+      const stanceDef = STANCE_DEFS[lord.stance?.id || 'idle'];
+      lords.push({
         lordId:         lord.id,
         lordName:       lord.name,
         lordRace:       lord.race,
         lordLevel:      lord.level || 1,
         lordClass:      lord.classId,
-        playerUsername: username,
+        lordPortrait:   lord.portrait || null,
         playerId:       row.player_id,
-        armyCapacity:   armyPoints,
-        units:          unitsSummary,
+        playerUsername: username,
+        units:          armyUnits.map(u => ({ unitId: u.unitId, count: u.count })),
+        armyCount:      _armyTotal(armyUnits),
+        armyPower:      _armyPower(armyUnits),
+        stanceId:       lord.stance?.id || 'idle',
+        stanceName:     stanceDef?.name || null,
         lastActivity:   lord.actionQueue?.length > 0 ? lord.actionQueue[0].actionId : 'idle',
-        forceSize:      _forceLabel(armyUnits),
-        stanceId:       isRogue ? (lord.stance?.id || 'idle') : null,
-        stanceName:     isRogue ? (stanceDef?.name || null) : null,
-      };
-      const tier = _qualityTier(callerClassId, tiers[lord.id] || null);
-      discoveries.push({
-        type:    'enemy_lord',
-        tileX:   x,
-        tileY:   y,
-        ttl:     _LORD_INTEL_TTL_MS,
-        rawData: _truncateLordData(tier, rawFull),
       });
     }
   }
 
-  return discoveries;
-}
-
-export async function scanTile(req, res) {
-  const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
-  if (!token) return res.status(401).json({ error: 'Missing Authorization header' });
-
-  let authClient, admin;
-  try { authClient = _authClient(); admin = _adminClient(); }
-  catch (e) { return res.status(500).json({ error: e.message }); }
-
-  const { data: { user }, error: authErr } = await authClient.auth.getUser(token);
-  if (authErr || !user) return res.status(401).json({ error: 'Invalid or expired token' });
-
-  const callerId = user.id;
-  const { tileX, tileY, knownTiers } = req.body || {};
-  const x = Number(tileX), y = Number(tileY);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    return res.status(400).json({ error: 'tileX and tileY required' });
-  }
-
-  // Load the scanning lord's class (Rogue always gets precise tier instantly).
-  const { data: callerStorageRows } = await admin.from('storage')
-    .select('key, value').eq('player_id', callerId).eq('key', 'lords');
-  const callerLords    = Object.values(callerStorageRows?.[0]?.value || {});
-  const scanningLord   = callerLords.find(l => l.x === x && l.y === y);
-  const callerClassId  = scanningLord?.classId || null;
-
-  const discoveries = await _gatherTileIntel(admin, callerId, callerClassId, x, y, knownTiers);
-  return res.json({ ok: true, discoveries });
+  return { city, lords };
 }
 
 // ── Presence scanner ──────────────────────────────────────────
 //
 //  POST /api/scan/presence
 //
-//  Live, zero-stats "is there something attackable here" layer for lords —
-//  cities already have an equivalent via the global world_state table
-//  (WorldService.getOccupiedTiles() client-side), so this only covers
-//  lords. One cross-player scan of 'lords' + 'armies', filtered to
-//  positioned lords with a non-empty army (army-less lords don't exist
-//  for detection purposes) and excluding the caller's own lords. Returns
-//  anonymized coordinates only — no names, classes, or army composition.
+//  Live, strength-free "there is a lord here" layer — cities already have an
+//  equivalent via the global world_state table (WorldService.getOccupiedTiles()
+//  client-side), so this only covers lords. One cross-player scan of 'lords' +
+//  'armies', filtered to positioned lords with a non-empty army (army-less
+//  lords don't exist for detection purposes) and excluding the caller's own.
 //
-//  Response: { ok, lords: [{ x, y }] }
+//  Carries WHO owns the lord but never HOW STRONG they are: owner identity is
+//  already public (the Clan screen lists every clan's roster, cities show their
+//  owner on the map), and the map needs it to colour allied vs at-war lords.
+//  Army size, composition, level and class stay behind a scout report.
+//
+//  Response: { ok, lords: [{ x, y, playerId, username }] }
 
 export async function scanPresence(req, res) {
   const token = (req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
@@ -829,14 +767,17 @@ export async function scanPresence(req, res) {
 
   const callerId = user.id;
 
-  const [lordResult, armyResult] = await Promise.all([
+  const [lordResult, armyResult, playerResult] = await Promise.all([
     admin.from('storage').select('player_id, value').eq('key', 'lords'),
     admin.from('storage').select('player_id, value').eq('key', 'armies'),
+    admin.from('storage').select('player_id, value').eq('key', 'players'),
   ]);
   if (lordResult.error) return res.status(500).json({ error: 'Failed to scan lords: ' + lordResult.error.message });
 
   const armyByPlayer = {};
+  const nameByPlayer = {};
   (armyResult.data || []).forEach(r => { armyByPlayer[r.player_id] = r.value || {}; });
+  (playerResult.data || []).forEach(r => { nameByPlayer[r.player_id] = ((r.value || {})[r.player_id] || {}).username || null; });
 
   const presence = [];
   for (const row of (lordResult.data || [])) {
@@ -847,7 +788,13 @@ export async function scanPresence(req, res) {
       if (l.downtimeUntil && Date.now() < l.downtimeUntil) return;
       const armyUnits = (armies[l.id] || {}).units || [];
       if (_armyTotal(armyUnits) <= 0) return;
-      presence.push({ x: l.x, y: l.y });
+      // Deliberately no size hint of any kind — not even a bucketed label.
+      // On the map every unscouted lord is simply "Unknown force".
+      presence.push({
+        x: l.x, y: l.y,
+        playerId: row.player_id,
+        username: nameByPlayer[row.player_id] || null,
+      });
     });
   }
 
@@ -932,7 +879,7 @@ export async function scanIncomingAttacks(req, res) {
 //   { ok: true, report, terrain, defPlayerIds, atkLords, atkArmies, atkPlayer }
 //   { ok: true, noDefenders: true, atkLords, atkArmies, atkPlayer }
 //   { ok: false, error, hidden?: true }
-async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tileY, opts = {}) {
+async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tileY) {
   // 1. Load attacker data.
   const { data: atkRows, error: atkErr } = await admin.from('storage')
     .select('key, value')
@@ -956,12 +903,8 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   if ((attackerLord.actionQueue || []).length > 0) {
     return { ok: false, error: 'Lord is busy with another action' };
   }
-  // skipAttackerStanceGate: used when an ambush-stanced lord is reacting
-  // to a scout entering their tile (server/combat-resolver.js resolveScout) —
-  // this gate exists to stop a stanced lord from *issuing new orders*, which
-  // doesn't apply to a stance passively triggering a fight it's the cause of.
   const atkStance = STANCE_DEFS[attackerLord.stance?.id || 'idle'];
-  if (!opts.skipAttackerStanceGate && atkStance?.restrictions?.includes('action')) {
+  if (atkStance?.restrictions?.includes('action')) {
     return { ok: false, error: `Cannot attack while in ${atkStance.name} stance` };
   }
 
@@ -1100,14 +1043,14 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
   // lords into one "Enemy" blob — see js/ui/battle-result-view.js. Array
   // order here MUST match the d{idx} prefixing _buildMultiContext/
   // _applyDefLosses use (both iterate `defenders` the same way), since the
-  // report itself only carries sourceId prefixes, not names. race/classId
-  // are included so the client can call pickLordPortrait() for an ENEMY
-  // lord too, not just the viewer's own — it's a pure hash of
-  // (race, classId, lordId), so any client computes the same portrait for
-  // any lord without needing to have that lord's data locally cached.
+  // report itself only carries sourceId prefixes, not names. `portrait` is
+  // each lord's own stored face, so an ENEMY lord renders in the report
+  // exactly as its owner sees it, with no need for that lord's data to be
+  // cached locally. race/classId ride along as the fallback input for
+  // pickLordPortrait() when portrait is null (lords predating the stored roll).
   report._meta = {
-    attacker:       { lordId: attackerLord.id, lordName: attackerLord.name, race: attackerLord.race, classId: attackerLord.classId },
-    defenderGroups: defenders.map(({ lord }) => ({ lordId: lord.id, lordName: lord.name, race: lord.race, classId: lord.classId })),
+    attacker:       { lordId: attackerLord.id, lordName: attackerLord.name, race: attackerLord.race, classId: attackerLord.classId, portrait: attackerLord.portrait || null },
+    defenderGroups: defenders.map(({ lord }) => ({ lordId: lord.id, lordName: lord.name, race: lord.race, classId: lord.classId, portrait: lord.portrait || null })),
     garrison:       cityHit ? { cityId: cityHit.city.id, cityName: cityHit.city.name } : null,
   };
 
@@ -1466,79 +1409,63 @@ export async function resolvePvpBattle(admin, attackerPlayerId, attackerLordId, 
 //   - server/tick/event-dispatcher.js's _advancePlayer (offline case)
 //   - POST /api/lord/scout-resolve (online case, mirrors resolvePvpAttack)
 //
-// Army-less lords are always safe (already invisible/unattackable per the
-// existing army-less rule) and go straight to gathering intel. A lord
-// scouting WITH an army risks an ambush: if an enemy lord on that exact tile
-// is in 'ambush' stance, roll _visibilityScore (the same formula
-// used everywhere else for "can this army be seen") as the detection chance.
-// If detected, the ambusher becomes the attacker in a full _resolveCore
-// fight and the scout gets NO intel regardless of outcome — getting caught
-// replaces the scouting result, it never stacks with it.
-async function _clearScoutPending(admin, playerId, lords, lordId) {
+// (Until 2026-07-29 a lord scouting WITH an army could be intercepted here by
+// an enemy lord in the 'ambush' stance. That stance was removed — it was
+// client-only and never observable server-side — so scouting is now always
+// safe and the only outcome is intel. Ambushes live on solely as the PvE
+// expedition event in server/tick/catch-up.js's _resolveAmbush.)
+//
+// `report`, when given, is stashed on the lord in the SAME write that clears
+// the pending flag — server/sync.js drains it into a scout_result event on the
+// player's next sync, and the client files it in the Activity feed. That feed
+// entry is the only place a scout's findings are ever stored, online or off,
+// which is what keeps them out of reach of the browser. Mirrors how
+// catch-up.js stashes pendingRaidReports for raids.
+async function _clearScoutPending(admin, playerId, lords, lordId, report = null) {
   if (!lords[lordId]) return;
   lords[lordId].pendingScoutResolve = null;
+  if (report) {
+    lords[lordId].pendingScoutReports = [...(lords[lordId].pendingScoutReports || []), report];
+  }
   await admin.from('storage').upsert(
     { player_id: playerId, key: 'lords', value: lords },
     { onConflict: 'player_id,key' }
   );
 }
 
-export async function resolveScout(admin, playerId, lordId, tileX, tileY, knownTiers = {}) {
+// Resolves a completed scout: gathers the tile report.
+//
+// The report is ALWAYS stashed on the lord for sync.js to deliver, whichever
+// path got here (dispatcher or the online endpoint) — the Activity feed is the
+// one and only place a scout's findings are written, so there is a single
+// producer and a single consumer. Callers that have a live client waiting also
+// get the report back in the response, but only to drive the immediate toast.
+export async function resolveScout(admin, playerId, lordId, tileX, tileY) {
   const { data: rows, error } = await admin.from('storage')
-    .select('key, value').eq('player_id', playerId).in('key', ['lords', 'armies']);
+    .select('key, value').eq('player_id', playerId).eq('key', 'lords');
   if (error) return { ok: false, error: 'Failed to load scout data: ' + error.message };
 
-  const data   = Object.fromEntries((rows || []).map(r => [r.key, r.value]));
-  const lords  = data.lords  || {};
-  const armies = data.armies || {};
-  const lord   = lords[lordId];
+  const lords = rows?.[0]?.value || {};
+  const lord  = lords[lordId];
   if (!lord) return { ok: false, error: 'Scouting lord not found' };
   if (lord.x !== tileX || lord.y !== tileY) {
+    // Clear the flag on the way out. Left set, it would be retried — and fail
+    // identically — on every future drain for this player, since nothing else
+    // ever unsets it.
+    await _clearScoutPending(admin, playerId, lords, lordId);
     return { ok: false, error: 'Lord is no longer at the scouted tile' };
   }
 
-  const armyUnits = (armies[lordId]?.units) || [];
-
-  // No army → always safe, no ambush check at all.
-  if (_armyTotal(armyUnits) <= 0) {
-    const discoveries = await _gatherTileIntel(admin, playerId, lord.classId, tileX, tileY, knownTiers);
-    await _clearScoutPending(admin, playerId, lords, lordId);
-    return { ok: true, outcome: 'intel', discoveries };
-  }
-
-  // Look for an enemy (never own-player) lord in ambush stance on this
-  // exact tile — same-tile only, no adjacent-tile interception.
-  const { data: allLordRows } = await admin.from('storage')
-    .select('player_id, value').eq('key', 'lords');
-  const now = Date.now();
-  let ambusher = null;
-  for (const row of (allLordRows || [])) {
-    if (row.player_id === playerId) continue;
-    const hit = Object.values(row.value || {}).find(l =>
-      l.x === tileX && l.y === tileY &&
-      !(l.downtimeUntil && now < l.downtimeUntil) &&
-      l.stance?.id === 'ambush' &&
-      !(l.stance?.finishAt && now >= l.stance.finishAt)
-    );
-    if (hit) { ambusher = { playerId: row.player_id, lord: hit }; break; }
-  }
-
-  if (ambusher && Math.random() * 100 < _visibilityScore(lord, armyUnits)) {
-    // Caught — no intel, just the fight. The ambusher becomes the attacker;
-    // _resolveCore picks the scout up automatically as a defender on that
-    // tile via its existing "find all enemy lords here" scan — no
-    // special-casing needed there.
-    await _clearScoutPending(admin, playerId, lords, lordId);
-    const result = await _resolveCore(admin, ambusher.playerId, ambusher.lord.id, tileX, tileY, { skipAttackerStanceGate: true });
-    if (!result.ok) return result;
-    return { ok: true, outcome: 'ambushed', report: result.report, terrain: result.terrain };
-  }
-
-  // Safe — no ambusher present, or the detection roll missed. Either way the
-  // ambusher (if any) never learns a scout was even there.
-  const discoveries = await _gatherTileIntel(admin, playerId, lord.classId, tileX, tileY, knownTiers);
-  await _clearScoutPending(admin, playerId, lords, lordId);
-  return { ok: true, outcome: 'intel', discoveries };
+  const found = await _gatherScoutReport(admin, playerId, tileX, tileY);
+  const at    = Date.now();
+  const report = {
+    id: `scout_${lordId}_${tileX}_${tileY}_${at}`,
+    lordId, lordName: lord.name || '', tileX, tileY, at,
+    city:  found.city  || null,
+    lords: found.lords || [],
+  };
+  await _clearScoutPending(admin, playerId, lords, lordId, report);
+  return { ok: true, outcome: 'intel', report };
 }
 
 // ── Raiding: auto-combat on arrival ────────────────────────────

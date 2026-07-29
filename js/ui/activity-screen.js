@@ -4,6 +4,69 @@
 
 const ActivityScreen = (() => {
   let _player = null;
+  const _expanded = new Set(); // entry ids whose scout report is open
+
+  // ── Scout report panel ────────────────────────────────────────
+  //
+  // The feed entry is the only place a scout's findings are stored, so this
+  // is the full dossier, not a teaser: garrison roster, every lord's army,
+  // and what taking the city would actually pay out.
+
+  function _unitLineHtml(u) {
+    const def = (typeof UNIT_DEFS !== 'undefined') ? UNIT_DEFS[u.unitId] : null;
+    return `
+      <div class="sr-unit">
+        <span class="sr-unit-name">${def?.name || u.unitId}</span>
+        <span class="sr-unit-count">×${u.count}</span>
+      </div>`;
+  }
+
+  function _plunderHtml(p) {
+    if (!p) return '';
+    const chip = (icon, val) => val > 0 ? `<span class="sr-loot">${gi(icon)} ${val.toLocaleString()}</span>` : '';
+    const chips = [
+      chip('two-coins', p.gold), chip('wheat', p.food),
+      chip('wood-pile', p.wood), chip('war-pick', p.stone),
+    ].filter(Boolean).join('');
+    return chips
+      ? `<div class="sr-loot-row"><span class="sr-sub">If you win</span>${chips}</div>`
+      : `<div class="sr-loot-row"><span class="sr-sub">If you win</span><span class="sr-empty">nothing worth taking</span></div>`;
+  }
+
+  function _scoutReportHtml(r) {
+    if (!r) return '';
+    const cityHtml = r.city ? `
+      <div class="sr-block">
+        <div class="sr-head">
+          <span class="sr-title">${gi('guarded-tower')} ${r.city.name}</span>
+          <span class="sr-sub">${r.city.ownerUsername || 'Unknown owner'} · pop ${(r.city.population || 0).toLocaleString()}</span>
+        </div>
+        <div class="sr-sub">Garrison — ${r.city.garrisonCount} troops · ${r.city.garrisonPower} PWR</div>
+        <div class="sr-units">
+          ${(r.city.garrison || []).map(_unitLineHtml).join('') || '<div class="sr-empty">Undefended</div>'}
+        </div>
+        ${_plunderHtml(r.city.plunder)}
+      </div>` : '';
+
+    const lordsHtml = (r.lords || []).map(l => {
+      const cls = (typeof LORD_CLASSES !== 'undefined') ? LORD_CLASSES[l.lordClass] : null;
+      const race = (typeof RACES !== 'undefined') ? RACES[l.lordRace] : null;
+      return `
+        <div class="sr-block">
+          <div class="sr-head">
+            <span class="sr-title">${gi('crossed-swords')} ${l.lordName || 'Enemy lord'}</span>
+            <span class="sr-sub">${l.playerUsername || 'Unknown'} · ${race?.name || ''} ${cls?.name || ''} · Lv ${l.lordLevel}</span>
+          </div>
+          <div class="sr-sub">Army — ${l.armyCount} troops · ${l.armyPower} PWR${l.stanceName ? ` · ${l.stanceName}` : ''}</div>
+          <div class="sr-units">${(l.units || []).map(_unitLineHtml).join('')}</div>
+        </div>`;
+    }).join('');
+
+    if (!cityHtml && !lordsHtml) {
+      return `<div class="sr-panel"><div class="sr-empty">Nothing on this tile when the scout arrived.</div></div>`;
+    }
+    return `<div class="sr-panel">${cityHtml}${lordsHtml}</div>`;
+  }
 
   function _timeAgo(ms) {
     const secs = Math.floor(ms / 1000);
@@ -15,8 +78,22 @@ const ActivityScreen = (() => {
     return `${Math.floor(hours / 24)}d ago`;
   }
 
-  function _isBattleEntry(e) {
-    return e.type === 'pvp_result' || (e.type || '').startsWith('battle_');
+  // Which lord screen (and tab) an entry jumps to, or null for entries that
+  // aren't tied to a lord's own records. Quest and raid entries route the same
+  // way battle entries always have — straight to the lord that earned them,
+  // landing on the tab where the full detail lives.
+  function _routeFor(e) {
+    if (e.type === 'pvp_result' || (e.type || '').startsWith('battle_')) {
+      return { tab: 'battles',   label: 'Report',     icon: gi('scroll-quill'),      title: 'View battle report' };
+    }
+    // scout_result is handled separately — its dossier expands in place.
+    if (e.type === 'discovery') {
+      return { tab: 'discovery', label: 'View quest', icon: gi('magnifying-glass'),  title: "Open this lord's Quests tab" };
+    }
+    if (e.type === 'raid_complete') {
+      return { tab: 'overview',  label: 'View lord',  icon: gi('black-flag'),        title: 'Open the raiding lord' };
+    }
+    return null;
   }
 
   function _html() {
@@ -32,6 +109,7 @@ const ActivityScreen = (() => {
       scout_result:   'af-discovery',
       lord_moved:     'af-move',
       action_complete:'af-action',
+      raid_complete:  'af-raid',
     };
 
     const content = feed.length === 0
@@ -43,12 +121,21 @@ const ActivityScreen = (() => {
       : feed.slice(0, 60).map(e => {
           const css  = TYPE_CSS[e.type] || '';
           const date = _timeAgo(TimeService.now() - e.at);
-          const reportLordId = e.lordId
+          // Entries logged before lordId was recorded fall back to a name
+          // match, so old feed items still route.
+          const route  = _routeFor(e);
+          const lordId = e.lordId
             || LordService.getByPlayer(_player.id).find(l => l.name === e.lordName)?.id
             || null;
-          const reportBtn = _isBattleEntry(e) && reportLordId
-            ? `<button class="af-report-btn" data-lord-id="${reportLordId}" title="View battle report">${gi('scroll-quill')} Report</button>`
-            : '';
+          // Scout entries carry their whole dossier — expand in place rather
+          // than routing off to a lord tab that no longer holds any of it.
+          const isScout = e.type === 'scout_result' && e.scoutReport;
+          const open    = _expanded.has(e.id);
+          const reportBtn = isScout
+            ? `<button class="af-report-btn" data-toggle-report="${e.id}">${gi('spy')} ${open ? 'Hide report' : 'View report'}</button>`
+            : route && lordId
+              ? `<button class="af-report-btn" data-lord-id="${lordId}" data-open-tab="${route.tab}" title="${route.title}">${route.icon} ${route.label}</button>`
+              : '';
           return `
             <div class="af-entry ${css}" data-entry-id="${e.id}">
               <span class="af-icon">${e.icon}</span>
@@ -56,6 +143,7 @@ const ActivityScreen = (() => {
                 <span class="af-title">${e.title}</span>
                 ${e.detail ? `<span class="af-detail">${e.detail}</span>` : ''}
                 ${reportBtn}
+                ${isScout && open ? _scoutReportHtml(e.scoutReport) : ''}
               </div>
               <div class="af-meta">
                 ${e.lordName ? `<span class="af-lord">${e.lordName}</span>` : ''}
@@ -78,10 +166,20 @@ const ActivityScreen = (() => {
   }
 
   function _bindEvents(root) {
+    root.querySelectorAll('.af-report-btn[data-toggle-report]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.dataset.toggleReport;
+        if (_expanded.has(id)) _expanded.delete(id); else _expanded.add(id);
+        root.innerHTML = _html();
+        _bindEvents(root);
+      });
+    });
+
     root.querySelectorAll('.af-report-btn[data-lord-id]').forEach(btn => {
       btn.addEventListener('click', () => {
         const lord = LordService.getById(btn.dataset.lordId);
-        if (lord) App.navigate('lord-screen', { lord, player: _player, openTab: 'battles' });
+        if (!lord) { ToastService.show('That lord is no longer available.'); return; }
+        App.navigate('lord-screen', { lord, player: _player, openTab: btn.dataset.openTab || 'battles' });
       });
     });
 

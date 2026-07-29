@@ -7,13 +7,15 @@
 //  Runs THREE tournaments — Start / Midgame / Endgame — each restricted
 //  to the units whose war buildings realistically exist at that stage,
 //  with a stage-appropriate lord level and PWR cap. For each stage,
-//  every race builds three strategy-archetype armies (swarm / elite /
-//  balanced) under the same gold budget and PWR cap, then a full
-//  round-robin (both directions, repeated — the engine is random).
+//  every race builds four strategy-archetype armies (swarm / elite /
+//  balanced / blocks) under the same gold budget and PWR cap, then a
+//  full round-robin (both directions, repeated — the engine is random).
 //
-//  Pass/fail thresholds (regression guards) apply to the ENDGAME
-//  tournament only — start/mid results are designer information,
-//  exported to balance-results.json for army-guide.html.
+//  Pass/fail thresholds (regression guards): race-level win rates are
+//  gated at EVERY stage (Nacho 2026-07-29: nothing below 40% or above
+//  60% at any stage; the check band is 38–62 to absorb sampling noise).
+//  Combo-level floor/ceiling checks remain endgame-only — archetype
+//  spread within a race is deliberately wider than the race band.
 //
 //  Lords are IDENTICAL on both sides (level, stats, no talents) and
 //  veterancy is symmetric-zero, so results isolate UNIT balance.
@@ -103,6 +105,30 @@ const ARCHETYPES = {
       .sort((a, b) => a.goldCost - b.goldCost)[0];
     const picks = ['infantry', 'ranged', 'cavalry', 'monster'].map(r => byRole[r]).filter(Boolean);
     return screen && !picks.includes(screen) ? [screen, ...picks] : picks;
+  },
+  blocks: defs => {
+    // regiments (2026-07-29 mass pass): FOUR line-unit types stacked
+    // deep — a cheap screen, the best ranged battery, the two strongest
+    // melee regiments. Exists to MEASURE the mass meta: before the
+    // ranged-spill + ranks/wedge changes, one-of-each variety got all
+    // the stack-count insurance and this archetype had no reason to win.
+    // Monsters/legendaries are excluded on purpose (by category AND by
+    // trait — dragons are category 'flying') — v1 picked the highest-PWR
+    // unit and fielded 4× Arachnarok (5.9% win rate): a doomstack, not a
+    // regiment. Melee regiments also require def ≥ 5: glass cannons
+    // aren't line troops — v3 picked Giant Slayers (def 3) for dwarfs,
+    // who died first, nuked side morale, and the army retreated with its
+    // untouched Irondrakes (98% survival) still loaded: 18.7% win rate.
+    const line   = defs.filter(d => d.category !== 'monster' && d.category !== 'legendary'
+      && !(d.traits || []).includes('monster') && !(d.traits || []).includes('large'));
+    const screen = [...line].filter(d => _role(d) === 'infantry')
+      .sort((a, b) => a.goldCost - b.goldCost)[0];
+    const ranged = [...line].filter(d => _role(d) === 'ranged')
+      .sort((a, b) => unitPwr(b) - unitPwr(a))[0];
+    const melee  = [...line].filter(d => d !== screen && d !== ranged && _role(d) !== 'ranged'
+      && (d.combatStats?.defense ?? 0) >= 5)
+      .sort((a, b) => unitPwr(b) - unitPwr(a));
+    return [...new Set([screen, ranged, melee[0], melee[1]].filter(Boolean))];
   },
 };
 
@@ -286,21 +312,27 @@ writeFileSync(new URL('../balance-results.json', import.meta.url), JSON.stringif
   }])),
 }, null, 2), 'utf8');
 
-// ── Checks (ENDGAME tournament only) ────────────────────────────
-section('Balance thresholds (endgame)');
+// ── Checks ──────────────────────────────────────────────────────
+section('Balance thresholds (race band, all stages)');
 
 // Races whose balance review is knowingly deferred: an out-of-band result
 // reports as a skip instead of failing the suite. EMPTY right now — add a
 // race here only with an explicit design decision.
 const DEFERRED_RACES = new Set([]);
 
-for (const [race, rate] of Object.entries(end.raceRate)) {
-  const inBand = rate >= 0.35 && rate <= 0.65;
-  if (!inBand && DEFERRED_RACES.has(race)) {
-    console.log(`  ⏭  race ${race} win rate ${pct(rate)} outside 35–65% — deferred (known open item, review pending)`);
-    continue;
+// Design target 40–60% per race per stage (2026-07-29 band pass landed
+// every cell inside it: 40.7–57.6). Gated at 38–62: race rates at REPS 96
+// carry ~±1pt of sampling noise, and the two tightest cells (orc start,
+// dwarf end) sit at ~41 — an exact 40 cutoff would flip red on noise alone.
+for (const t of tournaments) {
+  for (const [race, rate] of Object.entries(t.raceRate)) {
+    const inBand = rate >= 0.38 && rate <= 0.62;
+    if (!inBand && DEFERRED_RACES.has(race)) {
+      console.log(`  ⏭  ${t.stage.label}: race ${race} win rate ${pct(rate)} outside 38–62% — deferred (known open item, review pending)`);
+      continue;
+    }
+    check(`${t.stage.label}: race ${race} win rate within 38–62% (got ${pct(rate)})`, inBand);
   }
-  check(`race ${race} overall win rate within 35–65% (got ${pct(rate)})`, inBand);
 }
 
 // Ceiling 74%, not 72: the strongest legitimate combined-arms combo
@@ -315,7 +347,7 @@ const worstCombo = Object.entries(end.comboRate).sort((a, b) => a[1] - b[1])[0];
 check(`no race+strategy combo below 25% (bottom: ${worstCombo[0]} at ${pct(worstCombo[1])})`,
   worstCombo[1] >= 0.25);
 
-check('every race fielded all three archetypes at endgame',
+check('every race fielded every archetype at endgame',
   RACES.every(r => end.combos.filter(c => c.race === r).length === Object.keys(ARCHETYPES).length));
 
 // ── Summary ─────────────────────────────────────────────────────

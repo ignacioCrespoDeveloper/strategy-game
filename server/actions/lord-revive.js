@@ -35,7 +35,7 @@ export async function handleLordRevive(req, res) {
   const now = Date.now();
 
   // Use server's downtimeUntil if available. Fall back to clientDowntimeUntil when
-  // pveAttack didn't commit the fallen state to Supabase (e.g. a race condition
+  // a battle didn't commit the fallen state to Supabase (e.g. a race condition
   // or transient write failure). Validate the client value is in a plausible range
   // (must be in the future and within 2 hours from now) to prevent trivially cheap revives.
   const MAX_DOWNTIME_MS = 2 * 60 * 60 * 1000;

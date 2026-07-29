@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_BASE_STATS, LORD_CLASSES, RACES } from '../engine-loader.js';
+import { LORD_BASE_STATS, LORD_CLASSES, RACES, rollLordPortrait } from '../engine-loader.js';
 
 const MAX_LORDS = 5;
 
@@ -23,7 +23,7 @@ function _generateId() {
 }
 
 export async function handleLordCreate(req, res) {
-  const { name, classId, cityId, portrait } = req.body || {};
+  const { name, classId, cityId } = req.body || {};
   if (!name || !classId) {
     return res.status(400).json({ ok: false, error: 'Missing name or classId' });
   }
@@ -65,7 +65,10 @@ export async function handleLordCreate(req, res) {
   const lord = {
     id, playerId,
     name: n, race: raceId, classId,
-    portrait: (typeof portrait === 'string' && portrait.startsWith('assets/lord/')) ? portrait : null,
+    // Rolled here, once, and never again — the server owns the dice so a
+    // crafted request can't hand-pick a face, and so the choice survives
+    // any later change to the art pools.
+    portrait: rollLordPortrait(raceId, classId),
     createdAt:      now,
     level:          1,
     xp:             0,

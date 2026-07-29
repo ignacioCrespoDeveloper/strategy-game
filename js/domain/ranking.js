@@ -3,10 +3,12 @@
 //
 //  Computes a player's total score from:
 //    🏰 Building pts  — 10 points per building level across all cities
-//    🏙 City tier pts — 100/500/1500/3000 per city at town_hall tier 1-4
+//    🏙 City tier pts — 0/500/1500/3000 per city at town_hall tier 1-4
+//                       (tier 1 scores nothing — everyone has one)
 //    👑 Lord pts      — total XP ever earned ÷ 3 (continuous, not per-level;
 //                       a level-1 lord with 0 xp is worth 0)
-//    🔍 Quest pts     — tier 1 = 9pts, tier 2+ = 18pts, legendary = 27pts
+//    (Expeditions award NO points — they pay in gold, resources and recruits,
+//     and losses already cost army pts. See _computeScore for the reasoning.)
 //    🛡 Army pts (Militar) — raw PWR of every lord's army (see battle-
 //                       engine's power formula) counts directly as points.
 //                       This is the ONLY source of Militar points — PvP wins
@@ -40,12 +42,16 @@ const RankingService = (() => {
 
   // ── Public: compute a score object for the given player ────────
 
+  // Tier 1 scores 0 by design (2026-07-28) — see the matching note in
+  // server/tick/ranking-updater.js. These two copies MUST stay identical; the
+  // server's number is authoritative and this one is what the player sees, so
+  // any drift shows the same account two different scores.
   function _cityTierBonus(city) {
     const th = city.buildings?.town_hall || 0;
     if (th >= 16) return 3000;
     if (th >= 11) return 1500;
     if (th >= 6)  return 500;
-    return 100;
+    return 0;
   }
 
   // Army points use the same PWR score as the recruit cap
@@ -75,7 +81,7 @@ const RankingService = (() => {
     }, 0);
 
     // City tier bonus — rewards reaching town_hall milestones
-    // Tier 1 (th 1-5): +100 · Tier 2 (th 6-10): +500 · Tier 3 (th 11-15): +1500 · Tier 4 (th 16+): +3000
+    // Tier 1 (th 1-5): 0 · Tier 2 (th 6-10): +500 · Tier 3 (th 11-15): +1500 · Tier 4 (th 16+): +3000
     const tierPts = cities.reduce((sum, city) => sum + _cityTierBonus(city), 0);
 
     const allLords = LordService.getAll().filter(l => l.playerId === player.id);
@@ -89,20 +95,14 @@ const RankingService = (() => {
     // so losing troops in a battle immediately costs ranking points too.
     const armyPts = allLords.reduce((sum, l) => sum + _armyPowerFor(l.id), 0);
 
-    // Quest discoveries — tier 1 = 9pts, tier 2 = 18pts, legendary = 27pts
-    const questPts = DiscoveryService.getLog(player.id)
-      .filter(e => {
-        const def = DISCOVERY_DEFS[e.definitionId];
-        return def && def.category !== 'nothing' && def.category !== 'intelligence' && def.category !== 'combat';
-      })
-      .reduce((sum, e) => {
-        const def  = DISCOVERY_DEFS[e.definitionId];
-        const tier = def?.tier || 1;
-        const pts  = def?.category === 'legendary' ? 27 : tier >= 2 ? 18 : 9;
-        return sum + pts;
-      }, 0);
+    // Expeditions award NO ranking points (removed 2026-07-29). They already
+    // pay themselves: a good find hands over gold and resources you go and
+    // spend, and a recruit joins the army — which shows up in armyPts anyway.
+    // A bad one kills units, which COSTS armyPts. Scoring the log on top of
+    // that double-counted the wins and ignored the losses, and made rank a
+    // measure of how often you'd clicked rather than what you'd built.
 
-    const total = buildingPts + tierPts + lordPts + armyPts + questPts;
+    const total = buildingPts + tierPts + lordPts + armyPts;
 
     // Primary lord — highest-level lord for display
     const topLord  = [...allLords].sort((a, b) => (b.level || 1) - (a.level || 1))[0] || null;
@@ -112,7 +112,7 @@ const RankingService = (() => {
 
     return {
       total,
-      breakdown: { buildingPts, tierPts, lordPts, armyPts, questPts },
+      breakdown: { buildingPts, tierPts, lordPts, armyPts },
       lordMeta,
     };
   }
