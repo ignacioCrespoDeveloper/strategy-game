@@ -712,8 +712,66 @@ const CityView = (() => {
         ${def.id === 'library' && s.currentLvl > 0 ? `
           <div class="rs-hint">${gi('open-book')} Books are researched in the <b>Research</b> tab — higher Library levels unlock more of them.</div>
         ` : ''}
+        ${def.id === 'marketplace' ? _merchantHtml() : ''}
       </div>
     `;
+  }
+
+  // ── The Merchant (Marketplace panel) ──────────────────────────
+  // Sells resources from the empire-wide pool for gold. All rate/cap maths
+  // comes from MarketCore, shared with server/actions/market-sell.js — this
+  // only renders the quotes it returns.
+  //
+  // Two buttons per resource rather than a free-text amount: the whole view
+  // re-renders after every action, which would wipe an input mid-typing, and
+  // the daily cap means "sell max" is the natural move anyway. "Sell half"
+  // exists so dumping a stockpile you still need to build with isn't a footgun.
+  function _merchantHtml() {
+    const mkLevel = CityService.getPlayerCities(_player.id)
+      .reduce((max, c) => Math.max(max, c.buildings?.marketplace || 0), 0);
+
+    if (mkLevel < MarketCore.MARKET_MIN_MARKETPLACE) {
+      return `<div class="rs-hint">${gi('two-coins')} Build the Marketplace to open trade — the merchant buys surplus resources for gold.</div>`;
+    }
+
+    const ledger    = _player?.marketLedger || null;
+    const cap       = MarketCore.marketDailyCap(mkLevel);
+    const remaining = MarketCore.marketRemainingToday(mkLevel, ledger, TimeService.now());
+    const pool      = _player?.resources || {};
+
+    const rows = MarketCore.MARKET_RESOURCES.map(res => {
+      const held = Math.floor(pool[res] || 0);
+      const rate = MarketCore.MARKET_RATES[res];
+      const half = MarketCore.marketQuote(res, Math.floor(held / 2), mkLevel, ledger, TimeService.now());
+      const full = MarketCore.marketQuote(res, held, mkLevel, ledger, TimeService.now());
+
+      const btn = (q, label, amount) => q.ok && q.gold > 0
+        ? `<button class="mk-sell-btn" data-sell-res="${res}" data-sell-amount="${amount}">${label} → ${gi('two-coins')}${q.gold.toLocaleString()}</button>`
+        : `<button class="mk-sell-btn" disabled>${label}</button>`;
+
+      return `
+        <div class="mk-row">
+          <span class="mk-row-res">${RES[res].icon} ${RES[res].name}</span>
+          <span class="mk-row-held">${held.toLocaleString()} held</span>
+          <span class="mk-row-rate">${rate} : 1</span>
+          <span class="mk-row-actions">
+            ${btn(half, 'Sell ½', Math.floor(held / 2))}
+            ${btn(full, 'Sell max', held)}
+          </span>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="mk-panel">
+        <div class="bld3-detail-req-title">${gi('two-coins')} The Merchant — sell surplus for gold</div>
+        <div class="mk-cap">
+          Today: <b>${remaining.toLocaleString()}</b> of ${cap.toLocaleString()} gold remaining
+          <span class="mk-cap-hint">(${MarketCore.MARKET_GOLD_PER_MK_LEVEL.toLocaleString()} gold/day per Marketplace level — resets daily)</span>
+        </div>
+        ${rows}
+        <div class="mk-note">The merchant pays well below what your own cities are worth. This is a way to
+        turn a surplus you cannot spend into gold, not a way to earn it.</div>
+      </div>`;
   }
 
   // ── Queue banner ──────────────────────────────────────────────
@@ -851,6 +909,27 @@ const CityView = (() => {
       });
     });
 
+    // Merchant sell buttons. The server clamps to the player's real holdings
+    // and to the remaining daily volume, so we report what it ACTUALLY sold
+    // (result.sale) rather than what we asked for.
+    document.querySelectorAll('.mk-sell-btn[data-sell-res]:not([disabled])').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const res    = btn.dataset.sellRes;
+        const amount = parseInt(btn.dataset.sellAmount || '0', 10);
+        btn.disabled = true;
+        const result = await ServerActions.marketSell(res, amount);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
+        _player = PlayerService.getById(_player.id);
+        _renderContent();
+        const s = result.sale || {};
+        _toast(s.capped
+          ? `Sold ${(s.spent || 0).toLocaleString()} ${res} for ${(s.gold || 0).toLocaleString()} gold — daily limit reached.`
+          : `Sold ${(s.spent || 0).toLocaleString()} ${res} for ${(s.gold || 0).toLocaleString()} gold.`);
+        EventBus.emit('resources:changed');
+        HUD.refresh();
+      });
+    });
+
     // Tear down button
     document.querySelectorAll('.bld3-teardown-btn[data-demolish]').forEach(btn => {
       btn.addEventListener('click', async () => {
@@ -910,7 +989,7 @@ const CityView = (() => {
     if (refreshedLeft) refreshedLeft.innerHTML = _leftPanelHtml();
     _renderContent();
     _startCountdown();
-    _toast('Construction cancelled — resources refunded.');
+    _toast('Construction cancelled — 75% of resources refunded.');
   }
 
   // ── Live countdown ────────────────────────────────────────────

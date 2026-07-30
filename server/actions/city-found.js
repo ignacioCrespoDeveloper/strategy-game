@@ -10,15 +10,22 @@
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
 
-const MAX_CITIES  = 5;
+// Exported so scripts/economy-projection.js reads the REAL expansion curve
+// instead of keeping its own copy. js/domain/city.js mirrors these for the
+// client; that pair is the remaining duplication.
+// Raised 5 → 7 on 2026-07-30 alongside MAX_LORDS, same reasoning: give the
+// endgame somewhere to spend. Keep the ×2 curve (city 7 = 256k).
+export const MAX_CITIES = 7;
 // Mirrors the client's WorldService WIDTH/HEIGHT (js/domain/world.js).
 const MAP_WIDTH   = 20;
 const MAP_HEIGHT  = 10;
 
-function _foundCost(existingCount) {
+// First city is free; subsequent cities cost 8k, 16k, 32k, 64k.
+export function cityFoundCost(existingCount) {
   if (existingCount === 0) return 0;
   return 8000 * Math.pow(2, existingCount - 1);
 }
+const _foundCost = cityFoundCost;
 
 function _generateId() {
   return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);

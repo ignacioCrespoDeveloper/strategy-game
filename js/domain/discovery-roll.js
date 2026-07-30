@@ -577,6 +577,11 @@ var DiscoveryRoll = (() => {
       return rewards;
     }
 
+    // Tuning dials (js/data/tuning.js) — gold and resources are separate so
+    // expedition loot can be reined in without touching the coin economy.
+    const questGold = (typeof tune === 'function') ? tune('questGold')      : 1.0;
+    const questRes  = (typeof tune === 'function') ? tune('questResources') : 1.0;
+
     RES_TYPES.forEach(t => {
       if (!base[t] || base[t] <= 0) return;
       // lost_treasure keeps a hand-tuned gold band; everything else uses tier.
@@ -586,7 +591,8 @@ var DiscoveryRoll = (() => {
       const [min, max] = (t === 'gold')
         ? (def.id === 'lost_treasure' ? [800, 2000] : ranges.gold)
         : ranges.res;
-      rewards.push({ type: t, amount: Math.floor(_randInt(min, max) * scalar) });
+      const dial = (t === 'gold') ? questGold : questRes;
+      rewards.push({ type: t, amount: Math.floor(_randInt(min, max) * scalar * dial) });
     });
     // XP tracks how long the lord was actually out there, but NOT tile
     // depletion — a picked-clean tile yields no loot, yet the lord still

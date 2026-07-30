@@ -163,6 +163,21 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/market/sell
+  // Sells resources to the merchant for gold. The server clamps to what the
+  // player actually holds and to the remaining daily volume, so the response's
+  // `sale` block is the authority on what happened — always read `sale.spent`
+  // and `sale.gold` rather than assuming the requested amount went through.
+  async function marketSell(resource, amount) {
+    const result = await _post('/api/market/sell', { resource, amount });
+    if (result.ok && result.player) {
+      const players             = StorageService.get('players') || {};
+      players[result.player.id] = _mergePlayer(result.player);
+      StorageService.hydrate({ players });
+    }
+    return result;
+  }
+
   // POST /api/city/recruit
   // Enqueues a unit training batch.
   // On success, hydrates city + player from server response.
@@ -402,7 +417,7 @@ const ServerActions = (() => {
   }
 
   // POST /api/city/cancel-build — cancel a queued construction item (by
-  // queueIndex) with a full resource refund. Hydrates city + player.
+  // queueIndex) with a 75% resource refund. Hydrates city + player.
   async function cancelBuild(cityId, queueIndex) {
     const result = await _post('/api/city/cancel-build', { cityId, queueIndex });
     if (result.ok) {
@@ -423,7 +438,7 @@ const ServerActions = (() => {
   }
 
   // POST /api/city/cancel-recruit — cancel a queued recruitment batch (by
-  // queueIndex) with a full gold refund. Hydrates city + player.
+  // queueIndex) with a 75% gold refund. Hydrates city + player.
   async function cancelRecruit(cityId, queueIndex) {
     const result = await _post('/api/city/cancel-recruit', { cityId, queueIndex });
     if (result.ok) {
@@ -822,5 +837,5 @@ const ServerActions = (() => {
     return _post('/api/clan/war-declare', { targetClanId, durationSecs });
   }
 
-  return { build, demolish, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, transferUnits, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
+  return { build, demolish, marketSell, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, transferUnits, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
 })();

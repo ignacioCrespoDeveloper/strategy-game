@@ -22,6 +22,14 @@ var EconomyCore = (() => {
 
   const RESOURCE_KEYS = ['food', 'wood', 'stone'];
 
+  // Global tuning dials — see js/data/tuning.js, which is THE file to edit to
+  // make the game faster or slower. Read through a local shim so economy-core
+  // still works if tuning.js is missing (a stale cached index.html), in which
+  // case every dial reads 1.0 and nothing changes.
+  function _tune(key) {
+    return (typeof tune === 'function') ? tune(key) : 1.0;
+  }
+
   const STAT_BASE = {
     corruption:   0,
     happiness:    50,
@@ -65,6 +73,7 @@ var EconomyCore = (() => {
 
     const race = raceBonuses || {};
     const terr = terrainMods || {};
+    const dial = _tune('buildingProduction');
     for (const res of RESOURCE_KEYS) {
       const bonus = Math.max(PRODUCTION_BONUS_MIN,
                     Math.min(PRODUCTION_BONUS_MAX, race[res + '_production'] || 0));
@@ -72,6 +81,7 @@ var EconomyCore = (() => {
         totals[res]
         * (1 + bonus)
         * (terr[res] !== undefined ? terr[res] : 1)
+        * dial
       );
     }
     return totals;
@@ -131,7 +141,7 @@ var EconomyCore = (() => {
     let   rate = pop * 0.004 * (Math.max(0, happiness || 0) / 100);
     const mkLevel = (buildings || {}).marketplace || 0;
     if (mkLevel > 0) rate *= (1 + 0.08 * mkLevel);
-    return Math.floor(rate);
+    return Math.floor(rate * _tune('populationGold'));
   }
 
   // ── Library research effects ──────────────────────────────────
@@ -252,6 +262,32 @@ var EconomyCore = (() => {
     return VETERANCY_PER_LEVEL * levels;
   }
 
+  // ── Lord travel time ──────────────────────────────────────────
+  // THE march-duration formula: 20s per tile at speed 5, scaled by the lord's
+  // effective speed, times the travelTime tuning dial.
+  //
+  // Lived in FIVE hand-copied places until 2026-07-30 (js/domain/lord.js,
+  // server/actions/lord-action.js, js/ui/map-view.js and twice in
+  // js/ui/attack-confirm-view.js) — so a previewed ETA could disagree with the
+  // march the server actually queued. They are all thin callers now; do not
+  // re-inline it.
+  //
+  // opts.minSecs is the attack-intent floor (60s) that gives a defender a
+  // warning window; it applies even at distance 0 so a same-tile attack still
+  // announces itself.
+  const TRAVEL_SECS_PER_TILE = 20;
+  const TRAVEL_REF_SPEED     = 5;
+
+  function getTravelTime(distance, speed, opts) {
+    const minSecs = Math.max(0, opts?.minSecs || 0);
+    const dist    = Math.max(0, distance || 0);
+    if (dist <= 0) return minSecs;
+    const spd = Math.max(1, speed || TRAVEL_REF_SPEED);
+    return Math.max(minSecs, Math.round(
+      dist * TRAVEL_SECS_PER_TILE * (TRAVEL_REF_SPEED / spd) * _tune('travelTime'),
+    ));
+  }
+
   // ── Raiding stance — hourly payout ────────────────────────────
   // THE raid rate. Lived in three hand-synced copies until 2026-07-29
   // (server/tick/catch-up.js, js/ui/lord-screen.js's preview, and
@@ -273,8 +309,8 @@ var EconomyCore = (() => {
 
   function getRaidHourlyRewards(lordLevel) {
     const lvl  = Math.max(1, lordLevel || 1);
-    const gold = Math.round(RAID_BASE.gold + lvl * RAID_PER_LEVEL.gold);
-    const res  = Math.round(RAID_BASE.res  + lvl * RAID_PER_LEVEL.res);
+    const gold = Math.round((RAID_BASE.gold + lvl * RAID_PER_LEVEL.gold) * _tune('raidGold'));
+    const res  = Math.round((RAID_BASE.res  + lvl * RAID_PER_LEVEL.res)  * _tune('raidResources'));
     return { gold, food: res, wood: res, stone: res };
   }
 
@@ -389,7 +425,14 @@ var EconomyCore = (() => {
   // a deliberate 1.5–3× "quality tax" instead.
   // UNIT_DEFS keeps explicit goldCost numbers (data stays data);
   // test-economy.js asserts every unit matches this formula.
-  const GOLD_PER_PWR      = 3.5;
+  //
+  // 3.5 → 12.0 on 2026-07-30. Units are the only gold sink that repeats by
+  // itself — you re-buy after every combat loss — so they carry the recurring
+  // half of gold demand. At 3.5 a full army for a maxed lord cost ~5.2k, less
+  // than a single day of that lord's raid income, so losing a battle cost
+  // nothing. Effective gold-per-PWR after the premium: 12 infantry/ranged,
+  // 18 cavalry/elite/flying/mercenary, 24 artillery/monster, 36 legendary.
+  const GOLD_PER_PWR      = 12.0;
   const GOLD_TIER_PREMIUM = {
     infantry: 1.0, ranged: 1.0,
     cavalry: 1.5, elite: 1.5, flying: 1.5, mercenary: 1.5,
@@ -465,6 +508,10 @@ var EconomyCore = (() => {
     { minPop:  25000, level: 3, maxSlots:  75 },
     { minPop:  50000, level: 4, maxSlots: 100 },
     { minPop: 100000, level: 5, maxSlots: 150 },
+    // Tier 6 added 2026-07-30 with the cap raise: at 150 slots a city that
+    // pushed producers deep had no room left for the apex tier, which would
+    // have capped resource demand exactly where the new long-tail sinks live.
+    { minPop: 200000, level: 6, maxSlots: 200 },
   ];
 
   function _slotRow(population) {
@@ -511,6 +558,7 @@ var EconomyCore = (() => {
   return {
     RESOURCE_KEYS, STAT_BASE, SLOT_TABLE,
     getRates, getStats, getGoldRate, getMarchFoodCost, getPopGrowthRate,
+    getTravelTime, TRAVEL_SECS_PER_TILE,
     getResearchEffects, getBlessingEffects, getBuildTime, getRecruitTime, getCityBuildDivisor, getUnitTraining,
     getVeterancyPct, getGarrisonVeterancyPct,
     getRaidHourlyRewards, RAID_BASE, RAID_PER_LEVEL,

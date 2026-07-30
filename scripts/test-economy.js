@@ -13,12 +13,12 @@
 // =============================================
 
 import {
-  BUILDING_DEFS, UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore, UnitUnlockService,
+  BUILDING_DEFS, UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore, MarketCore, UnitUnlockService,
   RESEARCH_DEFS, RESEARCH_TIERS,
   BLESSING_DEFS, blessingMaxHours, blessingDuration, blessingCost,
   TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
   DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES,
-  DiscoveryRoll,
+  DiscoveryRoll, TUNING, tune,
 } from '../server/engine-loader.js';
 import { catchUp } from '../server/tick/catch-up.js';
 
@@ -146,16 +146,40 @@ check('getResearchEffects sums bonus keys across books',
   Math.abs(fx.construction_speed - (-0.03)) < 1e-9 &&
   Math.abs(fx.march_food_cost - (-0.05)) < 1e-9);
 
-// Slave Chronicles is an odd ladder: 1/3/5/7/9%, capped at −9% build time.
+// Slave Chronicles is an odd ladder: 1/3/5/7/9% over its first five volumes.
 check('Slave Chronicles follows the 1/3/5/7/9% ladder',
   [1, 3, 5, 7, 9].every((pct, i) =>
-    Math.abs(RESEARCH_DEFS.engineering_tomes.bonuses(i + 1).construction_speed + pct / 100) < 1e-9) &&
-  RESEARCH_DEFS.engineering_tomes.maxLevel === 5);
+    Math.abs(RESEARCH_DEFS.engineering_tomes.bonuses(i + 1).construction_speed + pct / 100) < 1e-9));
 
-// Cartography is 7 levels of −1%: −7% is the most march food a player can save.
-check('Cartography maxes out at −7% march food',
-  RESEARCH_DEFS.cartography.maxLevel === 7 &&
+// Cartography is −1% per volume.
+check('Cartography is −1% march food per level',
   Math.abs(RESEARCH_DEFS.cartography.bonuses(7).march_food_cost - (-0.07)) < 1e-9);
+
+// ── No hardcoded level ceilings (2026-07-30) ──────────────────
+// Nothing in the game should cap out at an arbitrary level: cost growth is the
+// limiter. Buildings were already Infinity; the two tomes were the outliers.
+check('no research book carries a finite maxLevel',
+  Object.values(RESEARCH_DEFS).every(d => d.maxLevel === Infinity));
+
+check('no building carries a finite maxLevel',
+  Object.values(BUILDING_DEFS).every(d => d.maxLevel === Infinity));
+
+// Uncapped levels only stay safe because every consumer clamps. Guard the
+// clamps directly — an unclamped key plus an uncapped tome is unbounded.
+check('deep tome levels stay inside the −80% clamps',
+  EconomyCore.getBuildTime(BUILDING_DEFS.library, 1, null, { construction_speed: -5 }) ===
+    Math.max(5, Math.round(BUILDING_DEFS.library.buildTime(1) * 0.2)) &&
+  EconomyCore.getRecruitTime({ recruitTime: 600 }, 1, { recruit_speed: -5 }) === Math.round(600 * 0.2) &&
+  EconomyCore.getMarchFoodCost(1, [{ unitId: 'spearmen', count: 1 }], { march_food_cost: -5 }) ===
+    Math.floor(1 * 95 * 0.2));
+
+// getRates was the ONE unclamped multiplier path (fixed 2026-07-30 alongside
+// the cap removal, since a production tome would otherwise scale without limit).
+check('production bonuses are clamped, not unbounded',
+  EconomyCore.getRates({ lumber_mill: 1 }, { wood_production: 999 }, null).wood ===
+  Math.floor(og(30, 1) * 4) &&
+  EconomyCore.getRates({ lumber_mill: 1 }, { wood_production: -999 }, null).wood ===
+  Math.floor(og(30, 1) * 0.1));
 
 check('getResearchEffects ignores books that no longer exist (orphan keys)',
   Object.keys(EconomyCore.getResearchEffects({ agronomy_tomes: 5, drill_manuals: 3 })).length === 0);
@@ -273,7 +297,194 @@ check('raid rate floors at level 1 for a missing/zero level',
 // relationship rather than the raw number: a day of raiding must beat an hour
 // of the Temple blessing it is meant to help pay for.
 check('a 24h raid at Lv 8 out-earns an hour of blessing by a wide margin',
-  EconomyCore.getRaidHourlyRewards(8).gold * 24 > blessingCost(1) * 5);
+  EconomyCore.getRaidHourlyRewards(8).gold * 24 > blessingCost(1).gold * 2);
+
+// ── Tuning dials (js/data/tuning.js) ────────────────────────────
+// The dials are the designer-facing surface: one number per income/time
+// channel, meant to be edited without touching code. Two things must hold —
+// every dial ships at 1.0 (so a fresh clone is the designed game), and each one
+// actually MOVES its channel and only its channel.
+section('Tuning dials');
+
+check('every dial ships at 1.0',
+  Object.values(TUNING).every(v => v === 1));
+
+check('the documented dial set is exactly what exists',
+  JSON.stringify(Object.keys(TUNING).sort()) === JSON.stringify([
+    'buildingProduction', 'populationGold', 'questGold', 'questResources',
+    'raidGold', 'raidResources', 'travelTime',
+  ]));
+
+check('tune() falls back to 1.0 for an unknown or malformed dial',
+  tune('no_such_dial') === 1 && tune(undefined) === 1);
+
+// Each dial is exercised by mutating TUNING, re-reading through the real
+// function, then restoring. This proves the wiring, not just the constant.
+function withDial(key, value, fn) {
+  const prev = TUNING[key];
+  TUNING[key] = value;
+  try { return fn(); } finally { TUNING[key] = prev; }
+}
+
+const _baseRates = EconomyCore.getRates({ lumber_mill: 5 }, null, null).wood;
+check('buildingProduction scales the 3 resource buildings',
+  withDial('buildingProduction', 2, () => EconomyCore.getRates({ lumber_mill: 5 }, null, null).wood) === _baseRates * 2 &&
+  withDial('buildingProduction', 0, () => EconomyCore.getRates({ lumber_mill: 5 }, null, null).wood) === 0);
+
+// No marketplace + happiness 100 keeps the underlying rate a whole number
+// (50,000 × 0.004 × 1.0 = 200), so the dial can be asserted exactly. With a
+// fractional rate the dial applies BEFORE the floor — 198.4×3 floors to 595,
+// not 198×3 — which is more accurate but not exactly divisible.
+const _baseGold = EconomyCore.getGoldRate({}, 50000, 100);
+check('populationGold scales city tax income',
+  _baseGold === 200 &&
+  withDial('populationGold', 3,   () => EconomyCore.getGoldRate({}, 50000, 100)) === 600 &&
+  withDial('populationGold', 0.5, () => EconomyCore.getGoldRate({}, 50000, 100)) === 100);
+
+const _baseRaid = EconomyCore.getRaidHourlyRewards(8);
+check('raidGold and raidResources move independently',
+  withDial('raidGold', 2, () => EconomyCore.getRaidHourlyRewards(8).gold) === _baseRaid.gold * 2 &&
+  withDial('raidGold', 2, () => EconomyCore.getRaidHourlyRewards(8).wood) === _baseRaid.wood &&
+  withDial('raidResources', 2, () => EconomyCore.getRaidHourlyRewards(8).wood) === _baseRaid.wood * 2 &&
+  withDial('raidResources', 2, () => EconomyCore.getRaidHourlyRewards(8).gold) === _baseRaid.gold);
+
+// Quest loot is a random draw from a band, so compare MEANS over enough samples
+// rather than single rolls or ranges — the tier-1 band spans 800-5,000 (6.25x),
+// wider than a small dial, so the ranges legitimately overlap and a min/max
+// comparison would be flaky. 200 samples puts the mean's 3-sigma inside ~9%,
+// so a 3x dial checked with 20% tolerance is stable.
+const _questMean = mult => withDial('questResources', mult, () => {
+  let sum = 0, n = 0;
+  for (let i = 0; i < 200; i++) {
+    const r = DiscoveryRoll.rollRewards(DISCOVERY_DEFS.fertile_fields, 1, { lengthId: 'standard' })
+      .find(x => x.type === 'food');
+    if (r) { sum += r.amount; n++; }
+  }
+  return n > 0 ? sum / n : 0;
+});
+const _qRatio = _questMean(3) / _questMean(1);
+check('questResources scales expedition loot',
+  _questMean(0) === 0 && _qRatio > 2.5 && _qRatio < 3.5,
+  `x3 measured as x${_qRatio.toFixed(2)}`);
+
+check('questGold and questResources are separate dials',
+  withDial('questGold', 0, () => {
+    const r = DiscoveryRoll.rollRewards(DISCOVERY_DEFS.fertile_fields, 1, { lengthId: 'standard' });
+    return (r.find(x => x.type === 'food')?.amount || 0) > 0;   // resources untouched
+  }) === true);
+
+// Travel time: the formula used to be hand-copied in five places, so pin both
+// the base rate and the dial on the shared function.
+check('getTravelTime is 20s/tile at speed 5, scaled by speed',
+  EconomyCore.getTravelTime(1, 5) === 20 &&
+  EconomyCore.getTravelTime(5, 5) === 100 &&
+  EconomyCore.getTravelTime(5, 10) === 50);
+
+check('getTravelTime honours the attack-intent floor even at distance 0',
+  EconomyCore.getTravelTime(0, 5) === 0 &&
+  EconomyCore.getTravelTime(0, 5, { minSecs: 60 }) === 60);
+
+check('travelTime dial stretches and compresses marches',
+  withDial('travelTime', 2,   () => EconomyCore.getTravelTime(5, 5)) === 200 &&
+  withDial('travelTime', 0.5, () => EconomyCore.getTravelTime(5, 5)) === 50);
+
+// Slowing travel must not quietly make marching more expensive — march food is
+// charged per TILE, not per second.
+check('travelTime does not change march food cost',
+  withDial('travelTime', 5, () => EconomyCore.getMarchFoodCost(3, [{ unitId: 'spearmen', count: 4 }], null)) ===
+  EconomyCore.getMarchFoodCost(3, [{ unitId: 'spearmen', count: 4 }], null));
+
+// ── The Merchant (MarketCore) ───────────────────────────────────
+// Resources → gold, deliberately lossy, hard-capped per UTC day. The CAP is the
+// safety mechanism, not the rate: a single tier-3 expedition find is up to
+// 187,200 of one resource, so an uncapped merchant at any rate would become the
+// primary gold channel.
+section('The Merchant');
+
+check('MarketCore is exported by engine-loader (client == server source)', !!MarketCore);
+
+check('rates cover exactly the three tradable resources',
+  JSON.stringify(Object.keys(MarketCore.MARKET_RATES).sort()) === JSON.stringify(['food', 'stone', 'wood']) &&
+  JSON.stringify([...MarketCore.MARKET_RESOURCES].sort()) === JSON.stringify(['food', 'stone', 'wood']));
+
+// Deliberately worse than production parity (~8 wood : 1 gold at comparable
+// investment). If a rate ever drops under that, the merchant stops being a
+// dump valve and starts being an income strategy.
+check('every rate is worse than production parity (>= 10 : 1)',
+  MarketCore.MARKET_RESOURCES.every(r => MarketCore.MARKET_RATES[r] >= 10));
+
+check('daily cap scales per Marketplace level, and is zero without one',
+  MarketCore.marketDailyCap(0) === 0 &&
+  MarketCore.marketDailyCap(1) === MarketCore.MARKET_GOLD_PER_MK_LEVEL &&
+  MarketCore.marketDailyCap(10) === MarketCore.MARKET_GOLD_PER_MK_LEVEL * 10);
+
+check('no Marketplace means no trade at all',
+  MarketCore.marketQuote('wood', 100000, 0, null, Date.now()).ok === false);
+
+const _mkNow = Date.UTC(2026, 6, 30, 12, 0, 0);
+const _q1 = MarketCore.marketQuote('wood', 1000, 5, null, _mkNow);
+check('a plain sale converts at the published rate',
+  _q1.ok && _q1.gold === Math.floor(1000 / MarketCore.MARKET_RATES.wood) &&
+  _q1.spend === _q1.gold * MarketCore.MARKET_RATES.wood);
+
+// spend must always be an exact multiple of the rate — the player should never
+// hand over a remainder that buys nothing.
+check('spend never takes a remainder the player is not paid for',
+  [1, 19, 20, 21, 999, 1234567].every(amt => {
+    const q = MarketCore.marketQuote('wood', amt, 5, null, _mkNow);
+    return !q.ok || q.spend % MarketCore.MARKET_RATES.wood === 0;
+  }));
+
+check('a sale below one gold is rejected rather than eating the resources',
+  MarketCore.marketQuote('wood', MarketCore.MARKET_RATES.wood - 1, 5, null, _mkNow).ok === false);
+
+const _capLvl = 10;
+
+// Worth stating plainly, because it shapes how the merchant FEELS: at 20:1 a
+// single tier-3 expedition find (up to 187,200 wood) is only ~9,360 gold, well
+// under the 30,000/day cap. The cap does not bind on one find — it binds on
+// dumping a stockpile, which is exactly the behaviour it exists to bound.
+const _oneFind = MarketCore.marketQuote('wood', 187200, _capLvl, null, _mkNow);
+check('a single tier-3 find sells freely (the cap is not a per-sale gate)',
+  _oneFind.ok && _oneFind.capped === false &&
+  _oneFind.gold === Math.floor(187200 / MarketCore.MARKET_RATES.wood));
+
+// THE headline guard: dumping a whole DAY of endgame resource income (~3.09M,
+// see scripts/economy-projection.js) must be clamped to the daily cap.
+const _bigDump = MarketCore.marketQuote('wood', 3090000, _capLvl, null, _mkNow);
+check('dumping a full day of resource income is clamped to the daily cap',
+  _bigDump.ok && _bigDump.gold === MarketCore.marketDailyCap(_capLvl) && _bigDump.capped === true);
+
+// Partial fill: the overflow stays in the stockpile rather than being consumed.
+check('a capped sale only spends what it was actually paid for',
+  _bigDump.spend === _bigDump.gold * MarketCore.MARKET_RATES.wood && _bigDump.spend < 3090000);
+
+const _spent = MarketCore.marketRecord(null, 1200, _mkNow);
+const _full  = MarketCore.marketRecord(null, MarketCore.marketDailyCap(1), _mkNow);
+
+check('the ledger accumulates within a day',
+  MarketCore.marketSoldToday(_spent, _mkNow) === 1200 &&
+  MarketCore.marketSoldToday(MarketCore.marketRecord(_spent, 300, _mkNow), _mkNow) === 1500);
+
+check('remaining volume shrinks as the ledger fills, and floors at zero',
+  MarketCore.marketRemainingToday(5, _spent, _mkNow) === MarketCore.marketDailyCap(5) - 1200 &&
+  MarketCore.marketRemainingToday(1, _full, _mkNow) === 0);
+
+// The cap resets on the UTC date rollover — the same date-key rule the
+// expedition tile-depletion counter uses, so both age out identically.
+const _tomorrow = _mkNow + 24 * 3600 * 1000;
+check('the cap resets on the UTC date rollover',
+  MarketCore.marketSoldToday(_full, _tomorrow) === 0 &&
+  MarketCore.marketRemainingToday(5, _full, _tomorrow) === MarketCore.marketDailyCap(5));
+
+check('a fully-spent day blocks further sales until reset',
+  MarketCore.marketQuote('wood', 100000, 1, _full, _mkNow).ok === false &&
+  MarketCore.marketQuote('wood', 100000, 1, _full, _tomorrow).ok === true);
+
+// Sanity vs the income model: the merchant must stay a minority gold channel.
+// Endgame gold income is ~252k/day (scripts/economy-projection.js).
+check('the merchant stays a minority of endgame gold income',
+  MarketCore.marketDailyCap(10) < 252000 * 0.25);
 
 // ── Temple blessings ────────────────────────────────────────────
 // Temple level is the CEILING on how many hours you may buy, not the
@@ -287,9 +498,20 @@ check('Temple level caps the hours you may consecrate',
 check('duration is exactly the hours chosen',
   blessingDuration(1) === 3600 && blessingDuration(5) === 5 * 3600);
 
+// blessingCost returns { gold, food, wood, stone } since 2026-07-30. A caller
+// that treats it as a number yields NaN or a free blessing, so pin the SHAPE as
+// well as the linearity.
+check('offering is an object with gold + all three resources',
+  typeof blessingCost(1) === 'object' &&
+  ['gold', 'food', 'wood', 'stone'].every(k => typeof blessingCost(1)[k] === 'number'));
+
 check('offering is linear per hour (no bulk discount or penalty)',
-  blessingCost(1) === 1250 && blessingCost(4) === 5000 &&
-  blessingCost(8) === blessingCost(1) * 8);
+  blessingCost(1).gold === 3000 && blessingCost(4).gold === 12000 &&
+  blessingCost(8).gold === blessingCost(1).gold * 8 &&
+  blessingCost(8).wood === blessingCost(1).wood * 8);
+
+check('blessings drain resources, not just gold (the recurring resource sink)',
+  blessingCost(1).food > 0 && blessingCost(1).wood > 0 && blessingCost(1).stone > 0);
 
 check('God of Commerce is gone; 4 blessings remain',
   !BLESSING_DEFS.god_of_commerce && Object.keys(BLESSING_DEFS).length === 4);

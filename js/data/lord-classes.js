@@ -374,6 +374,24 @@ var TALENT_POOL = {
 
 var MOUNT_MIN_LEVEL = 5;
 
+// PRICES REBUILT 2026-07-30 — mounts are now THE endgame gold sink.
+// They were 400–2,800, i.e. pocket change: the whole ladder for every lord cost
+// less than a day of one lord's raid income, so gold had nothing to buy once
+// lords/cities/armies were paid for and the late economy flattened out. A mount
+// is a permanent, visible, per-lord capstone with no cap of its own, which makes
+// it the right home for late gold.
+//
+// Anchored on endgame gold income of ~190k/day (scripts/economy-projection.js):
+//   Lv5  warhorse 300k / boar 350k     ~1.5-2 days   <- entry mount, a real goal
+//   Lv8  chariot 1.5M / bear 1.7M      ~8-9 days
+//   Lv10 griffon 4M   / dragon 5M      ~21-26 days
+// One per tier for one lord is ~6.8M; the full ladder across 7 lords is ~47M,
+// which is deliberately more than a year of income — players will kit out two or
+// three main lords and leave the rest bare, and THAT choice is the content.
+//
+// Note lord-mounts.js charges full price on every swap to a DIFFERENT mount and
+// never refunds, so at these prices the Griffon-or-Dragon pick is effectively
+// permanent. Keep the confirm dialog honest about that.
 var MOUNT_POOL = {
   // ── Tier 1 · level 5 ─────────────────────────────────
   warhorse: {
@@ -384,7 +402,7 @@ var MOUNT_POOL = {
     color:       '#c8933a',
     description: 'A sturdy battle-trained warhorse. Balanced power and mobility for any lord.',
     unlockLevel: 5,
-    cost:        400,
+    cost:        300000,
     effects: {
       attack: 2,
       speed:  2,
@@ -404,7 +422,7 @@ var MOUNT_POOL = {
     color:       '#6e8494',
     description: 'A tusked boar in riveted plate, bred to charge and never turn. Slower to start than a horse, impossible to stop once it is running.',
     unlockLevel: 5,
-    cost:        450,
+    cost:        350000,
     effects: {
       attack: 1,
       speed:  3,
@@ -420,7 +438,7 @@ var MOUNT_POOL = {
     color:       '#c06a30',
     description: 'A scythed war-chariot drawn by a matched team. Builds terrifying momentum on open ground.',
     unlockLevel: 8,
-    cost:        1100,
+    cost:        1500000,
     effects: {
       attack:  3,
       defense: 1,
@@ -440,7 +458,7 @@ var MOUNT_POOL = {
     color:       '#8a6a4a',
     description: 'A mountain bear broken to the saddle and armoured at the shoulders. Absorbs a charge and answers it.',
     unlockLevel: 8,
-    cost:        1200,
+    cost:        1700000,
     effects: {
       attack:  3,
       defense: 4,
@@ -457,7 +475,7 @@ var MOUNT_POOL = {
     color:       '#30a0b0',
     description: 'A majestic aerial predator, striking from above with deadly talons.',
     unlockLevel: 10,
-    cost:        2400,
+    cost:        4000000,
     effects: {
       attack:  4,
       defense: 2,
@@ -473,7 +491,7 @@ var MOUNT_POOL = {
     color:       '#c04030',
     description: 'An ancient wyrm that suffers a rider only because it chooses to. Armies break at the sight of it.',
     unlockLevel: 10,
-    cost:        2800,
+    cost:        5000000,
     effects: {
       attack:  5,
       defense: 4,

@@ -130,10 +130,30 @@ get their own dedicated `clans` / `clan_wars` tables instead.
   honor + ranking points, and time-boxed clan-vs-clan wars scored by power
   destroyed; allies (same clan) can't attack each other.
 
+### Tuning the economy
+
+**`js/data/tuning.js` is the file to edit when the game feels too fast or too
+slow.** Seven plain multipliers — one per income or time channel — all shipping
+at `1.0`:
+
+| Dial | Channel |
+|---|---|
+| `buildingProduction` | Economy from buildings (the 3 resource buildings) |
+| `populationGold` | Gold from population (city tax) |
+| `raidGold` / `raidResources` | Gold / resources from raiding |
+| `questGold` / `questResources` | Gold / resources from questing (finds **and** ambush loot) |
+| `travelTime` | Lord travel time (>1 = slower) |
+
+Change one, then run `node scripts/economy-projection.js` — it prints the dials
+first, then how many days a daily-active player needs to buy everything, and
+flags anything off target. Costs are deliberately *not* in this file; they live
+with the things they price.
+
 ### Tests & live dashboards
 ```bash
 node scripts/run-all-tests.js        # all three suites → test-results.json
-node scripts/test-economy.js         # 57 checks, in-process, ~1s
+node scripts/test-economy.js         # 134 checks, in-process, ~1s
+node scripts/economy-projection.js   # pacing model — days-to-buy-everything
 node scripts/test-balance.js         # staged balance sim (start/mid/end), ~20s
 node scripts/test-battle-movement.js # live 5-account integration, ~3 min
 node scripts/generate-army-guide.js  # rebuild army-guide.html from the sim

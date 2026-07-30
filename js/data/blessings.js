@@ -40,10 +40,21 @@
 // Temple level that unlocks the blessing system (owning any Temple).
 var BLESSING_MIN_TEMPLE = 1;
 
-// Gold per hour of favor. A 1h rite at Temple 1 costs this; a 5h rite at
+// Cost per hour of favor. A 1h rite at Temple 1 costs this; a 5h rite at
 // Temple 5 costs 5×. Linear on purpose — no bulk discount, no bulk
 // penalty, so the choice is purely "how long do I want this on for".
-var BLESSING_GOLD_PER_HOUR = 1250;
+//
+// Gold 1250 → 3000 and a RESOURCE cost added on 2026-07-30. Two reasons:
+//  · Blessings are the ONLY unbounded, recurring sink in the game. Everything
+//    else terminates once bought, so this is the dial that stops the late
+//    economy flattening out.
+//  · Charging resources points that drain at the most over-supplied pool.
+//    Resource income runs ~2.1M/day at endgame against a gold income of
+//    ~190k/day (scripts/economy-projection.js), so gold alone could never
+//    absorb it.
+// At full uptime this is 72,000 gold + 144,000 resources per day.
+var BLESSING_GOLD_PER_HOUR = 3000;
+var BLESSING_RES_PER_HOUR  = 2000; // per resource — food AND wood AND stone
 
 // How many hours the player may buy, from their HIGHEST Temple level
 // across all cities (mirrors how research keys off the highest Library).
@@ -56,10 +67,20 @@ function blessingDuration(hours) {
   return Math.max(1, Math.floor(hours || 1)) * 3600;
 }
 
-// Gold offering for a chosen number of hours.
-//   1h → 1,250 · 3h → 3,750 · 8h → 10,000 · 12h → 15,000
+// Offering for a chosen number of hours.
+//
+// ⚠ RETURNS AN OBJECT, not a number (changed 2026-07-30 when the resource cost
+// was added). Every caller must read .gold / .food / .wood / .stone —
+// a caller that still treats this as a scalar produces NaN or a free blessing.
+//   1h → 3,000g + 2,000 each · 5h → 15,000g + 10,000 each · 10h → 30,000g + 20,000 each
 function blessingCost(hours) {
-  return Math.max(1, Math.floor(hours || 1)) * BLESSING_GOLD_PER_HOUR;
+  const h = Math.max(1, Math.floor(hours || 1));
+  return {
+    gold:  h * BLESSING_GOLD_PER_HOUR,
+    food:  h * BLESSING_RES_PER_HOUR,
+    wood:  h * BLESSING_RES_PER_HOUR,
+    stone: h * BLESSING_RES_PER_HOUR,
+  };
 }
 
 var BLESSING_DEFS = {

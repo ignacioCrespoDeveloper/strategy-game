@@ -842,7 +842,7 @@ const MapView = (() => {
     const toTerrain   = WorldService.getTerrain(tx, ty);
     const dist        = Math.max(1, Math.max(Math.abs(tx - lord.x), Math.abs(ty - lord.y)));
     const speed       = LordService.getEffectiveStats(lord).speed;
-    const secs        = Math.round(dist * 20 * (5 / speed));
+    const secs        = EconomyCore.getTravelTime(dist, speed);
 
     return `
       <div class="mip-section">

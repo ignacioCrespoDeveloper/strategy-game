@@ -20,6 +20,7 @@ import { BattleEngine, UNIT_DEFS } from './engine-loader.js';
 import { syncPlayerState }         from './sync.js';
 import { handleBuild }             from './actions/build.js';
 import { handleDemolish }          from './actions/demolish.js';
+import { handleMarketSell }        from './actions/market-sell.js';
 import { handleResearchStart, handleResearchInstant } from './actions/research.js';
 import { handleBlessingConsecrate } from './actions/blessing.js';
 import { handleRecruit }           from './actions/recruit.js';
@@ -126,6 +127,7 @@ app.post('/api/attack/incoming', _safe(scanIncomingAttacks));
 // POST /api/lord/action   — validate + enqueue move/search_area server-side
 app.post('/api/city/build',    _safe(handleBuild));
 app.post('/api/city/demolish', _safe(handleDemolish));
+app.post('/api/market/sell',   _safe(handleMarketSell));
 app.post('/api/research/start',   _safe(handleResearchStart));
 app.post('/api/research/instant', _safe(handleResearchInstant));
 app.post('/api/blessing/consecrate', _safe(handleBlessingConsecrate));

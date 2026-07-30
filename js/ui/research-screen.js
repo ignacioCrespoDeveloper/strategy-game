@@ -276,6 +276,16 @@ const ResearchScreen = (() => {
     `;
   }
 
+  // PLAIN TEXT cost summary for title="" attributes. Deliberately does NOT use
+  // gi() — that returns SVG markup, which renders as literal angle brackets
+  // inside an attribute or textContent.
+  function _offeringLabel(cost) {
+    return Object.entries(cost)
+      .filter(([, v]) => v > 0)
+      .map(([res, v]) => `${v.toLocaleString()} ${res}`)
+      .join(' · ');
+  }
+
   function _costChips(cost) {
     return Object.entries(cost)
       .filter(([, v]) => v > 0)
@@ -358,7 +368,9 @@ const ResearchScreen = (() => {
     const isActive   = active?.id === def.id;
     const maxHours   = blessingMaxHours(templeLevel);
     const hours      = Math.min(Math.max(1, _blessingHours), maxHours);
-    const offering   = { gold: blessingCost(hours) };
+    // blessingCost returns { gold, food, wood, stone } — resources were added
+    // 2026-07-30, so this is already the full offering shape _canAfford wants.
+    const offering   = blessingCost(hours);
     const affordable = _canAfford(offering);
     const eta        = isActive ? Math.max(0, Math.round((active.finishAt - TimeService.now()) / 1000)) : 0;
     const durLabel   = TimeService.formatDuration(blessingDuration(hours));
@@ -372,7 +384,7 @@ const ResearchScreen = (() => {
         ${Array.from({ length: maxHours }, (_, i) => i + 1).map(h => `
           <button class="rs-hour ${h === hours ? 'rs-hour--on' : ''}"
                   data-bless-hours="${h}"
-                  title="${h}h · ${blessingCost(h).toLocaleString()} gold">${h}h</button>
+                  title="${h}h · ${_offeringLabel(blessingCost(h))}">${h}h</button>
         `).join('')}
       </div>`;
 

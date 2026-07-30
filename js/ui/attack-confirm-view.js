@@ -143,7 +143,7 @@ const AttackConfirmView = (() => {
     const fromX = lord.x ?? _targetX;
     const fromY = lord.y ?? _targetY;
     const dist  = Math.max(Math.abs(_targetX - fromX), Math.abs(_targetY - fromY));
-    const secs  = dist > 0 ? Math.round(dist * 20 * (5 / speed)) : 0;
+    const secs  = EconomyCore.getTravelTime(dist, speed);
     const eta   = secs > 0 ? TimeService.formatDuration(secs) : 'Immediate';
     const race  = RACES[lord.race] || {};
     return `<option value="${lord.id}">${lord.name} · ${eta}</option>`;
@@ -162,7 +162,7 @@ const AttackConfirmView = (() => {
     const fromX  = lord.x ?? _targetX;
     const fromY  = lord.y ?? _targetY;
     const dist   = Math.max(Math.abs(_targetX - fromX), Math.abs(_targetY - fromY));
-    const secs   = dist > 0 ? Math.round(dist * 20 * (5 / stats.speed)) : 0;
+    const secs   = EconomyCore.getTravelTime(dist, stats.speed);
     const eta    = secs > 0 ? TimeService.formatDuration(secs) : 'Immediate';
     const terrain = WorldService.getTerrain(_targetX, _targetY);
 

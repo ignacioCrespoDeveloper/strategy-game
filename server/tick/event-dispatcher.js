@@ -19,15 +19,7 @@
 import { createClient }     from '@supabase/supabase-js';
 import { catchUp }          from './catch-up.js';
 import { resolvePvpBattle, resolveScout, resolveArrivalCheck } from '../combat-resolver.js';
-import {
-  DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL,
-  LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS,
-  BUILDING_DEFS, RACES, EconomyCore,
-  TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
-  pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT,
-} from '../engine-loader.js';
-
-const _ENGINE   = { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS, pickLordPortrait, DiscoveryRoll, BattleEngine, CAMP_LEVEL_LOOT, BATTLE_WIN_HEAL_PCT };
+import { ENGINE as _ENGINE } from '../engine-loader.js';
 const SYNC_KEYS = ['players', 'lords', 'cities', 'armies'];
 
 function _admin() {

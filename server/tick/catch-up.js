@@ -154,12 +154,17 @@ function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
   // Loot rises with the same multiplier the roster did: a bigger fight is
   // worth more, but it now costs blood in proportion rather than being free.
   const mult     = (campDef.rewardMultiplier || 1.0) * (details.powerMult || 1);
+  // Ambush loot answers to the SAME quest dials as expedition finds
+  // (js/data/tuning.js) — an ambush is a payout of the expedition that walked
+  // into it, so tuning "questing" down must not leave this channel untouched.
+  const qGold = (typeof engine?.tune === 'function') ? engine.tune('questGold')      : 1.0;
+  const qRes  = (typeof engine?.tune === 'function') ? engine.tune('questResources') : 1.0;
   const encounter = {
     name:           `${campDef.displayName || def.name}${details ? ` (Level ${details.level})` : ''}`,
     startingMorale: campDef.morale || 55,
     loot: {
-      goldMin: Math.round(baseLoot.goldMin * mult), goldMax: Math.round(baseLoot.goldMax * mult),
-      resMin:  Math.round((baseLoot.resMin || 0) * mult), resMax: Math.round((baseLoot.resMax || 0) * mult),
+      goldMin: Math.round(baseLoot.goldMin * mult * qGold), goldMax: Math.round(baseLoot.goldMax * mult * qGold),
+      resMin:  Math.round((baseLoot.resMin || 0) * mult * qRes), resMax: Math.round((baseLoot.resMax || 0) * mult * qRes),
     },
     xpReward:  { win: Math.round(baseLoot.xpWin * mult), loss: Math.round(baseLoot.xpLoss * mult) },
     defenders: details.defenders,

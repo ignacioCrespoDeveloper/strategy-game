@@ -51,7 +51,11 @@ var RESEARCH_DEFS = {
     icon:        gi('hammer-nails'),
     image:       'assets/tomes/EngineeringTomes.webp',
     tier:        1,
-    maxLevel:    5,
+    // Cap removed 2026-07-30 — nothing in the game should carry a hardcoded
+    // level ceiling (every building is already Infinity). The ×1.8/level cost
+    // curve is the limiter now, exactly as it is for buildings. The effect is
+    // still bounded: getBuildTime floors its multiplier at 0.2 (−80%).
+    maxLevel:    Infinity,
     description: 'Ledgers of every gang, quarry and work-song since the first stone was dressed. Read them and your overseers know exactly how many bodies a wall costs — each volume cuts construction time in every city.',
     cost:         level => ({ wood: _rscale(1200, level), stone: _rscale(900, level), food: _rscale(400, level) }),
     researchTime: level => _rscale(1200, level),
@@ -68,7 +72,10 @@ var RESEARCH_DEFS = {
     icon:        gi('treasure-map'),
     image:       'assets/tomes/CartographyTomes.webp',
     tier:        1,
-    maxLevel:    7,
+    // Cap removed 2026-07-30 — see engineering_tomes. getMarchFoodCost floors
+    // its multiplier at 0.2, so the effect stays bounded at −80% however many
+    // volumes are bought.
+    maxLevel:    Infinity,
     description: 'Surveyed roads and provisioning charts. Each volume cuts the food cost of marching between tiles.',
     // Re-tuned 2026-07-29: was 5 levels of −8% (−40% total) for a token
     // stone/food price — the cheapest tome in the catalog also gutted the

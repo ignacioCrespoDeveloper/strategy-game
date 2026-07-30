@@ -32,10 +32,13 @@ const CityService = (() => {
     return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   }
 
-  const MAX_CITIES  = 5;
+  // ⚠ MIRROR of server/actions/city-found.js (MAX_CITIES, cityFoundCost).
+  // The server is authoritative; this copy exists only so the client can
+  // preview cost and disable the button. Change both together.
+  const MAX_CITIES  = 7;
 
   // Cost to found city N (1-indexed). First city is always free.
-  // 2nd: 8k, 3rd: 16k, 4th: 32k, 5th: 64k (×2 each time).
+  // 2nd: 8k, 3rd: 16k, 4th: 32k, 5th: 64k, 6th: 128k, 7th: 256k (×2 each time).
   function getFoundCost(existingCount) {
     if (existingCount === 0) return 0;
     return 8000 * Math.pow(2, existingCount - 1);

@@ -36,6 +36,7 @@ const _ctx = vm.createContext({
 });
 
 // ── Load order: deps before consumers ────────────────────────
+load('js/data/tuning.js');           // TUNING + tune() — MUST precede economy-core & discovery-roll
 load('js/data/lord-classes.js');     // LORD_BASE_STATS, LORD_CLASSES
 load('js/data/lord-portraits.js');   // LORD_PORTRAIT_POOLS, rollLordPortrait (no deps)
 load('js/data/stances.js');          // STANCE_DEFS
@@ -46,6 +47,7 @@ load('js/data/blessings.js');        // BLESSING_DEFS, blessingDuration, blessin
 load('js/data/races.js');            // RACES
 load('js/domain/world.js');          // TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS (WorldService itself is unused here)
 load('js/domain/economy-core.js');   // EconomyCore — THE shared economy math (needs BUILDING_DEFS)
+load('js/domain/market-core.js');    // MarketCore — THE shared merchant rates/cap (no deps)
 load('js/domain/unit-unlock.js');    // UnitUnlockService — THE recruitment gate (needs UNIT_DEFS, EconomyCore)
 load('js/data/battle-defs.js');      // TERRAIN_BATTLE_MODS, CAMP_DEFS
 load('js/data/discoveries.js');      // DISCOVERY_DEFS
@@ -68,6 +70,9 @@ export const blessingDuration      = _ctx.blessingDuration;
 export const blessingCost          = _ctx.blessingCost;
 export const RACES                 = _ctx.RACES;
 export const EconomyCore           = _ctx.EconomyCore;
+export const MarketCore            = _ctx.MarketCore;
+export const TUNING                = _ctx.TUNING;
+export const tune                  = _ctx.tune;
 export const UnitUnlockService     = _ctx.UnitUnlockService;
 export const TERRAIN_RESOURCE_MODS = _ctx.TERRAIN_RESOURCE_MODS;
 export const TERRAIN_STAT_MODS     = _ctx.TERRAIN_STAT_MODS;
@@ -88,3 +93,21 @@ export const DISCOVERY_DEFS        = _ctx.DISCOVERY_DEFS;
 export const DiscoveryRoll         = _ctx.DiscoveryRoll;
 export const CAMP_DEFS             = _ctx.CAMP_DEFS;
 export const CAMP_LEVEL_LOOT       = _ctx.CAMP_LEVEL_LOOT;
+
+// ── The engine bundle catchUp() expects ──────────────────────────
+// server/tick/catch-up.js takes everything it needs through one `engine`
+// argument. This used to be four hand-copied object literals (action-base.js,
+// sync.js, actions/instant-action.js, tick/event-dispatcher.js) that all had to
+// be edited in lockstep.
+//
+// THAT IS A SILENT-FAILURE SHAPE: a key missing from one copy does not throw,
+// it just reads undefined — a def vanishes or a tuning dial quietly reads 1.0
+// on that one code path. Adding `tune` for the quest dials hit exactly this.
+// One object, four importers, no drift. Add new engine deps HERE.
+export const ENGINE = {
+  DISCOVERY_DEFS, CAMP_DEFS, CAMP_LEVEL_LOOT, TALENT_POOL,
+  LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES,
+  EconomyCore, MarketCore, tune,
+  TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
+  pickLordPortrait, DiscoveryRoll, BattleEngine, BATTLE_WIN_HEAL_PCT,
+};

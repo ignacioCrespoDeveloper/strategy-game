@@ -99,9 +99,12 @@ const LordService = (() => {
 
   // ── CRUD ─────────────────────────────────────────────────────
 
-  const MAX_LORDS = 5;
+  // ⚠ MIRROR of server/actions/lord-create.js (MAX_LORDS, lordRecruitCost).
+  // The server is authoritative; this copy exists only so the client can
+  // preview cost and disable the button. Change both together.
+  const MAX_LORDS = 7;
 
-  // First lord is free; subsequent lords cost 10k, 20k, 40k, 80k.
+  // First lord is free; subsequent lords cost 10k, 20k, 40k, 80k, 160k, 320k.
   function getRecruitCost(existingLordCount) {
     if (existingLordCount === 0) return 0;
     return 10000 * Math.pow(2, existingLordCount - 1);
@@ -200,7 +203,7 @@ const LordService = (() => {
     // Attack moves always take at least 5 minutes (300s) — gives the defender a warning window
     // and ensures the attacker sees the travel countdown on the homepage.
     const minSecs  = opts?.intent === 'attack' ? 60 : 0;
-    const secs     = Math.max(minSecs, distance > 0 ? Math.round(distance * 20 * (5 / speed)) : 0);
+    const secs     = EconomyCore.getTravelTime(distance, speed, { minSecs });
 
     const now  = TimeService.now();
     const item = { actionId: 'move_lord', startedAt: now, finishAt: now + secs * 1000, destX, destY };

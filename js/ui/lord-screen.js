@@ -827,7 +827,7 @@ const LordScreen = (() => {
             <span title="HP">${gi('hearts')} ${def.combatStats.hp}</span>
             <span title="Speed">${gi('wingfoot')} ${def.combatStats.speed}</span>
           </div>
-          <div class="la-tt-cost">${gi('two-coins')}${def.goldCost}</div>
+          <div class="la-tt-cost">${gi('two-coins')}${def.goldCost.toLocaleString()}</div>
           ${traitsHtml ? `<div class="la-tt-section">${traitsHtml}</div>` : ''}
           ${abilitiesHtml ? `<div class="la-tt-section">${abilitiesHtml}</div>` : ''}
           ${tagsHtml ? `<div class="la-tt-tags">${tagsHtml}</div>` : ''}
@@ -1152,7 +1152,7 @@ const LordScreen = (() => {
             extraClass: queueFull ? 'la-recruit-card--busy' : '',
             nameSuffixHtml: vetPct > 0 ? ` <span class="la-vet-badge" title="Veterancy from training buildings across your empire">+${Math.round(vetPct * 100)}%</span>` : '',
             stats: { attack: atkShown, defense: defShown },
-            costHtml: `<span class="tt-unit-cost">${gi('two-coins')} ${def.goldCost} · ${gi('stopwatch')} ${TimeService.formatDuration(recruitSecs)}</span>`,
+            costHtml: `<span class="tt-unit-cost">${gi('two-coins')} ${def.goldCost.toLocaleString()} · ${gi('stopwatch')} ${TimeService.formatDuration(recruitSecs)}</span>`,
             bodyExtraHtml: `${_abilityBadgesHtml(def)}${_tagBadgesHtml(def)}`,
             actionHtml: `
               <button class="la-recruit-btn bld-btn--ready" data-unit-id="${unitId}"
@@ -1220,7 +1220,7 @@ const LordScreen = (() => {
     // Finish recruitment instantly
     document.getElementById('la-finish-recruit')?.addEventListener('click', _finishRecruitmentNow);
 
-    // Cancel a queued recruitment batch (full gold refund)
+    // Cancel a queued recruitment batch (75% gold refund since 2026-07-30)
     document.querySelectorAll('[data-cancel-recruit]').forEach(btn => {
       btn.addEventListener('click', () => _cancelRecruitment(Number(btn.dataset.cancelRecruit)));
     });
@@ -1753,7 +1753,9 @@ const LordScreen = (() => {
             locked:   isLocked,
             equipped: isEquipped,
             cant:     !isLocked && !isEquipped && !canAfford,
-            value:    `${gi('two-coins')}${m.cost || 0}`,
+            // toLocaleString matters here since the 2026-07-30 reprice — a
+            // dragon is 5,000,000, and the raw number was unreadable.
+            value:    `${gi('two-coins')}${(m.cost || 0).toLocaleString()}`,
             buttonHtml: `<button class="lm-choose-btn ${btnState}" data-mount-id="${m.id}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>`,
             reasonHtml: isLocked ? `<div class="lm-mount-reason">${gi('padlock')} Requires lord level ${reqLevel}</div>` : '',
           });
@@ -2329,7 +2331,7 @@ const LordScreen = (() => {
     _stopCountdown();
     _renderTab();
     _startCountdown();
-    _toast('Recruitment cancelled — gold refunded.');
+    _toast('Recruitment cancelled — 75% of gold refunded.');
   }
 
   // ── Live countdown ────────────────────────────────────────────

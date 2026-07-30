@@ -54,12 +54,31 @@ export async function handleBlessingConsecrate(req, res) {
     });
   }
 
-  // Gold offering is charged per hour, so a longer rite costs proportionally more.
+  // The offering is charged per hour, so a longer rite costs proportionally
+  // more. Since 2026-07-30 it takes GOLD AND ALL THREE RESOURCES — blessingCost
+  // returns { gold, food, wood, stone }, never a bare number.
   const cost = blessingCost(wantHours);
-  if (Math.floor(player.coins || 0) < cost) {
-    return res.status(400).json({ ok: false, error: `A ${wantHours}h consecration costs ${cost.toLocaleString()} gold (have ${Math.floor(player.coins || 0)}).` });
+  const have = { gold: Math.floor(player.coins || 0), ...(player.resources || {}) };
+
+  const short = [];
+  if (have.gold < cost.gold) short.push(`${cost.gold.toLocaleString()} gold (have ${Math.floor(have.gold).toLocaleString()})`);
+  for (const r of ['food', 'wood', 'stone']) {
+    if (Math.floor(have[r] || 0) < cost[r]) {
+      short.push(`${cost[r].toLocaleString()} ${r} (have ${Math.floor(have[r] || 0).toLocaleString()})`);
+    }
   }
-  player.coins = (player.coins || 0) - cost;
+  if (short.length > 0) {
+    return res.status(400).json({
+      ok: false,
+      error: `A ${wantHours}h consecration needs ${short.join(', ')}.`,
+    });
+  }
+
+  player.coins     = (player.coins || 0) - cost.gold;
+  player.resources = player.resources || {};
+  for (const r of ['food', 'wood', 'stone']) {
+    player.resources[r] = (player.resources[r] || 0) - cost[r];
+  }
 
   const now  = Date.now();
   const secs = blessingDuration(wantHours);

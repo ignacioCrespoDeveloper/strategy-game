@@ -19,7 +19,10 @@ import { loadAndCatchUp, saveState } from '../action-base.js';
 import { UNIT_DEFS } from '../engine-loader.js';
 
 // Best-case refund fraction of a unit's gold cost (at full HP). Tunable.
-const DISBAND_REFUND_MAX = 0.9;
+// 0.9 → 0.6 on 2026-07-30. At 90% (and 100% on the cancel paths) unit churn was
+// nearly free, so an army could be liquidated and rebuilt at will — which
+// defeats the point of making units the recurring gold sink.
+const DISBAND_REFUND_MAX = 0.6;
 
 export async function handleArmyDisband(req, res) {
   const { lordId, unitId, modelIdx = 0 } = req.body || {};

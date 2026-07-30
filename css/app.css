@@ -11914,6 +11914,101 @@ body.nav-open #screen-root {
 }
 .rs-hint b { color: var(--gold-light); }
 
+/* ── The Merchant (Marketplace detail panel, city-view) ───────── */
+
+.mk-panel {
+  border-top: 1px solid var(--border-base);
+  padding: 0.6rem 0.9rem 0.7rem;
+}
+.mk-cap {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.mk-cap b { color: var(--gold-light); }
+.mk-cap-hint {
+  display: block;
+  font-size: 0.66rem;
+  opacity: 0.75;
+}
+.mk-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 1fr) auto auto minmax(180px, auto);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.32rem 0;
+  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+}
+.mk-row:last-of-type { border-bottom: none; }
+.mk-row-res {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+.mk-row-held {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.mk-row-rate {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.mk-row-actions {
+  display: flex;
+  gap: 0.3rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.mk-sell-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  padding: 0.24rem 0.5rem;
+  font-size: 0.7rem;
+  font-family: inherit;
+  color: var(--gold-light);
+  background: rgba(200, 147, 58, 0.12);
+  border: 1px solid rgba(200, 147, 58, 0.4);
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  transition: background 0.12s, border-color 0.12s;
+}
+.mk-sell-btn:hover:not([disabled]) {
+  background: rgba(200, 147, 58, 0.22);
+  border-color: rgba(200, 147, 58, 0.7);
+}
+.mk-sell-btn[disabled] {
+  opacity: 0.35;
+  cursor: not-allowed;
+  color: var(--text-muted);
+  border-color: var(--border-base);
+  background: transparent;
+}
+.mk-note {
+  margin-top: 0.5rem;
+  font-size: 0.66rem;
+  line-height: 1.4;
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+/* Narrow screens: stack the row so the buttons keep their full labels. */
+@media (max-width: 640px) {
+  .mk-row {
+    grid-template-columns: 1fr auto;
+    row-gap: 0.25rem;
+  }
+  .mk-row-rate { grid-column: 2; text-align: right; }
+  .mk-row-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
 /* Active-research countdown + instant-finish (Research screen detail) */
 .rsch-active { display: flex; align-items: center; gap: 0.4rem; }
 .rsch-cd {

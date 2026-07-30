@@ -35,11 +35,14 @@ export async function handleCancelBuild(req, res) {
   const item = queue[idx];
   const def  = BUILDING_DEFS[item.buildingId];
 
-  // Full resource refund of what was paid to enqueue this upgrade.
+  // 75% resource refund (was 100% until 2026-07-30). Same reasoning as
+  // cancel-recruit: a free cancel is not a cost, it is a parking space.
+  const CANCEL_BUILD_REFUND = 0.75;
+
   const refund = def ? def.cost(item.targetLevel) : {};
   player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
   for (const [rKey, amt] of Object.entries(refund)) {
-    if (amt > 0) player.resources[rKey] = (player.resources[rKey] || 0) + amt;
+    if (amt > 0) player.resources[rKey] = (player.resources[rKey] || 0) + Math.floor(amt * CANCEL_BUILD_REFUND);
   }
 
   // Remove it; resequence everything from idx onward to chain after whatever

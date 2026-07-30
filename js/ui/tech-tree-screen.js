@@ -282,7 +282,7 @@ const TechTreeScreen = (() => {
     // they're never actually hired for free, so show that plainly instead
     // of a misleading "💰 0".
     const costHtml = opts.costHtml !== undefined ? opts.costHtml : (unit.goldCost > 0
-      ? `<span class="tt-unit-cost">${gi('two-coins')} ${unit.goldCost}</span>`
+      ? `<span class="tt-unit-cost">${gi('two-coins')} ${unit.goldCost.toLocaleString()}</span>`
       : `<span class="tt-unit-cost tt-unit-cost--none" title="Only encountered as a camp defender — not directly recruitable">${gi('campfire')} Camp Only</span>`);
 
     return `

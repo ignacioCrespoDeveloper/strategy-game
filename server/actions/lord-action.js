@@ -100,7 +100,7 @@ export async function handleLordAction(req, res) {
     const fromY    = lord.y ?? destY;
     const distance = Math.max(Math.abs(destX - fromX), Math.abs(destY - fromY));
     const minSecs  = intent === 'attack' ? 60 : 0;
-    const secs     = Math.max(minSecs, distance > 0 ? Math.round(distance * 20 * (5 / speed)) : 0);
+    const secs     = EconomyCore.getTravelTime(distance, speed, { minSecs });
 
     // March food cost (the OGame deuterium role): crossing tiles burns food,
     // paid up front at enqueue — same-tile actions stay free. No refund on

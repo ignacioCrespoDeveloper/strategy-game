@@ -11,12 +11,21 @@
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { LORD_BASE_STATS, LORD_CLASSES, RACES, rollLordPortrait } from '../engine-loader.js';
 
-const MAX_LORDS = 5;
+// Exported so scripts/economy-projection.js reads the REAL expansion curve
+// instead of keeping its own copy. js/domain/lord.js mirrors these for the
+// client; that pair is the remaining duplication.
+// Raised 5 → 7 on 2026-07-30: total gold demand was a fixed ~345k that a
+// mature player cleared in days, so the endgame had nothing to buy. Keep the
+// ×2 curve — doubling is what makes each marginal lord a real project (lord 7
+// at 320k is ~2.7 days of endgame gold income, before its army).
+export const MAX_LORDS = 7;
 
-function _recruitCost(existingLordCount) {
+// First lord is free; subsequent lords cost 10k, 20k, 40k, 80k, 160k, 320k.
+export function lordRecruitCost(existingLordCount) {
   if (existingLordCount === 0) return 0;
   return 10000 * Math.pow(2, existingLordCount - 1);
 }
+const _recruitCost = lordRecruitCost;
 
 function _generateId() {
   return 'l_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);

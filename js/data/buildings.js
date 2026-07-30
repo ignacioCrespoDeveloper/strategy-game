@@ -140,10 +140,19 @@ var BUILDING_DEFS = {
     description: 'The administrative heart of your city. Higher levels unlock more buildings, increase city capacity, and speed up all construction in this city.',
     maxLevel:    Infinity,
     requires:    {},
+    // Base ×2 and factor 1.5 → 1.7 on 2026-07-30. The Town Hall gates city tier
+    // AND all construction speed, so it must stay cheap at Lv1 while mattering
+    // at Lv10 — hence a curve change rather than a big base change.
+    //   Lv1 4,400 · Lv2 7,480 · Lv5 36,749 · Lv10 521,797 (cum ~1.26M)
+    // ⚠ OPENING CHECK: cities are seeded at town_hall 1, so the first cost a
+    // player meets is Lv1→2 = F3,400/W2,295/S1,785, which must stay inside the
+    // F5,000/W5,000/S4,000 starter kit. A fresh Farm makes 11 food/hour, so
+    // raising the base further would stall a new account. Re-verify after any
+    // change here or to the starter kit in server/actions/city-found.js.
     cost:        level => ({
-      food:  _scale(1000, 1.5, level),
-      wood:  _scale(675,  1.5, level),
-      stone: _scale(525,  1.5, level),
+      food:  _scale(2000, 1.7, level),
+      wood:  _scale(1350, 1.7, level),
+      stone: _scale(1050, 1.7, level),
     }),
     buildTime:   level => _scale(120, 1.6, level),
     production:  () => ({}),
@@ -171,8 +180,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { town_hall: 3 },
     cost:        level => ({
-      wood:  _scale(200, 1.4, level),
-      stone: _scale(170, 1.4, level),
+      wood:  _scale(800, 1.5, level),
+      stone: _scale(680, 1.5, level),
     }),
     buildTime:   level => _scale(200, 1.5, level),
     production:  () => ({}),
@@ -192,8 +201,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { town_hall: 4 },
     cost:        level => ({
-      wood:  _scale(200, 1.5, level),
-      stone: _scale(300, 1.5, level),
+      wood:  _scale(800, 1.5, level),
+      stone: _scale(1200, 1.5, level),
     }),
     buildTime:   level => _scale(300, 1.5, level),
     production:  () => ({}),
@@ -213,8 +222,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { town_hall: 3 },
     cost:        level => ({
-      wood:  _scale(165, 1.45, level),
-      stone: _scale(135, 1.45, level),
+      wood:  _scale(660, 1.5, level),
+      stone: _scale(540, 1.5, level),
     }),
     buildTime:   level => _scale(100, 1.5, level),
     production:  () => ({}),
@@ -236,8 +245,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { town_hall: 2 },
     cost:        level => ({
-      wood:  _scale(160, 1.4, level),
-      stone: _scale(90,  1.4, level),
+      wood:  _scale(640, 1.5, level),
+      stone: _scale(360, 1.5, level),
     }),
     buildTime:   level => _scale(90, 1.5, level),
     production:  () => ({}),
@@ -259,8 +268,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { town_hall: 3 },
     cost:        level => ({
-      wood:  _scale(300, 1.4, level),
-      stone: _scale(250, 1.4, level),
+      wood:  _scale(1200, 1.5, level),
+      stone: _scale(1000, 1.5, level),
     }),
     buildTime:   level => _scale(240, 1.5, level),
     production:  () => ({}),
@@ -284,8 +293,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { town_hall: 3 },
     cost:        level => ({
-      wood:  _scale(240, 1.4, level),
-      stone: _scale(190, 1.4, level),
+      wood:  _scale(960, 1.5, level),
+      stone: _scale(760, 1.5, level),
     }),
     buildTime:   level => _scale(180, 1.5, level),
     production:  () => ({}),
@@ -307,8 +316,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { barracks: 3 },
     cost:        level => ({
-      wood:  _scale(180, 1.4, level),
-      stone: _scale(130, 1.4, level),
+      wood:  _scale(720, 1.5, level),
+      stone: _scale(520, 1.5, level),
     }),
     buildTime:   level => _scale(150, 1.5, level),
     production:  () => ({}),
@@ -329,8 +338,8 @@ var BUILDING_DEFS = {
     requires:       { barracks: 5 },
     unlockRequires: [{ type: 'city_tier', minTier: 2 }],
     cost:        level => ({
-      wood:  _scale(240, 1.4, level),
-      stone: _scale(160, 1.4, level),
+      wood:  _scale(960, 1.5, level),
+      stone: _scale(640, 1.5, level),
     }),
     buildTime:   level => _scale(180, 1.5, level),
     production:  () => ({}),
@@ -350,8 +359,8 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { town_hall: 1 },
     cost:        level => ({
-      wood:  _scale(100, 1.4, level),
-      stone: _scale(140, 1.4, level),
+      wood:  _scale(400, 1.5, level),
+      stone: _scale(560, 1.5, level),
     }),
     buildTime:   level => _scale(90, 1.5, level),
     production:  () => ({}),
@@ -384,8 +393,8 @@ var BUILDING_DEFS = {
     requires:       { guard_post: 3, barracks: 2 },
     unlockRequires: [{ type: 'city_tier', minTier: 3 }],
     cost:        level => ({
-      wood:  _scale(425, 1.6, level),
-      stone: _scale(725, 1.6, level),
+      wood:  _scale(1200000, 1.6, level),
+      stone: _scale(2000000, 1.6, level),
     }),
     buildTime:   level => _scale(600, 1.7, level),
     production:  () => ({}),
@@ -414,8 +423,8 @@ var BUILDING_DEFS = {
     requires:    { barracks: 6 },
     unlockRequires: [{ type: 'race', id: 'dwarf' }, { type: 'city_tier', minTier: 4 }],
     cost:        level => ({
-      wood:  _scale(275, 1.6, level),
-      stone: _scale(375, 1.6, level),
+      wood:  _scale(800000, 1.6, level),
+      stone: _scale(1100000, 1.6, level),
     }),
     buildTime:   level => _scale(360, 1.6, level),
     production:  () => ({}),
@@ -437,8 +446,8 @@ var BUILDING_DEFS = {
     requires:    { barracks: 8 },
     unlockRequires: [{ type: 'race', ids: ['dark_elf', 'orc'] }, { type: 'city_tier', minTier: 4 }],
     cost:        level => ({
-      wood:  _scale(500, 1.6, level),
-      stone: _scale(400, 1.6, level),
+      wood:  _scale(1300000, 1.6, level),
+      stone: _scale(1040000, 1.6, level),
     }),
     buildTime:   level => _scale(600, 1.6, level),
     production:  () => ({}),
@@ -459,8 +468,8 @@ var BUILDING_DEFS = {
     requires:    { archery_range: 3 },
     unlockRequires: [{ type: 'race', id: 'human' }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
-      wood:  _scale(210, 1.4, level),
-      stone: _scale(260, 1.4, level),
+      wood:  _scale(840, 1.5, level),
+      stone: _scale(1040, 1.5, level),
     }),
     buildTime:   level => _scale(180, 1.5, level),
     production:  () => ({}),
@@ -482,8 +491,8 @@ var BUILDING_DEFS = {
     requires:    { archery_range: 5 },
     unlockRequires: [{ type: 'race', ids: ['dwarf', 'human', 'orc'] }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
-      wood:  _scale(190, 1.4, level),
-      stone: _scale(340, 1.5, level),
+      wood:  _scale(760, 1.5, level),
+      stone: _scale(1360, 1.5, level),
     }),
     buildTime:   level => _scale(200, 1.5, level),
     production:  () => ({}),
@@ -505,8 +514,8 @@ var BUILDING_DEFS = {
     requires:    { archery_range: 6 },
     unlockRequires: [{ type: 'race', id: 'high_elf' }, { type: 'city_tier', minTier: 3 }],
     cost:        level => ({
-      wood:  _scale(400, 1.7, level),
-      stone: _scale(600, 1.7, level),
+      wood:  _scale(1000000, 1.7, level),
+      stone: _scale(1500000, 1.7, level),
     }),
     buildTime:   level => _scale(600, 1.7, level),
     production:  () => ({}),
@@ -527,8 +536,8 @@ var BUILDING_DEFS = {
     requires:    { barracks: 12 },
     unlockRequires: [{ type: 'race', ids: ['dark_elf', 'high_elf'] }, { type: 'city_tier', minTier: 5 }],
     cost:        level => ({
-      wood:  _scale(1750, 2.0, level),
-      stone: _scale(2750, 2.0, level),
+      wood:  _scale(2400000, 2, level),
+      stone: _scale(3600000, 2, level),
     }),
     buildTime:   level => _scale(7200, 2.0, level),
     production:  () => ({}),
@@ -558,8 +567,8 @@ var BUILDING_DEFS = {
       { type: 'city_tier',    minTier: 4 },
     ],
     cost:        level => ({
-      wood:  _scale(1900, 1.8, level),
-      stone: _scale(2900, 1.8, level),
+      wood:  _scale(1900000, 1.8, level),
+      stone: _scale(2900000, 1.8, level),
     }),
     buildTime:   level => _scale(7200, 1.8, level),
     production:  () => ({}),
@@ -587,8 +596,8 @@ var BUILDING_DEFS = {
       { type: 'city_tier',    minTier: 4 },
     ],
     cost:        level => ({
-      wood:  _scale(2150, 1.7, level),
-      stone: _scale(950,  1.7, level),
+      wood:  _scale(2120000, 1.7, level),
+      stone: _scale(940000, 1.7, level),
     }),
     buildTime:   level => _scale(5400, 1.7, level),
     production:  level => ({ food: 40 * level }),
@@ -616,8 +625,8 @@ var BUILDING_DEFS = {
       { type: 'city_tier',    minTier: 4 },
     ],
     cost:        level => ({
-      wood:  _scale(1350, 1.8, level),
-      stone: _scale(2750, 1.8, level),
+      wood:  _scale(1400000, 1.8, level),
+      stone: _scale(2600000, 1.8, level),
     }),
     buildTime:   level => _scale(5400, 1.8, level),
     production:  level => ({ stone: 80 * level }),
@@ -644,8 +653,8 @@ var BUILDING_DEFS = {
       { type: 'city_tier',    minTier: 4 },
     ],
     cost:        level => ({
-      wood:  _scale(1700, 1.7, level),
-      stone: _scale(1300, 1.7, level),
+      wood:  _scale(1740000, 1.7, level),
+      stone: _scale(1360000, 1.7, level),
     }),
     buildTime:   level => _scale(4800, 1.7, level),
     production:  level => ({ food: 60 * level }),
@@ -673,8 +682,8 @@ var BUILDING_DEFS = {
       { type: 'city_tier',    minTier: 4 },
     ],
     cost:        level => ({
-      wood:  _scale(1200, 1.7, level),
-      stone: _scale(1000, 1.7, level),
+      wood:  _scale(1180000, 1.7, level),
+      stone: _scale(980000, 1.7, level),
     }),
     buildTime:   level => _scale(4200, 1.7, level),
     production:  level => ({ food: 30 * level, wood: 30 * level }),
@@ -701,8 +710,8 @@ var BUILDING_DEFS = {
       { type: 'city_tier',    minTier: 4 },
     ],
     cost:        level => ({
-      wood:  _scale(1000, 1.8, level),
-      stone: _scale(3100, 1.8, level),
+      wood:  _scale(1000000, 1.8, level),
+      stone: _scale(3000000, 1.8, level),
     }),
     buildTime:   level => _scale(6000, 1.8, level),
     production:  () => ({}),

@@ -32,9 +32,14 @@ export async function handleCancelRecruit(req, res) {
     return res.status(400).json({ ok: false, error: 'Invalid queue index' });
   }
 
+  // 75% refund (was 100% until 2026-07-30). A full refund with no time penalty
+  // let a player park gold in a recruit queue and pull it back out for free,
+  // which is not a cost at all — the 25% cancellation fee is the friction.
+  const CANCEL_RECRUIT_REFUND = 0.75;
+
   const item   = queue[idx];
   const def    = UNIT_DEFS[item.unitId];
-  const refund = (def?.goldCost || 0) * (item.count || 0);
+  const refund = Math.floor((def?.goldCost || 0) * (item.count || 0) * CANCEL_RECRUIT_REFUND);
   if (refund > 0) player.coins = (player.coins || 0) + refund;
 
   // Remove it; resequence everything from idx onward to chain after whatever
