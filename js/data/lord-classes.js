@@ -85,10 +85,14 @@ var LORD_CLASSES = {
       id:          'explorer',
       name:        'Explorer',
       icon:        gi('magnifying-glass'),
-      description: 'Search Area takes half the time. Higher chance of valuable discoveries.',
+      // "Higher chance of valuable discoveries" was removed from this text
+      // 2026-07-30: it was backed by discoveryWeightBonus, which no code has
+      // ever read. Find QUALITY is decided by Expedition Rating (army
+      // composition), not by the lord — see discovery-roll.js RECRUIT_TIERS.
+      // searchDurationMult IS live (server/actions/lord-action.js).
+      description: 'Search Area takes half the time.',
       effects: {
-        searchDurationMult:   0.5,
-        discoveryWeightBonus: 0.3,
+        searchDurationMult: 0.5,
       },
     },
   },
@@ -149,7 +153,6 @@ var LORD_CLASSES = {
 //  effects keys used by the engine:
 //    searchDurationMult    — multiplier on search action duration (lord.js)
 //    goldDiscoveryBonus    — extra weight on gold-type discoveries (discovery.js)
-//    commandCapacityBonus  — extra unit model slots (lord.js)
 //    armyPowerCapBonus     — extra CP cap (lord.js)
 //    attackerMoraleBonus   — own-side morale boost at battle start (battle-engine.js)
 //    defenderMoraleMalus   — enemy morale penalty at battle start (battle-engine.js)
@@ -252,10 +255,18 @@ var TALENT_POOL = {
     icon:        gi('crown'),
     color:       '#c8933a',
     category:    'strategic',
+    // ⚠ THIS TALENT CURRENTLY DOES NOTHING — NEEDS A DESIGN DECISION.
+    // "unit slots" is a retired system: army size is bounded only by the PWR
+    // cap. commandCapacityBonus was read solely by lord.js getCommandCapacity,
+    // which had no callers and was deleted 2026-07-30. Since talents are chosen
+    // ONCE and PERMANENTLY, this is a trap pick and must not ship as-is.
+    // Options: give it a distinct real effect, or drop it from the pool.
+    // Note strategist already covers +armyPowerCapBonus, so simply copying that
+    // would make strategist strictly dominant.
     description: 'Your lord inspires loyalty and discipline. Army capacity increased by +2 unit slots.',
     hint:        'Best for large-army builds',
     effects: {
-      commandCapacityBonus: 2,
+      commandCapacityBonus: 2, // dead key — no consumer
     },
   },
 

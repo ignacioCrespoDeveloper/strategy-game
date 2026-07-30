@@ -530,7 +530,7 @@ const OverviewScreen = (() => {
     const terrain    = WorldService.getTerrain(city.x, city.y);
     const stats      = CityStatsService.getStats(city);
     const slotInfo   = CityStatsService.getSlotInfo(city);
-    const prodRates  = ProductionService.getRates(city, _lord);
+    const prodRates  = ProductionService.getRates(city);
     const growth     = CityStatsService.getPopulationGrowthRate(city, stats, prodRates);
     const status     = CityStatsService.getCityStatus(stats, growth);
     const buildItem  = city.constructionQueue.length > 0 ? city.constructionQueue[0] : null;

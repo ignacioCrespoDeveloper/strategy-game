@@ -167,16 +167,27 @@ check('getBuildTime composes race + research construction_speed (−20% + −20%
   EconomyCore.getBuildTime(BUILDING_DEFS.town_hall, 1, RACES.dwarf.bonuses, { construction_speed: -0.20 }) ===
   Math.round(BUILDING_DEFS.town_hall.buildTime(1) * 0.6));
 
-check('Town Hall divides build time nanite-style (Lv1 ÷2, Lv5 ÷32)',
-  EconomyCore.getCityBuildDivisor({ town_hall: 5, farm: 3 }) === 32 &&
+// Divisor is LINEAR (Lv N = ÷(1+N)), not 2**N. It was 2**N until 2026-07-30,
+// which meant ÷1024 at Town Hall 10 and collapsed nearly every build to the
+// max(5, …) floor — a Fortress Lv10 finished in 69s and construction time
+// stopped being a cost at all. Guard the linearity explicitly: an exponential
+// divisor is the single easiest way to delete the build-time gate by accident.
+check('Town Hall divides build time linearly (Lv1 ÷2, Lv5 ÷6, Lv10 ÷11)',
+  BUILDING_DEFS.town_hall.buildTimeDivisor(1)  === 2  &&
+  BUILDING_DEFS.town_hall.buildTimeDivisor(5)  === 6  &&
+  BUILDING_DEFS.town_hall.buildTimeDivisor(10) === 11 &&
+  EconomyCore.getCityBuildDivisor({ town_hall: 5, farm: 3 }) === 6 &&
   EconomyCore.getBuildTime(BUILDING_DEFS.library, 1, null, null, { town_hall: 1 }) ===
   Math.round(BUILDING_DEFS.library.buildTime(1) / 2) &&
   EconomyCore.getBuildTime(BUILDING_DEFS.dragon_lair, 1, null, null, { town_hall: 5 }) ===
-  Math.round(BUILDING_DEFS.dragon_lair.buildTime(1) / 32));
+  Math.round(BUILDING_DEFS.dragon_lair.buildTime(1) / 6));
+
+check('a high Town Hall no longer trivialises a late build (Fortress Lv10 stays minutes, not seconds)',
+  EconomyCore.getBuildTime(BUILDING_DEFS.fortress, 10, null, null, { town_hall: 10 }) > 600);
 
 check('race/research % applies on top of the Town Hall divisor (5s floor holds)',
   EconomyCore.getBuildTime(BUILDING_DEFS.library, 1, RACES.dwarf.bonuses, { construction_speed: -0.20 }, { town_hall: 4 }) ===
-  Math.max(5, Math.round(BUILDING_DEFS.library.buildTime(1) * 0.6 / 16)));
+  Math.max(5, Math.round(BUILDING_DEFS.library.buildTime(1) * 0.6 / 5)));
 
 check('getRecruitTime applies recruit_speed (−20% → ×0.8)',
   EconomyCore.getRecruitTime({ recruitTime: 600 }, 2, { recruit_speed: -0.20 }) === Math.round(600 * 2 * 0.8));

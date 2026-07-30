@@ -107,10 +107,11 @@ const LordService = (() => {
     return 10000 * Math.pow(2, existingLordCount - 1);
   }
 
-  // Command capacity: max army points this lord can field.
-  function getCommandCapacity(lord) {
-    return 6 + 2 * (lord.level || 1) + (getTalentEffects(lord).commandCapacityBonus || 0);
-  }
+  // getCommandCapacity was removed 2026-07-30: it described a retired
+  // "unit model slots" system, had no caller anywhere in the codebase, and
+  // was the only consumer of the Commander talent's commandCapacityBonus.
+  // Army size is bounded solely by the PWR cap (200 + level×80 + talent
+  // bonus) in server/actions/recruit.js.
 
   function create(playerId, name, raceId, classId) {
     const n = (name || '').trim();
@@ -422,7 +423,7 @@ const LordService = (() => {
 
   return {
     create, getById, getByPlayer, getAll, save, setPosition,
-    getRecruitCost, getCommandCapacity,
+    getRecruitCost,
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
     getEffectiveStats, getActionDuration, getTalentEffects, getMountEffects,

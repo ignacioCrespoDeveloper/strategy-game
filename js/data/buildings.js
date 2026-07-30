@@ -114,7 +114,7 @@ var BUILDING_DEFS = {
     icon:        gi('aqueduct'),
     image:       'assets/buildings/aqueduct.jpg',
     category:    'resources',
-    description: 'Channels fresh water into the city. Water is the lifeblood of every mill, quarry and farm — a thirsty city works at a fraction of its potential.',
+    description: 'Channels fresh water into the city. Clean water keeps a crowded city healthy — the larger your population grows, the more it needs.',
     maxLevel:    Infinity,
     requires:    { town_hall: 1 },
     cost:        level => ({
@@ -147,7 +147,12 @@ var BUILDING_DEFS = {
     }),
     buildTime:   level => _scale(120, 1.6, level),
     production:  () => ({}),
-    buildTimeDivisor: level => 2 ** level, // OGame Nanite Factory: Lv1 = ÷2, Lv5 = ÷32, Lv10 = ÷1024
+    // OGame Robotics Factory: Lv1 = ÷2, Lv5 = ÷6, Lv10 = ÷11.
+    // Was 2**level (Lv10 = ÷1024), which collapsed almost every build to the
+    // max(5, …) floor in getBuildTime — a Fortress Lv10 finished in 69s and
+    // construction time stopped existing as a cost. Linear matches the
+    // canonical spec in economy-core.js (getCityBuildDivisor).
+    buildTimeDivisor: level => 1 + level,
     effects:     level => [
       { stat: 'hygiene',    value:  6 * level },
       { stat: 'corruption', value: -4 * level },

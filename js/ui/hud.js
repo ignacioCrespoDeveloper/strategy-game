@@ -229,7 +229,7 @@ const HUD = (() => {
     // Production rates: sum across all cities
     const rates  = { food: 0, wood: 0, stone: 0 };
     cities.forEach(city => {
-      const cityRates = ProductionService.getRates(city, null);
+      const cityRates = ProductionService.getRates(city);
       ['food', 'wood', 'stone'].forEach(k => {
         rates[k] += cityRates[k] || 0;
       });

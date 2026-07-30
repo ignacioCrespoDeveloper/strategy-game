@@ -3,7 +3,7 @@
 //
 //  No timers. No polling.
 //  Call tick(city, lord) on every city open to accumulate resources,
-//  gold income, upkeep deductions, and freePopulation growth.
+//  gold income and freePopulation growth. (No upkeep — see below.)
 //
 //  All economy math lives in EconomyCore (economy-core.js) —
 //  this service only wires city/lord/terrain context into it.
@@ -11,16 +11,27 @@
 //  Gold income per city:  pop × 0.004 × (happiness/100), +8%/marketplace level
 //  NO upkeep of any kind — armies are constrained by the PWR cap only.
 //  freePopulation growth: +5/day per city (≈0.2083/h), capped at 20
+//    ⚠ freePopulation accrues here and in server/tick/catch-up.js but is
+//      SPENT BY NOTHING. It pairs with the equally unused unit populationCost
+//      as a future army-constraint lever; it is not a live limit today.
 // =============================================
 
 const ProductionService = (() => {
 
   // Resource rates (food/wood/stone) per hour for a city:
   // building output × (race + Library research) bonuses × terrain multipliers.
-  function getRates(city, lord) {
-    const race     = lord ? (RACES[lord.race] || null) : null;
-    const terrain  = WorldService.getTerrain(city.x, city.y);
+  //
+  // The race is derived HERE, from the player's main lord (player.lordId) —
+  // the same source server/tick/catch-up.js uses — rather than from a lord the
+  // caller passes in. Callers that had no lord handy passed null, which
+  // silently dropped the race bonus: the HUD and the map city panel showed a
+  // dwarf 30% less stone than the server actually credited, while city-view
+  // and the overview screen (which did pass a lord) showed the right number.
+  function getRates(city) {
     const player   = PlayerService.getById(city.playerId);
+    const raceId   = LordService.getById(player?.lordId)?.race || player?.race || null;
+    const race     = raceId ? (RACES[raceId] || null) : null;
+    const terrain  = WorldService.getTerrain(city.x, city.y);
     const research = EconomyCore.getResearchEffects(player?.research);
     // God of Nature blessing: % production, additive with race + research.
     const blessing = EconomyCore.getBlessingEffects(player?.activeBlessing, TimeService.now());
@@ -57,7 +68,7 @@ const ProductionService = (() => {
 
   // Apply accumulated production since lastResourceUpdate.
   // Resources accumulate into player.resources (empire-wide pool).
-  // Also handles gold income and (once per player per tick) upkeep + freePopulation.
+  // Also handles gold income and (once per player per tick) freePopulation.
   function tick(city, lord) {
     const now     = TimeService.now();
     const elapsed = TimeService.hoursElapsed(city.lastResourceUpdate || now);
@@ -72,7 +83,7 @@ const ProductionService = (() => {
       delete player.resources.iron; // legacy resource, removed in the OGame overhaul
 
       // ── Resource production → empire pool ─────────────────────
-      const rates = getRates(city, lord);
+      const rates = getRates(city);
       Object.entries(rates).forEach(([res, perHour]) => {
         if (perHour <= 0) return;
         player.resources[res] = (player.resources[res] || 0) + perHour * elapsed;

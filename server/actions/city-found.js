@@ -83,7 +83,10 @@ export async function handleCityFound(req, res) {
     population: 1000,
     freePopulation: 3,
     happiness: 75,
-    buildings: {},
+    // Seeded with a Town Hall: every producer requires town_hall >= 1, so an
+    // empty city had zero production AND zero build-time divisor until the
+    // player manually built one. Matches the legacy client path (js/domain/city.js).
+    buildings: { town_hall: 1 },
     constructionQueue: [],
     recruitmentQueue: [],
     lastResourceUpdate:   now,

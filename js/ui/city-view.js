@@ -109,7 +109,7 @@ const CityView = (() => {
     const race    = RACES[_lord?.race] || {};
     const terrain = WorldService.getTerrain(_city.x, _city.y);
     const stats   = CityStatsService.getStats(_city);
-    const rates   = ProductionService.getRates(_city, _lord);
+    const rates   = ProductionService.getRates(_city);
     const growth  = CityStatsService.getPopulationGrowthRate(_city, stats, rates);
     const status  = CityStatsService.getCityStatus(stats, growth);
 
@@ -274,7 +274,7 @@ const CityView = (() => {
 
   function _overviewTabHtml() {
     const stats    = CityStatsService.getStats(_city);
-    const rates    = ProductionService.getRates(_city, _lord);
+    const rates    = ProductionService.getRates(_city);
     const growth   = CityStatsService.getPopulationGrowthRate(_city, stats, rates);
     const status   = CityStatsService.getCityStatus(stats, growth);
     const { level, usedSlots, maxSlots } = CityStatsService.getSlotInfo(_city);

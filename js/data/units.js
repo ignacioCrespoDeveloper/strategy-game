@@ -17,7 +17,11 @@
 //                    (resources are for buildings/research/marching)
 //    recruitTime   → seconds to train (0 = instant, for mercenaries)
 //                    tier1=600s  tier2=5400s  tier3=21600s  tier4=86400s  tier5=172800s
-//    populationCost→ population slots consumed (0 for mercenaries)
+//    populationCost→ ⚠ NOT IMPLEMENTED. Read by NOTHING — not by
+//                    server/actions/recruit.js, not by any client path. Kept as
+//                    data because it is the ready-made second army-constraint
+//                    lever (pair it with city.freePopulation, which likewise
+//                    accrues but is never spent). Do not cite it as a live cost.
 //    (NO upkeep of any kind — armies are constrained by the PWR cap only)
 //    combatStats   → { attack, defense, hp, speed }
 //    traits        → [traitId, ...] — passive combat behaviours (see traits.js)

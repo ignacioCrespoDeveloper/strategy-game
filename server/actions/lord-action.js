@@ -12,7 +12,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL, EconomyCore, DiscoveryRoll } from '../engine-loader.js';
+import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL, TALENT_POOL, EconomyCore, DiscoveryRoll } from '../engine-loader.js';
 
 // Base scout duration before the speed multiplier — mirrors move's own
 // distance*20*(5/speed) curve so speed behaves consistently everywhere.
@@ -137,8 +137,17 @@ export async function handleLordAction(req, res) {
     // than erroring, so an older client keeps working.
     const len = DiscoveryRoll.lengthOf(length);
 
-    const cls  = LORD_CLASSES[lord.classId];
-    const mult = cls?.passive?.effects?.searchDurationMult ?? 1;
+    // Class passive AND talent both shorten expeditions; take the lowest of
+    // whichever apply. This mirrors js/domain/lord.js getActionDuration exactly.
+    // The talent was ignored here until 2026-07-30, so a Pathfinder lord that
+    // was not also a Rogue saw the client promise a 25%-shorter expedition and
+    // then got the full duration from the server.
+    const cls        = LORD_CLASSES[lord.classId];
+    const clsMult    = cls?.passive?.effects?.searchDurationMult;
+    const talentMult = lord.talentId ? TALENT_POOL?.[lord.talentId]?.effects?.searchDurationMult : undefined;
+    const mult = (clsMult != null && talentMult != null)
+      ? Math.min(clsMult, talentMult)
+      : (clsMult ?? talentMult ?? 1);
     const secs = Math.round(len.secs * mult);
 
     // Depletion is resolved HERE, at enqueue, not at resolution: the player is

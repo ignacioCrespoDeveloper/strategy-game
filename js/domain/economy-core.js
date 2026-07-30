@@ -1,10 +1,17 @@
 // =============================================
 //  economy-core.js — Pure, isomorphic economy math
 //
-//  THE single source of truth for resource rates, the water
-//  (energy) factor, city stats, gold rate, population growth
-//  and building slots. No service dependencies — only plain
-//  data in, plain data out, plus the BUILDING_DEFS global.
+//  THE single source of truth for resource rates, city stats,
+//  gold rate, population growth and building slots. No service
+//  dependencies — only plain data in, plain data out, plus the
+//  BUILDING_DEFS global.
+//
+//  There is NO water/energy production factor and never was one in
+//  code — production is building output × race bonus × terrain
+//  multiplier, full stop (see ECONOMY-OVERHAUL.md §0, Nacho's call
+//  on 2026-07-26). Water became the `hygiene` city stat, which
+//  affects population growth only. scripts/test-economy.js asserts
+//  the mechanic's absence; this header used to claim otherwise.
 //
 //  Loaded in the browser (index.html) AND on the server via
 //  server/engine-loader.js — never duplicate these formulas.
@@ -32,7 +39,17 @@ var EconomyCore = (() => {
   // ── Resource rates (per hour) ─────────────────────────────────
   // Plain building output × race bonus × terrain multiplier.
   // raceBonuses:  { food_production, wood_production, stone_production } (race.bonuses or {})
+  //               — the caller SUMS race + research + blessing into these keys.
   // terrainMods:  { food, wood, stone } multipliers (TERRAIN_RESOURCE_MODS[terrainId] or {})
+  //
+  // The summed bonus is clamped. Every other multiplier path in this file is
+  // bounded (getBuildTime/getRecruitTime/getMarchFoodCost all floor at 0.2) but
+  // production was not, so an uncapped stack could scale output without limit.
+  // Today's realistic ceiling is ~+55% (dwarf stone +30% + God of Nature +25%),
+  // so +300% leaves generous headroom for future Library tomes while keeping the
+  // multiplier finite. The floor stops a hypothetical penalty inverting output.
+  const PRODUCTION_BONUS_MAX =  3.0;   // ×4 output
+  const PRODUCTION_BONUS_MIN = -0.9;   // ×0.1 output
 
   function getRates(buildings, raceBonuses, terrainMods) {
     const totals = { food: 0, wood: 0, stone: 0 };
@@ -49,9 +66,11 @@ var EconomyCore = (() => {
     const race = raceBonuses || {};
     const terr = terrainMods || {};
     for (const res of RESOURCE_KEYS) {
+      const bonus = Math.max(PRODUCTION_BONUS_MIN,
+                    Math.min(PRODUCTION_BONUS_MAX, race[res + '_production'] || 0));
       totals[res] = Math.floor(
         totals[res]
-        * (1 + (race[res + '_production'] || 0))
+        * (1 + bonus)
         * (terr[res] !== undefined ? terr[res] : 1)
       );
     }

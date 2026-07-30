@@ -198,6 +198,13 @@ const _MIN_XP            = 5;
 const _MIN_CITY_VICTORY_GOLD = 50;
 const _MIN_CITY_XP           = 30;
 const _RESOURCE_LOOT_PCT = 0.05;  // fraction of the city owner's resource pool looted
+// Two bounds on that percentage. Without them a sack moved 5% of the victim's
+// ENTIRE empire-wide pool, uncapped, with no repeat-attack limit — the largest
+// transfer in the game, and at endgame pool sizes a single hit could take a
+// full day of production. The cap scales with lootMult so the God of War
+// blessing keeps its value against rich targets.
+const _RESOURCE_LOOT_CAP = 100000;          // max per resource, per sack
+const _LOOT_COOLDOWN_MS  = 60 * 60 * 1000;  // per-victim plunder immunity (matches lord-defeat downtime)
 
 // Sum of unit "power" for a battle-army stack list — the same PWR score
 // shown everywhere else (EconomyCore.getArmyPower: linear per-model cost +
@@ -329,21 +336,37 @@ function _awardXp(lord, xpEarned) {
 // place on both player records. Returns { [resType]: amountLooted }.
 // lootMult scales the plundered fraction — the God of War blessing feeds a
 // >1 multiplier here so a blessed sacking strips a bigger share of the pool.
-function _lootResources(defenderPlayer, attackerPlayer, lootMult = 1) {
-  const loot   = {};
+function _lootResources(defenderPlayer, attackerPlayer, lootMult = 1, nowMs = Date.now()) {
+  const loot   = _lootQuote(defenderPlayer, lootMult, nowMs);
   const defRes = defenderPlayer.resources || {};
-  const pct    = _RESOURCE_LOOT_PCT * lootMult;
   attackerPlayer.resources = attackerPlayer.resources || {};
-  ['food', 'wood', 'stone'].forEach(r => {
-    const avail  = defRes[r] || 0;
-    const amount = Math.floor(avail * pct);
-    if (amount <= 0) return;
-    defRes[r] = avail - amount;
+  for (const [r, amount] of Object.entries(loot)) {
+    defRes[r] = (defRes[r] || 0) - amount;
     attackerPlayer.resources[r] = (attackerPlayer.resources[r] || 0) + amount;
-    loot[r] = amount;
-  });
+  }
   defenderPlayer.resources = defRes;
+  // Only an actual transfer starts the cooldown — a sack that found an empty
+  // stockpile must not hand out immunity.
+  if (Object.keys(loot).length > 0) defenderPlayer.lastPlunderedAt = nowMs;
   return loot;
+}
+
+// Pure: what a sack would take from this player right now, cap and per-victim
+// cooldown applied, no mutation. Shared by the live payout above and by the
+// scout report, which used to hand-copy the percentage and so could promise
+// loot the real sack would not deliver.
+function _lootQuote(defenderPlayer, lootMult = 1, nowMs = Date.now()) {
+  const quote = {};
+  const last  = defenderPlayer?.lastPlunderedAt || 0;
+  if (nowMs - last < _LOOT_COOLDOWN_MS) return quote; // freshly plundered — immune
+  const defRes = defenderPlayer?.resources || {};
+  const pct    = _RESOURCE_LOOT_PCT * lootMult;
+  const cap    = Math.floor(_RESOURCE_LOOT_CAP * lootMult);
+  ['food', 'wood', 'stone'].forEach(r => {
+    const amount = Math.min(Math.floor((defRes[r] || 0) * pct), cap);
+    if (amount > 0) quote[r] = amount;
+  });
+  return quote;
 }
 
 // Pure reward calculation for a resolved PvP fight — no I/O, no mutation.
@@ -673,19 +696,21 @@ async function _gatherScoutReport(admin, callerId, x, y) {
     const population    = Math.floor(cityHit.city.population || 0);
     const owner         = profileByPlayer[cityHit.playerId] || {};
 
-    // What taking this city would actually be worth. Mirrors the real payout
-    // maths — _lootResources for the resource cut, _computeRewards for gold —
-    // minus the ±15% jitter the live roll applies, so two scouts of an
-    // unchanged city always report the same number. Resources are empire-wide
-    // (player.resources), so this is a slice of the OWNER'S whole stockpile,
-    // not a per-city stash: the same figure applies to any city they hold.
-    const ownerRes = owner.resources || {};
-    const plunder  = {
+    // What taking this city would actually be worth. Calls the REAL payout
+    // maths — _lootQuote for the resource cut, so the cap and the per-victim
+    // plunder cooldown are both reflected here — minus the ±15% jitter the live
+    // roll applies, so two scouts of an unchanged city always report the same
+    // number. Resources are empire-wide (player.resources), so this is a slice
+    // of the OWNER'S whole stockpile, not a per-city stash: the same figure
+    // applies to any city they hold. A recently sacked owner reports 0 loot,
+    // which is correct — that is what an attack right now would take.
+    const ownerLoot = _lootQuote(owner);
+    const plunder   = {
       gold:  Math.max(_MIN_CITY_VICTORY_GOLD,
                       Math.round(garrisonPower * _GOLD_PER_POWER) + Math.round(population * _CITY_GOLD_PCT)),
-      food:  Math.floor((ownerRes.food  || 0) * _RESOURCE_LOOT_PCT),
-      wood:  Math.floor((ownerRes.wood  || 0) * _RESOURCE_LOOT_PCT),
-      stone: Math.floor((ownerRes.stone || 0) * _RESOURCE_LOOT_PCT),
+      food:  ownerLoot.food  || 0,
+      wood:  ownerLoot.wood  || 0,
+      stone: ownerLoot.stone || 0,
     };
 
     city = {

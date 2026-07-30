@@ -986,7 +986,7 @@ const MapView = (() => {
       const _status    = CityStatsService.getCityStatus(_stats);
       const _slots     = CityStatsService.getSlotInfo(rawCity);
       const _goldRate  = ProductionService.getGoldRate(rawCity);
-      const _rates     = ProductionService.getRates(rawCity, null);
+      const _rates     = ProductionService.getRates(rawCity);
       const _growth    = CityStatsService.getPopulationGrowthRate(rawCity, _stats, _rates);
       const _buildItem = rawCity.constructionQueue.length > 0 ? rawCity.constructionQueue[0] : null;
       const _buildDef  = _buildItem ? BUILDING_DEFS[_buildItem.buildingId] : null;
