@@ -148,7 +148,10 @@ const ActionConfirmView = (() => {
     // empty), not just which recruits will join. See RECRUIT_TIERS in
     // discovery-roll.js. Leaving it below would have made the "chance of
     // nothing" figure below silently wrong.
-    const er   = Math.round(DiscoveryRoll.expeditionRating(army.units, UNIT_DEFS));
+    // Mount ER bonus included — the server applies it when the expedition
+    // resolves (catch-up.js), so leaving it out here would understate the
+    // band and make the odds table below disagree with the actual result.
+    const er   = Math.round(DiscoveryRoll.expeditionRating(army.units, UNIT_DEFS, LordService.getMountExpeditionErMult(_lord)));
     const tier = DiscoveryRoll.erTierFor(er);
     const next = [...DiscoveryRoll.RECRUIT_TIERS].reverse().find(t => t.er > er);
 

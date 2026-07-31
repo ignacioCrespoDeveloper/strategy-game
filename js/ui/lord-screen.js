@@ -123,10 +123,14 @@ const LordScreen = (() => {
 
   // ── Shell ─────────────────────────────────────────────────────
 
+  // Tabs carry only their STATIC state here (level locks, badges) plus a
+  // data-base-title for the tooltip to fall back to. Whether a tab is
+  // reachable right now is applied by _syncTabStates() on every _renderTab(),
+  // since this markup is written once per screen open and an order can start
+  // or finish while the player is standing in it.
   function _shell() {
     const race       = RACES[_lord?.race] || {};
     const cls        = LORD_CLASSES[_lord?.classId];
-    const lordIsDown = LordService.isDown(_lord);
     return `
       <div class="ls-fullscreen">
 
@@ -139,10 +143,10 @@ const LordScreen = (() => {
           <div class="ls-right">
             <nav class="ls-tabs">
               <button class="ls-tab ${_activeTab === 'overview'  ? 'ls-tab--active' : ''}" data-tab="overview">${gi('position-marker')} Overview</button>
-              <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>${gi('crossed-swords')} Army</button>
-              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery" ${lordIsDown ? 'disabled title="Lord is incapacitated"' : ''}>${gi('magnifying-glass')} Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id, _lord.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
-              <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < 5 ? 'title="Unlocks at level 5"' : ''}>${gi('magic-swirl')} Talents${(_lord.level || 1) >= 5 && !_lord.talentId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
-              <button class="ls-tab ${_activeTab === 'mount'     ? 'ls-tab--active' : ''}" data-tab="mount" ${(_lord.level || 1) < MOUNT_MIN_LEVEL ? `title="Unlocks at level ${MOUNT_MIN_LEVEL}"` : ''}>${gi('horse-head')} Mount${(_lord.level || 1) >= MOUNT_MIN_LEVEL && !_lord.mountId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
+              <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army">${gi('crossed-swords')} Army</button>
+              <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery">${gi('magnifying-glass')} Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id, _lord.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
+              <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < 5 ? 'data-base-title="Unlocks at level 5"' : ''}>${gi('magic-swirl')} Talents${(_lord.level || 1) >= 5 && !_lord.talentId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
+              <button class="ls-tab ${_activeTab === 'mount'     ? 'ls-tab--active' : ''}" data-tab="mount" ${(_lord.level || 1) < MOUNT_MIN_LEVEL ? `data-base-title="Unlocks at level ${MOUNT_MIN_LEVEL}"` : ''}>${gi('horse-head')} Mount${(_lord.level || 1) >= MOUNT_MIN_LEVEL && !_lord.mountId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
               <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">${gi('plain-dagger')} Battles${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
             </nav>
             <div class="ls-content" id="ls-content"></div>
@@ -351,10 +355,11 @@ const LordScreen = (() => {
     document.getElementById('ls-revive-now')?.addEventListener('click', _reviveNow);
     document.getElementById('ls-ransom-now')?.addEventListener('click', _ransomNow);
 
-    // Force back to overview while downed
-    if (LordService.isDown(_lord) && (_activeTab === 'army' || _activeTab === 'discovery')) {
-      _activeTab = 'overview';
-    }
+    // Kicked back to Overview the moment the active tab stops being reachable
+    // — a lord can start an order (or come out of one) while the player is
+    // standing in the Army or Mount tab, and _tabBlockReason owns that rule.
+    if (_tabBlockReason(_activeTab)) _activeTab = 'overview';
+    _syncTabStates();
 
     switch (_activeTab) {
       case 'overview':
@@ -385,9 +390,9 @@ const LordScreen = (() => {
         document.querySelectorAll('#ls-content [data-action="open-mount-tab"]').forEach(el => {
           el.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (_tabBlockReason('mount')) return; // busy lords don't get the shortcut either
             _activeTab = 'mount';
-            document.querySelectorAll('.ls-tab').forEach(b => b.classList.toggle('ls-tab--active', b.dataset.tab === 'mount'));
-            _renderTab();
+            _renderTab(); // re-syncs the strip, including the active class
             _startCountdown();
           });
         });
@@ -450,6 +455,59 @@ const LordScreen = (() => {
 
   // ── Helpers ───────────────────────────────────────────────────
 
+  // THE "this lord is occupied" test — mirrors server/lord-busy.js, which is
+  // the authoritative copy. A lord that is down, mid-action (questing,
+  // scouting, marching, attacking) or raiding cannot reorganise its forces:
+  // the Army and Mount tabs go dark, the recruit panel and the troop-exchange
+  // button with them. An army is assembled BEFORE the lord sets out.
+  //
+  // Nothing is hidden by this: the Overview tab already renders the full
+  // roster and the equipped mount as a read-out, so a busy lord's forces stay
+  // inspectable — only the controls that change them go away.
+  //
+  // Returns a player-facing reason, or null when the lord is free.
+  function _lordBusyReason(lord) {
+    if (LordService.isDown(lord)) return `${lord.name} is incapacitated`;
+    const item = (lord.actionQueue || [])[0];
+    if (item) {
+      const what = item.intent === 'attack'      ? 'marching to attack'
+                 : item.actionId === 'search_area' ? 'away on an expedition'
+                 : item.actionId === 'scout'       ? 'scouting'
+                 : item.actionId === 'move_lord'   ? 'marching'
+                 : 'busy with an order';
+      return `${lord.name} is ${what}`;
+    }
+    if (LordService.isStanced(lord) && STANCE_DEFS[lord.stance.id]?.restrictions.includes('action')) {
+      return `${lord.name} is ${(STANCE_DEFS[lord.stance.id].name || lord.stance.id).toLowerCase()}`;
+    }
+    return null;
+  }
+
+  // Why a tab can't be opened right now, phrased as the tooltip the disabled
+  // button carries — or null when it's reachable. The tab strip is rendered
+  // once by _shell(), but reachability changes while the screen is open (an
+  // order starts, a raid ends, downtime expires), so _renderTab() re-applies it.
+  function _tabBlockReason(tab) {
+    if (tab === 'army' || tab === 'mount') {
+      const busy = _lordBusyReason(_lord);
+      return busy ? `${busy} — its army and mount are locked until it is free` : null;
+    }
+    if (tab === 'discovery') {
+      return LordService.isDown(_lord) ? `${_lord.name} is incapacitated` : null;
+    }
+    return null;
+  }
+
+  function _syncTabStates() {
+    document.querySelectorAll('.ls-tab').forEach(btn => {
+      const reason = _tabBlockReason(btn.dataset.tab);
+      btn.disabled = !!reason;
+      const title  = reason || btn.dataset.baseTitle || '';
+      if (title) btn.title = title; else btn.removeAttribute('title');
+      btn.classList.toggle('ls-tab--active', btn.dataset.tab === _activeTab);
+    });
+  }
+
   // PWR comes from EconomyCore.getUnitPower/getArmyPower — the single
   // source of truth shared with the server's recruit/hire gates (linear
   // per-model cost + combat-trait tax). Rounded here (not just at display
@@ -467,8 +525,26 @@ const LordScreen = (() => {
   // Preview of the raid payout. Reads the SAME EconomyCore rate the server
   // pays out with (at completion, never here), so the "earned so far" number
   // and the real payout can never disagree.
+  //
+  // ⚠ That claim was FALSE until 2026-07-30: the base rate was previewed raw
+  // while server/tick/catch-up.js multiplied it by the God of Destruction
+  // raid_bonus, so a blessed raid always paid ~50% more than the screen
+  // promised. The mount reprice added a second source of the same key (war and
+  // apex mounts, +35%), which would have widened the same gap. Both are summed
+  // here exactly as catch-up.js sums them — change one, change both.
   function _raidHourlyRewardsPreview(lord) {
-    return EconomyCore.getRaidHourlyRewards(lord.level);
+    const base    = EconomyCore.getRaidHourlyRewards(lord.level);
+    const player  = PlayerService.getById(lord.playerId) || _player;
+    const blessFx = EconomyCore.getBlessingEffects(player?.activeBlessing, TimeService.now());
+    const mult    = 1 + (blessFx.raid_bonus || 0)
+                      + (LordService.getMountEffects(lord).raid_bonus || 0);
+    if (mult === 1) return base;
+    return {
+      gold:  Math.round(base.gold  * mult),
+      food:  Math.round(base.food  * mult),
+      wood:  Math.round(base.wood  * mult),
+      stone: Math.round(base.stone * mult),
+    };
   }
 
   // Army power if `addCount` more of `unitId` were added to this lord's army.
@@ -665,18 +741,23 @@ const LordScreen = (() => {
     // Here it's cut to art + name + "Equipped" (noFoot): Overview is a readout,
     // and the stat chips and Change button are both duplicated one tab over.
     // The whole card is the click target into that tab, so nothing is lost.
+    //
+    // While the lord is out on an order the card stays — it's a read-out, and
+    // a marching lord's mount is exactly the thing you want to check — but it
+    // stops being a doorway into the Mount tab, which is closed (_lordBusyReason).
     const mountUnlocked = (_lord.level || 1) >= MOUNT_MIN_LEVEL;
+    const mountBlocked  = _lordBusyReason(_lord);
     const chosenMount   = (typeof MOUNT_POOL !== 'undefined' && _lord.mountId)
       ? getMountForRace(_lord.mountId, _lord.race)
       : null;
     const mountCard = !mountUnlocked ? _mountEmptyTileHtml(true)
       : chosenMount ? _mountTileHtml(chosenMount, {
           equipped: true,
-          link:     true,
+          link:     !mountBlocked,
           value:    'Equipped',
           noFoot:   true,
         })
-      : _mountEmptyTileHtml(false);
+      : _mountEmptyTileHtml(false, mountBlocked);
     const mountHtml = `<div class="lm-mount-grid">${mountCard}</div>`;
 
     // ── Army ──────────────────────────────────────────────────────
@@ -861,17 +942,9 @@ const LordScreen = (() => {
       .filter(l => l.id !== _lord.id && l.x === _lord.x && l.y === _lord.y);
   }
 
-  // Why a lord can't exchange right now, or null if they can.
-  // Mirrors the server checks so the button never promises what the
-  // endpoint would refuse.
-  function _exchangeBlockReason(lord) {
-    if (LordService.isDown(lord)) return `${lord.name} is incapacitated`;
-    if ((lord.actionQueue || []).length > 0) return `${lord.name} is busy with an action`;
-    if (LordService.isStanced(lord) && STANCE_DEFS[lord.stance.id]?.restrictions.includes('action')) {
-      return `${lord.name} is in ${STANCE_DEFS[lord.stance.id].name} stance`;
-    }
-    return null;
-  }
+  // Why a lord can't exchange right now is just _lordBusyReason — the same
+  // rule the Army tab itself is gated on, and the same one the server applies
+  // in actions/army-transfer.js. (This used to be its own three-check copy.)
 
   // One entry per model, because the roster UI is per-model cards: the
   // front model carries the stack's damage (hp = number), everyone
@@ -1032,16 +1105,20 @@ const LordScreen = (() => {
     // gracefully instead of rendering a stale panel.
     if (_exchangeWith) {
       const partner = _exchangePartners().find(l => l.id === _exchangeWith);
-      if (partner && !_exchangeBlockReason(_lord) && !_exchangeBlockReason(partner)) {
+      if (partner && !_lordBusyReason(_lord) && !_lordBusyReason(partner)) {
         return _exchangeHtml(partner);
       }
       _closeExchange();
     }
 
-    const army        = ArmyService.get(_lord.id);
-    const city        = _getLordCurrentCity();
-    const player      = PlayerService.getById(_player.id);
-    const isTraveling = _lord.actionQueue.length > 0 && _lord.actionQueue[0].actionId === 'move_lord';
+    const army       = ArmyService.get(_lord.id);
+    const city       = _getLordCurrentCity();
+    const player     = PlayerService.getById(_player.id);
+    // Defence in depth: the tab itself is unreachable while the lord is busy
+    // (_tabBlockReason), so this branch should never render. It used to test
+    // for travel alone, which left questing, scouting and raiding lords free
+    // to recruit — the hole this whole change closes.
+    const busyReason = _lordBusyReason(_lord);
 
     // Army Power is the single capacity stat — see the identical note in
     // _overviewTabHtml(). It's both informational (shown as a badge) and
@@ -1068,8 +1145,8 @@ const LordScreen = (() => {
 
     // ── Recruitment (city-based) ───────────────────────────────
     let recruitSectionHtml;
-    if (isTraveling) {
-      recruitSectionHtml = `<p class="la-recruit-note">Cannot recruit while traveling.</p>`;
+    if (busyReason) {
+      recruitSectionHtml = `<p class="la-recruit-note">${busyReason} — troops must be raised before the lord sets out.</p>`;
     } else if (!city) {
       recruitSectionHtml = `<p class="la-recruit-note">Your lord must be standing inside one of your cities to recruit.</p>`;
     } else {
@@ -1178,9 +1255,11 @@ const LordScreen = (() => {
     const partners = _exchangePartners();
     let exchangeEntryHtml = '';
     if (partners.length > 0) {
-      const selfBlock = _exchangeBlockReason(_lord);
+      // selfBlock is always null here — a busy lord can't reach this tab at
+      // all — but the partner can be mid-order, so their reason still shows.
+      const selfBlock = _lordBusyReason(_lord);
       exchangeEntryHtml = `<div class="la-ex-entry">` + partners.map(p => {
-        const block = selfBlock || _exchangeBlockReason(p);
+        const block = selfBlock || _lordBusyReason(p);
         return `<button class="la-ex-open-btn" data-exchange-with="${p.id}" ${block ? `disabled title="${block}"` : `title="${p.name} is standing on this tile"`}>⇄ Exchange Troops with ${p.name}</button>`;
       }).join('') + `</div>`;
     }
@@ -1618,14 +1697,33 @@ const LordScreen = (() => {
 
   }
 
-  // Small chip row for a mount's flat stat bonuses, e.g. "+2 ⚔  +2 💨".
+  // Small chip row for a mount's bonuses, e.g. "+2 ⚔  +2 💨".
+  //
+  // Two effect keys are NOT lord stats and would otherwise render as nothing
+  // at all, which is the entire payload of the scout and apex mounts — a
+  // Wolf would have shown "+1 ⚔ +2 💨" and looked strictly worse than the
+  // War Boar it is meant to be a sidegrade of. They get explicit chips:
+  //   expeditionRatingMult → "+15% Quests"  (find AND recruit quality)
+  //   armyPowerCapBonus    → "+200 Army"    (PWR cap headroom)
   function _mountEffectChips(effects) {
-    return Object.entries(effects || {})
+    const fx    = effects || {};
+    const stats = Object.entries(fx)
       .map(([key, val]) => {
         const meta = LORD_STAT_META[key];
         if (!meta || !val) return '';
         return `<span class="lm-stat-chip">+${val} ${meta.icon}</span>`;
       }).join('');
+
+    const extras = [];
+    if (fx.expeditionRatingMult > 1) {
+      extras.push(`<span class="lm-stat-chip lm-stat-chip--special" title="Expedition Rating — raises the quality of both what you find and who joins you">
+        +${Math.round((fx.expeditionRatingMult - 1) * 100)}% ${gi('magnifying-glass')}</span>`);
+    }
+    if (fx.armyPowerCapBonus > 0) {
+      extras.push(`<span class="lm-stat-chip lm-stat-chip--special" title="Army PWR cap — this lord can field a larger army">
+        +${fx.armyPowerCapBonus} ${gi('crossed-swords')}</span>`);
+    }
+    return stats + extras.join('');
   }
 
   // Mount artwork if set (MOUNT_POOL[id].image), else the icon glyph. When art
@@ -1690,12 +1788,14 @@ const LordScreen = (() => {
       </div>`;
   }
 
-  // The no-mount card — same tile, same size, in place of a mount. Two
+  // The no-mount card — same tile, same size, in place of a mount. Three
   // flavours: below MOUNT_MIN_LEVEL it reads as locked (matching a locked
-  // building tile), above it as an empty slot that opens the Mount tab.
-  function _mountEmptyTileHtml(locked) {
+  // building tile); with `blockedReason` it says why the Mount tab is shut
+  // right now; otherwise it's an empty slot that opens that tab.
+  function _mountEmptyTileHtml(locked, blockedReason) {
+    const inert = locked || !!blockedReason;
     return `
-      <div class="bld3-tile lm-mount-tile ${locked ? 'bld3-tile--locked' : 'lm-mount-tile--link'}"${locked ? '' : ' data-action="open-mount-tab"'}>
+      <div class="bld3-tile lm-mount-tile ${locked ? 'bld3-tile--locked' : inert ? 'bld3-tile--cant' : 'lm-mount-tile--link'}"${inert ? '' : ' data-action="open-mount-tab"'}>
         <span class="bld3-tile-art">
           <span class="bld3-tile-icon">${locked ? gi('padlock') : gi('horse-head')}</span>
           <span class="bld3-tile-art-fade"></span>
@@ -1708,6 +1808,8 @@ const LordScreen = (() => {
         <div class="lm-mount-foot">
           ${locked
             ? `<div class="lm-mount-reason">${gi('padlock')} Requires lord level ${MOUNT_MIN_LEVEL}</div>`
+            : blockedReason
+            ? `<div class="lm-mount-reason">${gi('hourglass')} ${blockedReason}</div>`
             : `<button class="lm-choose-btn lm-choose-btn--change" data-action="open-mount-tab">Equip a mount</button>`}
         </div>
       </div>`;
@@ -1715,21 +1817,29 @@ const LordScreen = (() => {
 
   function _mountTabHtml() {
     const level     = _lord.level || 1;
-    const chosenId  = _lord.mountId;
     const coins     = _player?.coins || 0;
+    // The RESOLVED id, not the raw stored one: a lord still carrying a
+    // pre-race-split mount is already riding its race's equivalent, so that
+    // is the card which must read "Equipped". Comparing the raw id would show
+    // the whole ladder as unowned and invite the player to re-buy.
+    const chosenId  = resolveMountId(_lord.mountId, _lord.race);
 
-    // The whole ladder is always visible — locked tiers included, with their
-    // stats on show. A mount you can't reach yet is a reason to keep levelling,
-    // so hiding it would throw away the only thing the level gate buys.
+    // Only this lord's RACE pool — four mounts, never another race's. The
+    // whole ladder stays visible, locked tiers included, with their stats on
+    // show: a mount you can't reach yet is a reason to keep levelling, so
+    // hiding it would throw away the only thing the level gate buys.
+    //
+    // getMountsForRace already returns them in ladder order (scout, field,
+    // war, apex), which is why there is no sort here any more — the two level-5
+    // sidegrades are equal on both level and price, so sorting by those left
+    // their order down to object-key chance.
     //
     // (The wide "Equipped" summary strip that used to sit above the grid went
     // on 2026-07-29. The equipped mount is already the gold-bordered card in
     // the ladder and the Overview tab carries the read-out, so the strip was
     // a third copy of the same card — and the only thing on the tab that
     // wasn't building-card grammar.)
-    const ladder = Object.values(MOUNT_POOL)
-      .map(m => getMountForRace(m.id, _lord.race))
-      .sort((a, b) => (a.unlockLevel || 0) - (b.unlockLevel || 0) || (a.cost || 0) - (b.cost || 0));
+    const ladder = getMountsForRace(_lord.race);
 
     const pickerHtml = `
       <div class="lm-mount-grid">
@@ -1738,25 +1848,33 @@ const LordScreen = (() => {
           const isLocked   = level < reqLevel;
           const isEquipped = m.id === chosenId;
           const canAfford  = isEquipped || coins >= (m.cost || 0);
-          const disabled   = isLocked || isEquipped || !canAfford;
+          const disabled   = isLocked || (!isEquipped && !canAfford);
+          // The equipped card's button used to be a dead "Equipped" label —
+          // the one card guaranteed to be on screen spent its only action slot
+          // saying what the gold border already said. It is now the Sell
+          // control, which is the only way off a mount you regret buying.
           const btnLabel   = isLocked ? `${gi('padlock')} Locked`
-                           : isEquipped ? 'Equipped'
+                           : isEquipped ? `Sell ${gi('two-coins')}${mountSellValue(m).toLocaleString()}`
                            : canAfford ? 'Equip'
                            : 'No gold';
           // Button states mirror the building panel's .bld2-btn--* set, so
           // "can't yet" reads the same here as it does in a city.
           const btnState   = isLocked ? 'lm-choose-btn--locked'
-                           : isEquipped ? 'lm-choose-btn--equipped'
+                           : isEquipped ? 'lm-choose-btn--sell'
                            : canAfford ? 'lm-choose-btn--ready'
                            : 'lm-choose-btn--cant';
+          // Equipped cards carry data-sell-mount instead of data-mount-id, so
+          // the equip handler can never fire on them — clicking Sell must not
+          // be able to re-buy the mount you are standing on.
+          const btnAttr    = isEquipped ? 'data-sell-mount="1"' : `data-mount-id="${m.id}"`;
           return _mountTileHtml(m, {
             locked:   isLocked,
             equipped: isEquipped,
             cant:     !isLocked && !isEquipped && !canAfford,
-            // toLocaleString matters here since the 2026-07-30 reprice — a
-            // dragon is 5,000,000, and the raw number was unreadable.
+            // toLocaleString matters here since the 2026-07-30 reprice — an
+            // apex mount is 1,500,000, and the raw number was unreadable.
             value:    `${gi('two-coins')}${(m.cost || 0).toLocaleString()}`,
-            buttonHtml: `<button class="lm-choose-btn ${btnState}" data-mount-id="${m.id}" ${disabled ? 'disabled' : ''}>${btnLabel}</button>`,
+            buttonHtml: `<button class="lm-choose-btn ${btnState}" ${btnAttr} ${disabled ? 'disabled' : ''}>${btnLabel}</button>`,
             reasonHtml: isLocked ? `<div class="lm-mount-reason">${gi('padlock')} Requires lord level ${reqLevel}</div>` : '',
           });
         }).join('')}
@@ -1765,7 +1883,7 @@ const LordScreen = (() => {
     return `
       <div class="lm-container">
         <div class="lm-section">
-          <div class="lm-section-title">${gi('horse-head')} All mounts — one equipped at a time, swap any time for the new mount's price</div>
+          <div class="lm-section-title">${gi('horse-head')} All mounts — one equipped at a time. Equipping costs the new mount's full price; selling returns ${Math.round(MOUNT_SELL_REFUND * 100)}%</div>
           ${pickerHtml}
         </div>
       </div>`;
@@ -1773,7 +1891,7 @@ const LordScreen = (() => {
 
   function _bindMountEvents() {
     // No open/change/cancel handlers any more — the ladder is always on
-    // screen, so the only thing to bind is equipping.
+    // screen, so the only things to bind are equipping and selling.
     document.querySelectorAll('.lm-choose-btn[data-mount-id]').forEach(btn => {
       btn.addEventListener('click', async () => {
         btn.disabled = true;
@@ -1784,6 +1902,28 @@ const LordScreen = (() => {
         HUD.refresh();
         const mount = getMountForRace(btn.dataset.mountId, _lord.race);
         _toast(`${mount?.name || 'Mount'} equipped!`);
+        _renderTab();
+      });
+    });
+
+    // Selling loses 40% of a purchase that runs to 1.5M, and there is no undo
+    // — this is exactly the shape the raid-cancel and clear-history buttons
+    // already gate behind a confirm(), so it gets one too, naming the mount
+    // and the exact gold rather than asking "are you sure?".
+    document.querySelectorAll('.lm-choose-btn[data-sell-mount]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const current = getLordMount(_lord);
+        if (!current) return;
+        const value = mountSellValue(current).toLocaleString();
+        if (!confirm(`Sell the ${current.name} for ${value} gold?\n\nThis lord loses its mount and every bonus it grants. Buying it back costs the full ${(current.cost || 0).toLocaleString()}.`)) return;
+        btn.disabled = true;
+        const result = await ServerActions.sellMount(_lord.id);
+        if (!result.ok) { _toast(result.error || 'Server error'); btn.disabled = false; return; }
+        _lord   = LordService.getById(_lord.id);
+        _player = PlayerService.getById(_player.id);
+        HUD.refresh();
+        // Server-authored numbers — the refund fraction lives there.
+        _toast(`${result.sold} sold for ${(result.refund || 0).toLocaleString()} gold.`);
         _renderTab();
       });
     });
@@ -2204,11 +2344,11 @@ const LordScreen = (() => {
     document.querySelectorAll('.ls-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         const tab = btn.dataset.tab;
-        if (LordService.isDown(_lord) && (tab === 'army' || tab === 'discovery')) return;
+        // `disabled` already swallows the click; this is the belt-and-braces
+        // copy for the frame where the strip hasn't been re-synced yet.
+        if (_tabBlockReason(tab)) return;
         _activeTab = tab;
-        document.querySelectorAll('.ls-tab').forEach(b => b.classList.remove('ls-tab--active'));
-        btn.classList.add('ls-tab--active');
-        _renderTab();
+        _renderTab(); // re-syncs the strip, including the active class
         _startCountdown();
       });
     });

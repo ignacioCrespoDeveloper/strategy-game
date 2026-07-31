@@ -368,9 +368,11 @@ const ResearchScreen = (() => {
     const isActive   = active?.id === def.id;
     const maxHours   = blessingMaxHours(templeLevel);
     const hours      = Math.min(Math.max(1, _blessingHours), maxHours);
-    // blessingCost returns { gold, food, wood, stone } — resources were added
-    // 2026-07-30, so this is already the full offering shape _canAfford wants.
-    const offering   = blessingCost(hours);
+    // blessingCost returns { gold, food, wood, stone } — the full offering shape
+    // _canAfford wants. The blessing id is REQUIRED: each blessing is billed in
+    // the currency it does not produce (BLESSING_COST_MIX in js/data/blessings.js),
+    // so dropping it would quote the dearest profile for every one of them.
+    const offering   = blessingCost(hours, def.id);
     const affordable = _canAfford(offering);
     const eta        = isActive ? Math.max(0, Math.round((active.finishAt - TimeService.now()) / 1000)) : 0;
     const durLabel   = TimeService.formatDuration(blessingDuration(hours));
@@ -384,7 +386,7 @@ const ResearchScreen = (() => {
         ${Array.from({ length: maxHours }, (_, i) => i + 1).map(h => `
           <button class="rs-hour ${h === hours ? 'rs-hour--on' : ''}"
                   data-bless-hours="${h}"
-                  title="${h}h · ${_offeringLabel(blessingCost(h))}">${h}h</button>
+                  title="${h}h · ${_offeringLabel(blessingCost(h, def.id))}">${h}h</button>
         `).join('')}
       </div>`;
 

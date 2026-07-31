@@ -55,9 +55,11 @@ export async function handleBlessingConsecrate(req, res) {
   }
 
   // The offering is charged per hour, so a longer rite costs proportionally
-  // more. Since 2026-07-30 it takes GOLD AND ALL THREE RESOURCES — blessingCost
-  // returns { gold, food, wood, stone }, never a bare number.
-  const cost = blessingCost(wantHours);
+  // more. blessingCost returns { gold, food, wood, stone }, never a bare number,
+  // and WHICH of those are non-zero depends on the blessing: each is billed in
+  // the currency it does not produce (BLESSING_COST_MIX). Passing blessingId is
+  // mandatory in spirit — omitting it silently charges the dearest profile.
+  const cost = blessingCost(wantHours, blessingId);
   const have = { gold: Math.floor(player.coins || 0), ...(player.resources || {}) };
 
   const short = [];

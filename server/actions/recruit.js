@@ -9,7 +9,8 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { UNIT_DEFS, TALENT_POOL, EconomyCore, UnitUnlockService } from '../engine-loader.js';
+import { UNIT_DEFS, TALENT_POOL, EconomyCore, UnitUnlockService, getLordMountEffects } from '../engine-loader.js';
+import { lordBusyReason } from '../lord-busy.js';
 
 // Army capacity is gated by Army Power alone — EconomyCore.getArmyPower is
 // the single source of truth (linear per-model cost + combat-trait tax).
@@ -24,9 +25,14 @@ function _projectedArmyPower(army, unitId, addCount) {
   return EconomyCore.getProjectedArmyPower(army?.units, UNIT_DEFS, unitId, addCount);
 }
 
+// Talent and apex-mount cap bonuses stack. Must stay identical to
+// LordService.getArmyPowerCap (js/domain/lord.js) and _armyPowerCap in
+// server/tick/catch-up.js — if this one is lower the client offers recruits
+// the server then refuses; if it is higher the cap leaks.
 function _armyPowerCap(lord, talentPool) {
-  const bonus = talentPool?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
-  return 200 + (lord.level || 1) * 80 + bonus;
+  const talent = talentPool?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  const mount  = getLordMountEffects(lord).armyPowerCapBonus || 0;
+  return 200 + (lord.level || 1) * 80 + talent + mount;
 }
 
 export async function handleRecruit(req, res) {
@@ -43,6 +49,16 @@ export async function handleRecruit(req, res) {
   const lord = lords[lordId];
   if (!lord) return res.status(404).json({ ok: false, error: 'Lord not found' });
   if (lord.playerId !== playerId) return res.status(403).json({ ok: false, error: 'Not your lord' });
+
+  // A lord already out on an order cannot raise troops. Recruiting is bound to
+  // the lord (the batch carries lordId and lands in THEIR army when it
+  // finishes), so without this a lord could march on an enemy city and queue
+  // reinforcements the whole way there. Same rule as the raiding stance's
+  // long-declared 'recruit' restriction — this is what finally reads it.
+  const busy = lordBusyReason(lord);
+  if (busy) {
+    return res.status(400).json({ ok: false, error: `${busy} — troops must be raised before the lord sets out.` });
+  }
 
   const city = cities[cityId];
   if (!city) return res.status(404).json({ ok: false, error: 'City not found' });

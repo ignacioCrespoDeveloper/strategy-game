@@ -365,7 +365,10 @@ const OverviewScreen = (() => {
       `<option value="${c.id}">${c.name} (${c.x}, ${c.y})</option>`
     ).join('');
 
-    const classCards = Object.values(LORD_CLASSES).map(_classCardHtml).join('');
+    // Recruitable classes only — Priest and Dark Lord are hidden until their
+    // passives exist (see `recruitable` in js/data/lord-classes.js). Existing
+    // lords of those classes are unaffected; this is the creation door only.
+    const classCards = getRecruitableClasses().map(_classCardHtml).join('');
 
     return `
       <div class="modal-overlay hidden" id="recruit-modal" role="dialog" aria-modal="true" aria-labelledby="recruit-modal-title">

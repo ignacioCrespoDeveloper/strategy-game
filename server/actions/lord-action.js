@@ -12,7 +12,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_CLASSES, STANCE_DEFS, MOUNT_POOL, TALENT_POOL, EconomyCore, DiscoveryRoll } from '../engine-loader.js';
+import { LORD_CLASSES, STANCE_DEFS, getLordMountEffects, TALENT_POOL, EconomyCore, DiscoveryRoll } from '../engine-loader.js';
 
 // Base scout duration before the speed multiplier — mirrors move's own
 // distance*20*(5/speed) curve so speed behaves consistently everywhere.
@@ -22,7 +22,7 @@ const _SCOUT_MIN_SECS  = 30;
 function _getEffectiveSpeed(lord) {
   const base  = lord.baseStats?.speed ?? 5;
   const cls   = LORD_CLASSES[lord.classId];
-  const mount = lord.mountId ? (MOUNT_POOL?.[lord.mountId]?.effects?.speed || 0) : 0;
+  const mount = getLordMountEffects(lord).speed || 0;
   return base + (cls?.modifiers?.speed || 0) + mount;
 }
 

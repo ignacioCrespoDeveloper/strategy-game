@@ -398,6 +398,20 @@ async function main() {
       const tryRecruit = (acct, unitId, count = 1) =>
         api('/api/city/recruit', acct.token, { lordId: acct.lordId, cityId: acct.cityId, unitId, count });
 
+      // Alice attacked Bob's city army-less back in Test 2 and almost always
+      // loses it, which leaves her in an hour of 'defeated' downtime. A downed
+      // or busy lord is refused BEFORE the unlock gate is consulted
+      // (server/lord-busy.js), so every assertion below would come back with
+      // the wrong error. Same revive-first pattern Test 8 uses for Eve — this
+      // block is about WHICH units a city can train, not about who is free to
+      // train them (Test 5c owns that).
+      const alicePre  = await readStorage(alice.userId, 'lords');
+      const aliceDown = alicePre?.[alice.lordId]?.downtimeUntil || 0;
+      if (aliceDown > Date.now()) {
+        const rev = await api('/api/lord/revive', alice.token, { lordId: alice.lordId });
+        info(`Alice was downed by Test 2's attack — revived: ${rev.ok ? 'yes' : 'no (' + rev.error + ')'}`);
+      }
+
       const free = await tryRecruit(alice, 'garrison_soldier', 50);
       assert('garrison units are refused (goldCost 0 + recruitTime 0 exploit)',
         !free.ok && /cannot be trained/i.test(free.error || ''), JSON.stringify(free).slice(0, 200));
@@ -440,6 +454,42 @@ async function main() {
       const gone = await api('/api/blessing/consecrate', alice.token, { blessingId: 'god_of_commerce', hours: 1 });
       assert('the removed God of Commerce is no longer consecratable',
         !gone.ok && /Unknown blessing/i.test(gone.error || ''), JSON.stringify(gone).slice(0, 200));
+    }
+
+    // ── Test 5c: Busy-lord gate ──────────────────────────────────────
+    // An army is assembled BEFORE the lord sets out. Recruiting is bound to a
+    // lord (the batch carries lordId and lands in THEIR army), so a marching
+    // lord queueing reinforcements the whole way to an enemy city used to be
+    // free reinforcement in transit. server/lord-busy.js is the one rule; the
+    // client greys the Army and Mount tabs out on the same test.
+    section('Test 5c: Busy-lord gate — no recruiting, mounts or dismissals mid-order');
+    {
+      const march = await moveTo(alice.token, alice.lordId, alice.x, alice.y);
+      assert('Alice set off marching home', march.ok, march.error);
+      if (march.ok) {
+        const busyRecruit = await api('/api/city/recruit', alice.token,
+          { lordId: alice.lordId, cityId: alice.cityId, unitId: 'spearmen', count: 1 });
+        assert('recruiting is refused while the lord is marching',
+          !busyRecruit.ok && /is marching/i.test(busyRecruit.error || ''),
+          JSON.stringify(busyRecruit).slice(0, 200));
+
+        // The busy check runs before the mount's own race/level/gold gates, so
+        // a real, affordable-or-not mount id still comes back with this reason.
+        const busyMount = await api('/api/lord/mounts', alice.token,
+          { lordId: alice.lordId, mountId: 'warhorse' });
+        assert('equipping a mount is refused while the lord is marching',
+          !busyMount.ok && /is marching/i.test(busyMount.error || ''),
+          JSON.stringify(busyMount).slice(0, 200));
+
+        // Likewise ahead of the "army not found" lookup — dropping models
+        // mid-march would be a free way to duck under the PWR cap or shed
+        // upkeep while already committed.
+        const busyDisband = await api('/api/army/disband', alice.token,
+          { lordId: alice.lordId, unitId: 'spearmen', modelIdx: 0 });
+        assert('dismissing a unit is refused while the lord is marching',
+          !busyDisband.ok && /is marching/i.test(busyDisband.error || ''),
+          JSON.stringify(busyDisband).slice(0, 200));
+      }
     }
 
     // ── Test 6: Scout ─────────────────────────────────────────────────

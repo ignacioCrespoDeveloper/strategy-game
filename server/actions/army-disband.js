@@ -17,6 +17,7 @@
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { UNIT_DEFS } from '../engine-loader.js';
+import { lordBusyReason } from '../lord-busy.js';
 
 // Best-case refund fraction of a unit's gold cost (at full HP). Tunable.
 // 0.9 → 0.6 on 2026-07-30. At 90% (and 100% on the cancel paths) unit churn was
@@ -36,6 +37,14 @@ export async function handleArmyDisband(req, res) {
   const lord = lords[lordId];
   if (!lord) return res.status(404).json({ ok: false, error: 'Lord not found' });
   if (lord.playerId !== playerId) return res.status(403).json({ ok: false, error: 'Not your lord' });
+
+  // Same rule as recruiting (server/lord-busy.js): the army is set before the
+  // lord marches. Dropping models mid-march would also be a free way to duck
+  // under the PWR cap or dodge food upkeep while already committed to a fight.
+  const busy = lordBusyReason(lord);
+  if (busy) {
+    return res.status(400).json({ ok: false, error: `${busy} — its army cannot be reorganised until it returns.` });
+  }
 
   const army = armies[lordId];
   if (!army) return res.status(404).json({ ok: false, error: 'Army not found' });

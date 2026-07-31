@@ -15,12 +15,27 @@
 import {
   BUILDING_DEFS, UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore, MarketCore, UnitUnlockService,
   RESEARCH_DEFS, RESEARCH_TIERS,
-  BLESSING_DEFS, blessingMaxHours, blessingDuration, blessingCost,
+  BLESSING_DEFS, BLESSING_COST_MIX, blessingMaxHours, blessingDuration, blessingCost,
+  lordRansomCost,
   TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
   DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES,
+  MOUNT_POOL, MOUNT_SLOTS,
   DiscoveryRoll, TUNING, tune,
 } from '../server/engine-loader.js';
 import { catchUp } from '../server/tick/catch-up.js';
+
+// ── Neutralise the tuning dials for the formula checks ──────────
+// Almost everything below asserts the DESIGNED numbers (a Lumber Mill Lv1
+// makes 33 wood, gold is pop × 0.004 × happiness, …). Those are statements
+// about the formulas, not about the designer's current preferences — so if a
+// tuned js/data/tuning.js leaked in here, the whole suite would go red the
+// moment someone used the file for its intended purpose. That would train
+// everyone to ignore it.
+//
+// The dials' own wiring is verified in the "Tuning dials" section below, which
+// sets and restores each one explicitly via withDial().
+const _designerDials = { ...TUNING };
+for (const k of Object.keys(TUNING)) TUNING[k] = 1;
 
 let passed = 0, failed = 0;
 function check(name, cond, detail = '') {
@@ -247,12 +262,15 @@ check('elite gates hold: Black Orcs Barracks 10 (apex spread), 6h',
   JSON.stringify(EconomyCore.getUnitTraining('orc', 'black_orcs')) === JSON.stringify({ buildingId: 'barracks', minLevel: 10 }));
 
 // Gold tracks PWR (2026-07-27): every priced unit must match the formula
-// goldCost = PWR × 3.5 × tier premium (EconomyCore.getUnitGoldCost).
+// goldCost = PWR × GOLD_PER_PWR × tier premium (EconomyCore.getUnitGoldCost).
+// The multiplier went 3.5 → 12.0 on 2026-07-30; this message said "× 3.5" for
+// three days after, which is exactly the drift the check exists to prevent —
+// so it now reads the live constant instead of restating it.
 // Camp-defender-only units (goldCost 0) are exempt — 0 is their marker.
 const _misPriced = Object.values(UNIT_DEFS)
   .filter(u => !(u.race === null && u.goldCost === 0))
   .filter(u => u.goldCost !== EconomyCore.getUnitGoldCost(u));
-check('every priced unit follows goldCost = PWR × 3.5 × tier premium',
+check('every priced unit follows goldCost = PWR × GOLD_PER_PWR × tier premium',
   _misPriced.length === 0, _misPriced.map(u => `${u.id} ${u.goldCost}≠${EconomyCore.getUnitGoldCost(u)}`).join(', '));
 
 // New TWW3 roster (2026-07-27): every race fields the full building chain.
@@ -297,7 +315,21 @@ check('raid rate floors at level 1 for a missing/zero level',
 // relationship rather than the raw number: a day of raiding must beat an hour
 // of the Temple blessing it is meant to help pay for.
 check('a 24h raid at Lv 8 out-earns an hour of blessing by a wide margin',
-  EconomyCore.getRaidHourlyRewards(8).gold * 24 > blessingCost(1).gold * 2);
+  EconomyCore.getRaidHourlyRewards(8).gold * 24 > blessingCost(1, 'god_of_destruction').gold * 2);
+
+// ── Lord ransom (repriced quadratic 2026-07-30, Phase 2b) ───────
+// Was 300 + 150×level = 1,800 gold for a level-10 lord, about fifteen minutes
+// of endgame gold income. The bound that matters is the relationship, not the
+// literal: freeing a maxed lord must cost more than re-arming one, or capture
+// is not a real PvP outcome.
+check('ransoming a maxed lord costs more than a full army for one',
+  lordRansomCost(10) > 30000 &&
+  lordRansomCost(10) > EconomyCore.getUnitGoldCost(UNIT_DEFS.swordsmen) * 18,
+  `L10 ransom ${lordRansomCost(10)}`);
+
+check('ransom stays trivial for a fresh lord and scales superlinearly',
+  lordRansomCost(1) < 1000 &&
+  lordRansomCost(10) / lordRansomCost(5) > 3);
 
 // ── Tuning dials (js/data/tuning.js) ────────────────────────────
 // The dials are the designer-facing surface: one number per income/time
@@ -306,8 +338,19 @@ check('a 24h raid at Lv 8 out-earns an hour of blessing by a wide margin',
 // actually MOVES its channel and only its channel.
 section('Tuning dials');
 
-check('every dial ships at 1.0',
-  Object.values(TUNING).every(v => v === 1));
+// Deliberately does NOT assert 1.0 — a tuned repo is a legitimate state, and
+// failing here would punish using the file. What must hold is that every dial
+// is a usable number, since a typo'd string or negative would silently be
+// swallowed by tune()'s fallback and the game would quietly play at 1.0.
+check('every dial is a valid non-negative number',
+  Object.keys(_designerDials).length > 0 &&
+  Object.values(_designerDials).every(v => typeof v === 'number' && isFinite(v) && v >= 0),
+  JSON.stringify(_designerDials));
+
+const _tuned = Object.entries(_designerDials).filter(([, v]) => v !== 1);
+console.log(_tuned.length === 0
+  ? '  · dials: all at 1.0 (shipped defaults)'
+  : `  · dials TUNED: ${_tuned.map(([k, v]) => `${k}=${v}`).join(' · ')} — neutralised for the formula checks above`);
 
 check('the documented dial set is exactly what exists',
   JSON.stringify(Object.keys(TUNING).sort()) === JSON.stringify([
@@ -482,9 +525,22 @@ check('a fully-spent day blocks further sales until reset',
   MarketCore.marketQuote('wood', 100000, 1, _full, _tomorrow).ok === true);
 
 // Sanity vs the income model: the merchant must stay a minority gold channel.
-// Endgame gold income is ~252k/day (scripts/economy-projection.js).
+//
+// The literal here was 252,000 — an endgame gold/day figure measured with
+// js/data/tuning.js at 1.0, never updated when the dials shipped at
+// 0.5/0.5/0.25/0.5. The check was passing for the wrong reason: at the real
+// curve the 30,000/day cap was 27% of gold income, not the 12% the merchant's
+// own header claimed, and not under the 25% this asserted.
+//
+// Fixed properly by Phase 1 of ECONOMY-REBALANCE-PLAN.md (questGold 0.25 →
+// 0.60), which lifted day-25 gold income to ~145k — so the cap is back to ~21%
+// and the original 25% bound holds again on real numbers. Keep this literal in
+// step with the INCOME ANCHORS in scripts/economy-projection.js; they are the
+// same frozen curve. Re-measure, do not guess.
+const ENDGAME_GOLD_PER_DAY = 145000;
 check('the merchant stays a minority of endgame gold income',
-  MarketCore.marketDailyCap(10) < 252000 * 0.25);
+  MarketCore.marketDailyCap(10) < ENDGAME_GOLD_PER_DAY * 0.25,
+  `cap ${MarketCore.marketDailyCap(10)} vs ${Math.round(ENDGAME_GOLD_PER_DAY * 0.25)}`);
 
 // ── Temple blessings ────────────────────────────────────────────
 // Temple level is the CEILING on how many hours you may buy, not the
@@ -503,15 +559,103 @@ check('duration is exactly the hours chosen',
 // well as the linearity.
 check('offering is an object with gold + all three resources',
   typeof blessingCost(1) === 'object' &&
-  ['gold', 'food', 'wood', 'stone'].every(k => typeof blessingCost(1)[k] === 'number'));
+  ['gold', 'food', 'wood', 'stone'].every(k => typeof blessingCost(1, 'god_of_destruction')[k] === 'number'));
 
 check('offering is linear per hour (no bulk discount or penalty)',
-  blessingCost(1).gold === 3000 && blessingCost(4).gold === 12000 &&
-  blessingCost(8).gold === blessingCost(1).gold * 8 &&
-  blessingCost(8).wood === blessingCost(1).wood * 8);
+  blessingCost(1, 'god_of_destruction').gold === 1500 &&
+  blessingCost(4, 'god_of_destruction').gold === 6000 &&
+  blessingCost(8, 'god_of_destruction').gold === blessingCost(1, 'god_of_destruction').gold * 8 &&
+  blessingCost(8, 'god_of_destruction').wood === blessingCost(1, 'god_of_destruction').wood * 8);
 
-check('blessings drain resources, not just gold (the recurring resource sink)',
-  blessingCost(1).food > 0 && blessingCost(1).wood > 0 && blessingCost(1).stone > 0);
+// ── Per-blessing cost mix (2026-07-30, Phase 2c) ────────────────
+// THE RULE: charge the currency the blessing does NOT give you. Billing a
+// resource blessing in resources is what made god_of_nature unable to break
+// even at any price, so this is the assertion that keeps the rule enforced
+// rather than merely documented.
+check('every blessing is billed in a currency it does NOT produce',
+  // nature yields resources → gold only
+  blessingCost(1, 'god_of_nature').gold > 0 &&
+  ['food', 'wood', 'stone'].every(r => blessingCost(1, 'god_of_nature')[r] === 0) &&
+  // fertility yields population → food only
+  blessingCost(1, 'god_of_fertility').gold === 0 &&
+  blessingCost(1, 'god_of_fertility').food > 0 &&
+  // war is tempo/PvP → gold only
+  blessingCost(1, 'god_of_war').gold > 0 &&
+  ['food', 'wood', 'stone'].every(r => blessingCost(1, 'god_of_war')[r] === 0) &&
+  // destruction yields both → billed in both
+  blessingCost(1, 'god_of_destruction').gold > 0 &&
+  blessingCost(1, 'god_of_destruction').wood > 0);
+
+check('every blessing has a cost mix, and none of them is free',
+  Object.keys(BLESSING_DEFS).every(id => {
+    const c = blessingCost(1, id);
+    return BLESSING_COST_MIX[id] && (c.gold + c.food + c.wood + c.stone) > 0;
+  }));
+
+// A missing/unknown id must fall back to the DEAREST profile — a caller that
+// forgets to pass one should overcharge, never hand out a free blessing.
+check('an unknown blessing id falls back to the dearest profile',
+  JSON.stringify(blessingCost(3, 'no_such_blessing')) ===
+  JSON.stringify(blessingCost(3, 'god_of_destruction')) &&
+  JSON.stringify(blessingCost(3)) === JSON.stringify(blessingCost(3, 'god_of_destruction')));
+
+// God of Nature must reach the WHOLE resource pool, not just buildings.
+// Buildings are ~24% of resource income, so a production-only version could
+// not cover its own offering at any price (measured 2026-07-30).
+check('God of Nature covers building output AND raid/expedition resources',
+  BLESSING_DEFS.god_of_nature.effects.wood_production > 0 &&
+  BLESSING_DEFS.god_of_nature.effects.resource_yield_bonus > 0);
+
+check('resource_yield_bonus never appears on a blessing that also boosts gold',
+  Object.values(BLESSING_DEFS).every(d =>
+    !d.effects?.resource_yield_bonus ||
+    (!d.effects.raid_bonus && !d.effects.quest_bonus && !d.effects.gold_income_bonus)));
+
+// ── Mounts (repriced 2026-07-30, ECONOMY-REBALANCE-PLAN.md Phase 2a) ──
+section('Mounts');
+
+// The catalog keeps an explicit `cost` on all 20 mounts AND a cost per slot in
+// MOUNT_SLOTS — 24 literals that must agree. That is a drift shape, so pin it.
+const _mountCostDrift = Object.values(MOUNT_POOL)
+  .filter(m => m.cost !== MOUNT_SLOTS[m.slot]?.cost)
+  .map(m => `${m.id} ${m.cost}≠${MOUNT_SLOTS[m.slot]?.cost}`);
+check('every mount costs exactly its slot price', _mountCostDrift.length === 0, _mountCostDrift.join(', '));
+
+check('every mount declares a slot that exists, and every slot is filled per race',
+  Object.values(MOUNT_POOL).every(m => MOUNT_SLOTS[m.slot]) &&
+  Object.keys(RACES).every(r => {
+    const slots = Object.values(MOUNT_POOL).filter(m => m.race === r).map(m => m.slot).sort();
+    return JSON.stringify(slots) === JSON.stringify(['apex', 'field', 'scout', 'war']);
+  }));
+
+// Mounts are an ACCESSORY, not the endgame gold sink (Rule 5: a terminal
+// purchase cannot hold an endgame at any price). The concrete bound: a full
+// mount ladder on one lord must stay under the cost of expanding to the last
+// lord + last city, or mounts have quietly become the expansion competitor
+// again — which is exactly the state the 2026-07-30 audit found.
+const _ladder = MOUNT_SLOTS.scout.cost + MOUNT_SLOTS.war.cost + MOUNT_SLOTS.apex.cost;
+check('a full mount ladder costs less than the last lord + last city',
+  _ladder < 320000 + 256000, `ladder ${_ladder} vs 576000`);
+
+// Every slot but `field` must carry an income key, or the PAYBACK table in
+// scripts/economy-projection.js reads NEVER for it. `field` is the deliberate
+// combat-only exception (see the MOUNT_POOL header).
+const _incomeKeys = ['quest_bonus', 'raid_bonus', 'expeditionRatingMult'];
+const _inert = Object.values(MOUNT_POOL)
+  .filter(m => m.slot !== 'field')
+  .filter(m => !_incomeKeys.some(k => m.effects?.[k]))
+  .map(m => m.id);
+check('every non-field mount carries an income effect', _inert.length === 0, _inert.join(', '));
+
+// raid_bonus/quest_bonus were blessing-only keys before the reprice. A mount
+// declaring one is inert unless catch-up.js sums it — assert the KEY GRAMMAR
+// matches so the two sources stay interchangeable.
+check('mount income keys reuse the blessing effect grammar',
+  Object.values(MOUNT_POOL).every(m =>
+    ['quest_bonus', 'raid_bonus'].every(k => m.effects?.[k] === undefined || typeof m.effects[k] === 'number')) &&
+  BLESSING_DEFS.god_of_destruction.effects.raid_bonus > 0);
+
+section('Temple blessings (continued)');
 
 check('God of Commerce is gone; 4 blessings remain',
   !BLESSING_DEFS.god_of_commerce && Object.keys(BLESSING_DEFS).length === 4);

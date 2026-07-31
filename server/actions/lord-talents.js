@@ -29,7 +29,14 @@ export async function handleLordTalents(req, res) {
   // ── Talent choice ─────────────────────────────────────────────
   if (talentId != null) {
     if ((lord.level || 1) < 5)       return res.status(400).json({ ok: false, error: 'Talent selection unlocks at level 5.' });
-    if (lord.talentId != null)       return res.status(400).json({ ok: false, error: 'Talent already chosen — permanent.' });
+    // "Permanent" only binds a talent that STILL EXISTS. A lord holding a
+    // retired id (commander/scholar, dropped 2026-07-30 for having no live
+    // effect) gets to pick again: js/ui/lord-screen.js already falls through to
+    // the selection grid for an unknown talentId, so without this the player
+    // would see the grid and every Choose button would answer "already
+    // chosen — permanent" forever, with nothing to show for the pick.
+    const held = lord.talentId != null ? TALENT_POOL?.[lord.talentId] : null;
+    if (held)                        return res.status(400).json({ ok: false, error: 'Talent already chosen — permanent.' });
     if (!TALENT_POOL?.[talentId])    return res.status(400).json({ ok: false, error: 'Unknown talent.' });
     lord.talentId = talentId;
   }

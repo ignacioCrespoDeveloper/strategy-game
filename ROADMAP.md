@@ -59,20 +59,80 @@ something.
 (The five `abilities` were originally bundled here; Nacho parked them
 2026-07-29 — signature moves deserve a bigger design than a flat stat hook.)
 
-### 3. Mounts — ✅ LADDER + ART + CARD REDESIGN SHIPPED 2026-07-29
+### 3. Mounts — ✅ RACE POOLS SHIPPED 2026-07-30
 
-**Design call (Nacho, 2026-07-29):** three tiers, two mounts each, and
-mounts stay **flat stat pads — no special abilities**.
+**Design call (Nacho, 2026-07-30):** mounts are now **five exclusive pools of
+four** — one per race — replacing the single shared pool of six. A lord may
+only equip a mount of its own race, gated server-side in `lord-mounts.js`.
 
-| Tier | Mounts | Stat budget | Cost |
+| Slot | Lv | Cost | Budget | Orc | Dwarf | Human | High Elf | Dark Elf |
+|---|---|---|---|---|---|---|---|---|
+| scout | 5 | 300k | 3 pts + **+15% ER** | Wolf | Battle Ram | War Lion | Elven Steed | Cold One |
+| field | 5 | 300k | 4 pts | War Boar | War Bear | Warhorse | White Lion | Dark Steed |
+| war | 8 | 800k | 7 pts | Giant Spider | Steam Tank | Pegasus | Great Eagle | Dark Pegasus |
+| apex | 10 | 1.5M | 10 pts + **+200 PWR cap** | Manticore | Stone Golem | Griffon | Dragon | Black Dragon |
+
+`scout` and `field` are **sidegrades**: same level, same price, and the scout
+trades exactly one stat point for its Expedition Rating bonus. That is the
+level-5 choice — quest or fight. Power climbs only across slots, which is
+what the level gate pays for.
+
+**The two non-stat effect keys**, both read through helpers rather than
+summed as stats, and both shown as gold chips on the card:
+- `expeditionRatingMult` (1.15) multiplies **Expedition Rating**, which gates
+  find quality *and* recruit quality. 20 goblin rabble is ER 400; with a
+  scout mount it is 460, which crosses the 450 **Rare** band. Sized to move
+  you a band, not to be rounding error.
+- `armyPowerCapBonus` (200) raises the army PWR cap. Already an established
+  key — the talent pool has used it for months — and it **stacks** with the
+  talent. All **four** cap copies read it (`lord.js`, `recruit.js`,
+  `catch-up.js`, `army-transfer.js`); army-transfer was the easy one to miss
+  and would have made a legally-recruited army unable to be split and
+  reassembled.
+
+Still **flat pads — no traits, no abilities, no battle hooks**; the
+2026-07-29 legibility call holds. Both new keys are economy/progression
+dials read outside the battle engine.
+
+**Selling — `POST /api/lord/mount-sell` (2026-07-30).** Equipping still charges
+the new mount's full price, but a mount can now be **sold back for 60%**
+(`MOUNT_SELL_REFUND`), leaving the lord unmounted. Before this, a 1.5M apex
+pick was effectively permanent — buy the wrong one and you were simply stuck.
+
+| Slot | Cost | Sells for | Net cost of a same-slot swap |
 |---|---|---|---|
-| Lv 5 | Warhorse · War Boar | 4 points | 400 / 450 |
-| Lv 8 | War Chariot · War Bear | 7 points | 1100 / 1200 |
-| Lv 10 | Griffon · Dragon | 10 points | 2400 / 2800 |
+| scout / field | 300k | 180k | 120k |
+| war | 800k | 480k | 320k |
+| apex | 1.5M | 900k | 600k |
 
-Within a tier the two are **sidegrades on one budget** — one leans fast, one
-leans sturdy — so the pick is a shape choice; power climbs only across
-tiers, which is what the level gate pays for.
+60% is deliberately the same number as `DISBAND_REFUND_MAX` in
+`army-disband.js`, which was cut 0.9 → 0.6 the same day for the same reason:
+at a high refund the sink stops being a sink. Churn always loses money, so
+buy/sell cycling can never mint gold.
+
+`MOUNT_SELL_REFUND` + `mountSellValue()` live in `js/data/lord-classes.js`,
+**not** in the endpoint — the Sell button prints the exact gold it will pay,
+and neither side re-derives `cost × fraction`. The equipped card's button was
+a dead "Equipped" label; it is now the Sell control (muted gold, warning red
+on hover) behind a `confirm()` naming the mount and the amount. Equipped cards
+carry `data-sell-mount` rather than `data-mount-id` so the equip handler can
+never fire on them.
+
+**Migration — no backfill, nobody loses gold.** `resolveMountId(mountId,
+raceId)` maps a stored id onto a mount the lord can actually ride, at read
+time: right race → unchanged; another race's mount or a retired id → the
+**same slot** of the lord's own race. Since slots are equal-priced within a
+level, a migrated lord always lands on a mount worth what they paid. Four old
+ids survived into a pool outright (`warhorse`, `dire_wolf`, `griffon`,
+`dragon` — the last two keeping stats, level and price exactly); only
+`war_chariot` and `war_bear` are retired, both to `LEGACY_MOUNT_SLOTS`.
+`lord-mounts.js` compares the **resolved** id before charging, so a migrated
+lord is never billed again for the mount it is visibly already on.
+
+**Prior design (2026-07-29), superseded above:** three tiers of two shared
+mounts, at 300k/350k · 700k/800k · 1.5M/1.5M. The level-5 pair is now equal-
+priced — the old 300k/350k split quietly made a sidegrade pair into a power
+ranking.
 
 **Shipped:** `unlockLevel` per mount in `MOUNT_POOL`; per-mount gating
 server-side in `lord-mounts.js` (replacing the flat "level 5" check); the
@@ -90,14 +150,17 @@ degrades unknown ids to "no mount", verified).
 - **The Stance section is gone.** Raiding was the only stance left, so its
   block (progress, earnings, Cancel / Finish Now) merged into **Status** —
   the one place that already answered "what is this lord doing".
-- The Mount tab shows **the full six-mount ladder, always**. There is no
-  picker mode any more — the grid used to be hidden behind a click, so
-  opening the tab with a mount on showed only that mount. Below level 5 all
-  six render, locked.
-- **Dark Elves ride a Black Dragon** — flavour only, via a `raceVariants`
-  field + `getMountForRace()`. Variants may override name/icon/image/colour/
-  description ONLY; effects, cost, unlockLevel and the stored `dragon` id
-  always come from the base mount, so flavour can never become balance.
+- The Mount tab shows **the lord's full four-mount race ladder, always**
+  (six shared mounts before the 2026-07-30 race split). There is no picker
+  mode any more — the grid used to be hidden behind a click, so opening the
+  tab with a mount on showed only that mount. Below level 5 all four render,
+  locked.
+- **Dark Elves ride a Black Dragon** — was flavour only, via a `raceVariants`
+  field. **Superseded 2026-07-30:** `raceVariants` is gone and the Black
+  Dragon is a real mount (`de_black_dragon`) with its own id and its own stat
+  spread, which is what lets it differ from the High Elf Dragon by more than
+  name and art. `getMountForRace()` kept its signature and now resolves
+  through race pools, so every call site still reads correctly.
 
 **Card redesign (2026-07-29):** a mount card **is** a building card. The tile
 is literally `.bld3-tile` (`city-view.js`'s grid) — same 200px tracks, same
@@ -115,23 +178,35 @@ The wide "Equipped" strip above the ladder is **gone**: the equipped mount is
 already the gold-bordered card in the grid and the Overview carries the
 read-out, so it was a third copy of the same object.
 
-**Art — shipped 2026-07-29 (Nacho).** All in `assets/mounts/`; filenames
-follow the art, not the mount id, so the `image` strings are literal:
+**Art — 5 of 20 (Nacho, 2026-07-29).** All in `assets/mounts/`; filenames
+follow the art, not the mount id, so the `image` strings are literal. The
+race split kept every existing piece by pointing it at the race that
+inherited that mount:
 
-| File | Mount | Status |
+| File | Mount | Race |
 |---|---|---|
-| `warhorse.png` | Warhorse (lv 5) | ✅ |
-| `boar.webp` | War Boar (lv 5) | ✅ |
-| `chariot.webp` | War Chariot (lv 8) | ✅ |
-| `bear.webp` | War Bear (lv 8) | ✅ |
-| `dragon.webp` | Dragon (lv 10) | ✅ |
-| `blackdragon.webp` | Black Dragon — Dark Elves only | ✅ |
-| — | Griffon (lv 10) | **pending** — no `image` field, renders its glyph |
+| `warhorse.png` | Warhorse (field) | Human |
+| `boar.webp` | War Boar (field) | Orc |
+| `bear.webp` | War Bear (field) | Dwarf |
+| `dragon.webp` | Dragon (apex) | High Elf |
+| `blackdragon.webp` | Black Dragon (apex) | Dark Elf |
 
-The lv-5 sidegrade was **renamed Dire Wolf → War Boar** to match the art that
-landed for that slot. The stored id stays `dire_wolf` (it's persisted on
-lords in Supabase, same rule as the elf race ids) — name, icon, colour and
-description changed, stats/cost/level did not, so it isn't a balance change.
+`chariot.webp` is now **orphaned** — the War Chariot has no race and was
+retired; the file is still on disk and nothing references it.
+
+**The other 15 mounts have no `image` and render their sprite glyph** — the
+agreed ship state (Nacho, 2026-07-30), the same path the Griffon has taken
+since 2026-07-29. `_mountVisual()` already falls back, so dropping a `.webp`
+in and adding one `image:` line is the whole job when art lands; no code
+change. Icons are deliberately reused across races (both lions share
+`claw-slashes`, three races share `horse-head`) — pools are race-exclusive,
+so no two of them are ever on screen together.
+
+The orc field mount was **renamed Dire Wolf → War Boar** on 2026-07-29 to
+match its art. The stored id stays `dire_wolf` (persisted on lords in
+Supabase, same rule as the elf race ids) and survived the race split for the
+same reason.
+
 `warhorse.png` is still ~700 KB; converting it to `.webp` like the rest would
 cut ~80% with no visible loss, worth doing before this goes public.
 

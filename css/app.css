@@ -5004,9 +5004,15 @@ body.nav-open #screen-root {
 }
 
 /* Lord class card grid */
+/* Track count follows the number of recruitable classes rather than being
+   pinned to 5. Hiding the Priest and Dark Lord (2026-07-30) left the old
+   `repeat(5, 1fr)` with two dead columns, so three cards bunched into the
+   left three-fifths of the modal against an empty gap. auto-fit collapses
+   the empty tracks and stretches what's left, so this stays correct at 3,
+   at 5 when those classes return, and at any number after that. */
 .lc-class-grid {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
   gap: 0.5rem;
 }
 
@@ -9582,6 +9588,16 @@ body.nav-open #screen-root {
   border: 1px solid rgba(74,170,74,0.3);
 }
 
+/* Non-stat mount bonuses — the scout mounts' Expedition Rating and the apex
+   mounts' army PWR cap. Gold rather than the green stat chips because they
+   are the reason to pick that mount at all, and a player scanning four cards
+   needs the one line that isn't "+2 attack" to be the one that stands out. */
+.lm-stat-chip--special {
+  background: rgba(200,147,58,0.15);
+  color: #d8a94a;
+  border-color: rgba(200,147,58,0.35);
+}
+
 /* Equip action — same button grammar as the building panel's .bld2-btn--*,
    so "ready / can't / locked" reads identically in a city and on a lord. */
 .lm-choose-btn {
@@ -9606,13 +9622,25 @@ body.nav-open #screen-root {
   background: linear-gradient(180deg, #3a6a3a 0%, #2a4f2a 100%);
   color: #b0ffb0;
 }
-.lm-choose-btn--equipped {
+/* Sell — the equipped card's action. Muted gold at rest so it never competes
+   with the green Equip buttons for attention (selling is the rare path, and
+   the card already announces itself with a gold border), warming to a clear
+   warning red on hover because the click gives up 40% of the purchase. */
+.lm-choose-btn--sell {
   background: rgba(200,147,58,0.1);
   border-color: var(--border-accent);
   color: var(--text-gold);
-  cursor: default;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.04em;
 }
+.lm-choose-btn--sell:hover {
+  background: linear-gradient(180deg, #5a2a24 0%, #3a1a18 100%);
+  border-color: #a04c3c;
+  color: #ffb4a4;
+}
+/* (.lm-choose-btn--equipped was the equipped card's dead "Equipped" label.
+   Removed 2026-07-30 when that slot became the Sell button — the Overview
+   card renders with noFoot and has no button at all, so nothing else wanted
+   it.) */
 .lm-choose-btn--cant {
   background: var(--bg-raised);
   border-color: var(--border-muted);

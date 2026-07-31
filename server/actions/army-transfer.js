@@ -17,24 +17,24 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { UNIT_DEFS, TALENT_POOL, STANCE_DEFS, EconomyCore } from '../engine-loader.js';
+import { UNIT_DEFS, TALENT_POOL, EconomyCore, getLordMountEffects } from '../engine-loader.js';
 import { applyExchange } from '../army-transfer-core.js';
+import { lordBusyReason } from '../lord-busy.js';
 
 // Mirrors recruit.js's _armyPowerCap — PWR is the single army-size metric.
+// Talent AND apex-mount bonuses both count. Missing the mount term here would
+// be a silent one-way trap: a lord on an apex mount could RECRUIT up to 1200
+// but not be handed the same troops by another lord, so an army built legally
+// could not be split and reassembled.
 function _armyPowerCap(lord) {
-  const bonus = TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
-  return 200 + (lord.level || 1) * 80 + bonus;
+  const talent = TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  const mount  = getLordMountEffects(lord).armyPowerCapBonus || 0;
+  return 200 + (lord.level || 1) * 80 + talent + mount;
 }
 
-function _isDown(lord) {
-  return !!(lord.downtimeUntil && Date.now() < lord.downtimeUntil);
-}
-
-function _isActionStanced(lord) {
-  if (!lord.stance?.id || lord.stance.id === 'idle') return false;
-  if (!lord.stance.finishAt || Date.now() >= lord.stance.finishAt) return false;
-  return !!STANCE_DEFS[lord.stance.id]?.restrictions?.includes('action');
-}
+// The down / mid-action / restricting-stance checks that used to live here as
+// three inline tests are now server/lord-busy.js, shared with recruit, disband
+// and the two mount endpoints — one rule, one wording, one place to change it.
 
 // Units already bought and queued for this lord across ALL cities — they
 // WILL land in the army when training finishes (catch-up adds them without
@@ -94,14 +94,9 @@ export async function handleArmyTransfer(req, res) {
   }
 
   for (const lord of [lordA, lordB]) {
-    if (_isDown(lord)) {
-      return res.status(400).json({ ok: false, error: `${lord.name} is incapacitated — their army cannot be touched.` });
-    }
-    if ((lord.actionQueue || []).length > 0) {
-      return res.status(400).json({ ok: false, error: `${lord.name} is busy — wait for their current action to finish.` });
-    }
-    if (_isActionStanced(lord)) {
-      return res.status(400).json({ ok: false, error: `${lord.name} cannot exchange troops while in ${STANCE_DEFS[lord.stance.id]?.name || 'a'} stance.` });
+    const busy = lordBusyReason(lord);
+    if (busy) {
+      return res.status(400).json({ ok: false, error: `${busy} — troops cannot change hands until it returns.` });
     }
   }
 

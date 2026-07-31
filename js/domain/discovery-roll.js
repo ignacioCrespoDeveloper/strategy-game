@@ -57,14 +57,22 @@ var DiscoveryRoll = (() => {
   // scout-heavy force is the answer instead of simply a large one.
   const SCOUT_ER_MULT = 2;
 
-  function expeditionRating(units, unitDefs) {
+  // `erMult` (optional, default 1) is the lord's own contribution — currently
+  // only the level-5 scout mounts, which grant 1.15 (MOUNT_SCOUT_ER_MULT in
+  // js/data/lord-classes.js). It multiplies the FINISHED army total rather
+  // than being added to it, so the mount is worth more to a well-built column
+  // than to a rabble — the scouts you brought are what it helps you use.
+  //
+  // Callers without a lord in hand (the quest-guide generator) simply omit it.
+  function expeditionRating(units, unitDefs, erMult) {
     if (!units || !unitDefs || typeof EconomyCore === 'undefined') return 0;
-    return units.reduce((sum, u) => {
+    const army = units.reduce((sum, u) => {
       const def = unitDefs[u.unitId];
       if (!def) return sum;
       const isScout = (def.traits || []).includes('scout');
       return sum + EconomyCore.getUnitPower(def) * (u.count || 0) * (isScout ? SCOUT_ER_MULT : 1);
     }, 0);
+    return army * (erMult > 0 ? erMult : 1);
   }
 
   // ONE ER ladder, TWO consequences. `er` is the rating needed; then:
@@ -135,8 +143,8 @@ var DiscoveryRoll = (() => {
 
   // Rolls what an expedition's recruit find actually offers.
   // Returns { tierId, tierLabel, unitId, count, er } or null.
-  function rollRecruits(units, unitDefs) {
-    const er   = expeditionRating(units, unitDefs);
+  function rollRecruits(units, unitDefs, erMult) {
+    const er   = expeditionRating(units, unitDefs, erMult);
     const tier = recruitTierFor(er);
     const pool = (tier.pool || []).filter(id => unitDefs?.[id]);
     if (pool.length === 0) return null;

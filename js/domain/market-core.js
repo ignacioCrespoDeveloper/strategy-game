@@ -10,11 +10,13 @@
 //  research; nothing converted either way. A player sitting on millions of
 //  wood with no gold for a mount had no move to make.
 //
-//  WHY IT IS DELIBERATELY BAD VALUE: resources are the over-supplied pool
-//  (~3.1M/day at endgame against ~250k gold/day — see
-//  scripts/economy-projection.js). At a fair rate this would become the
-//  primary gold strategy and drown the gold economy the 2026-07-30 reprice
-//  just rebuilt. So the merchant is a DUMP VALVE, not an income channel:
+//  WHY IT IS DELIBERATELY BAD VALUE: resources are the over-supplied pool —
+//  run `node scripts/economy-projection.js` for the live ratio rather than
+//  trusting a number written here (this header used to claim ~3.1M/day against
+//  ~250k gold/day, both measured with the tuning dials at 1.0 and never
+//  updated; the real curve is roughly a third of that). At a fair rate the
+//  merchant would become the primary gold strategy and drown the gold economy.
+//  So it is a DUMP VALVE, not an income channel:
 //    · the rate is ~2.5x worse than production parity, and
 //    · a hard daily volume cap means it can never scale with your stockpile.
 //  The cap is the real safety mechanism. The rate alone would not be enough:
@@ -32,10 +34,15 @@ var MarketCore = (() => {
   const MARKET_RATES = { wood: 20, stone: 15, food: 25 };
 
   // Daily sell allowance, in GOLD RECEIVED, per level of the player's best
-  // Marketplace. At Marketplace 10 that is 30,000 gold/day — about 12% of
-  // endgame gold income: enough to matter as a valve, not enough to replace
-  // raiding or expeditions. This finally gives the Marketplace a reason to
-  // level beyond its +8%/level passive gold trickle.
+  // Marketplace. At Marketplace 10 that is 30,000 gold/day. This finally gives
+  // the Marketplace a reason to level beyond its +8%/level passive gold trickle.
+  //
+  // That was sized as "about 12% of endgame gold income" against a dials-at-1.0
+  // figure. Re-measured 2026-07-30 it was ~27% — over the 25% its own test
+  // asserted, which the test failed to catch because it held the same stale
+  // number. Phase 1 of ECONOMY-REBALANCE-PLAN.md (questGold 0.25 → 0.60) lifted
+  // endgame gold income to ~145k/day, so the cap is now ~21%: a minority
+  // channel again, on measured numbers. test-economy.js bounds it at 25%.
   const MARKET_GOLD_PER_MK_LEVEL = 3000;
 
   // Marketplace level needed to trade at all.

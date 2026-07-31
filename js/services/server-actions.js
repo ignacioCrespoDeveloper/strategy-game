@@ -693,6 +693,31 @@ const ServerActions = (() => {
     return result;
   }
 
+  // POST /api/lord/mount-sell
+  // Sell the equipped mount back for a fraction of its price (the fraction
+  // lives server-side in lord-mount-sell.js — never re-derive it here) and
+  // leave the lord unmounted. Hydrates lords + players like spendMount, since
+  // both the lord's mountId and the player's coins change.
+  // Resolves { ok, lord, player, sold, refund }.
+  async function sellMount(lordId) {
+    const result = await _post('/api/lord/mount-sell', { lordId });
+    if (result.ok) {
+      const patch = {};
+      if (result.lord) {
+        const lords = StorageService.get('lords') || {};
+        lords[result.lord.id] = result.lord;
+        patch.lords = lords;
+      }
+      if (result.player) {
+        const players = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
   // POST /api/lord/quest-resolve
   // Called when a search_area timer expires (browser open). catchUp in loadAndCatchUp
   // has already rolled the discovery into lord.pendingDiscoveries[]; this endpoint
@@ -837,5 +862,5 @@ const ServerActions = (() => {
     return _post('/api/clan/war-declare', { targetClanId, durationSecs });
   }
 
-  return { build, demolish, marketSell, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, transferUnits, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, instantLordAction, setPlayerRace, spendTalents, spendMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
+  return { build, demolish, marketSell, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, transferUnits, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, instantLordAction, setPlayerRace, spendTalents, spendMount, sellMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
 })();

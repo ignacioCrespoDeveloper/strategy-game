@@ -72,7 +72,10 @@ var BattleEngine = (() => {
     const base  = lord.baseStats || { ...LORD_BASE_STATS };
     const cls   = LORD_CLASSES[lord.classId];
     const mods  = cls?.modifiers || {};
-    const mount = (typeof MOUNT_POOL !== 'undefined' && lord.mountId) ? (MOUNT_POOL[lord.mountId]?.effects || {}) : {};
+    // getLordMountEffects (lord-classes.js) rather than a raw MOUNT_POOL
+    // lookup: mounts became race-exclusive on 2026-07-30, so a stored id has
+    // to be resolved against lord.race before its effects mean anything.
+    const mount = (typeof getLordMountEffects !== 'undefined') ? getLordMountEffects(lord) : {};
     const result = {};
     for (const key of Object.keys(LORD_BASE_STATS)) {
       result[key] = (base[key] ?? LORD_BASE_STATS[key]) + (mods[key] || 0) + (mount[key] || 0);

@@ -269,9 +269,24 @@ function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
 // is the whole reason to leave room before questing, and it also stops
 // expeditions being a way around the army cap. Mirrors the recruit gate in
 // server/actions/recruit.js — the cap is 200 + level×80 (+ talent bonus).
+// Talent and apex-mount bonuses stack; mirrors LordService.getArmyPowerCap
+// (js/domain/lord.js) and _armyPowerCap in server/actions/recruit.js.
 function _armyPowerCap(lord, engine) {
-  const bonus = engine?.TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
-  return 200 + (lord.level || 1) * 80 + bonus;
+  const talent = engine?.TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  const mount  = _mountEffects(lord, engine).armyPowerCapBonus || 0;
+  return 200 + (lord.level || 1) * 80 + talent + mount;
+}
+
+// Mount effects, race-resolved. Guarded because catch-up is handed its engine
+// bundle by four different importers — an older bundle without the helper must
+// degrade to "no mount" rather than throwing mid-tick and stalling the catch-up.
+function _mountEffects(lord, engine) {
+  return engine?.getLordMountEffects ? engine.getLordMountEffects(lord) : {};
+}
+
+// Expedition Rating multiplier from the lord's mount (scout mounts only).
+function _mountErMult(lord, engine) {
+  return _mountEffects(lord, engine).expeditionRatingMult || 1;
 }
 
 function _resolveRecruits(lord, armies, engine) {
@@ -279,7 +294,7 @@ function _resolveRecruits(lord, armies, engine) {
   if (!UNIT_DEFS || !EconomyCore || !DiscoveryRoll) return null;
 
   const army  = armies[lord.id] || { lordId: lord.id, units: [] };
-  const offer = DiscoveryRoll.rollRecruits(army.units, UNIT_DEFS);
+  const offer = DiscoveryRoll.rollRecruits(army.units, UNIT_DEFS, _mountErMult(lord, engine));
   if (!offer) return null;
 
   const def = UNIT_DEFS[offer.unitId];
@@ -337,7 +352,7 @@ function _resolveSearchArea(lord, armies, cities, nowMs, engine, action) {
   // Expedition Rating: the SAME rating that gates which recruits will join now
   // also decides the quality of what gets found — see RECRUIT_TIERS.find. A
   // scout-heavy column is shown the good ground; a rabble is shown a ditch.
-  const er = DiscoveryRoll.expeditionRating((armies[lord.id] || {}).units, UNIT_DEFS);
+  const er = DiscoveryRoll.expeditionRating((armies[lord.id] || {}).units, UNIT_DEFS, _mountErMult(lord, engine));
 
   const def = DiscoveryRoll.rollDef(DISCOVERY_DEFS, terrainId, talentEffects.goldDiscoveryBonus || 0, lengthId, loudness, er);
   if (!def) return null;
@@ -470,13 +485,15 @@ export function catchUp(state, nowMs, engine = null) {
       // search_area: resolve XP + discovery server-side when engine data is available.
       // This ensures rewards are applied even when the browser was closed during the quest.
       if (done.actionId === 'search_area' && engine) {
-        const talentEffects = (engine.TALENT_POOL && lord.talentId)
-          ? (engine.TALENT_POOL[lord.talentId]?.effects || {}) : {};
-        const xpMult = talentEffects.xpMultiplier || 1;
         // The flat "you ran an expedition" XP scales with how long it ran, so a
         // Long push is worth its 30 minutes even when it finds nothing.
+        // No talent multiplies this any more: the `scholar` talent's
+        // xpMultiplier was the only reader and was retired 2026-07-30 because
+        // multiplying THIS number alone (8 XP) while leaving the find and
+        // ambush XP untouched delivered ~2% of what the talent promised. If an
+        // XP talent returns, it has to scale pending.rewards' xp entries too.
         const lenMul = engine.DiscoveryRoll ? engine.DiscoveryRoll.lengthOf(done.length).reward : 1;
-        const baseXp = Math.round(_SEARCH_AREA_XP * xpMult * lenMul);
+        const baseXp = Math.round(_SEARCH_AREA_XP * lenMul);
 
         const pending = _resolveSearchArea(lord, armies, cities, nowMs, engine, done);
         if (pending) {
@@ -495,13 +512,23 @@ export function catchUp(state, nowMs, engine = null) {
           // God of Destruction blessing: a heavier haul from every expedition.
           // Applied to material loot only — XP is the lord's own effort and is
           // deliberately left alone, same as the raid path leaves XP untouched.
-          const questMult = 1 + (blessingFx.quest_bonus || 0);
+          // Mount stacks ADDITIVELY with the blessing (scout +15%, apex +25%),
+          // same grammar as every other % key in the game. Added 2026-07-30 with
+          // the mount reprice: quest_bonus/raid_bonus were blessing-only keys,
+          // so a mount that declared one would have been silently inert.
+          const questMult = 1 + (blessingFx.quest_bonus || 0)
+                              + (_mountEffects(lord, engine).quest_bonus || 0);
+          // God of Nature's resource_yield_bonus rides on top for RESOURCES
+          // ONLY — it is the non-building half of a "+X% resources" blessing
+          // and must never touch coin, or it becomes a gold blessing by
+          // accident. Same split in the raid block below.
+          const questResMult = questMult + (blessingFx.resource_yield_bonus || 0);
           for (const r of (pending.rewards || [])) {
             if      (r.type === 'gold') player.coins = Math.floor((player.coins || 0) + r.amount * questMult);
             else if (r.type === 'xp')  lord.xp = (lord.xp || 0) + r.amount;
             else if (['food','wood','stone'].includes(r.type)) {
               player.resources = player.resources || {};
-              player.resources[r.type] = Math.floor((player.resources[r.type] || 0) + r.amount * questMult);
+              player.resources[r.type] = Math.floor((player.resources[r.type] || 0) + r.amount * questResMult);
             }
           }
           _checkLevelUp(lord, engine);
@@ -574,7 +601,13 @@ export function catchUp(state, nowMs, engine = null) {
         const hours = Math.max(0, (lord.stance.finishAt - lord.stance.startedAt) / 3_600_000);
         const rates = engine.EconomyCore.getRaidHourlyRewards(lord.level);
         // God of Destruction blessing: heavier plunder from every raid.
-        const raidMult   = 1 + (blessingFx.raid_bonus || 0);
+        // War/apex mounts add +35% here, stacking additively with the blessing.
+        // js/ui/lord-screen.js's raid preview applies the same sum — if you
+        // change one, change both or the previewed payout stops matching.
+        const raidMult   = 1 + (blessingFx.raid_bonus || 0)
+                             + (_mountEffects(lord, engine).raid_bonus || 0);
+        // Resources take God of Nature's yield bonus on top; gold does not.
+        const raidResMult = raidMult + (blessingFx.resource_yield_bonus || 0);
         const goldEarned = Math.floor(rates.gold * hours * raidMult);
         player.coins      = Math.floor((player.coins || 0) + goldEarned);
         player.resources  = player.resources || { food: 0, wood: 0, stone: 0 };
@@ -583,7 +616,7 @@ export function catchUp(state, nowMs, engine = null) {
           // Floor the GAIN (not the sum) so the number reported to the player
           // is exactly the number that was added — stored resources are always
           // integers, so this is arithmetically identical to the old form.
-          resEarned[r] = Math.floor(rates[r] * hours * raidMult);
+          resEarned[r] = Math.floor(rates[r] * hours * raidResMult);
           player.resources[r] = (player.resources[r] || 0) + resEarned[r];
         });
 

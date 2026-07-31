@@ -52,11 +52,25 @@ const LordService = (() => {
       : {};
   }
 
-  // Returns the flat stat bonuses for the lord's equipped mount, or {} if none.
+  // Returns the effects for the lord's equipped mount, or {} if none.
+  // Goes through getLordMountEffects rather than indexing MOUNT_POOL directly
+  // so a lord still holding a pre-race-split mount id resolves to its race's
+  // equivalent instead of reading undefined — see resolveMountId.
+  //
+  // NOTE not every key here is a stat: `expeditionRatingMult` and
+  // `armyPowerCapBonus` also live in `effects` and are read by
+  // getMountExpeditionErMult / getArmyPowerCap below. getEffectiveStats only
+  // ever reads LORD_BASE_STATS keys off this object, so the extras are inert
+  // there rather than needing to be filtered out.
   function getMountEffects(lord) {
-    return (typeof MOUNT_POOL !== 'undefined' && lord.mountId)
-      ? (MOUNT_POOL[lord.mountId]?.effects || {})
-      : {};
+    return (typeof getLordMountEffects !== 'undefined') ? getLordMountEffects(lord) : {};
+  }
+
+  // Multiplier this lord's mount applies to Expedition Rating (1 if none).
+  // ER gates find quality and recruit quality, so this is the whole payload of
+  // the level-5 scout mounts.
+  function getMountExpeditionErMult(lord) {
+    return getMountEffects(lord).expeditionRatingMult || 1;
   }
 
   // Returns the lord's effective stats: base + class permanent modifiers + mount bonuses.
@@ -111,8 +125,10 @@ const LordService = (() => {
   }
 
   // getCommandCapacity was removed 2026-07-30: it described a retired
-  // "unit model slots" system, had no caller anywhere in the codebase, and
-  // was the only consumer of the Commander talent's commandCapacityBonus.
+  // "unit model slots" system and had no caller anywhere in the codebase. It
+  // was the only consumer of commandCapacityBonus, so the `commander` talent
+  // that granted that key was retired the same day rather than left in the
+  // pool as an unundoable dead pick (see the TALENT_POOL header note).
   // Army size is bounded solely by the PWR cap (200 + level×80 + talent
   // bonus) in server/actions/recruit.js.
 
@@ -121,7 +137,10 @@ const LordService = (() => {
     if (n.length < 2)           return { ok: false, error: 'Lord name must be at least 2 characters.' };
     if (n.length > 30)          return { ok: false, error: 'Lord name cannot exceed 30 characters.' };
     if (!RACES[raceId])         return { ok: false, error: 'Select a race before continuing.' };
-    if (!LORD_CLASSES[classId]) return { ok: false, error: 'Select a class before continuing.' };
+    // isClassRecruitable, not a bare LORD_CLASSES lookup — a hidden class must
+    // be refused here too, or this path would disagree with the server gate in
+    // server/actions/lord-create.js the moment anything calls it.
+    if (!isClassRecruitable(classId)) return { ok: false, error: 'Select a class before continuing.' };
 
     const lords = _getAll();
     const playerLords = Object.values(lords).filter(l => l.playerId === playerId);
@@ -340,8 +359,7 @@ const LordService = (() => {
     // For all other actions (none currently have xpReward, but keep the guard future-proof).
     let leveled = 0;
     if (item.actionId !== 'search_area' && def && def.xpReward) {
-      const xpMult = getTalentEffects(lord).xpMultiplier || 1;
-      lord.xp = (lord.xp || 0) + Math.round(def.xpReward * xpMult);
+      lord.xp = (lord.xp || 0) + def.xpReward;
       leveled = checkLevelUp(lord);
     }
 
@@ -420,8 +438,15 @@ const LordService = (() => {
   }
 
   // CP cap by lord level: Lv1=280, +80 per level.
+  // Talent and mount bonuses STACK — they are separate purchases on separate
+  // axes (a permanent talent pick vs. a re-buyable 1.5M apex mount), so a
+  // level-10 commanding lord on an apex mount caps at 1000 + 100 + 200 = 1300.
+  // Mirrored in server/actions/recruit.js and server/tick/catch-up.js; all
+  // three must agree or the client will offer recruits the server refuses.
   function getArmyPowerCap(lord) {
-    return 200 + (lord.level || 1) * 80 + (getTalentEffects(lord).armyPowerCapBonus || 0);
+    return 200 + (lord.level || 1) * 80
+      + (getTalentEffects(lord).armyPowerCapBonus || 0)
+      + (getMountEffects(lord).armyPowerCapBonus  || 0);
   }
 
   return {
@@ -430,6 +455,7 @@ const LordService = (() => {
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
     getEffectiveStats, getActionDuration, getTalentEffects, getMountEffects,
+    getMountExpeditionErMult,
     getStance, isStanced, enterStance, exitStance, tickStance,
     getArmyPowerCap,
     isDown, getDowntimeRemaining, tickDowntime,

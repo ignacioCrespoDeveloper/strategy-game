@@ -75,7 +75,18 @@ var TUNING = {
   // NOTE these are the biggest levers in the game: expeditions are ~50% of
   // resource income at every stage (run the projection's INCOME MIX to see
   // it). If resources feel out of control, start here.
-  questGold:      0.25,
+  //
+  // questGold 0.25 → 0.60 on 2026-07-30 (ECONOMY-REBALANCE-PLAN.md Phase 1).
+  // At 0.25 an expedition paid 608 gold/hour against parked raiding's 490 — a
+  // 1.24x premium for the channel that costs attention, travel AND ambush
+  // casualties, while the passive one cost nothing but a locked lord. So the
+  // gold half of expeditions had quietly stopped being a reason to play the
+  // game actively, and raiding drifted to 53% of all gold income.
+  //
+  // The two dials stay SEPARATE and deliberately unequal: expeditions already
+  // pay ~15x raiding on resources, so questResources stays at 0.5. Only the
+  // gold side was underpaying. Do not "tidy" these to the same number.
+  questGold:      0.60,
   questResources: 0.5,
 
   // ── TIME ────────────────────────────────────────────────────────

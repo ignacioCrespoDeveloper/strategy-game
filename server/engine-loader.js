@@ -65,6 +65,7 @@ export const RESEARCH_DEFS         = _ctx.RESEARCH_DEFS;
 export const RESEARCH_TIERS        = _ctx.RESEARCH_TIERS;
 export const BLESSING_DEFS         = _ctx.BLESSING_DEFS;
 export const BLESSING_MIN_TEMPLE   = _ctx.BLESSING_MIN_TEMPLE;
+export const BLESSING_COST_MIX     = _ctx.BLESSING_COST_MIX;
 export const blessingMaxHours      = _ctx.blessingMaxHours;
 export const blessingDuration      = _ctx.blessingDuration;
 export const blessingCost          = _ctx.blessingCost;
@@ -80,6 +81,8 @@ export const TERRAIN_BATTLE_MODS   = _ctx.TERRAIN_BATTLE_MODS;
 export const BATTLE_WIN_HEAL_PCT   = _ctx.BATTLE_WIN_HEAL_PCT;
 export const LORD_BASE_STATS       = _ctx.LORD_BASE_STATS;
 export const LORD_CLASSES          = _ctx.LORD_CLASSES;
+export const isClassRecruitable    = _ctx.isClassRecruitable;
+export const getRecruitableClasses = _ctx.getRecruitableClasses;
 export const LORD_MAX_LEVEL        = _ctx.LORD_MAX_LEVEL;
 export const lordStatGain          = _ctx.lordStatGain;
 export const rollLordPortrait      = _ctx.rollLordPortrait;
@@ -87,7 +90,14 @@ export const pickLordPortrait      = _ctx.pickLordPortrait;
 export const STANCE_DEFS           = _ctx.STANCE_DEFS;
 export const TALENT_POOL           = _ctx.TALENT_POOL;
 export const MOUNT_POOL            = _ctx.MOUNT_POOL;
+export const MOUNT_SLOTS           = _ctx.MOUNT_SLOTS;
 export const getMountForRace       = _ctx.getMountForRace;
+export const resolveMountId        = _ctx.resolveMountId;
+export const getLordMount          = _ctx.getLordMount;
+export const getLordMountEffects   = _ctx.getLordMountEffects;
+export const getMountsForRace      = _ctx.getMountsForRace;
+export const MOUNT_SELL_REFUND     = _ctx.MOUNT_SELL_REFUND;
+export const mountSellValue        = _ctx.mountSellValue;
 export const lordRansomCost        = _ctx.lordRansomCost;
 export const DISCOVERY_DEFS        = _ctx.DISCOVERY_DEFS;
 export const DiscoveryRoll         = _ctx.DiscoveryRoll;
@@ -110,4 +120,8 @@ export const ENGINE = {
   EconomyCore, MarketCore, tune,
   TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
   pickLordPortrait, DiscoveryRoll, BattleEngine, BATTLE_WIN_HEAL_PCT,
+  // Mounts: catch-up reads them for the army PWR cap AND for the Expedition
+  // Rating bonus on scout mounts. getLordMountEffects (not MOUNT_POOL) is the
+  // one that matters — it resolves a stored id against the lord's race.
+  MOUNT_POOL, getLordMountEffects,
 };

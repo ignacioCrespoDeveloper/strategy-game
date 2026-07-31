@@ -44,7 +44,7 @@ import {
   LORD_CLASSES,
   LORD_MAX_LEVEL,
   STANCE_DEFS,
-  MOUNT_POOL,
+  getLordMountEffects,
   TALENT_POOL,
   EconomyCore,
   BATTLE_WIN_HEAL_PCT,
@@ -77,7 +77,10 @@ export function _effectiveStats(lord) {
   const base  = lord.baseStats || { ...LORD_BASE_STATS };
   const cls   = LORD_CLASSES[lord.classId];
   const mods  = cls?.modifiers || {};
-  const mount = lord.mountId ? (MOUNT_POOL?.[lord.mountId]?.effects || {}) : {};
+  // Race-resolved (mounts became race-exclusive 2026-07-30) — a raw
+  // MOUNT_POOL[lord.mountId] read silently drops the bonuses of any lord
+  // still holding a pre-split id.
+  const mount = getLordMountEffects ? getLordMountEffects(lord) : {};
   const result = {};
   for (const key of Object.keys(LORD_BASE_STATS)) {
     result[key] = (base[key] ?? LORD_BASE_STATS[key]) + (mods[key] || 0) + (mount[key] || 0);
@@ -427,12 +430,14 @@ function _unitRole(def) {
 // mirrors js/domain/battle-engine.js buildContext()'s client-side PvE path,
 // which this previously lacked entirely, silently no-op'ing every combat
 // talent (blademaster, double_strike, pyroblast, iron_wall) in PvP.
+const _talentFx = lord => (lord?.talentId && TALENT_POOL[lord.talentId]?.effects) || {};
+
 function _makeLordUnit(lord, stats, prefix) {
   const traits = ['backline'];
   let   attack = stats.attack;
   let   defense = stats.defense;
 
-  const talentEffects = (lord.talentId && TALENT_POOL[lord.talentId]?.effects) || {};
+  const talentEffects = _talentFx(lord);
   if (talentEffects.battleUnitAttackBonus)  attack  += talentEffects.battleUnitAttackBonus;
   if (talentEffects.battleUnitDefenseBonus) defense += talentEffects.battleUnitDefenseBonus;
   if (talentEffects.battleUnitTraits) {
@@ -511,7 +516,9 @@ function _makeStack(stack, prefix, idx, usePrefix, vetPct = 0) {
 // so nothing needs to persist here.
 // vet (optional): { attacker: unitId=>pct, defenders: [unitId=>pct per index],
 // garrison: pct } — veterancy buffs from each side's training buildings.
-function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain, vet) {
+// Exported (like _effectiveStats / _armyTotal / _checkLevelUp above) purely so
+// the morale + talent wiring can be asserted without standing up a server.
+export function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain, vet) {
   const atkStats = _effectiveStats(atkLord);
   const vetAtk   = vet?.attacker || (() => 0);
 
@@ -536,6 +543,24 @@ function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain,
     (m, { lord }) => Math.max(m, _effectiveStats(lord).leadership), 0
   );
 
+  // Morale talents (inspiring / fearsome). js/domain/battle-engine.js's
+  // buildContext applies these on the PvE ambush path, but PvP built both
+  // sides' morale from leadership alone — so the two talents silently did
+  // nothing in the only fight that costs a player anything, the same way the
+  // combat talents did before _makeLordUnit was taught about them.
+  //
+  // Applied SYMMETRICALLY, which the PvE path can't express because the player
+  // is always the attacker there: each side gets its OWN inspiring bonus and
+  // eats the OTHER side's fearsome malus. That is exactly what the two
+  // descriptions promise ("allied morale starts 10 higher" / "enemy forces
+  // enter battle with 10 less"), and it means a defending lord's talent is
+  // worth the same as an attacking one's. Defenders take the best of each,
+  // same rule maxDefLeadership already uses for a multi-defender stack.
+  const atkFx    = _talentFx(atkLord);
+  const defFx    = defenders.map(d => _talentFx(d.lord));
+  const bestDef  = key => defFx.reduce((m, fx) => Math.max(m, fx[key] || 0), 0);
+  const _clamped = v => Math.max(0, Math.min(100, v));
+
   return {
     terrain,
     attacker: {
@@ -544,12 +569,14 @@ function _buildMultiContext(atkLord, atkArmy, defenders, garrisonUnits, terrain,
         _makeLordUnit(atkLord, atkStats, 'a'),
         ...(atkArmy?.units || []).map((s, i) => _makeStack(s, 'a', i, false, vetAtk(s.unitId))).filter(Boolean),
       ],
-      morale: Math.min(100, 75 + atkStats.leadership * 1.5),
+      morale: _clamped(75 + atkStats.leadership * 1.5
+        + (atkFx.attackerMoraleBonus || 0) - bestDef('defenderMoraleMalus')),
     },
     defender: {
       id:    defenders.map(d => d.lord.playerId).join('+'),
       units: defUnits,
-      morale: Math.min(100, 75 + maxDefLeadership * 1.5),
+      morale: _clamped(75 + maxDefLeadership * 1.5
+        + bestDef('attackerMoraleBonus') - (atkFx.defenderMoraleMalus || 0)),
     },
   };
 }

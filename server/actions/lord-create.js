@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_BASE_STATS, LORD_CLASSES, RACES, rollLordPortrait } from '../engine-loader.js';
+import { LORD_BASE_STATS, LORD_CLASSES, RACES, rollLordPortrait, isClassRecruitable } from '../engine-loader.js';
 
 // Exported so scripts/economy-projection.js reads the REAL expansion curve
 // instead of keeping its own copy. js/domain/lord.js mirrors these for the
@@ -40,7 +40,11 @@ export async function handleLordCreate(req, res) {
   const n = name.trim();
   if (n.length < 2)  return res.status(400).json({ ok: false, error: 'Lord name must be at least 2 characters.' });
   if (n.length > 30) return res.status(400).json({ ok: false, error: 'Lord name cannot exceed 30 characters.' });
-  if (!LORD_CLASSES[classId]) return res.status(400).json({ ok: false, error: 'Invalid class.' });
+  // isClassRecruitable covers BOTH "does this class exist" and "is it offered"
+  // — the modal hides Priest and Dark Lord, but the modal is not the gate. It
+  // is also own-property-safe, so `classId: 'constructor'` is rejected here
+  // rather than being written onto a lord.
+  if (!isClassRecruitable(classId)) return res.status(400).json({ ok: false, error: 'Invalid class.' });
 
   const ctx = await loadAndCatchUp(req, res);
   if (!ctx) return;
