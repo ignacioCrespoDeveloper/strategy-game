@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { UNIT_DEFS, TALENT_POOL, EconomyCore, UnitUnlockService, getLordMountEffects } from '../engine-loader.js';
+import { UNIT_DEFS, EconomyCore, UnitUnlockService, getLordMountEffects, lordTalentEffects, lordArmyPowerCapBase } from '../engine-loader.js';
 import { lordBusyReason } from '../lord-busy.js';
 
 // Army capacity is gated by Army Power alone — EconomyCore.getArmyPower is
@@ -28,11 +28,12 @@ function _projectedArmyPower(army, unitId, addCount) {
 // Talent and apex-mount cap bonuses stack. Must stay identical to
 // LordService.getArmyPowerCap (js/domain/lord.js) and _armyPowerCap in
 // server/tick/catch-up.js — if this one is lower the client offers recruits
-// the server then refuses; if it is higher the cap leaks.
-function _armyPowerCap(lord, talentPool) {
-  const talent = talentPool?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+// the server then refuses; if it is higher the cap leaks. The base term is
+// lordArmyPowerCapBase (frozen at level 10) so that freeze is defined once.
+function _armyPowerCap(lord) {
+  const talent = lordTalentEffects(lord).armyPowerCapBonus || 0;
   const mount  = getLordMountEffects(lord).armyPowerCapBonus || 0;
-  return 200 + (lord.level || 1) * 80 + talent + mount;
+  return lordArmyPowerCapBase(lord.level) + talent + mount;
 }
 
 export async function handleRecruit(req, res) {
@@ -100,7 +101,7 @@ export async function handleRecruit(req, res) {
     else virtualArmy.units.push({ unitId: item.unitId, count: item.count });
   });
 
-  const cap            = _armyPowerCap(lord, TALENT_POOL);
+  const cap            = _armyPowerCap(lord);
   const usedPower      = _armyPower(virtualArmy);
   const projectedPower = _projectedArmyPower(virtualArmy, unitId, count);
   if (projectedPower > cap) {
@@ -126,7 +127,9 @@ export async function handleRecruit(req, res) {
   // batch is ahead of it finishes, not immediately, unless the queue is
   // empty (then it starts now, same as before this was a multi-slot queue).
   const now          = Date.now();
-  const recruitMult  = TALENT_POOL?.[lord.talentId]?.effects?.recruitTimeMult ?? 1;
+  // Merged across every talent the lord holds — two recruit-time talents would
+  // compound (×0.7 × ×0.7), never add. See TALENT_MULT_KEYS in lord-classes.js.
+  const recruitMult  = lordTalentEffects(lord).recruitTimeMult ?? 1;
   // Recruit time: base × recruit_speed modifiers ÷ hangar divisor (every
   // level of THIS city's training building above the unit's unlock level),
   // then the lord's talent mult.

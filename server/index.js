@@ -12,15 +12,20 @@
 
 import 'dotenv/config';
 import express              from 'express';
+import { readFile }         from 'fs/promises';
 import { fileURLToPath }    from 'url';
 import { dirname, join }    from 'path';
+import { getAssetVersion, stampHtml } from './asset-version.js';
 import { resolvePvpAttack, scanPresence, scanIncomingAttacks } from './combat-resolver.js';
 import { runDispatch } from './tick/event-dispatcher.js';
 import { BattleEngine, UNIT_DEFS } from './engine-loader.js';
 import { syncPlayerState }         from './sync.js';
 import { handleBuild }             from './actions/build.js';
 import { handleDemolish }          from './actions/demolish.js';
+import { handleCityItemApply }     from './actions/city-item.js';
 import { handleMarketSell }        from './actions/market-sell.js';
+import { handleMarketBuy }         from './actions/market-buy.js';
+import { handleUsernameCheck }     from './actions/username-check.js';
 import { handleResearchStart, handleResearchInstant } from './actions/research.js';
 import { handleBlessingConsecrate } from './actions/blessing.js';
 import { handleRecruit }           from './actions/recruit.js';
@@ -73,7 +78,46 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // ── Middleware ────────────────────────────────────────────────
 app.use(express.json());
-app.use(express.static(join(__dirname, '..')));
+
+// index.html is served by hand rather than by express.static so every local
+// asset URL can be stamped with the current build id (server/asset-version.js).
+// Without that stamp a browser holding an old js/data file renders prices and
+// rules the server no longer applies, which is unfalsifiable from the outside —
+// see the mount-price report of 2026-08-02. The document itself must never be
+// cached: it is the thing that carries the new version numbers.
+app.get(['/', '/index.html'], async (req, res, next) => {
+  try {
+    const html = await readFile(join(__dirname, '..', 'index.html'), 'utf8');
+    res.set('Cache-Control', 'no-store');
+    res.type('html').send(stampHtml(html, getAssetVersion()));
+  } catch (e) {
+    // Serving an unstamped page beats serving no page at all.
+    console.warn('[static] index.html stamp failed, falling through to static:', e.message);
+    next();
+  }
+});
+
+// Stamp the running build on every API response. The client compares it with
+// the build its page was served with and warns when they diverge — a tab left
+// open across a deploy renders old prices and old rules while the server
+// applies the new ones, which is unfalsifiable from a screenshot. Header, not
+// body, so it costs nothing and no endpoint has to remember to include it.
+app.use('/api', (req, res, next) => {
+  res.setHeader('X-Hexfront-Build', getAssetVersion());
+  next();
+});
+
+app.use(express.static(join(__dirname, '..'), {
+  setHeaders(res) {
+    // A request carrying ?v=<build> is by construction pinned to one immutable
+    // version of that file — any edit changes the version and therefore the
+    // URL — so it can be cached hard. Everything else (the guide pages, art,
+    // anything hit without a stamp) keeps the revalidate-every-time behaviour
+    // express.static had before.
+    if (res.req?.query?.v) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    else                   res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 // Express 4 (unlike Express 5) does NOT automatically catch a rejected
 // promise thrown inside an async route handler — none of the action
@@ -106,6 +150,12 @@ function _safe(handler) {
 // POST /api/sync — offline catch-up on login
 app.post('/api/sync', _safe(syncPlayerState));
 
+// POST /api/auth/username-available — registration-time uniqueness check.
+// Deliberately NOT behind loadAndCatchUp: it runs before the account exists.
+// See the header of actions/username-check.js for why this cannot be a client
+// query and what it does and does not guarantee.
+app.post('/api/auth/username-available', _safe(handleUsernameCheck));
+
 app.post('/api/pvp/resolve',         _safe(resolvePvpAttack));
 
 // POST /api/scan/presence — live, strength-free "there is a lord here" layer
@@ -128,7 +178,9 @@ app.post('/api/attack/incoming', _safe(scanIncomingAttacks));
 // POST /api/lord/action   — validate + enqueue move/search_area server-side
 app.post('/api/city/build',    _safe(handleBuild));
 app.post('/api/city/demolish', _safe(handleDemolish));
+app.post('/api/city/item-apply', _safe(handleCityItemApply));
 app.post('/api/market/sell',   _safe(handleMarketSell));
+app.post('/api/market/buy',    _safe(handleMarketBuy));
 app.post('/api/research/start',   _safe(handleResearchStart));
 app.post('/api/research/instant', _safe(handleResearchInstant));
 app.post('/api/blessing/consecrate', _safe(handleBlessingConsecrate));

@@ -58,6 +58,36 @@ const ServerActions = (() => {
     return session?.access_token || null;
   }
 
+  // ── Stale-client detection ────────────────────────────────────
+  //
+  // Every /api/* response carries the server's build id (server/index.js). This
+  // page carries the build it was SERVED with, stamped into a meta tag. When
+  // they diverge, the tab has been open across a deploy and is rendering data
+  // definitions the server no longer uses.
+  //
+  // This is the whole shape of the mount-price report of 2026-08-02: the Mount
+  // tab printed the pre-reprice 300k ladder while the server charged 60k. Note
+  // the money was never wrong — the server is authoritative and charged the
+  // real price — so this WARNS rather than blocks. A hard gate would also make
+  // every save during development log the player out.
+  //
+  // Fires once per session; the reload clears it.
+  let _staleWarned = false;
+
+  function _checkBuild(res) {
+    if (_staleWarned) return;
+    const serverBuild = res.headers.get('X-Hexfront-Build');
+    const pageBuild   = document.querySelector('meta[name="hexfront-build"]')?.content;
+    // 'dev' means index.html was opened off disk rather than served — there is
+    // no build to compare against, so there is nothing to warn about.
+    if (!serverBuild || !pageBuild || pageBuild === 'dev' || serverBuild === pageBuild) return;
+    _staleWarned = true;
+    console.warn(`[build] page ${pageBuild} vs server ${serverBuild} — reload to resync`);
+    if (typeof ToastService !== 'undefined') {
+      ToastService.show('A new version of the game is live — reload the page. Prices and rules on screen may be out of date.');
+    }
+  }
+
   async function _post(path, body) {
     const token = await _token();
     if (!token) return { ok: false, error: 'Not logged in' };
@@ -70,6 +100,8 @@ const ServerActions = (() => {
       },
       body: JSON.stringify(body),
     });
+
+    _checkBuild(res);
 
     const json = await res.json().catch(() => ({ ok: false, error: 'Invalid server response' }));
     return { status: res.status, ...json };
@@ -91,6 +123,29 @@ const ServerActions = (() => {
         const players            = StorageService.get('players') || {};
         players[result.player.id] = _mergePlayer(result.player);
         patch.players            = players;
+      }
+      if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
+    }
+    return result;
+  }
+
+  // POST /api/city/item-apply
+  // Spends one city item from the backpack onto a city for its fixed duration.
+  // Hydrates BOTH: the city (activeItems changed, which changes its production
+  // rates) and the player (the backpack shrank).
+  async function applyItem(cityId, itemId) {
+    const result = await _post('/api/city/item-apply', { cityId, itemId });
+    if (result.ok) {
+      const patch = {};
+      if (result.city) {
+        const cities   = StorageService.get('cities') || {};
+        cities[cityId] = result.city;
+        patch.cities   = cities;
+      }
+      if (result.player) {
+        const players             = StorageService.get('players') || {};
+        players[result.player.id] = _mergePlayer(result.player);
+        patch.players             = players;
       }
       if (Object.keys(patch).length > 0) StorageService.hydrate(patch);
     }
@@ -170,6 +225,20 @@ const ServerActions = (() => {
   // and `sale.gold` rather than assuming the requested amount went through.
   async function marketSell(resource, amount) {
     const result = await _post('/api/market/sell', { resource, amount });
+    if (result.ok && result.player) {
+      const players             = StorageService.get('players') || {};
+      players[result.player.id] = _mergePlayer(result.player);
+      StorageService.hydrate({ players });
+    }
+    return result;
+  }
+
+  // POST /api/market/buy
+  // Buys resources from the merchant with gold — the mirror of marketSell.
+  // `gold` is what you OFFER; the server clamps it to your real balance, so
+  // read `purchase.spent` / `purchase.received` for what actually happened.
+  async function marketBuy(resource, gold) {
+    const result = await _post('/api/market/buy', { resource, gold });
     if (result.ok && result.player) {
       const players             = StorageService.get('players') || {};
       players[result.player.id] = _mergePlayer(result.player);
@@ -658,7 +727,8 @@ const ServerActions = (() => {
   }
 
   // POST /api/lord/talents
-  // Choose a talent (talentId) and/or spend talent points on a stat (statKey + statPoints).
+  // Claim a talent slot (talentId — one per 5 levels, four in total) and/or
+  // spend talent points on a stat (statKey + statPoints).
   // On success, hydrates lords from server response.
   async function spendTalents(lordId, opts = {}) {
     const result = await _post('/api/lord/talents', { lordId, ...opts });
@@ -862,5 +932,5 @@ const ServerActions = (() => {
     return _post('/api/clan/war-declare', { targetClanId, durationSecs });
   }
 
-  return { build, demolish, marketSell, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, transferUnits, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, instantLordAction, setPlayerRace, spendTalents, spendMount, sellMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
+  return { build, demolish, applyItem, marketSell, marketBuy, checkIncomingAttacks, researchStart, researchInstant, blessingConsecrate, recruit, lordMove, lordSearch, lordScout, createLord, foundCity, reviveLord, ransomLord, releaseLord, getPrisonList, disbandUnit, transferUnits, syncNow, instantBuild, instantRecruit, cancelBuild, cancelRecruit, cancelLordAction, instantLordAction, setPlayerRace, spendTalents, spendMount, sellMount, saveLordXp, questResolve, scoutResolve, raidStart, raidCancel, raidInstant, clanCreate, clanApply, clanAccept, clanReject, clanLeave, clanKick, clanList, clanWarDeclare };
 })();

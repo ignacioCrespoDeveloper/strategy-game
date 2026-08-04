@@ -25,7 +25,8 @@
 //  single worst thing you can do — hence the solver below.
 // =============================================
 
-import { UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore, DiscoveryRoll, DISCOVERY_DEFS } from '../server/engine-loader.js';
+import { UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore, DiscoveryRoll, DISCOVERY_DEFS,
+         LORD_MAX_LEVEL, LORD_POWER_LEVEL_CAP } from '../server/engine-loader.js';
 import { writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -39,6 +40,7 @@ const pwr        = def => EconomyCore.getUnitPower(def);
 const isScout    = def => (def.traits || []).includes('scout');
 
 // Mirrors scripts/test-balance.js so both guides describe the same game.
+// Endgame is level 10 because the army PWR cap freezes there — see that file.
 const STAGES = [
   { id: 'start', label: 'Start',   lordLevel: 3,  pwrCap: 440  },
   { id: 'mid',   label: 'Midgame', lordLevel: 6,  pwrCap: 680  },
@@ -229,15 +231,27 @@ const findRows = TIERS.map(t => `
   </tr>`).join('');
 
 // Payout bands the find tiers actually pay, straight from the engine.
+// The resource columns are split three ways because the band is shared but the
+// yield is not — RES_RATIO pays wood/stone/food at 3:2:1. Printing one merged
+// "each resource" column, as this did before that landed, would have been
+// wrong for two of the three.
+const RES_ORDER = ['wood', 'stone', 'food'];
 const payRows = [1, 2, 3].map(tier => {
   const r = DiscoveryRoll.TIER_RANGES[tier];
+  const cells = RES_ORDER.map(t => {
+    const m = DiscoveryRoll.resYieldMult(t);
+    return `<td class="cell num">${Math.floor(r.res[0] * m)}–${Math.floor(r.res[1] * m)}</td>`;
+  }).join('');
   return `
   <tr>
     <td class="rowhead">Tier ${tier}</td>
     <td class="cell num">${r.gold[0]}–${r.gold[1]}</td>
-    <td class="cell num">${r.res[0]}–${r.res[1]}</td>
+    ${cells}
   </tr>`;
 }).join('');
+
+const ratioLine = RES_ORDER.map(t =>
+  `${t} ×${DiscoveryRoll.resYieldMult(t).toFixed(2)}`).join(' · ');
 
 const lenRows = Object.values(DiscoveryRoll.LENGTHS).map(L => `
   <tr>
@@ -350,7 +364,7 @@ const html = `<!doctype html>
     ER        = Σ unitPWR × (scout ? ${DiscoveryRoll.SCOUT_ER_MULT} : 1)<br>
     loudness  = clamp((armyPWR − ${DiscoveryRoll.QUIET_PWR}) / ${DiscoveryRoll.LOUD_PWR - DiscoveryRoll.QUIET_PWR}, 0, 1)<br>
     ambush    = ${DiscoveryRoll.ambushRatioFor(0).toFixed(2)} below ${DiscoveryRoll.OVERMATCH_PWR} PWR, rising to ${DiscoveryRoll.ambushRatioFor(DiscoveryRoll.OVERMATCH_MAX).toFixed(2)} at ${DiscoveryRoll.OVERMATCH_MAX} PWR<br>
-    army cap  = 200 + 80 × lordLevel &nbsp;(max ${DiscoveryRoll.OVERMATCH_MAX} with the Commanding talent)
+    army cap  = 200 + 80 × min(lordLevel, ${LORD_POWER_LEVEL_CAP}) &nbsp;(${DiscoveryRoll.OVERMATCH_MAX} with the Strategist talent)
   </div>
 
   <h2>Glossary</h2>
@@ -360,7 +374,7 @@ const html = `<!doctype html>
     <tbody>
       <tr><td class="rowhead">ER</td><td><b>Expedition Rating</b> — <code>Σ unitPWR × (scout ? ${DiscoveryRoll.SCOUT_ER_MULT} : 1)</code>. Scout-trait units count double. One rating, two jobs: it decides which <b>recruit tier</b> can turn up <em>and</em> how rich the <b>ground you are shown</b> is (see Find quality below). It is why a small scout party outperforms a big line army at finding things.</td></tr>
       <tr><td class="rowhead">Find tier</td><td>Every discovery carries a loot tier 1–3, which decides its payout band. <b>ER decides which tiers you are offered at all</b> — the roll draws the tier from your band first, then picks a find of that tier that suits the terrain. A Common-rated force is offered tier 1 only; Legendary is offered tier 3 on ${pctFlat(DiscoveryRoll.RECRUIT_TIERS[0].tierOdds[3])} of its finds.</td></tr>
-      <tr><td class="rowhead">PWR</td><td>A unit's combat power (<code>EconomyCore.getUnitPower</code>). Your army's total PWR is capped at <code>200 + 80 × lordLevel</code>.</td></tr>
+      <tr><td class="rowhead">PWR</td><td>A unit's combat power (<code>EconomyCore.getUnitPower</code>). Your army's total PWR is capped at <code>200 + 80 × min(lordLevel, ${LORD_POWER_LEVEL_CAP})</code> — the cap stops growing at level ${LORD_POWER_LEVEL_CAP}, so levels ${LORD_POWER_LEVEL_CAP + 1}–${LORD_MAX_LEVEL} make the <em>lord</em> stronger, never the army bigger.</td></tr>
       <tr><td class="rowhead">Headroom</td><td>Cap − army PWR. Free capacity to <em>receive</em> a recruit. A recruit that doesn't fit is <b>lost outright</b>, not queued.</td></tr>
       <tr><td class="rowhead">Loudness</td><td>How conspicuous the army is: 0 below ${DiscoveryRoll.QUIET_PWR} PWR, rising to 1.0 at ${DiscoveryRoll.LOUD_PWR}. Higher means more ambushes, more empty expeditions, and smaller find rewards.</td></tr>
       <tr><td class="rowhead">Footprint</td><td>The umbrella name for the loudness penalties — the ceiling that stops "bring everything" from winning.</td></tr>
@@ -419,11 +433,12 @@ const html = `<!doctype html>
   <h2>What each find tier pays <span class="stage-meta">before level, length, depletion and footprint scaling</span></h2>
   <div class="tablewrap">
   <table>
-    <thead><tr><th>Find tier</th><th>Gold</th><th>Each resource</th></tr></thead>
+    <thead><tr><th>Find tier</th><th>Gold</th><th>Wood</th><th>Stone</th><th>Food</th></tr></thead>
     <tbody>${payRows}</tbody>
   </table>
   </div>
-  <p class="note">Lord level adds +${Math.round(100 * DiscoveryRoll.LEVEL_SCALAR_PER_LEVEL)}% per level above 1, and expedition length multiplies on top (×${DiscoveryRoll.LENGTHS.long.reward} on Long). A level-10 lord on a Long expedition therefore multiplies these by ~${((1 + DiscoveryRoll.LEVEL_SCALAR_PER_LEVEL * 9) * DiscoveryRoll.LENGTHS.long.reward).toFixed(1)}×.</p>
+  <p class="note"><b>Why the three resources differ (${ratioLine}).</b> Wood, stone and food are equally likely to turn <em>up</em> — terrain decides which one, not the catalog — but they do not pay the same, because the city does not need them equally. Every resource building, house and wall is bought with wood and stone; food appears in barely a handful of costs and is the one resource a city already out-produces. So expedition loot follows the building ratio, ${DiscoveryRoll.RES_RATIO.wood}&nbsp;:&nbsp;${DiscoveryRoll.RES_RATIO.stone}&nbsp;:&nbsp;${DiscoveryRoll.RES_RATIO.food}, the same way an OGame expedition hands back far more metal than deuterium. The multipliers average to exactly 1.0, so this changes <em>which</em> resource an expedition is worth, never <em>how much</em>.</p>
+  <p class="note">Lord level adds +${Math.round(100 * DiscoveryRoll.LEVEL_SCALAR_PER_LEVEL)}% per level above 1 <b>up to level ${LORD_POWER_LEVEL_CAP}</b>, where it stops — levels ${LORD_POWER_LEVEL_CAP + 1}–${LORD_MAX_LEVEL} raise your lord's own stats and grant talents, not loot. Expedition length multiplies on top (×${DiscoveryRoll.LENGTHS.long.reward} on Long), so a level-${LORD_POWER_LEVEL_CAP}-or-higher lord on a Long expedition multiplies these by ~${((1 + DiscoveryRoll.LEVEL_SCALAR_PER_LEVEL * (LORD_POWER_LEVEL_CAP - 1)) * DiscoveryRoll.LENGTHS.long.reward).toFixed(1)}×.</p>
 
   <h2>Expedition length — your bet</h2>
   <div class="tablewrap">

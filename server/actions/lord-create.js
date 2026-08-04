@@ -9,16 +9,17 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_BASE_STATS, LORD_CLASSES, RACES, rollLordPortrait, isClassRecruitable } from '../engine-loader.js';
+import { LORD_BASE_STATS, LORD_CLASSES, RACES, rollLordPortrait, isClassRecruitable, EconomyCore } from '../engine-loader.js';
 
-// Exported so scripts/economy-projection.js reads the REAL expansion curve
-// instead of keeping its own copy. js/domain/lord.js mirrors these for the
-// client; that pair is the remaining duplication.
-// Raised 5 → 7 on 2026-07-30: total gold demand was a fixed ~345k that a
-// mature player cleared in days, so the endgame had nothing to buy. Keep the
-// ×2 curve — doubling is what makes each marginal lord a real project (lord 7
-// at 320k is ~2.7 days of endgame gold income, before its army).
-export const MAX_LORDS = 7;
+// The flat MAX_LORDS = 7 is GONE (2026-08-03). How many lords a player may
+// command is now bought from the Library — the Codes of Command book, OGame's
+// Computer Technology — and computed by EconomyCore.getLordSlots, which the
+// client mirror (js/domain/lord.js) calls too. There is no ceiling: the
+// doubling gold price below and the ×2 research curve are the limiters.
+//
+// Research unlocks the SLOT; this gold price still buys the lord. Keep the ×2
+// curve — doubling is what makes each marginal lord a real project (lord 7 at
+// 320k is ~2.7 days of endgame gold income, before its army).
 
 // First lord is free; subsequent lords cost 10k, 20k, 40k, 80k, 160k, 320k.
 export function lordRecruitCost(existingLordCount) {
@@ -57,8 +58,12 @@ export async function handleLordCreate(req, res) {
   }
 
   const playerLords = Object.values(lords).filter(l => l.playerId === playerId);
-  if (playerLords.length >= MAX_LORDS) {
-    return res.status(400).json({ ok: false, error: `Maximum of ${MAX_LORDS} lords reached.` });
+  const lordSlots   = EconomyCore.getLordSlots(EconomyCore.getResearchEffects(player.research));
+  if (playerLords.length >= lordSlots) {
+    return res.status(400).json({
+      ok: false,
+      error: `You may command ${lordSlots} ${lordSlots === 1 ? 'lord' : 'lords'}. Research Codes of Command in the Library to raise another.`,
+    });
   }
 
   // Global name uniqueness check
@@ -87,6 +92,9 @@ export async function handleLordCreate(req, res) {
     xp:             0,
     xpToNext:       150,
     talentPoints:   0,
+    // Four talent slots, claimed at levels 5/10/15/20 (TALENT_LEVELS).
+    // talentId is the pre-2026-08-03 scalar, mirrored to talentIds[0] on write.
+    talentIds:      [],
     talentId:       null,
     actionQueue:    [],
     stance:         { id: 'idle', startedAt: null, finishAt: null },

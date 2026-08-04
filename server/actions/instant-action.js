@@ -76,15 +76,29 @@ export async function handleInstantAction(req, res) {
     return res.json({ ok: true, lord: cu.lords[lordId], player: cu.player, completedAction: action });
   }
 
-  // For move/other: dequeue manually and apply position side-effects
-  const completed = lord.actionQueue.shift();
-  if (completed.actionId === 'move_lord' && completed.destX != null) {
-    lord.x = completed.destX;
-    lord.y = completed.destY;
-  }
+  // Move (and anything else): backdate and let catchUp complete it, exactly as
+  // the two branches above do.
+  //
+  // This used to dequeue by hand and set lord.x/lord.y itself, which quietly
+  // skipped everything ELSE catchUp does on an arrival — above all
+  // `pendingArrivalCheck`, the flag that makes a lord walking onto an enemy
+  // raider trigger the fight (server/combat-resolver.js's resolveArrivalCheck).
+  // Paying credits to finish a march was therefore a way to arrive without ever
+  // being intercepted, which is not something the feature was ever meant to
+  // sell. It also skipped the army rest clock (`regenAt`). Documented as a
+  // gotcha in TESTING.md; fixed 2026-08-03.
+  //
+  // `finishAt` is backdated rather than left alone so the completion timestamps
+  // catchUp now stamps (the arrival event, the rest clock) read as "just now",
+  // which for an instant finish is the truth.
+  const completed = lord.actionQueue[0];
+  lord.actionQueue[0] = { ...completed, finishAt: Date.now() - 1 };
   lords[lordId] = lord;
 
-  await saveState(admin, playerId, rawPlayers, { player, lords, cities, armies });
+  const cu = catchUp({ player, lords, cities, armies }, Date.now(), _ENGINE);
+  await saveState(admin, playerId, rawPlayers, {
+    player: cu.player, lords: cu.lords, cities: cu.cities, armies: cu.armies,
+  });
 
-  return res.json({ ok: true, lord, player, completedAction: completed });
+  return res.json({ ok: true, lord: cu.lords[lordId], player: cu.player, completedAction: completed });
 }

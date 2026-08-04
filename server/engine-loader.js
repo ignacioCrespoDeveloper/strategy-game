@@ -44,11 +44,15 @@ load('js/data/units.js');            // UNIT_DEFS
 load('js/data/buildings.js');        // BUILDING_DEFS
 load('js/data/research.js');         // RESEARCH_DEFS, RESEARCH_TIERS (Library books)
 load('js/data/blessings.js');        // BLESSING_DEFS, blessingDuration, blessingCost (Temple blessings)
+load('js/data/items.js');            // ITEM_DEFS, itemsOfTier, itemDurationMs (city items)
+                                     // MUST precede economy-core.js (getCityItemEffects reads
+                                     // ITEM_DEFS) and discovery-roll.js (rollItem calls itemsOfTier)
 load('js/data/races.js');            // RACES
 load('js/domain/world.js');          // TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS (WorldService itself is unused here)
 load('js/domain/economy-core.js');   // EconomyCore — THE shared economy math (needs BUILDING_DEFS)
 load('js/domain/market-core.js');    // MarketCore — THE shared merchant rates/cap (no deps)
 load('js/domain/unit-unlock.js');    // UnitUnlockService — THE recruitment gate (needs UNIT_DEFS, EconomyCore)
+load('js/domain/building-unlock.js');// BuildingUnlockService — THE build gate (needs BUILDING_DEFS, RACES, EconomyCore)
 load('js/data/battle-defs.js');      // TERRAIN_BATTLE_MODS, CAMP_DEFS
 load('js/data/discoveries.js');      // DISCOVERY_DEFS
 load('js/domain/discovery-roll.js'); // DiscoveryRoll — THE shared quest roll math
@@ -69,12 +73,17 @@ export const BLESSING_COST_MIX     = _ctx.BLESSING_COST_MIX;
 export const blessingMaxHours      = _ctx.blessingMaxHours;
 export const blessingDuration      = _ctx.blessingDuration;
 export const blessingCost          = _ctx.blessingCost;
+export const ITEM_DEFS             = _ctx.ITEM_DEFS;
+export const itemsOfTier           = _ctx.itemsOfTier;
+export const itemDurationMs        = _ctx.itemDurationMs;
+export const itemBonusLabel        = _ctx.itemBonusLabel;
 export const RACES                 = _ctx.RACES;
 export const EconomyCore           = _ctx.EconomyCore;
 export const MarketCore            = _ctx.MarketCore;
 export const TUNING                = _ctx.TUNING;
 export const tune                  = _ctx.tune;
 export const UnitUnlockService     = _ctx.UnitUnlockService;
+export const BuildingUnlockService = _ctx.BuildingUnlockService;
 export const TERRAIN_RESOURCE_MODS = _ctx.TERRAIN_RESOURCE_MODS;
 export const TERRAIN_STAT_MODS     = _ctx.TERRAIN_STAT_MODS;
 export const TERRAIN_BATTLE_MODS   = _ctx.TERRAIN_BATTLE_MODS;
@@ -84,11 +93,21 @@ export const LORD_CLASSES          = _ctx.LORD_CLASSES;
 export const isClassRecruitable    = _ctx.isClassRecruitable;
 export const getRecruitableClasses = _ctx.getRecruitableClasses;
 export const LORD_MAX_LEVEL        = _ctx.LORD_MAX_LEVEL;
+export const LORD_POWER_LEVEL_CAP  = _ctx.LORD_POWER_LEVEL_CAP;
+export const lordPowerLevel        = _ctx.lordPowerLevel;
+export const lordArmyPowerCapBase  = _ctx.lordArmyPowerCapBase;
 export const lordStatGain          = _ctx.lordStatGain;
 export const rollLordPortrait      = _ctx.rollLordPortrait;
 export const pickLordPortrait      = _ctx.pickLordPortrait;
 export const STANCE_DEFS           = _ctx.STANCE_DEFS;
 export const TALENT_POOL           = _ctx.TALENT_POOL;
+export const TALENT_LEVELS         = _ctx.TALENT_LEVELS;
+export const MAX_TALENTS           = _ctx.MAX_TALENTS;
+export const lordTalentSlots       = _ctx.lordTalentSlots;
+export const nextTalentLevel       = _ctx.nextTalentLevel;
+export const getLordTalentIds      = _ctx.getLordTalentIds;
+export const mergeTalentEffects    = _ctx.mergeTalentEffects;
+export const lordTalentEffects     = _ctx.lordTalentEffects;
 export const MOUNT_POOL            = _ctx.MOUNT_POOL;
 export const MOUNT_SLOTS           = _ctx.MOUNT_SLOTS;
 export const getMountForRace       = _ctx.getMountForRace;
@@ -115,7 +134,7 @@ export const CAMP_LEVEL_LOOT       = _ctx.CAMP_LEVEL_LOOT;
 // on that one code path. Adding `tune` for the quest dials hit exactly this.
 // One object, four importers, no drift. Add new engine deps HERE.
 export const ENGINE = {
-  DISCOVERY_DEFS, CAMP_DEFS, CAMP_LEVEL_LOOT, TALENT_POOL,
+  DISCOVERY_DEFS, CAMP_DEFS, CAMP_LEVEL_LOOT, TALENT_POOL, ITEM_DEFS,
   LORD_BASE_STATS, LORD_CLASSES, UNIT_DEFS, BUILDING_DEFS, RACES,
   EconomyCore, MarketCore, tune,
   TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
@@ -124,4 +143,9 @@ export const ENGINE = {
   // Rating bonus on scout mounts. getLordMountEffects (not MOUNT_POOL) is the
   // one that matters — it resolves a stored id against the lord's race.
   MOUNT_POOL, getLordMountEffects,
+  // Lords: same shape as the mount helpers — catch-up must not index
+  // TALENT_POOL by lord.talentId itself (a lord holds up to four talents since
+  // 2026-08-03) and must not size the PWR cap or the raid/loot scalars off the
+  // raw level (they freeze at LORD_POWER_LEVEL_CAP).
+  lordTalentEffects, lordArmyPowerCapBase, lordPowerLevel,
 };

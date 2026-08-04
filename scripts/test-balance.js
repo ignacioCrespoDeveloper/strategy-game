@@ -42,6 +42,11 @@ const REPS        = 96;       // battles per pair per direction — the engine
 const RACES = ['human', 'dwarf', 'orc', 'high_elf', 'dark_elf'];
 
 // Progression stages. Caps follow the lord formula (200 + 80×level).
+//
+// "Endgame" is level 10, not LORD_MAX_LEVEL (20 since 2026-08-03), and that is
+// the right stage to test: the PWR cap freezes at 10, so level 10 is where army
+// COMPOSITION stops changing and this suite measures composition. Levels 11–20
+// only raise the lord's own stat line, identically on both sides here.
 const STAGES = [
   { id: 'start', label: 'Start',   lordLevel: 3,  pwrCap: 440  },
   { id: 'mid',   label: 'Midgame', lordLevel: 6,  pwrCap: 680  },
@@ -349,6 +354,93 @@ check(`no race+strategy combo below 25% (bottom: ${worstCombo[0]} at ${pct(worst
 
 check('every race fielded every archetype at endgame',
   RACES.every(r => end.combos.filter(c => c.race === r).length === Object.keys(ARCHETYPES).length));
+
+// ── Shape neutrality ────────────────────────────────────────────
+//
+// WHY THIS IS NOT AN ARCHETYPE. The tournament above measures RACE balance
+// across four fixed shapes, and every one of those shapes is varied — even
+// `blocks` takes four unit types. `buildArmy` is a round-robin greedy filler:
+// it walks the whole preference list adding ONE of each unit that fits, then
+// loops. So it can never produce "all the budget in one unit", and the
+// tournament structurally cannot answer "does concentrating beat varying".
+//
+// It was asked once, by accident, and the answer was misread: an early version
+// of `blocks` picked the highest-PWR unit and fielded 4× Arachnarok for a 5.9%
+// win rate. That was read as "doomstacks are bad" and designed out of the
+// heuristic. It was actually the per-stack armour bug screaming — see the
+// 2026-08-03 fixes in js/domain/battle-engine.js.
+//
+// THE EXPERIMENT. One stack of N versus N stacks of 1 OF THE IDENTICAL UNIT:
+// same models, same stats, same PWR, same traits, sides alternated so the
+// attacker/defender bias cancels. The only variable is how the models are
+// grouped, so any deviation from 50% is the engine's arithmetic.
+//
+// Adding it as a fifth archetype was rejected: it would change every pairing
+// in the tournament and move all fifteen race win rates for a reason that has
+// nothing to do with races. It runs on its own, outside the tournament.
+section('Shape neutrality (grouping must not decide fights)');
+
+const SHAPE_UNITS = ['swordsmen', 'halberdiers', 'dwarf_warriors', 'orc_boyz', 'spearmen'];
+const SHAPE_N     = 10;
+const SHAPE_REPS  = 200;
+
+// Draws are excluded from the win rate's denominator, so `decided` is reported
+// alongside it: a mirror of tanky, high-defence units (dwarfs especially) can
+// grind almost every fight to the round cap, and "0%" over four decided fights
+// is noise, not a finding. Without this the two dwarf-ish rows read as the
+// starkest signal in the table when they are the weakest evidence in it.
+function shapeDuel(unitId, n, reps) {
+  const deep = [{ unitId, count: n }];
+  const flat = Array.from({ length: n }, () => ({ unitId, count: 1 }));
+  let deepWins = 0, decided = 0;
+  for (let i = 0; i < reps; i++) {
+    const deepIsAttacker = i % 2 === 0;
+    const w = deepIsAttacker ? fight(deep, flat, 10) : fight(flat, deep, 10);
+    if (w === 'draw') continue;
+    decided++;
+    if (deepIsAttacker ? w === 'attacker' : w === 'defender') deepWins++;
+  }
+  return { rate: decided > 0 ? deepWins / decided : 0.5, decided, reps };
+}
+
+const shapeRates = SHAPE_UNITS
+  .filter(id => UNIT_DEFS[id]?.combatStats)
+  .map(id => ({ id, name: UNIT_DEFS[id].name, ...shapeDuel(id, SHAPE_N, SHAPE_REPS) }));
+
+console.log(`\n  ${SHAPE_N} models per side, ${SHAPE_REPS} fights each, sides alternated:`);
+shapeRates.forEach(s => {
+  const wall = (UNIT_DEFS[s.id].traits || []).includes('shield_wall') ? ' shield_wall' : '';
+  const weak = s.decided < s.reps * 0.2 ? '  ← few decided, treat as noise' : '';
+  console.log(`    ${s.name.padEnd(20)} deep wins ${pct(s.rate).padStart(6)}  (${String(s.decided).padStart(3)}/${s.reps} decided)${wall}${weak}`);
+});
+// Weighted by decided fights, so a row that ground to draws cannot drag the
+// headline number around on four samples.
+const shapeDecided = shapeRates.reduce((s, r) => s + r.decided, 0);
+const shapeAvg = shapeDecided > 0
+  ? shapeRates.reduce((s, r) => s + r.rate * r.decided, 0) / shapeDecided
+  : 0.5;
+console.log(`    ${'AVERAGE'.padEnd(20)} ${pct(shapeAvg).padStart(6)}   (50% = grouping is cost-neutral)`);
+
+// REPORTED, NOT GATED — deliberately, and this is the honest state of it.
+//
+// History on these exact five units: 100% before the 2026-08-03 armour fix
+// (a deep stack of 20 beat twenty stacks of 1 of the identical unit every
+// single time), then 0–5%, then ~11% after all three engine fixes. Synthetic
+// trait-free units of the same stat line sit at ~30%, so most of the residual
+// gap is NOT arithmetic any more — it is trait interaction.
+//
+// The per-unit rows above make the lead obvious: every unit carrying
+// `shield_wall` sits near zero, the two without it sit near 25%. `shield_wall`
+// ranks scale with the TARGET's model count (−2% per model beyond the first,
+// capped −30%), which was meant to reward depth and is somehow doing the
+// reverse in this matchup. That is the next thread to pull, and it wants its
+// own investigation rather than a number nudged until the suite goes quiet.
+//
+// A gate is added when the target is reachable. Gating at 50% today would ship
+// a permanently red suite — which is how a warning gets ignored — and a band
+// wide enough to pass 11% would no longer catch anything worth catching.
+console.log(`  ⏭  shape neutrality is REPORTED, not gated — target 50%, measured ${pct(shapeAvg)}.`);
+console.log('     Known open item (ROADMAP.md, Tanda 3). Was 100% before the 2026-08-03 armour fix.');
 
 // ── Summary ─────────────────────────────────────────────────────
 console.log(`\n${'='.repeat(54)}`);

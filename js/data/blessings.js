@@ -71,7 +71,7 @@ var BLESSING_MIN_TEMPLE = 1;
 // income, and widen *_production to all resource income. See ECONOMY-AUDIT.md §C.
 // At full uptime this is currently 72,000 gold + 144,000 resources per day.
 var BLESSING_GOLD_PER_HOUR = 1500;
-var BLESSING_RES_PER_HOUR  = 3000; // per resource — food AND wood AND stone
+var BLESSING_RES_PER_HOUR  = 3000; // per resource — wood AND stone AND food
 
 // ── WHICH currency each blessing is charged in ──────────────────
 //
@@ -92,13 +92,16 @@ var BLESSING_RES_PER_HOUR  = 3000; // per resource — food AND wood AND stone
 //
 // An unlisted blessing falls back to the old flat gold+all-three shape, so a
 // new def is never accidentally free.
+// Keys follow the canonical order — gold, then EconomyCore.RESOURCE_KEYS
+// (wood → stone → food). blessingCost() returns the same shape, and the Temple
+// tab renders it, so a food-first literal here surfaces as a food-first chip.
 var BLESSING_COST_MIX = {
-  god_of_war:         { gold: 1.0, food: 0,   wood: 0,   stone: 0   },
-  god_of_destruction: { gold: 1.0, food: 1.0, wood: 1.0, stone: 1.0 },
-  god_of_nature:      { gold: 2.0, food: 0,   wood: 0,   stone: 0   },
-  god_of_fertility:   { gold: 0,   food: 2.0, wood: 0,   stone: 0   },
+  god_of_war:         { gold: 1.0, wood: 0,   stone: 0,   food: 0   },
+  god_of_destruction: { gold: 1.0, wood: 1.0, stone: 1.0, food: 1.0 },
+  god_of_nature:      { gold: 2.0, wood: 0,   stone: 0,   food: 0   },
+  god_of_fertility:   { gold: 0,   wood: 0,   stone: 0,   food: 2.0 },
 };
-var BLESSING_COST_MIX_DEFAULT = { gold: 1.0, food: 1.0, wood: 1.0, stone: 1.0 };
+var BLESSING_COST_MIX_DEFAULT = { gold: 1.0, wood: 1.0, stone: 1.0, food: 1.0 };
 
 // How many hours the player may buy, from their HIGHEST Temple level
 // across all cities (mirrors how research keys off the highest Library).
@@ -114,7 +117,7 @@ function blessingDuration(hours) {
 // Offering for a chosen number of hours OF A SPECIFIC BLESSING.
 //
 // ⚠ RETURNS AN OBJECT, not a number (changed 2026-07-30 when the resource cost
-// was added). Every caller must read .gold / .food / .wood / .stone —
+// was added). Every caller must read .gold / .wood / .stone / .food —
 // a caller that still treats this as a scalar produces NaN or a free blessing.
 //
 // ⚠ TAKES A BLESSING ID (added 2026-07-30 with the cost-mix rework). Omitting it
@@ -122,7 +125,7 @@ function blessingDuration(hours) {
 // so a caller that forgets the id overcharges rather than handing out a
 // discount. Per hour, at the current rates:
 //   god_of_war          1,500g
-//   god_of_destruction  1,500g + 3,000 food/wood/stone
+//   god_of_destruction  1,500g + 3,000 wood/stone/food
 //   god_of_nature       3,000g
 //   god_of_fertility    6,000 food
 function blessingCost(hours, blessingId) {
@@ -130,9 +133,9 @@ function blessingCost(hours, blessingId) {
   const mix = (blessingId && BLESSING_COST_MIX[blessingId]) || BLESSING_COST_MIX_DEFAULT;
   return {
     gold:  Math.round(h * BLESSING_GOLD_PER_HOUR * (mix.gold  || 0)),
-    food:  Math.round(h * BLESSING_RES_PER_HOUR  * (mix.food  || 0)),
     wood:  Math.round(h * BLESSING_RES_PER_HOUR  * (mix.wood  || 0)),
     stone: Math.round(h * BLESSING_RES_PER_HOUR  * (mix.stone || 0)),
+    food:  Math.round(h * BLESSING_RES_PER_HOUR  * (mix.food  || 0)),
   };
 }
 
@@ -178,7 +181,7 @@ var BLESSING_DEFS = {
     // could not cover its own offering at any price. Widening the scope, not
     // cutting the price, is what makes this a real choice.
     effects:     {
-      food_production: 0.25, wood_production: 0.25, stone_production: 0.25,
+      wood_production: 0.25, stone_production: 0.25, food_production: 0.25,
       resource_yield_bonus: 0.25,
     },
   },

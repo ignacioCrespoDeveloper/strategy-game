@@ -113,6 +113,14 @@ const ResearchScreen = (() => {
       construction_speed: v => `−${Math.round(-v * 100)}% construction time`,
       march_food_cost:    v => `−${Math.round(-v * 100)}% march food cost`,
       recruit_speed:      v => `−${Math.round(-v * 100)}% recruit time`,
+      // The count keys (2026-08-03). They are totals, not deltas, so they read
+      // "3 cities", not "+3" — the number IS the new allowance, and the +1
+      // founding city/lord that no research buys is folded in here so the card
+      // says the same thing the Overview badge does.
+      travel_speed:       v => `+${Math.round(v * 100)}% march speed`,
+      city_slots:         v => `${1 + Math.floor(v)} cities allowed`,
+      lord_slots:         v => `${1 + Math.floor(v)} lords allowed`,
+      espionage_power:    v => `Espionage ${Math.floor(v)} — scout reports go ${Math.floor(v)} ${Math.floor(v) === 1 ? 'rung' : 'rungs'} deeper than an equal rival`,
     };
     return Object.entries(def.bonuses(level))
       .map(([k, v]) => (LABELS[k] ? LABELS[k](v) : `${k}: ${v}`))
@@ -280,15 +288,24 @@ const ResearchScreen = (() => {
   // gi() — that returns SVG markup, which renders as literal angle brackets
   // inside an attribute or textContent.
   function _offeringLabel(cost) {
-    return Object.entries(cost)
-      .filter(([, v]) => v > 0)
+    return _orderedRes(cost)
       .map(([res, v]) => `${v.toLocaleString()} ${res}`)
       .join(' · ');
   }
 
+  // Gold first, then EconomyCore.RESOURCE_KEYS (wood → stone → food). Book costs
+  // already declare that order; blessing offerings come back as
+  // a bundle from blessingCost, so reading the object's own key order printed
+  // food ahead of wood on the Temple tab before 2026-08-04.
+  function _orderedRes(bundle) {
+    const b = bundle || {};
+    return ['gold', ...EconomyCore.RESOURCE_KEYS]
+      .filter(k => (b[k] || 0) > 0)
+      .map(k => [k, b[k]]);
+  }
+
   function _costChips(cost) {
-    return Object.entries(cost)
-      .filter(([, v]) => v > 0)
+    return _orderedRes(cost)
       .map(([res, v]) => {
         const has = _balanceOf(res) >= v;
         return `<span class="${has ? 'bld2-res' : 'bld2-res bld2-res--short'}">${RES_ICON[res] ? RES_ICON[res]() : res} ${v.toLocaleString()}</span>`;
@@ -368,7 +385,7 @@ const ResearchScreen = (() => {
     const isActive   = active?.id === def.id;
     const maxHours   = blessingMaxHours(templeLevel);
     const hours      = Math.min(Math.max(1, _blessingHours), maxHours);
-    // blessingCost returns { gold, food, wood, stone } — the full offering shape
+    // blessingCost returns { gold, wood, stone, food } — the full offering shape
     // _canAfford wants. The blessing id is REQUIRED: each blessing is billed in
     // the currency it does not produce (BLESSING_COST_MIX in js/data/blessings.js),
     // so dropping it would quote the dearest profile for every one of them.

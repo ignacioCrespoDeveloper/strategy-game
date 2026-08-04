@@ -131,19 +131,59 @@ const AuthView = (() => {
     await _hydrateSession(data.session, data.user);
   }
 
+  // ── Username uniqueness ───────────────────────────────────────
+  // Nothing in Supabase enforces this: the username is a free-text field on
+  // the auth user's metadata, so two accounts could hold the same name and
+  // every screen that shows a player — map, rankings, battle reports — would
+  // show two identical lords. The server owns the check (it needs the
+  // service-role key to see other accounts at all); see
+  // server/actions/username-check.js for the limits of what it guarantees.
+  //
+  // Returns { available, error } and FAILS OPEN on a network/server error:
+  // a check we could not run must not block registration outright. The worst
+  // case is the duplicate we already have today.
+  async function _checkUsername(username) {
+    try {
+      const res  = await fetch('/api/auth/username-available', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ username }),
+      });
+      const data = await res.json();
+      if (!data || data.ok !== true) return { available: true };
+      return { available: !!data.available, error: data.error };
+    } catch {
+      return { available: true };
+    }
+  }
+
   // ── Register step 1: validate credentials, go to race panel ──
 
-  function _onRegisterStep1() {
+  async function _onRegisterStep1() {
     const username = document.getElementById('reg-username').value.trim();
     const email    = document.getElementById('reg-email').value.trim();
     const password = document.getElementById('reg-password').value;
     const errorEl  = document.getElementById('reg-error');
+    const btn      = document.getElementById('reg-btn');
     errorEl.textContent = '';
 
     if (!username || !email || !password) { errorEl.textContent = 'Please fill in all fields.'; return; }
     if (username.length < 3)              { errorEl.textContent = 'Username must be at least 3 characters.'; return; }
+    if (username.length > 20)             { errorEl.textContent = 'Username cannot exceed 20 characters.'; return; }
     if (!/^[a-zA-Z0-9_]+$/.test(username)) { errorEl.textContent = 'Username: only letters, numbers and underscores.'; return; }
     if (password.length < 6)              { errorEl.textContent = 'Password must be at least 6 characters.'; return; }
+
+    // Checked HERE rather than at the final confirm so the error lands on the
+    // screen that still has the username field on it — being told the name is
+    // taken after picking a race would mean going back to find the input.
+    btn.disabled = true; btn.textContent = 'Checking name…';
+    const check = await _checkUsername(username);
+    btn.disabled = false; btn.textContent = 'Choose your Race →';
+
+    if (!check.available) {
+      errorEl.textContent = check.error || 'That username is already taken.';
+      return;
+    }
 
     _pendingUsername = username;
     _pendingEmail    = email;
@@ -275,6 +315,17 @@ const AuthView = (() => {
 
     btn.disabled = true; btn.textContent = 'Creating dynasty…';
 
+    // Re-checked immediately before signUp, not just at step 1: the race panel
+    // is a screen a player can sit on for minutes, and someone else may have
+    // claimed the name in between. This narrows the window to the signUp call
+    // itself — it cannot close it (see server/actions/username-check.js).
+    const check = await _checkUsername(_pendingUsername);
+    if (!check.available) {
+      errorEl.textContent = `${check.error || 'That username is already taken.'} Go back and pick another.`;
+      btn.disabled = false; btn.textContent = `Play as ${RACES[_selectedRace].name} →`;
+      return;
+    }
+
     const { data, error } = await SupabaseService.client.auth.signUp({
       email:    _pendingEmail,
       password: _pendingPassword,
@@ -283,7 +334,7 @@ const AuthView = (() => {
 
     if (error) {
       errorEl.textContent = _friendlyError(error.message);
-      btn.disabled = false; btn.textContent = 'Found your Dynasty';
+      btn.disabled = false; btn.textContent = `Play as ${RACES[_selectedRace].name} →`;
       return;
     }
 

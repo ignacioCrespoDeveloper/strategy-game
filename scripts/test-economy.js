@@ -19,7 +19,11 @@ import {
   lordRansomCost,
   TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
   DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES,
+  LORD_MAX_LEVEL, LORD_POWER_LEVEL_CAP, lordPowerLevel, lordArmyPowerCapBase,
+  TALENT_LEVELS, MAX_TALENTS, lordTalentSlots, nextTalentLevel,
+  getLordTalentIds, mergeTalentEffects, lordTalentEffects,
   MOUNT_POOL, MOUNT_SLOTS,
+  ITEM_DEFS, itemsOfTier, itemDurationMs, itemBonusLabel,
   DiscoveryRoll, TUNING, tune,
 } from '../server/engine-loader.js';
 import { catchUp } from '../server/tick/catch-up.js';
@@ -97,9 +101,26 @@ check('aqueduct is the hygiene counterweight (+8/level)',
   BUILDING_DEFS.aqueduct.effects(3).some(e => e.stat === 'hygiene' && e.value === 24));
 check('lumber mill cost L1 = 60 wood / 15 stone (OGame metal mine)',
   BUILDING_DEFS.lumber_mill.cost(1).wood === 60 && BUILDING_DEFS.lumber_mill.cost(1).stone === 15);
-check('stone quarry cost L2 = 76 wood / 38 stone (×1.6)',
-  BUILDING_DEFS.stone_quarry.cost(2).wood === Math.floor(48 * 1.6) &&
-  BUILDING_DEFS.stone_quarry.cost(2).stone === Math.floor(24 * 1.6));
+// Factor 1.6 → 1.5 on 2026-08-03: all three producers now compound at the same
+// rate, so the quarry's payback no longer diverges from the mill's forever.
+// Pinned as a group rather than per-building — the point is that they AGREE.
+check('all 3 producers compound at ×1.5',
+  ['lumber_mill', 'stone_quarry', 'farm'].every(id => {
+    const l1 = BUILDING_DEFS[id].cost(1), l2 = BUILDING_DEFS[id].cost(2);
+    return l2.wood === Math.floor(l1.wood * 1.5) && l2.stone === Math.floor(l1.stone * 1.5);
+  }));
+// Cost base ÷ production base — the ratio the 12× payback spread came from.
+// Mill 2.5 / quarry 3.6 / farm 30.0 before the 2026-08-03 rebase; the farm's
+// 300 base against 10 production was the outlier that made it a dead building.
+check('producer cost:production ratios are within 2.5× of each other',
+  (() => {
+    const ratio = (id, prod) => {
+      const c = BUILDING_DEFS[id].cost(1);
+      return (c.wood + c.stone) / prod;
+    };
+    const rs = [ratio('lumber_mill', 30), ratio('stone_quarry', 20), ratio('farm', 10)];
+    return Math.max(...rs) / Math.min(...rs) <= 2.5;
+  })());
 check('resource build time = (wood+stone)·1.44s, min 15s',
   BUILDING_DEFS.lumber_mill.buildTime(1) === Math.max(15, Math.round(75 * 1.44)));
 
@@ -130,22 +151,82 @@ check('gold rate downgraded to pop × 0.004 × happiness',
   EconomyCore.getGoldRate({}, 10000, 100) === 40 &&
   EconomyCore.getGoldRate({}, 10000, 50)  === 20);
 
-check('march food cost = distance × min(500, 50 + 45·models); same tile free',
+// Corruption skims city tax since 2026-08-03 (Phase 4). The Courthouse existed
+// to fight corruption and corruption did nothing measurable, so the building
+// did nothing measurable — see getGoldRate. Pinned at both ends plus the
+// omitted-argument case, which must behave exactly as before.
+check('corruption skims city gold, capped at half',
+  EconomyCore.getGoldRate({}, 10000, 100, 0)   === 40 &&
+  EconomyCore.getGoldRate({}, 10000, 100)      === 40 &&   // absent arg = no skim
+  EconomyCore.getGoldRate({}, 10000, 100, 50)  === 30 &&   // −25%
+  EconomyCore.getGoldRate({}, 10000, 100, 100) === 20 &&   // −50%, the cap
+  EconomyCore.getGoldRate({}, 10000, 100, 999) === 20);    // clamped
+
+// The Courthouse's whole purpose. A market town without one must measurably
+// lose gold to corruption; with one, it must get some back.
+check('a Courthouse measurably restores gold a Marketplace leaks',
+  (() => {
+    const dirty = { town_hall: 5, marketplace: 8 };
+    const clean = { ...dirty, courthouse: 6 };
+    const gold  = b => {
+      const s = EconomyCore.getStats(b, 50000, []);
+      return EconomyCore.getGoldRate(b, 50000, s.happiness, s.corruption);
+    };
+    return gold(clean) > gold(dirty);
+  })());
+
+check('march food cost = distance × (50 + 45·models); same tile free',
   EconomyCore.getMarchFoodCost(0, [{ count: 10 }]) === 0 &&
   EconomyCore.getMarchFoodCost(1, null) === 50 &&
   EconomyCore.getMarchFoodCost(5, null) === 250 &&
-  EconomyCore.getMarchFoodCost(3, [{ count: 6 }, { count: 4 }]) === 1500 &&
-  EconomyCore.getMarchFoodCost(10, [{ count: 30 }]) === 5000);
+  EconomyCore.getMarchFoodCost(3, [{ count: 6 }, { count: 4 }]) === 1500);
+
+// The 500/tile ceiling was removed 2026-08-03: it was reached at exactly 10
+// models, so every army from ten models upward marched for the same price and
+// the per-model supply cost stopped existing precisely where armies get big.
+// Pinned as a REGRESSION GUARD — re-introducing any ceiling breaks this.
+check('march food scales past 10 models (the 500/tile cap is gone)',
+  EconomyCore.getMarchFoodCost(10, [{ count: 30 }]) === 14000 &&
+  EconomyCore.getMarchFoodCost(5,  [{ count: 40 }]) === 9250 &&
+  EconomyCore.getMarchFoodCost(5,  [{ count: 40 }]) ===
+    4 * EconomyCore.getMarchFoodCost(5, [{ count: 10 }]) - 3 * EconomyCore.getMarchFoodCost(5, null));
 
 // ── 3.5 Library research (books) ────────────────────────────────
 section('Library research (books)');
 
-// Catalog trimmed 2026-07-29 to two tier-1 books while progression is
-// retuned; tiers 2 and 3 stay defined for the books coming next.
-check('2 books defined, both available from Library 1',
-  Object.keys(RESEARCH_DEFS).length === 2 &&
-  Object.values(RESEARCH_DEFS).every(d => d.tier === 1) &&
+// Catalog trimmed 2026-07-29 to two tier-1 books, then given a tier-2 rung on
+// 2026-08-03 (Phase 3a): before that, reaching Library 4 unlocked nothing at
+// all, so the building gated only itself. Tier 3 stays defined and empty for
+// the next rung. What matters is that every tier in use is REACHABLE and that
+// tier 1 still opens the moment the Library exists.
+check('books span tiers 1–2, tier 1 opens at Library 1',
+  Object.keys(RESEARCH_DEFS).length >= 2 &&
+  Object.values(RESEARCH_DEFS).some(d => d.tier === 1) &&
+  Object.values(RESEARCH_DEFS).some(d => d.tier === 2) &&
+  Object.values(RESEARCH_DEFS).every(d => RESEARCH_TIERS[d.tier] !== undefined) &&
   RESEARCH_TIERS[1] === 1 && RESEARCH_TIERS[2] === 4 && RESEARCH_TIERS[3] === 8);
+
+// Every bonus key a book emits must have a live consumer. This is the check
+// the flavor-trait debt earned: `gold_income_bonus` reads fine and does
+// nothing, because getGoldRate never looks at it. Adding a book on a dead key
+// ships a purchase that changes no number the player can see.
+check('every research bonus key has a live consumer',
+  (() => {
+    const LIVE = new Set([
+      'construction_speed',   // EconomyCore.getBuildTime
+      'recruit_speed',        // EconomyCore.getRecruitTime
+      'march_food_cost',      // EconomyCore.getMarchFoodCost
+      'food_production',      // EconomyCore.getRates (summed in production.js / catch-up.js)
+      'wood_production',
+      'stone_production',
+      'travel_speed',         // EconomyCore.getTravelTime
+      'city_slots',           // EconomyCore.getCitySlots  → server/actions/city-found.js
+      'lord_slots',           // EconomyCore.getLordSlots  → server/actions/lord-create.js
+      'espionage_power',      // server/combat-resolver.js _gatherScoutReport
+    ]);
+    return Object.values(RESEARCH_DEFS).every(d =>
+      Object.keys(d.bonuses(1)).every(k => LIVE.has(k)));
+  })());
 
 check('every book declares a tier that exists',
   Object.values(RESEARCH_DEFS).every(d => RESEARCH_TIERS[d.tier] != null));
@@ -159,16 +240,120 @@ check('engineering_tomes keeps its id through the rename',
 const fx = EconomyCore.getResearchEffects({ engineering_tomes: 2, cartography: 5 });
 check('getResearchEffects sums bonus keys across books',
   Math.abs(fx.construction_speed - (-0.03)) < 1e-9 &&
-  Math.abs(fx.march_food_cost - (-0.05)) < 1e-9);
+  Math.abs(fx.march_food_cost - (-0.05)) < 1e-9 &&
+  Math.abs(fx.travel_speed - 1.50) < 1e-9);
 
 // Slave Chronicles is an odd ladder: 1/3/5/7/9% over its first five volumes.
 check('Slave Chronicles follows the 1/3/5/7/9% ladder',
   [1, 3, 5, 7, 9].every((pct, i) =>
     Math.abs(RESEARCH_DEFS.engineering_tomes.bonuses(i + 1).construction_speed + pct / 100) < 1e-9));
 
-// Cartography is −1% per volume.
-check('Cartography is −1% march food per level',
-  Math.abs(RESEARCH_DEFS.cartography.bonuses(7).march_food_cost - (-0.07)) < 1e-9);
+// Cartography is −1% per volume, and since 2026-08-03 also +30% march SPEED
+// per volume — OGame's Hyperspace Drive, which is what Nacho asked this book to
+// be modelled on. Both keys: the drive conversion kept the food discount rather
+// than replacing it.
+check('Cartography is −1% march food and +30% march speed per level',
+  Math.abs(RESEARCH_DEFS.cartography.bonuses(7).march_food_cost - (-0.07)) < 1e-9 &&
+  Math.abs(RESEARCH_DEFS.cartography.bonuses(1).travel_speed - 0.30) < 1e-9 &&
+  Math.abs(RESEARCH_DEFS.cartography.bonuses(5).travel_speed - 1.50) < 1e-9);
+
+// ── OGame price import (2026-08-03) ───────────────────────────
+// Four books carry OGame's own research costs verbatim, on OGame's own factor,
+// metal→wood / crystal→stone / deuterium→food. Pin the Lv1 vectors: these are
+// QUOTED numbers, so a silent edit here is a transcription error, not a
+// balance call, and should fail loudly rather than drift.
+check('the four OGame-priced books quote their source costs at Lv1',
+  (() => {
+    const at1 = id => RESEARCH_DEFS[id].cost(1);
+    const eq  = (got, want) => Object.keys(want).every(k => got[k] === want[k]);
+    return eq(at1('cartography'),       { wood: 10000, stone: 20000, food: 6000 })  // Hyperspace Drive
+        && eq(at1('frontier_charters'), { wood:  4000, stone:  8000, food: 4000 })  // Astrophysics
+        && eq(at1('codes_of_command'),  {              stone:   400, food:  600 })  // Computer Technology
+        && eq(at1('spymasters_ledger'), { wood:   200, stone:  1000, food:  200 }); // Espionage Technology
+  })());
+
+// Astrophysics is the one OGame research NOT on a doubling curve (×1.75); the
+// other three double. Checked as a RATIO so it survives a future base change.
+check('OGame factors: Charters ×1.75, the other three ×2',
+  Math.abs(RESEARCH_DEFS.frontier_charters.cost(2).stone / RESEARCH_DEFS.frontier_charters.cost(1).stone - 1.75) < 0.01 &&
+  Math.abs(RESEARCH_DEFS.cartography.cost(2).wood        / RESEARCH_DEFS.cartography.cost(1).wood        - 2) < 0.01 &&
+  Math.abs(RESEARCH_DEFS.codes_of_command.cost(2).food   / RESEARCH_DEFS.codes_of_command.cost(1).food   - 2) < 0.01 &&
+  Math.abs(RESEARCH_DEFS.spymasters_ledger.cost(2).stone / RESEARCH_DEFS.spymasters_ledger.cost(1).stone - 2) < 0.01);
+
+// ── Expansion slots (Frontier Charters / Codes of Command) ────
+// These replaced the flat MAX_CITIES / MAX_LORDS = 7 constants, which had
+// already drifted into five hand-copied values (server 7/7, city.js 7,
+// lord.js 7, map-view.js 5, overview-screen.js 5/5). One formula now, and
+// NO CEILING — the doubling gold price and the research curve are the limiters.
+check('city slots follow OGame Astrophysics: 1 + ceil(level/2), uncapped',
+  [[0, 1], [1, 2], [2, 2], [3, 3], [4, 3], [12, 7], [40, 21]].every(([lvl, want]) =>
+    EconomyCore.getCitySlots(EconomyCore.getResearchEffects({ frontier_charters: lvl })) === want));
+
+check('lord slots follow OGame Computer Tech: 1 + level, uncapped',
+  [[0, 1], [1, 2], [6, 7], [30, 31]].every(([lvl, want]) =>
+    EconomyCore.getLordSlots(EconomyCore.getResearchEffects({ codes_of_command: lvl })) === want));
+
+// The founding city and founding lord are not purchasable and must survive a
+// junk save — a negative or fractional key must never take them away.
+check('slot formulas floor at the free founding city/lord',
+  EconomyCore.getCitySlots({}) === 1 &&
+  EconomyCore.getLordSlots({}) === 1 &&
+  EconomyCore.getCitySlots({ city_slots: -5 })  === 1 &&
+  EconomyCore.getLordSlots({ lord_slots: 2.7 }) === 3);
+
+// Espionage is the only book whose key is read RELATIVELY (scout level minus
+// target level, in server/combat-resolver.js _gatherScoutReport). All this end
+// has to guarantee is that the key is an honest integer count.
+check("Spymaster's Ledger emits its level as an integer count",
+  [1, 4, 9].every(lvl =>
+    EconomyCore.getResearchEffects({ spymasters_ledger: lvl }).espionage_power === lvl));
+
+// ── City tiers & building slots ───────────────────────────────
+section('City tiers & building slots');
+
+// The ladder Nacho set on 2026-08-04, pinned as literals because they ARE the
+// design. Tier 6 (200k pop) was deleted in the same pass: tier 5 already pays
+// 200 slots, so it granted nothing.
+check('slot ladder is 50/100/125/150/200 over five tiers',
+  JSON.stringify(EconomyCore.SLOT_TABLE.map(r => [r.level, r.minPop, r.maxSlots])) ===
+  JSON.stringify([[1, 0], [2, 10000], [3, 25000], [4, 50000], [5, 100000]]
+    .map(([lvl, pop], i) => [lvl, pop, [50, 100, 125, 150, 200][i]])));
+
+// A ladder that dips would hand a growing city FEWER slots than it already
+// filled — and tier is a ratchet off peakPopulation, so nothing would ever
+// take those buildings back. Both columns must climb.
+check('tiers, thresholds and slot counts all ascend strictly',
+  EconomyCore.SLOT_TABLE.every((r, i, a) => i === 0
+    ? (r.level === 1 && r.minPop === 0)
+    : (r.level > a[i - 1].level && r.minPop > a[i - 1].minPop && r.maxSlots > a[i - 1].maxSlots)));
+
+// THE check that makes deleting a tier safe. A `city_tier` gate pointing at a
+// tier the ladder no longer has is unreachable content: building-unlock.js
+// finds no SLOT_TABLE row and prints "Requires City Tier 6 (0+ population)"
+// on a building nobody can ever raise.
+check('every city_tier building gate names a tier the ladder has',
+  (() => {
+    const levels = new Set(EconomyCore.SLOT_TABLE.map(r => r.level));
+    const bad = Object.entries(BUILDING_DEFS)
+      .flatMap(([id, d]) => (d.unlockRequires || [])
+        .filter(r => r.type === 'city_tier' && !levels.has(r.minTier))
+        .map(r => `${id}→T${r.minTier}`));
+    return bad.length === 0;
+  })());
+
+// getSlotInfo reads PEAK population upstream (city-stats.js); here we only pin
+// that the lookup floors on tier 1 rather than falling off the front of the
+// table, and that a pop past the top rung stays on the top rung.
+check('slot lookup floors at tier 1 and saturates at the top tier',
+  EconomyCore.getSlotInfo({}, 0).maxSlots === 50 &&
+  EconomyCore.getSlotInfo({}, 0).level === 1 &&
+  EconomyCore.getCityLevel(9999) === 1 &&
+  EconomyCore.getCityLevel(100000) === 5 &&
+  EconomyCore.getCityLevel(5000000) === 5 &&
+  EconomyCore.getSlotInfo({}, 5000000).maxSlots === 200);
+
+check('usedSlots counts every building level, not every building',
+  EconomyCore.getSlotInfo({ farm: 3, lumber_mill: 2 }, 1000).usedSlots === 5);
 
 // ── No hardcoded level ceilings (2026-07-30) ──────────────────
 // Nothing in the game should cap out at an arbitrary level: cost growth is the
@@ -295,11 +480,14 @@ check('Cartography discounts march food (lone lord 1 tile: 50 → 46 at max −7
 // preview, and the published raid guide all call getRaidHourlyRewards.
 section('Raiding stance');
 
+// Compared with JSON.stringify, so this pins KEY ORDER as well as values —
+// deliberately: the payout object is rendered as-is by the raid chips, and the
+// canonical order is gold → wood → stone → food (EconomyCore.RESOURCE_KEYS).
 check('raid rate = base + perLevel × lord level, all 3 resources equal',
   JSON.stringify(EconomyCore.getRaidHourlyRewards(8)) ===
-    JSON.stringify({ gold: 400, food: 500, wood: 500, stone: 500 }) &&
+    JSON.stringify({ gold: 400, wood: 500, stone: 500, food: 500 }) &&
   JSON.stringify(EconomyCore.getRaidHourlyRewards(1)) ===
-    JSON.stringify({ gold: 85, food: 115, wood: 115, stone: 115 }));
+    JSON.stringify({ gold: 85, wood: 115, stone: 115, food: 115 }));
 
 check('raid rate is defined by the exported tunables (guide reads these)',
   EconomyCore.RAID_BASE.gold === 40 && EconomyCore.RAID_PER_LEVEL.gold === 45 &&
@@ -310,6 +498,16 @@ check('raid rate floors at level 1 for a missing/zero level',
     JSON.stringify(EconomyCore.getRaidHourlyRewards(1)) &&
   JSON.stringify(EconomyCore.getRaidHourlyRewards(undefined)) ===
     JSON.stringify(EconomyCore.getRaidHourlyRewards(1)));
+
+// THE guard on the 2026-08-03 level-cap raise. Raiding is a linear-in-level
+// income line, so a max level of 20 read raw would have taken a maxed lord from
+// 490 to 940 gold/hour — a doubled endgame on a curve that was measured at
+// level 10. Same story for expedition loot. Both must plateau.
+check('raid rate plateaus at LORD_POWER_LEVEL_CAP — levels 11-20 pay no income',
+  JSON.stringify(EconomyCore.getRaidHourlyRewards(LORD_MAX_LEVEL)) ===
+    JSON.stringify(EconomyCore.getRaidHourlyRewards(LORD_POWER_LEVEL_CAP)),
+  `L${LORD_MAX_LEVEL} ${EconomyCore.getRaidHourlyRewards(LORD_MAX_LEVEL).gold}g/h vs `
+  + `L${LORD_POWER_LEVEL_CAP} ${EconomyCore.getRaidHourlyRewards(LORD_POWER_LEVEL_CAP).gold}g/h`);
 
 // The 2026-07-29 bump exists because raiding was not worth the stance. Pin the
 // relationship rather than the raw number: a day of raiding must beat an hour
@@ -326,6 +524,120 @@ check('ransoming a maxed lord costs more than a full army for one',
   lordRansomCost(10) > 30000 &&
   lordRansomCost(10) > EconomyCore.getUnitGoldCost(UNIT_DEFS.swordsmen) * 18,
   `L10 ransom ${lordRansomCost(10)}`);
+
+// ── Lord leveling & talents (cap raised 10 → 20, 2026-08-03) ────
+// The shape of the change: the level cap doubled, the POWER curve did not.
+// Levels 11–20 pay in stats and talent slots only. These checks pin that split
+// — see the two-halves block in js/data/lord-classes.js.
+section('Lord leveling & talents');
+
+check('level cap is 20, power curve freezes at 10',
+  LORD_MAX_LEVEL === 20 && LORD_POWER_LEVEL_CAP === 10 &&
+  lordPowerLevel(1) === 1 && lordPowerLevel(10) === 10 &&
+  lordPowerLevel(11) === 10 && lordPowerLevel(LORD_MAX_LEVEL) === 10 &&
+  lordPowerLevel(0) === 1 && lordPowerLevel(undefined) === 1);
+
+// The four PWR-cap copies (lord.js, recruit.js, army-transfer.js, catch-up.js)
+// all build on lordArmyPowerCapBase, so pinning it pins all four.
+check('army PWR cap climbs to 1000 at level 10 and stops',
+  lordArmyPowerCapBase(1)  === 280  &&
+  lordArmyPowerCapBase(10) === 1000 &&
+  lordArmyPowerCapBase(11) === 1000 &&
+  lordArmyPowerCapBase(LORD_MAX_LEVEL) === 1000);
+
+// The cap is what the ambush curve is tuned against — if the freeze ever comes
+// off, discovery-roll.js's OVERMATCH_MAX becomes reachable-and-then-some and
+// every endgame expedition changes shape.
+check('the ambush ceiling still bounds a maxed lord + strategist talent',
+  lordArmyPowerCapBase(LORD_MAX_LEVEL) + TALENT_POOL.strategist.effects.armyPowerCapBonus
+    === DiscoveryRoll.OVERMATCH_MAX);
+
+// Expedition loot is the other linear-in-level income line, and it is the
+// biggest one in the game. rollRewards draws from a fixed band and multiplies
+// by the level scalar, so a level-20 payout can NEVER exceed what the level-10
+// scalar allows — unless the freeze comes off, in which case ~63% of draws
+// break the ceiling and 400 samples catch it with certainty.
+const _goldDef  = Object.values(DISCOVERY_DEFS).find(d =>
+  d.category !== 'combat' && d.id !== 'lost_treasure' && DiscoveryRoll.BASE_REWARDS[d.id]?.gold > 0);
+const _goldBand = DiscoveryRoll.TIER_RANGES[_goldDef.tier || 2].gold;
+const _ceil10   = Math.floor(_goldBand[1]
+  * (1 + DiscoveryRoll.LEVEL_SCALAR_PER_LEVEL * (LORD_POWER_LEVEL_CAP - 1))
+  * DiscoveryRoll.lengthOf(undefined).reward
+  * tune('questGold'));
+const _maxAt20  = Math.max(...Array.from({ length: 400 }, () =>
+  DiscoveryRoll.rollRewards(_goldDef, LORD_MAX_LEVEL, { depletion: 1 })
+    .find(r => r.type === 'gold').amount));
+check('expedition loot scalar plateaus at the power cap too',
+  _maxAt20 <= _ceil10,
+  `${_goldDef.id}: best of 400 rolls at L${LORD_MAX_LEVEL} was ${_maxAt20}, L${LORD_POWER_LEVEL_CAP} ceiling is ${_ceil10}`);
+
+check('four talent slots, one every fifth level',
+  MAX_TALENTS === 4 &&
+  JSON.stringify(TALENT_LEVELS) === JSON.stringify([5, 10, 15, 20]) &&
+  TALENT_LEVELS[TALENT_LEVELS.length - 1] === LORD_MAX_LEVEL &&
+  lordTalentSlots(1) === 0 && lordTalentSlots(4)  === 0 &&
+  lordTalentSlots(5) === 1 && lordTalentSlots(14) === 2 &&
+  lordTalentSlots(15) === 3 && lordTalentSlots(20) === 4);
+
+check('nextTalentLevel names the level that opens the next slot',
+  nextTalentLevel(1) === 5 && nextTalentLevel(5) === 10 &&
+  nextTalentLevel(19) === 20 && nextTalentLevel(20) === null);
+
+// The pool must stay bigger than the budget, or the four picks stop being a
+// build and become a checklist.
+check('the talent pool offers more than a maxed lord can hold',
+  Object.keys(TALENT_POOL).length > MAX_TALENTS);
+
+// Read-time migration off the pre-2026-08-03 single `talentId`. No backfill was
+// run, so every existing lord takes this path on their next read.
+check('a legacy single-talent lord migrates into slot 1',
+  JSON.stringify(getLordTalentIds({ level: 7, talentId: 'strategist' })) ===
+    JSON.stringify(['strategist']));
+
+// A lord holding a RETIRED id must get the slot back rather than being stuck
+// holding a talent with no effect — the rule server/actions/lord-talents.js
+// depends on to let them re-pick.
+check('a retired talent id frees its slot instead of sticking',
+  getLordTalentIds({ level: 20, talentIds: ['commander', 'blademaster'] }).length === 1 &&
+  getLordTalentIds({ level: 20, talentIds: ['commander', 'blademaster'] })[0] === 'blademaster');
+
+check('held talents never exceed what the level has earned',
+  getLordTalentIds({ level: 5,  talentIds: ['blademaster', 'iron_wall'] }).length === 1 &&
+  getLordTalentIds({ level: 1,  talentIds: ['blademaster'] }).length === 0 &&
+  getLordTalentIds({ level: 20, talentIds: ['blademaster', 'blademaster'] }).length === 1);
+
+// THE merge contract. Flat bonuses add, multipliers compound, traits union —
+// and the result keeps the SHAPE of one talent's `effects`, which is what lets
+// battle-engine/combat-resolver/recruit/catch-up read it unchanged.
+const _merged = mergeTalentEffects(['blademaster', 'iron_wall', 'strategist', 'inspiring']);
+check('talent effects merge: flat bonuses add, traits union',
+  _merged.battleUnitAttackBonus  === 4   &&
+  _merged.battleUnitDefenseBonus === 4   &&
+  _merged.armyPowerCapBonus      === 100 &&
+  _merged.attackerMoraleBonus    === 10  &&
+  _merged.battleUnitTraits.includes('armor_piercing') &&
+  _merged.battleUnitTraits.includes('shield_wall')    &&
+  _merged.battleUnitTraits.length === 2);
+
+// Duration multipliers COMPOUND. If a mult key ever fell through to the
+// additive branch, ×0.75 would become +0.75 — a 75% LONGER expedition instead
+// of a 25% shorter one, silently, on the one talent that sells speed.
+check('duration multipliers compound rather than add',
+  Math.abs(mergeTalentEffects(['pathfinder']).searchDurationMult - 0.75) < 1e-9 &&
+  Math.abs(mergeTalentEffects(['drillmaster']).recruitTimeMult   - 0.7)  < 1e-9 &&
+  Math.abs(mergeTalentEffects(['pathfinder', 'drillmaster']).searchDurationMult - 0.75) < 1e-9 &&
+  mergeTalentEffects([]).searchDurationMult === undefined);
+
+check('lordTalentEffects merges what the lord actually holds',
+  lordTalentEffects({ level: 20, talentIds: ['blademaster', 'iron_wall'] }).battleUnitAttackBonus === 4 &&
+  JSON.stringify(lordTalentEffects({ level: 1, talentIds: ['blademaster'] })) === '{}' &&
+  JSON.stringify(lordTalentEffects(null)) === '{}');
+
+// Legendary units gate on lord level 12 (unit-unlock.js). Under the old cap of
+// 10 that was UNREACHABLE — the raise is what makes them recruitable at all.
+check('the legendary lord-level gate is reachable under the new cap',
+  UnitUnlockService.LEGENDARY_LORD_LEVEL <= LORD_MAX_LEVEL &&
+  UnitUnlockService.LEGENDARY_LORD_LEVEL > LORD_POWER_LEVEL_CAP);
 
 check('ransom stays trivial for a fresh lord and scales superlinearly',
   lordRansomCost(1) < 1000 &&
@@ -354,7 +666,7 @@ console.log(_tuned.length === 0
 
 check('the documented dial set is exactly what exists',
   JSON.stringify(Object.keys(TUNING).sort()) === JSON.stringify([
-    'buildingProduction', 'populationGold', 'questGold', 'questResources',
+    'buildTime', 'buildingProduction', 'populationGold', 'questGold', 'questResources',
     'raidGold', 'raidResources', 'travelTime',
   ]));
 
@@ -427,6 +739,26 @@ check('getTravelTime honours the attack-intent floor even at distance 0',
   EconomyCore.getTravelTime(0, 5) === 0 &&
   EconomyCore.getTravelTime(0, 5, { minSecs: 60 }) === 60);
 
+// Cartography's travel_speed (2026-08-03) — the OGame drive is ADDITIVE on base
+// speed, so it DIVIDES the march: +30% is time ÷ 1.3, NOT time × 0.7. Getting
+// that backwards is the whole reason this is pinned.
+check('travel_speed divides the march, drive-style',
+  EconomyCore.getTravelTime(5, 5, { researchEffects: { travel_speed: 0.30 } }) === Math.round(100 / 1.3) &&
+  EconomyCore.getTravelTime(5, 5, { researchEffects: { travel_speed: 1.50 } }) === 40 &&
+  EconomyCore.getTravelTime(5, 5, { researchEffects: {} }) === 100 &&
+  EconomyCore.getTravelTime(5, 5) === 100);
+
+// Bounded like every other multiplier in economy-core (floor 0.2 = a hard ×5
+// speed ceiling), and immune to a negative key inventing a slower march.
+check('travel_speed is floored at ×5 and ignores negative keys',
+  EconomyCore.getTravelTime(5, 5, { researchEffects: { travel_speed: 99 } }) === 20 &&
+  EconomyCore.getTravelTime(5, 5, { researchEffects: { travel_speed: -0.9 } }) === 100);
+
+// The attack floor outranks the drive: a fast lord with deep Cartography still
+// gives the defender their 60s warning window.
+check('the attack-intent floor still wins over travel_speed',
+  EconomyCore.getTravelTime(1, 10, { minSecs: 60, researchEffects: { travel_speed: 3 } }) === 60);
+
 check('travelTime dial stretches and compresses marches',
   withDial('travelTime', 2,   () => EconomyCore.getTravelTime(5, 5)) === 200 &&
   withDial('travelTime', 0.5, () => EconomyCore.getTravelTime(5, 5)) === 50);
@@ -437,110 +769,187 @@ check('travelTime does not change march food cost',
   withDial('travelTime', 5, () => EconomyCore.getMarchFoodCost(3, [{ unitId: 'spearmen', count: 4 }], null)) ===
   EconomyCore.getMarchFoodCost(3, [{ unitId: 'spearmen', count: 4 }], null));
 
+// buildTime (2026-08-04). Uses a LATE, expensive building so the assertions are
+// nowhere near the max(5, …) floor — pinned on a cheap one, a dial of 3 could
+// read as "correct" purely because both sides clamped to 5.
+const _btDef = BUILDING_DEFS.fortress;
+check('buildTime dial scales construction both ways',
+  withDial('buildTime', 3,     () => EconomyCore.getBuildTime(_btDef, 5, null, null, null)) ===
+    Math.round(_btDef.buildTime(5) * 3) &&
+  withDial('buildTime', 1 / 3, () => EconomyCore.getBuildTime(_btDef, 5, null, null, null)) ===
+    Math.round(_btDef.buildTime(5) / 3));
+
+// The dial multiplies WITH the Town Hall divisor and the construction_speed %,
+// it does not replace or short-circuit either. A dial that silently overrode
+// the divisor would delete the Town Hall's entire reason to level.
+check('buildTime composes with the Town Hall divisor and construction_speed',
+  withDial('buildTime', 1 / 3, () =>
+    EconomyCore.getBuildTime(_btDef, 5, null, { construction_speed: -0.20 }, { town_hall: 4 })) ===
+  Math.max(5, Math.round(_btDef.buildTime(5) * 0.8 / 3 / 5)));
+
+// The 5-second floor is the last word: no dial, however small, may produce an
+// instant build. (A 0 dial must not yield a 0-second queue item either.)
+check('buildTime cannot dial a build below the 5s floor',
+  withDial('buildTime', 0.00001, () => EconomyCore.getBuildTime(_btDef, 10, null, null, null)) === 5 &&
+  withDial('buildTime', 0,       () => EconomyCore.getBuildTime(_btDef, 10, null, null, null)) === 5);
+
+// Build time is a PACING dial, not an economy one: it must not touch what a
+// building costs, or the projection's resource curve would silently shift.
+check('buildTime does not change what anything costs',
+  JSON.stringify(withDial('buildTime', 3, () => _btDef.cost(5))) ===
+  JSON.stringify(_btDef.cost(5)));
+
 // ── The Merchant (MarketCore) ───────────────────────────────────
-// Resources → gold, deliberately lossy, hard-capped per UTC day. The CAP is the
-// safety mechanism, not the rate: a single tier-3 expedition find is up to
-// 187,200 of one resource, so an uncapped merchant at any rate would become the
-// primary gold channel.
+// Resources ⇄ gold, deliberately lossy in BOTH directions. The daily cap is
+// currently OFF (Nacho, 2026-08-04), which makes the SPREAD the only thing
+// standing between the merchant and a money pump — so that is what these
+// checks defend hardest.
 section('The Merchant');
 
 check('MarketCore is exported by engine-loader (client == server source)', !!MarketCore);
 
-check('rates cover exactly the three tradable resources',
-  JSON.stringify(Object.keys(MarketCore.MARKET_RATES).sort()) === JSON.stringify(['food', 'stone', 'wood']) &&
+check('both rate tables cover exactly the three tradable resources',
+  JSON.stringify(Object.keys(MarketCore.MARKET_SELL_RATES).sort()) === JSON.stringify(['food', 'stone', 'wood']) &&
+  JSON.stringify(Object.keys(MarketCore.MARKET_BUY_RATES).sort()) === JSON.stringify(['food', 'stone', 'wood']) &&
   JSON.stringify([...MarketCore.MARKET_RESOURCES].sort()) === JSON.stringify(['food', 'stone', 'wood']));
 
 // Deliberately worse than production parity (~8 wood : 1 gold at comparable
 // investment). If a rate ever drops under that, the merchant stops being a
 // dump valve and starts being an income strategy.
-check('every rate is worse than production parity (>= 10 : 1)',
-  MarketCore.MARKET_RESOURCES.every(r => MarketCore.MARKET_RATES[r] >= 10));
+check('every sell rate is worse than production parity (>= 10 : 1)',
+  MarketCore.MARKET_RESOURCES.every(r => MarketCore.MARKET_SELL_RATES[r] >= 10));
 
-check('daily cap scales per Marketplace level, and is zero without one',
-  MarketCore.marketDailyCap(0) === 0 &&
-  MarketCore.marketDailyCap(1) === MarketCore.MARKET_GOLD_PER_MK_LEVEL &&
-  MarketCore.marketDailyCap(10) === MarketCore.MARKET_GOLD_PER_MK_LEVEL * 10);
+// THE INVARIANT THE WHOLE FEATURE RESTS ON. Buy and sell are separate tables,
+// so nothing structural stops someone "fixing" a rate into a loop where
+// selling X and buying it back leaves you with more than you started. Checked
+// per resource and as a full round trip, in units, not ratios — a ratio check
+// would pass on rates that still round in the player's favour at small amounts.
+check('no resource can be round-tripped for profit',
+  MarketCore.MARKET_RESOURCES.every(r => {
+    if (MarketCore.MARKET_BUY_RATES[r] >= MarketCore.MARKET_SELL_RATES[r]) return false;
+    // Sell a big round amount, buy back with every coin it produced.
+    const sold   = MarketCore.marketSellQuote(r, 1_000_000, null, Date.UTC(2026, 6, 30));
+    const bought = MarketCore.marketBuyQuote(r, sold.gold, sold.gold);
+    return bought.receive < sold.spend;
+  }));
 
-check('no Marketplace means no trade at all',
-  MarketCore.marketQuote('wood', 100000, 0, null, Date.now()).ok === false);
+// And the reverse lap: gold → resources → gold must also lose.
+check('gold cannot be round-tripped for profit either',
+  MarketCore.MARKET_RESOURCES.every(r => {
+    const bought = MarketCore.marketBuyQuote(r, 100_000, 100_000);
+    const sold   = MarketCore.marketSellQuote(r, bought.receive, null, Date.UTC(2026, 6, 30));
+    return sold.gold < bought.spend;
+  }));
+
+// NO BUILDING GATES THE MERCHANT, AND NO CAP IS IN FORCE (2026-08-04). It used
+// to require a Marketplace and scale its cap off that building's level. Pinned
+// explicitly because both regressions are silent — re-introducing a level
+// argument would be ignored by these functions rather than throwing.
+check('the merchant is ungated and uncapped',
+  MarketCore.marketDailyCap() === null &&
+  MarketCore.marketHasDailyCap() === false &&
+  MarketCore.MARKET_GOLD_PER_MK_LEVEL === undefined &&
+  MarketCore.MARKET_MIN_MARKETPLACE === undefined);
 
 const _mkNow = Date.UTC(2026, 6, 30, 12, 0, 0);
-const _q1 = MarketCore.marketQuote('wood', 1000, 5, null, _mkNow);
+
+check('a player with no buildings at all can still trade',
+  MarketCore.marketSellQuote('wood', 100000, null, _mkNow).ok === true &&
+  MarketCore.marketBuyQuote('wood', 100, 100).ok === true);
+
+const _q1 = MarketCore.marketSellQuote('wood', 1000, null, _mkNow);
 check('a plain sale converts at the published rate',
-  _q1.ok && _q1.gold === Math.floor(1000 / MarketCore.MARKET_RATES.wood) &&
-  _q1.spend === _q1.gold * MarketCore.MARKET_RATES.wood);
+  _q1.ok && _q1.gold === Math.floor(1000 / MarketCore.MARKET_SELL_RATES.wood) &&
+  _q1.spend === _q1.gold * MarketCore.MARKET_SELL_RATES.wood);
+
+const _b1 = MarketCore.marketBuyQuote('wood', 1000, 5000);
+check('a plain purchase converts at the published rate',
+  _b1.ok && _b1.spend === 1000 && _b1.receive === 1000 * MarketCore.MARKET_BUY_RATES.wood);
 
 // spend must always be an exact multiple of the rate — the player should never
 // hand over a remainder that buys nothing.
 check('spend never takes a remainder the player is not paid for',
   [1, 19, 20, 21, 999, 1234567].every(amt => {
-    const q = MarketCore.marketQuote('wood', amt, 5, null, _mkNow);
-    return !q.ok || q.spend % MarketCore.MARKET_RATES.wood === 0;
+    const q = MarketCore.marketSellQuote('wood', amt, null, _mkNow);
+    return !q.ok || q.spend % MarketCore.MARKET_SELL_RATES.wood === 0;
   }));
 
 check('a sale below one gold is rejected rather than eating the resources',
-  MarketCore.marketQuote('wood', MarketCore.MARKET_RATES.wood - 1, 5, null, _mkNow).ok === false);
+  MarketCore.marketSellQuote('wood', MarketCore.MARKET_SELL_RATES.wood - 1, null, _mkNow).ok === false);
 
-const _capLvl = 10;
+// The buy-side equivalent of the same protection, plus the clamp that keeps a
+// "spend it all" button honest when the purse moved under it.
+check('a purchase is clamped to the purse and never goes negative',
+  MarketCore.marketBuyQuote('wood', 999999, 250).spend === 250 &&
+  MarketCore.marketBuyQuote('wood', 100, 0).ok === false &&
+  MarketCore.marketBuyQuote('wood', 0, 5000).ok === false &&
+  MarketCore.marketBuyQuote('wood', -50, 5000).ok === false);
 
-// Worth stating plainly, because it shapes how the merchant FEELS: at 20:1 a
-// single tier-3 expedition find (up to 187,200 wood) is only ~9,360 gold, well
-// under the 30,000/day cap. The cap does not bind on one find — it binds on
-// dumping a stockpile, which is exactly the behaviour it exists to bound.
-const _oneFind = MarketCore.marketQuote('wood', 187200, _capLvl, null, _mkNow);
-check('a single tier-3 find sells freely (the cap is not a per-sale gate)',
-  _oneFind.ok && _oneFind.capped === false &&
-  _oneFind.gold === Math.floor(187200 / MarketCore.MARKET_RATES.wood));
+check('neither side will trade a resource that is not tradable',
+  MarketCore.marketSellQuote('iron', 1000, null, _mkNow).ok === false &&
+  MarketCore.marketBuyQuote('iron', 1000, 5000).ok === false);
 
-// THE headline guard: dumping a whole DAY of endgame resource income (~3.09M,
-// see scripts/economy-projection.js) must be clamped to the daily cap.
-const _bigDump = MarketCore.marketQuote('wood', 3090000, _capLvl, null, _mkNow);
-check('dumping a full day of resource income is clamped to the daily cap',
-  _bigDump.ok && _bigDump.gold === MarketCore.marketDailyCap(_capLvl) && _bigDump.capped === true);
+// WITH THE CAP OFF, nothing clamps a stockpile dump. Pinned as an explicit
+// statement of the current design rather than left implicit — the day this
+// starts failing is the day someone re-enabled the cap, which should be a
+// deliberate act, not a surprise.
+const _bigDump = MarketCore.marketSellQuote('wood', 3090000, null, _mkNow);
+check('an uncapped merchant absorbs a full day of endgame resource income',
+  _bigDump.ok && _bigDump.capped === false &&
+  _bigDump.gold === Math.floor(3090000 / MarketCore.MARKET_SELL_RATES.wood));
 
-// Partial fill: the overflow stays in the stockpile rather than being consumed.
-check('a capped sale only spends what it was actually paid for',
-  _bigDump.spend === _bigDump.gold * MarketCore.MARKET_RATES.wood && _bigDump.spend < 3090000);
-
+// The ledger keeps recording while the cap is off, so switching the cap back on
+// cannot hand anyone a fresh allowance they had already spent.
 const _spent = MarketCore.marketRecord(null, 1200, _mkNow);
-const _full  = MarketCore.marketRecord(null, MarketCore.marketDailyCap(1), _mkNow);
-
-check('the ledger accumulates within a day',
+check('the ledger still accumulates within a day even with no cap',
   MarketCore.marketSoldToday(_spent, _mkNow) === 1200 &&
   MarketCore.marketSoldToday(MarketCore.marketRecord(_spent, 300, _mkNow), _mkNow) === 1500);
 
-check('remaining volume shrinks as the ledger fills, and floors at zero',
-  MarketCore.marketRemainingToday(5, _spent, _mkNow) === MarketCore.marketDailyCap(5) - 1200 &&
-  MarketCore.marketRemainingToday(1, _full, _mkNow) === 0);
-
-// The cap resets on the UTC date rollover — the same date-key rule the
+// The ledger resets on the UTC date rollover — the same date-key rule the
 // expedition tile-depletion counter uses, so both age out identically.
 const _tomorrow = _mkNow + 24 * 3600 * 1000;
-check('the cap resets on the UTC date rollover',
-  MarketCore.marketSoldToday(_full, _tomorrow) === 0 &&
-  MarketCore.marketRemainingToday(5, _full, _tomorrow) === MarketCore.marketDailyCap(5));
+check('the ledger resets on the UTC date rollover',
+  MarketCore.marketSoldToday(_spent, _tomorrow) === 0);
 
-check('a fully-spent day blocks further sales until reset',
-  MarketCore.marketQuote('wood', 100000, 1, _full, _mkNow).ok === false &&
-  MarketCore.marketQuote('wood', 100000, 1, _full, _tomorrow).ok === true);
+// Uncapped, remaining volume is Infinity — NOT 0. A falsy check on this value
+// would read "no trading allowed", the exact opposite of what it means, and
+// would silently close the merchant for everyone.
+check('remaining volume reads as unlimited, not as zero',
+  MarketCore.marketRemainingToday(_spent, _mkNow) === Infinity &&
+  MarketCore.marketRemainingToday(null, _mkNow) === Infinity);
 
-// Sanity vs the income model: the merchant must stay a minority gold channel.
-//
-// The literal here was 252,000 — an endgame gold/day figure measured with
-// js/data/tuning.js at 1.0, never updated when the dials shipped at
-// 0.5/0.5/0.25/0.5. The check was passing for the wrong reason: at the real
-// curve the 30,000/day cap was 27% of gold income, not the 12% the merchant's
-// own header claimed, and not under the 25% this asserted.
-//
-// Fixed properly by Phase 1 of ECONOMY-REBALANCE-PLAN.md (questGold 0.25 →
-// 0.60), which lifted day-25 gold income to ~145k — so the cap is back to ~21%
-// and the original 25% bound holds again on real numbers. Keep this literal in
-// step with the INCOME ANCHORS in scripts/economy-projection.js; they are the
-// same frozen curve. Re-measure, do not guess.
+// ⚠ WHAT UNCAPPING COSTS, stated in numbers so it is never a surprise. At
+// endgame resource income (~3.09M/day, scripts/economy-projection.js) selling
+// wood alone now out-earns every other gold channel combined (~145k/day). This
+// check does not fail — it REPORTS. Nacho accepted this while testing; the fix,
+// if it ever bites, is one number in market-core.js.
 const ENDGAME_GOLD_PER_DAY = 145000;
-check('the merchant stays a minority of endgame gold income',
-  MarketCore.marketDailyCap(10) < ENDGAME_GOLD_PER_DAY * 0.25,
-  `cap ${MarketCore.marketDailyCap(10)} vs ${Math.round(ENDGAME_GOLD_PER_DAY * 0.25)}`);
+const ENDGAME_RES_PER_DAY  = 3090000;
+{
+  const uncapped = MarketCore.marketSellQuote('wood', ENDGAME_RES_PER_DAY, null, _mkNow).gold;
+  const pct      = Math.round((uncapped / ENDGAME_GOLD_PER_DAY) * 100);
+  console.log(`  ⏭  merchant is UNCAPPED — a full day of wood converts to ${uncapped.toLocaleString()} gold`);
+  console.log(`     = ${pct}% of all other endgame gold income (~${ENDGAME_GOLD_PER_DAY.toLocaleString()}/day).`);
+  console.log(`     Accepted by Nacho 2026-08-04 for testing. Re-cap: MARKET_DAILY_GOLD_CAP in market-core.js.`);
+}
+
+// The one early-game guard that still holds without a cap: the RATE. A new
+// player's entire starter kit is worth pocket change, so opening the merchant
+// on day one is not a shortcut past the early game.
+const STARTING_RESOURCES = 5000;   // server/actions/city-found.js first-city kit
+const STARTING_GOLD      = 5000;   // server/action-base.js bootstrap
+check('the starter kit is worth pocket change at the merchant',
+  MarketCore.marketSellQuote('wood', STARTING_RESOURCES, null, _mkNow).gold < 500,
+  `${MarketCore.marketSellQuote('wood', STARTING_RESOURCES, null, _mkNow).gold} gold from the full starter kit`);
+
+// The buy side of the same question: spending the whole opening purse must not
+// out-produce actually building the economy. A Lumber Mill Lv1 makes 33 wood/h,
+// so the starting gold buys roughly a month of one mill — meaningful, not a
+// replacement for building.
+check('the opening purse buys a helpful, not decisive, amount of wood',
+  MarketCore.marketBuyQuote('wood', STARTING_GOLD, STARTING_GOLD).receive
+    < EconomyCore.getRates({ lumber_mill: 1 }, null, null).wood * 24 * 45,
+  `${MarketCore.marketBuyQuote('wood', STARTING_GOLD, STARTING_GOLD).receive} wood for the whole opening purse`);
 
 // ── Temple blessings ────────────────────────────────────────────
 // Temple level is the CEILING on how many hours you may buy, not the
@@ -554,7 +963,7 @@ check('Temple level caps the hours you may consecrate',
 check('duration is exactly the hours chosen',
   blessingDuration(1) === 3600 && blessingDuration(5) === 5 * 3600);
 
-// blessingCost returns { gold, food, wood, stone } since 2026-07-30. A caller
+// blessingCost returns { gold, wood, stone, food } since 2026-07-30. A caller
 // that treats it as a number yields NaN or a free blessing, so pin the SHAPE as
 // well as the linearity.
 check('offering is an object with gold + all three resources',
@@ -786,6 +1195,63 @@ const researchDone = catchUp(researchState, 2_000, { EconomyCore, RACES, UNIT_DE
 check('catchUp completes finished research into player.research',
   researchDone.player.research?.cartography === 2 && researchDone.player.researchQueue.length === 0);
 
+// ── 3.6 Resource display order ──────────────────────────────────
+section('Resource order (wood → stone → food)');
+
+// Costs, production and loot bundles are rendered by walking the OBJECT, so a
+// literal's key order IS its display order. The Town Hall declared
+// `{ food, wood, stone }` while the other 25 buildings declared wood first, and
+// its cost panel alone read "food · wood · stone" (Nacho, 2026-08-04).
+//
+// Checked on the DEFS rather than the UI because that is where the drift starts:
+// a new building copied from the wrong neighbour is one keystroke away, and no
+// screen would fail loudly for it.
+const CANON_ORDER = ['gold', ...EconomyCore.RESOURCE_KEYS];
+const _keysInOrder = obj => {
+  const present = Object.keys(obj || {}).filter(k => CANON_ORDER.includes(k));
+  return JSON.stringify(present) === JSON.stringify(CANON_ORDER.filter(k => present.includes(k)));
+};
+
+check('EconomyCore.RESOURCE_KEYS is the canonical order',
+  JSON.stringify(EconomyCore.RESOURCE_KEYS) === JSON.stringify(['wood', 'stone', 'food']));
+
+const bldOrderBad = Object.values(BUILDING_DEFS)
+  .filter(d => !_keysInOrder(d.cost(3)) || !_keysInOrder(d.production(3)))
+  .map(d => d.id);
+check('every building declares cost & production in canonical order',
+  bldOrderBad.length === 0, bldOrderBad.join(', '));
+
+const bookOrderBad = Object.values(RESEARCH_DEFS)
+  .filter(d => !_keysInOrder(d.cost(2))).map(d => d.id);
+check('every research book declares its cost in canonical order',
+  bookOrderBad.length === 0, bookOrderBad.join(', '));
+
+// Both the mix literal and what blessingCost builds from it — the Temple tab
+// renders the returned object directly.
+const blessOrderBad = Object.keys(BLESSING_COST_MIX)
+  .filter(id => !_keysInOrder(BLESSING_COST_MIX[id]) || !_keysInOrder(blessingCost(2, id)));
+check('every blessing offering is in canonical order',
+  blessOrderBad.length === 0, blessOrderBad.join(', '));
+
+check('raid payout bundle is in canonical order',
+  _keysInOrder(EconomyCore.getRaidHourlyRewards(5)));
+
+const raceOrderBad = Object.values(RACES).filter(r => {
+  const prod = Object.keys(r.bonuses || {})
+    .filter(k => k.endsWith('_production')).map(k => k.replace('_production', ''));
+  return JSON.stringify(prod) !== JSON.stringify(EconomyCore.RESOURCE_KEYS.filter(k => prod.includes(k)));
+}).map(r => r.id);
+check('every race lists its *_production bonuses in canonical order',
+  raceOrderBad.length === 0, raceOrderBad.join(', '));
+
+const terrOrderBad = Object.keys(TERRAIN_RESOURCE_MODS)
+  .filter(t => !_keysInOrder(TERRAIN_RESOURCE_MODS[t]));
+check('every terrain lists its resource modifiers in canonical order',
+  terrOrderBad.length === 0, terrOrderBad.join(', '));
+
+check('the merchant lists its resources in canonical order',
+  JSON.stringify(MarketCore.MARKET_RESOURCES) === JSON.stringify(EconomyCore.RESOURCE_KEYS));
+
 // ── 4. Iron is gone ─────────────────────────────────────────────
 section('Iron removal');
 
@@ -800,6 +1266,37 @@ check('units cost ONLY gold (no resourceCost on any unit)',
 check('no race has iron_production', Object.values(RACES).every(r => !('iron_production' in r.bonuses)));
 check('no terrain has an iron modifier',
   Object.values(TERRAIN_RESOURCE_MODS).every(m => !('iron' in m)));
+
+// ── 4a. Security is gone ────────────────────────────────────────
+section('Security removal');
+
+// Deleted 2026-08-04: fifteen emitters fed it and nothing read it back. Pinned
+// the same way iron is, because a half-removal is the dangerous state — getStats
+// silently DROPS an effect whose stat is not in STAT_BASE, so a leftover
+// `{ stat: 'security' }` costs a building its effect with no error anywhere.
+check('security is not a stat', !('security' in EconomyCore.STAT_BASE));
+
+check('City Defenses is stability alone',
+  JSON.stringify(EconomyCore.DEFENSE_STATS) === JSON.stringify(['stability']));
+
+const bldWithSecurity = Object.values(BUILDING_DEFS)
+  .filter(d => (d.effects ? d.effects(3) : []).some(e => e.stat === 'security'));
+check('no building grants security', bldWithSecurity.length === 0,
+  bldWithSecurity.map(d => d.id).join(', '));
+
+check('no terrain grants security',
+  Object.values(TERRAIN_STAT_MODS).every(mods => mods.every(e => e.stat !== 'security')));
+
+// The general form of the same bug: ANY effect naming a stat the engine does
+// not have is dead weight the player is being charged for. Covers buildings and
+// terrain in one sweep, so the next stat that gets cut cannot leave orphans.
+const orphanEffects = [
+  ...Object.values(BUILDING_DEFS).flatMap(d =>
+    (d.effects ? d.effects(3) : []).map(e => [d.id, e.stat])),
+  ...Object.entries(TERRAIN_STAT_MODS).flatMap(([t, mods]) => mods.map(e => [t, e.stat])),
+].filter(([, stat]) => !(stat in EconomyCore.STAT_BASE));
+check('every building/terrain effect names a stat that exists',
+  orphanEffects.length === 0, orphanEffects.map(([o, s]) => `${o}→${s}`).join(', '));
 
 // ── 4b. Expedition reward ladder ────────────────────────────────
 section('Expedition tiers (DiscoveryRoll)');
@@ -829,7 +1326,7 @@ for (const band of DiscoveryRoll.RECRUIT_TIERS) {
 
 // Tier gating actually holds in the roll, on every terrain — a band with
 // tierOdds 0 for a tier must NEVER produce it.
-const _TIERED = new Set(['resource', 'event', 'trade', 'legendary']);
+const _TIERED = new Set(['resource', 'item', 'trade', 'legendary']);
 let gateLeaks = 0;
 for (const terrain of ['plains', 'forest', 'mountain', 'marsh', 'desert']) {
   for (const band of DiscoveryRoll.RECRUIT_TIERS) {
@@ -842,6 +1339,288 @@ for (const terrain of ['plains', 'forest', 'mountain', 'marsh', 'desert']) {
 }
 check('ER tier gating never leaks a forbidden tier', gateLeaks === 0, `${gateLeaks} leaks`);
 
+// ── 4a-bis. City items ──────────────────────────────────────────
+section('City items (js/data/items.js)');
+
+const _ITEM_KEYS = new Set(['wood_production', 'stone_production', 'food_production']);
+
+// Catalog shape. Items are the ONLY per-city production lever, so a def with a
+// stray effect key would be applied to a city and silently do nothing.
+const _badItems = Object.values(ITEM_DEFS).filter(d =>
+  !d.id || !d.name || !d.icon || !d.summary || !d.description
+  || ![1, 2, 3].includes(d.tier)
+  || !(d.durationHours > 0)
+  || Object.keys(d.effects || {}).length === 0
+  || Object.keys(d.effects).some(k => !_ITEM_KEYS.has(k))
+  || Object.values(d.effects).some(v => !(v > 0)));
+check('every item def is well-formed', _badItems.length === 0, _badItems.map(d => d.id).join(', '));
+
+check('item ids match their keys',
+  Object.entries(ITEM_DEFS).every(([key, def]) => key === def.id));
+
+check('itemDurationMs agrees with durationHours',
+  Object.values(ITEM_DEFS).every(d => itemDurationMs(d.id) === d.durationHours * 3600 * 1000));
+
+// THE COVERAGE RULE. Item finds are ER-gated like all tiered loot (see the tier
+// gating check above), so an ER band whose tierOdds only reach tier N can ONLY
+// ever be shown tier-N item finds. If either side of that pairing has a hole,
+// some band of players can never obtain an item at all — which is exactly the
+// bug that adding wandering_drover (tier 1) and forgotten_estate (tier 3) fixed
+// when the three inherited defs were all tier 2.
+const _itemDiscoveryTiers = new Set(Object.values(DISCOVERY_DEFS)
+  .filter(d => d.category === 'item').map(d => d.tier || 2));
+for (const tier of [1, 2, 3]) {
+  check(`tier ${tier} has both an item and a way to find one`,
+    itemsOfTier(tier).length > 0 && _itemDiscoveryTiers.has(tier),
+    `${itemsOfTier(tier).length} items, discovery def: ${_itemDiscoveryTiers.has(tier)}`);
+}
+
+// An item find pays the item and its XP — never coin, never resources. Swept
+// over every item def rather than spot-checked, since the branch keys off the
+// CATEGORY and a new def inherits it for free.
+let _itemRewardLeaks = [];
+for (const def of Object.values(DISCOVERY_DEFS).filter(d => d.category === 'item')) {
+  for (let i = 0; i < 50; i++) {
+    const rewards = DiscoveryRoll.rollRewards(def, 10, { lengthId: 'long', depletion: 1 });
+    const items   = rewards.filter(r => r.type === 'item');
+    const spoils  = rewards.filter(r => ['gold', 'wood', 'stone', 'food'].includes(r.type));
+    if (items.length !== 1 || spoils.length > 0) { _itemRewardLeaks.push(def.id); break; }
+    if ((ITEM_DEFS[items[0].itemId] || {}).tier !== (def.tier || 2)) { _itemRewardLeaks.push(def.id + ':tier'); break; }
+  }
+}
+check('item finds pay exactly one item of their own tier, and no coin or resources',
+  _itemRewardLeaks.length === 0, _itemRewardLeaks.join(', '));
+
+check('no item find declares dead gold in BASE_REWARDS',
+  Object.values(DISCOVERY_DEFS).filter(d => d.category === 'item')
+    .every(d => !(DiscoveryRoll.BASE_REWARDS[d.id] || {}).gold));
+
+// itemBonusLabel is what the city view and the quest log both print. It must be
+// built from effects, never prose, or the UI can promise a number nobody applies.
+check('itemBonusLabel reads the effects, not the summary',
+  itemBonusLabel(ITEM_DEFS.cattle) === '+20% food'
+  && itemBonusLabel(ITEM_DEFS.horn_of_plenty) === '+25% all resources');
+
+// ── Effect resolution: instantaneous vs time-weighted ──
+const _T0 = 1_800_000_000_000;
+const _hAgo = h => _T0 - h * 3_600_000;
+
+const _liveCity = { activeItems: [{ itemId: 'cattle', startedAt: _hAgo(2), expiresAt: _T0 + 3_600_000 }] };
+const _deadCity = { activeItems: [{ itemId: 'cattle', startedAt: _hAgo(30), expiresAt: _hAgo(6) }] };
+
+check('an active item reports its full bonus',
+  EconomyCore.getCityItemEffects(_liveCity, _T0).food_production === 0.20);
+check('an expired item reports nothing',
+  Object.keys(EconomyCore.getCityItemEffects(_deadCity, _T0)).length === 0);
+
+// THE OFFLINE CASE, and the reason the weighted form exists at all: catch-up
+// credits a whole window in one lump at one rate. An item that ran and lapsed
+// inside that window must still be paid for the hours it was live, or a 24h
+// item applied before a 48h absence would quietly pay nothing.
+check('a lapsed item is still paid for the hours it ran',
+  Math.abs(EconomyCore.getCityItemEffects(_deadCity, _T0, _hAgo(12)).food_production - 0.10) < 1e-9,
+  JSON.stringify(EconomyCore.getCityItemEffects(_deadCity, _T0, _hAgo(12))));
+check('an item applied mid-window is only paid from when it was applied',
+  Math.abs(EconomyCore.getCityItemEffects(
+    { activeItems: [{ itemId: 'cattle', startedAt: _hAgo(5), expiresAt: _T0 + 3_600_000 }] },
+    _T0, _hAgo(10)).food_production - 0.10) < 1e-9);
+
+// No slot limit (Nacho's call, 2026-08-04): two of the same item are two
+// independent entries and their bonuses add.
+check('identical items stack',
+  EconomyCore.getCityItemEffects({ activeItems: [
+    { itemId: 'cattle', startedAt: _hAgo(1), expiresAt: _T0 + 3_600_000 },
+    { itemId: 'cattle', startedAt: _hAgo(1), expiresAt: _T0 + 3_600_000 },
+  ] }, _T0).food_production === 0.40);
+
+check('unknown and malformed entries are ignored, not thrown on',
+  Object.keys(EconomyCore.getCityItemEffects(
+    { activeItems: [null, { itemId: 'no_such_item', expiresAt: _T0 + 1 }] }, _T0)).length === 0);
+
+// Pruning is what keeps activeItems from growing forever. It must run AFTER the
+// window is paid — the weighting above is what makes that ordering safe.
+const _pruneCity = { activeItems: [
+  { itemId: 'cattle',        startedAt: _hAgo(30), expiresAt: _hAgo(6) },
+  { itemId: 'ironwood_grove', startedAt: _hAgo(1),  expiresAt: _T0 + 3_600_000 },
+] };
+const _pruned = EconomyCore.pruneExpiredItems(_pruneCity, _T0);
+check('pruneExpiredItems drops the lapsed entry and keeps the live one',
+  _pruned === true && _pruneCity.activeItems.length === 1
+  && _pruneCity.activeItems[0].itemId === 'ironwood_grove');
+check('pruneExpiredItems reports no change when nothing lapsed',
+  EconomyCore.pruneExpiredItems(_pruneCity, _T0) === false);
+
+// ── End to end through catchUp: the number the player actually banks ──
+// (The suite's shared ENGINE bundle is assembled further down, after this
+// section — this is the same shape, scoped to these three runs.)
+const _ITEM_ENGINE = {
+  DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, LORD_BASE_STATS, LORD_CLASSES,
+  UNIT_DEFS, BUILDING_DEFS, RACES, EconomyCore, TERRAIN_RESOURCE_MODS, TERRAIN_STAT_MODS,
+};
+
+function _itemFixture(activeItems) {
+  return {
+    player: { id: 'p1', lordId: 'l1', coins: 0, resources: { wood: 0, stone: 0, food: 0 }, research: {} },
+    lords:  { l1: { id: 'l1', playerId: 'p1', race: 'human', level: 1, actionQueue: [] } },
+    armies: {},
+    cities: { c1: {
+      id: 'c1', playerId: 'p1', name: 'Item Test', x: 5, y: 5,
+      population: 10000, freePopulation: 3,
+      buildings: { town_hall: 5, lumber_mill: 10, stone_quarry: 10, farm: 10 },
+      constructionQueue: [], activeItems,
+      lastResourceUpdate: _hAgo(10), lastPopulationUpdate: _hAgo(10),
+    } },
+  };
+}
+const _noItemRun = catchUp(_itemFixture([]), _T0, _ITEM_ENGINE);
+const _fullRun   = catchUp(_itemFixture([
+  { itemId: 'ironwood_grove', startedAt: _hAgo(50), expiresAt: _T0 + 20 * 3_600_000 }]), _T0, _ITEM_ENGINE);
+
+// The item is ADDITIVE with the race bonus, exactly like research and blessings
+// — so the expected ratio is (1 + race + item) / (1 + race), NOT 1 + item.
+// Humans carry +5% wood; asserting 1.60 here would be asserting the wrong model.
+const _raceWood = RACES.human.bonuses.wood_production;
+const _expected = (1 + _raceWood + 0.60) / (1 + _raceWood);
+const _actual   = _fullRun.player.resources.wood / _noItemRun.player.resources.wood;
+check('catchUp credits the item bonus additively with the race bonus',
+  Math.abs(_actual - _expected) < 0.01, `expected ${_expected.toFixed(3)}, got ${_actual.toFixed(3)}`);
+
+const _lapsedRun = catchUp(_itemFixture([
+  { itemId: 'ironwood_grove', startedAt: _hAgo(30), expiresAt: _hAgo(5) }]), _T0, _ITEM_ENGINE);
+const _halfExpected = (1 + _raceWood + 0.30) / (1 + _raceWood);
+const _halfActual   = _lapsedRun.player.resources.wood / _noItemRun.player.resources.wood;
+check('catchUp pays a mid-window expiry for exactly the half it ran',
+  Math.abs(_halfActual - _halfExpected) < 0.01,
+  `expected ${_halfExpected.toFixed(3)}, got ${_halfActual.toFixed(3)}`);
+check('catchUp prunes the lapsed entry once it has been paid',
+  _lapsedRun.cities.c1.activeItems.length === 0);
+check('catchUp keeps a still-live entry',
+  _fullRun.cities.c1.activeItems.length === 1);
+
+// NO SLOT LIMIT means the only ceiling is PRODUCTION_BONUS_MAX inside getRates.
+// Verify it actually bites, since an unbounded per-city multiplier is the one
+// way this system could break the economy outright: 40 stacked Ironwood Groves
+// (+2400%) must produce exactly what the clamp allows and not a unit more.
+const _absurd = Array.from({ length: 40 }, () => (
+  { itemId: 'ironwood_grove', startedAt: _hAgo(1), expiresAt: _T0 + 3_600_000 }));
+const _absurdFx = EconomyCore.getCityItemEffects({ activeItems: _absurd }, _T0);
+const _clamped  = EconomyCore.getRates({ lumber_mill: 10 }, { wood_production: _absurdFx.wood_production }, null);
+const _atMax    = EconomyCore.getRates({ lumber_mill: 10 }, { wood_production: 3.0 }, null);
+check('stacked items cannot outrun the production clamp',
+  Math.abs(_absurdFx.wood_production - 24) < 1e-9 && _clamped.wood === _atMax.wood,
+  `raw bonus ${_absurdFx.wood_production}, wood ${_clamped.wood} vs clamped ${_atMax.wood}`);
+
+// ── 4b. Population growth invariants ────────────────────────────
+section('Population growth (status ladder + famine)');
+
+// NO CITY STATE MAY HOLD POPULATION STILL (Nacho's call, 2026-08-03). A flat
+// rate is a dead end for the player: nothing to fix, nothing to plan against,
+// and the UI had to invent a third "stagnant" wording for it. Sweep the whole
+// matrix — every status tier × fed/starving — rather than spot-checking, since
+// the old bug was one arithmetic coincidence (Growing 125 − penalty 125 = 0).
+const _statsForTier = {
+  // Loadouts measured to land on each tier at 1,000 pop on neutral terrain.
+  prosperous: { town_hall: 10, farm: 8, aqueduct: 8, temple: 8, tavern: 8 },
+  growing:    { town_hall: 5,  farm: 4, aqueduct: 3, temple: 2 },
+  stable:     { town_hall: 1,  farm: 1 },
+};
+let flatFound = [];
+for (const [label, buildings] of Object.entries(_statsForTier)) {
+  const s = EconomyCore.getStats(buildings, 1000, []);
+  for (const foodRate of [0, 50]) {
+    for (const foodStock of [0, 10000]) {
+      const r = EconomyCore.getPopGrowthRate(s, foodRate, foodStock);
+      if (r === 0) flatFound.push(`${label} food=${foodRate} stock=${foodStock}`);
+    }
+  }
+}
+check('no status × larder combination yields 0 pop growth', flatFound.length === 0,
+  flatFound.join(', '));
+
+check('every STATUS_POP_RATE tier is non-zero',
+  Object.values(EconomyCore.STATUS_POP_RATE).every(r => r !== 0));
+
+// The specific coincidence that used to produce 0, and the one that used to let
+// a Prosperous city GROW through a famine.
+const _growingStats = EconomyCore.getStats(_statsForTier.growing, 1000, []);
+const _prosperStats = EconomyCore.getStats(_statsForTier.prosperous, 1000, []);
+check('a starving Growing city declines (was exactly 0)',
+  EconomyCore.getPopGrowthRate(_growingStats, 0, 0) < 0,
+  `got ${EconomyCore.getPopGrowthRate(_growingStats, 0, 0)}`);
+check('a starving Prosperous city declines (was +42)',
+  EconomyCore.getPopGrowthRate(_prosperStats, 0, 0) < 0,
+  `got ${EconomyCore.getPopGrowthRate(_prosperStats, 0, 0)}`);
+
+// Starvation must still respect the ladder: a bad city starves faster than a
+// good one, or the player has no reason to fix stats during a famine.
+check('starvation is worse for a worse status',
+  EconomyCore.getPopGrowthRate(EconomyCore.getStats({}, 200000, []), 0, 0)
+    < EconomyCore.getPopGrowthRate(_prosperStats, 0, 0));
+
+// Food is an EMPIRE pool, so a farmless city in a stocked realm is fed.
+check('city with no farm but a stocked empire is fed', EconomyCore.isCityFed(0, 5000));
+check('city with a farm is fed even at 0 stock',       EconomyCore.isCityFed(11, 0));
+check('no farm and no stock is a famine',             !EconomyCore.isCityFed(0, 0));
+
+// A NEW CITY MUST OPEN STABLE AND GROWING. This is the exact founding loadout
+// from server/actions/city-found.js — the regression it guards is a city that
+// read "Stable" on the badge while shrinking at −42/hr from its first minute.
+//
+// The free Farm was removed on 2026-08-04, so the city now produces NO food of
+// its own and is fed entirely from the empire larder. That makes the larder
+// argument load-bearing rather than incidental: it is the starter kit
+// city-found.js seeds alongside the city, and it is the only reason the opening
+// hours are not a famine. Passing 0 here would be testing a state the game
+// never actually creates.
+const FOUNDING_BUILDINGS  = { town_hall: 1 };
+const FOUNDING_POP        = 1000;
+const FOUNDING_FOOD_STOCK = 5000;   // server/actions/city-found.js starter kit
+for (const terrain of ['plains', 'forest', 'mountain', 'marsh', 'desert']) {
+  const s      = EconomyCore.getStats(FOUNDING_BUILDINGS, FOUNDING_POP, TERRAIN_STAT_MODS[terrain] || []);
+  const food   = EconomyCore.getRates(FOUNDING_BUILDINGS, {}, TERRAIN_RESOURCE_MODS[terrain] || {}).food;
+  const status = EconomyCore.getCityStatus(s);
+  const rate   = EconomyCore.getPopGrowthRate(s, food, FOUNDING_FOOD_STOCK);
+  check(`new city on ${terrain} opens Stable or better`,
+    ['stable', 'growing', 'prosperous'].includes(status.id), `got ${status.id}`);
+  check(`new city on ${terrain} opens GROWING, not declining`, rate > 0, `got ${rate}/hr`);
+  // No CRITICAL row at founding on any terrain. A single Warning is allowed and
+  // is terrain flavour, not a defect: marsh is −15 hygiene, so a marsh city
+  // opens with hygiene 39 (Warning) and must build an Aqueduct before it can
+  // reach Prosperous. That is the cost of the tile the player picked — the
+  // Warning still caps the badge, so it stays a real decision.
+  check(`new city on ${terrain} has no Critical status row`,
+    EconomyCore.STATUS_STATS.every(k => EconomyCore.getStatTier(k, s[k]) !== 'critical'),
+    EconomyCore.STATUS_STATS.map(k => `${k}=${s[k]}(${EconomyCore.getStatTier(k, s[k])})`).join(' '));
+}
+
+// On NEUTRAL terrain — no terrain stat mods at all — the founding stats must be
+// unambiguously healthy: every status row Stable or better. This is the
+// "a new city starts stable" requirement with the terrain variable removed.
+{
+  const s = EconomyCore.getStats(FOUNDING_BUILDINGS, FOUNDING_POP, []);
+  check('new city on neutral terrain: every status row Stable or better',
+    EconomyCore.STATUS_STATS.every(k => ['excellent', 'stable'].includes(EconomyCore.getStatTier(k, s[k]))),
+    EconomyCore.STATUS_STATS.map(k => `${k}=${s[k]}(${EconomyCore.getStatTier(k, s[k])})`).join(' '));
+}
+
+// The founding loadout is duplicated in three places (server, legacy client,
+// projection script). It is now Town Hall ONLY — nothing else, no free Farm.
+// Pinned in both directions: the Town Hall must be there (every producer
+// requires it, so a city without one cannot start at all), and nothing else
+// may quietly creep back in.
+check('founding loadout is the Town Hall and nothing else',
+  JSON.stringify(FOUNDING_BUILDINGS) === JSON.stringify({ town_hall: 1 }));
+
+// The other half of removing the Farm: the city makes no food itself, so the
+// larder is the only thing standing between a new city and a famine. If
+// isCityFed ever stopped reading the empire pool, every new city would open
+// starving — this is the check that would catch it.
+check('a brand-new city grows only because the empire larder feeds it',
+  EconomyCore.getRates(FOUNDING_BUILDINGS, {}, {}).food === 0 &&
+  EconomyCore.isCityFed(0, FOUNDING_FOOD_STOCK) &&
+  EconomyCore.getPopGrowthRate(
+    EconomyCore.getStats(FOUNDING_BUILDINGS, FOUNDING_POP, []), 0, FOUNDING_FOOD_STOCK) > 0);
+
 // ── 5. Client formulas == server catch-up ───────────────────────
 section('Client/server parity (catchUp uses EconomyCore)');
 
@@ -853,7 +1632,7 @@ const cityFixture = {
   id: 'c_test', playerId: 'p_test', name: 'Testheim', x: 3, y: 7,
   population: 5000, freePopulation: 3,
   buildings: { town_hall: 2, lumber_mill: 3, stone_quarry: 2, farm: 2, aqueduct: 4, marketplace: 1 },
-  constructionQueue: [], recruitmentQueue: [], activeModifiers: [],
+  constructionQueue: [], recruitmentQueue: [], activeItems: [],
   lastResourceUpdate: NOW - HOUR, lastPopulationUpdate: NOW - HOUR,
 };
 const state = {
@@ -883,8 +1662,10 @@ check('catchUp strips legacy iron from player.resources', !('iron' in migrated.p
 
 // Population growth parity: client CityStatsService delegates to the same
 // EconomyCore.getPopGrowthRate, so asserting catchUp moved population by
-// getPopGrowthRate(stats, food) proves both sides agree.
-const popRate  = EconomyCore.getPopGrowthRate(statsT, expected.food);
+// getPopGrowthRate(stats, cityFood, empireFoodStock) proves both sides agree.
+// The stock argument is the pool AFTER this city banked its production, which
+// is the order catch-up.js uses.
+const popRate  = EconomyCore.getPopGrowthRate(statsT, expected.food, result.player.resources.food);
 check('catchUp population growth matches EconomyCore.getPopGrowthRate',
   result.cities.c_test.population === Math.max(1, Math.round(cityFixture.population + popRate * 1)),
   `got ${result.cities.c_test.population}, expected ${cityFixture.population + popRate}`);

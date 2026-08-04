@@ -100,6 +100,14 @@ var QUEST_DEF_NARRATIVES = {
     "A stand of old-growth timber, hidden behind a ridge and untouched by any saw. Your scouts estimated the yield at several hundred logs of high-quality hardwood. Whoever logged this valley before missed it entirely.",
     "A collapsed logging operation from a previous generation had left behind a large cache of cut and cured timber. Most of it was still good. Your men earmarked the find for collection.",
   ],
+  fallen_timber: [
+    "A winter gale had walked straight through this stand and laid half of it flat. The trunks have had a season to season where they fell — dry, sound, and asking only for a cart and a strong back.",
+    "Your scouts found a swathe of forest thrown down by wind, the root plates standing on end like walls. The timber beneath is clean and already cured. No felling required; only hauling.",
+  ],
+  charcoal_stack: [
+    "A burner's clearing, the turf stack still half-built and long cold. Whatever took the man who raised it took him quickly — he left a season's cordwood corded and covered, and never came back for it.",
+    "Your men smelled the old burn before they saw it: a ring of scorched earth, a lean-to, and stack after stack of cut cordwood waiting on a fire that never came. Nobody has touched it in years.",
+  ],
   abandoned_mine: [
     "A rotted sign and a caved-in shaft entrance marked the spot. Someone had worked this seam before and either run out of coin or been driven off. With fresh timber and effort, it could run again.",
     "Your scouts found the mine by following an old cart track to its end. The entrance had been deliberately sealed — not by collapse, but by someone who intended to come back. They never did.",

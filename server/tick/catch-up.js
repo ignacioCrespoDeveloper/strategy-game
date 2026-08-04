@@ -18,7 +18,7 @@
 //    ✓ Lord action queue completions (move + search)
 //    ✓ Building construction completions
 //    ✓ Unit recruitment completions (adds to army)
-//    ✓ Resource production (food/wood/stone × race × terrain)
+//    ✓ Resource production (wood/stone/food × race × terrain)
 //    ✓ Population growth
 //    ✓ Gold income + upkeep deduction
 // =============================================
@@ -66,7 +66,26 @@ function _xpToNextLevel(level) { return 50 * (2 * level + 1); }
 // This module is deliberately dependency-free (same reason _xpToNextLevel is
 // duplicated above rather than imported), so the constant is inlined. If the
 // canonical value changes, change it here too.
-const _LORD_MAX_LEVEL = 10;
+const _LORD_MAX_LEVEL = 20;
+
+// The level past which a lord stops projecting MORE power into the world —
+// army PWR cap, raid rate and expedition loot all freeze here while stats and
+// talents keep growing to _LORD_MAX_LEVEL. Local copy of LORD_POWER_LEVEL_CAP
+// for the same dependency-free reason as above; `engine.lordPowerLevel` is
+// preferred where the bundle carries it, this is the fallback.
+const _LORD_POWER_LEVEL_CAP = 10;
+
+function _powerLevel(lord, engine) {
+  if (engine?.lordPowerLevel) return engine.lordPowerLevel(lord?.level);
+  return Math.min(Math.max(1, lord?.level || 1), _LORD_POWER_LEVEL_CAP);
+}
+
+// Merged effects of every talent the lord holds. Guarded like _mountEffects —
+// an older engine bundle without the helper degrades to "no talents" rather
+// than throwing mid-tick and stalling the catch-up for that player.
+function _talentEffects(lord, engine) {
+  return engine?.lordTalentEffects ? engine.lordTalentEffects(lord) : {};
+}
 
 // Apply pending level-ups after an XP gain. Mirrors lord.js checkLevelUp().
 function _checkLevelUp(lord, engine) {
@@ -139,7 +158,15 @@ function _mergeXpReward(rewards, extraXp) {
 //
 // Deliberately awards NO honor. Honor is a purely PvP metric now, which is
 // what ranking-updater.js and ranking-screen.js already claimed it was.
-function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
+//
+// `atMs` is WHEN THE EXPEDITION FINISHED, not when catch-up ran. Those are the
+// same number for an online player and days apart for one who closed the
+// browser mid-expedition, and every timestamp below describes the fight rather
+// than the login that discovered it: the report's filing time, the rest clock,
+// and the hour of downtime a fallen lord serves. Passing `nowMs` here (as this
+// did until 2026-08-03) made a lord that fell three days ago start its recovery
+// hour on login.
+function _resolveAmbush(lord, armies, cities, def, terrainId, atMs, engine) {
   const { CAMP_DEFS, CAMP_LEVEL_LOOT, UNIT_DEFS, EconomyCore, BattleEngine, DiscoveryRoll, BATTLE_WIN_HEAL_PCT } = engine;
   if (!BattleEngine || !CAMP_LEVEL_LOOT) return null;
 
@@ -211,7 +238,7 @@ function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
       if (cur < uMax) stack.currentHp = Math.min(uMax, Math.round(cur + uMax * (BATTLE_WIN_HEAL_PCT || 0)));
     });
   }
-  updated.regenAt  = nowMs;
+  updated.regenAt  = atMs;
   armies[lord.id]  = updated;
 
   // Lord HP / downtime straight from the battle outcome.
@@ -226,7 +253,7 @@ function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
     }
   } else {
     lord.currentHp      = 0;
-    lord.downtimeUntil  = nowMs + 60 * 60 * 1000;
+    lord.downtimeUntil  = atMs + 60 * 60 * 1000;
     lord.downtimeReason = 'defeated';
     // No need to clear actionQueue: the caller already shifted this item off,
     // and it reassigns lord.actionQueue from its own local `queue` after the
@@ -255,7 +282,7 @@ function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
     // finds out. An expedition that resolved three hours ago while the browser
     // was closed must file in the Battles tab under its real time, and it
     // doubles as the de-dupe key for BattleHistoryService.saveAmbush.
-    ambush:   { won, report, campLevel: details.level, campName: encounter.name, lordFell: !lordSurv, at: nowMs },
+    ambush:   { won, report, campLevel: details.level, campName: encounter.name, lordFell: !lordSurv, at: atMs },
   };
 }
 
@@ -268,13 +295,14 @@ function _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine) {
 // the newcomers walk away, and the report says so with the exact numbers. That
 // is the whole reason to leave room before questing, and it also stops
 // expeditions being a way around the army cap. Mirrors the recruit gate in
-// server/actions/recruit.js — the cap is 200 + level×80 (+ talent bonus).
+// server/actions/recruit.js — the cap is 200 + level×80, FROZEN AT LEVEL 10.
 // Talent and apex-mount bonuses stack; mirrors LordService.getArmyPowerCap
 // (js/domain/lord.js) and _armyPowerCap in server/actions/recruit.js.
 function _armyPowerCap(lord, engine) {
-  const talent = engine?.TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  const talent = _talentEffects(lord, engine).armyPowerCapBonus || 0;
   const mount  = _mountEffects(lord, engine).armyPowerCapBonus || 0;
-  return 200 + (lord.level || 1) * 80 + talent + mount;
+  if (engine?.lordArmyPowerCapBase) return engine.lordArmyPowerCapBase(lord.level) + talent + mount;
+  return 200 + _powerLevel(lord, engine) * 80 + talent + mount;
 }
 
 // Mount effects, race-resolved. Guarded because catch-up is handed its engine
@@ -333,16 +361,21 @@ function _resolveRecruits(lord, armies, engine) {
 // expedition length and the tile's depletion multiplier onto it at enqueue
 // time, so resolution needs no access to the search_fatigue storage key.
 // Absent on items queued before expedition lengths existed → Standard, 1.0.
-function _resolveSearchArea(lord, armies, cities, nowMs, engine, action) {
+//
+// `atMs` is the expedition's OWN finish time (`action.finishAt`), not the
+// current tick — see the note above _resolveAmbush. Everything stamped in here
+// dates the expedition, so a player logging in after two days away reads real
+// history instead of a pile of events that all claim to have just happened.
+function _resolveSearchArea(lord, armies, cities, atMs, engine, action) {
   if (lord.x == null || lord.y == null) return null;
-  const { DISCOVERY_DEFS, CAMP_DEFS, TALENT_POOL, UNIT_DEFS, DiscoveryRoll } = engine;
+  const { DISCOVERY_DEFS, CAMP_DEFS, UNIT_DEFS, DiscoveryRoll } = engine;
   if (!DiscoveryRoll) return null; // engine built without the roll module — nothing to resolve
 
   const lengthId  = action?.length;
   const depletion = action?.depletion;
 
   const terrainId     = _getTerrain(lord.x, lord.y);
-  const talentEffects = (TALENT_POOL && lord.talentId) ? (TALENT_POOL[lord.talentId]?.effects || {}) : {};
+  const talentEffects = _talentEffects(lord, engine);
 
   // Footprint: how loud this expedition is. A big army gets jumped more, comes
   // back empty more, and is shown less — see DiscoveryRoll's FOOTPRINT block.
@@ -362,14 +395,19 @@ function _resolveSearchArea(lord, armies, cities, nowMs, engine, action) {
   }
 
   const record = {
-    id:           'disc_' + nowMs + '_' + Math.floor(Math.random() * 100000),
+    id:           'disc_' + atMs + '_' + Math.floor(Math.random() * 100000),
     definitionId: def.id,
     tileX:        lord.x,
     tileY:        lord.y,
     terrain:      terrainId,
     lordId:       lord.id,
-    discoveredAt: nowMs,
-    expiresAt:    def.baseDuration > 0 ? nowMs + def.baseDuration * 1000 : null,
+    discoveredAt: atMs,
+    // Measured from the discovery, not from the login that revealed it: a find
+    // that sat on the map for its whole 24-48h window while the browser was
+    // closed HAS expired, and expireOld drains it. No reward is lost either
+    // way — gold/XP/resources are credited in the caller the moment the
+    // expedition resolves; the record is only the map marker.
+    expiresAt:    def.baseDuration > 0 ? atMs + def.baseDuration * 1000 : null,
   };
 
   // Recruits: the units ARE the reward, so no loot roll — rollRewards has no
@@ -389,7 +427,7 @@ function _resolveSearchArea(lord, armies, cities, nowMs, engine, action) {
   // game can act on one, so leaving an orphan behind would be worse than a
   // quiet miss.
   if (def.category === 'combat') {
-    const ambush = _resolveAmbush(lord, armies, cities, def, terrainId, nowMs, engine);
+    const ambush = _resolveAmbush(lord, armies, cities, def, terrainId, atMs, engine);
     if (ambush) return { ...ambush, lengthId, depletion, loudness };
     return { defId: 'nothing_found', category: 'nothing', record: null, rewards: [], lengthId, depletion, loudness };
   }
@@ -495,8 +533,16 @@ export function catchUp(state, nowMs, engine = null) {
         const lenMul = engine.DiscoveryRoll ? engine.DiscoveryRoll.lengthOf(done.length).reward : 1;
         const baseXp = Math.round(_SEARCH_AREA_XP * lenMul);
 
-        const pending = _resolveSearchArea(lord, armies, cities, nowMs, engine, done);
+        // done.finishAt, not nowMs. The loop condition guarantees it is a real
+        // number, and it is the only honest answer to "when did this happen" —
+        // catch-up may be running days later.
+        const pending = _resolveSearchArea(lord, armies, cities, done.finishAt, engine, done);
         if (pending) {
+          // Carried to the client on the quest_result event so the Activity
+          // feed, the quest log and the Battles tab all file this under the
+          // hour it actually resolved. Without it every result that piled up
+          // while the browser was closed read "just now" on login.
+          pending.at = done.finishAt;
           // Fold the flat expedition XP INTO the reported rewards instead of
           // crediting it off to the side. It used to be applied straight to
           // lord.xp above, so an expedition that found nothing reported an
@@ -526,9 +572,19 @@ export function catchUp(state, nowMs, engine = null) {
           for (const r of (pending.rewards || [])) {
             if      (r.type === 'gold') player.coins = Math.floor((player.coins || 0) + r.amount * questMult);
             else if (r.type === 'xp')  lord.xp = (lord.xp || 0) + r.amount;
-            else if (['food','wood','stone'].includes(r.type)) {
+            else if (['wood','stone','food'].includes(r.type)) {
               player.resources = player.resources || {};
               player.resources[r.type] = Math.floor((player.resources[r.type] || 0) + r.amount * questResMult);
+            }
+            // An item find (js/data/items.js) lands in the backpack, not in a
+            // resource pool — the player decides which city gets it later.
+            // Deliberately NOT multiplied by questMult/questResMult: an item is
+            // a COUNT of one, and a 30% bonus on one thing is either nothing or
+            // a silent second item. Blessings and mounts pay out on the finds
+            // that carry amounts.
+            else if (r.type === 'item' && r.itemId) {
+              player.items = player.items || {};
+              player.items[r.itemId] = (player.items[r.itemId] || 0) + 1;
             }
           }
           _checkLevelUp(lord, engine);
@@ -575,6 +631,10 @@ export function catchUp(state, nowMs, engine = null) {
         type: 'lord_action_done', lordId: lord.id, lordName: lord.name || '',
         actionId: done.actionId || 'move_lord',
         destX: done.destX ?? null, destY: done.destY ?? null, intent: done.intent ?? null,
+        // The action's own finish time. This event carried no timestamp at all
+        // until 2026-08-03, so anything consuming it had to fall back to "now"
+        // — which is the login, not the arrival.
+        at: done.finishAt,
       });
     }
     if (queueChanged) lord.actionQueue = queue;
@@ -610,9 +670,11 @@ export function catchUp(state, nowMs, engine = null) {
         const raidResMult = raidMult + (blessingFx.resource_yield_bonus || 0);
         const goldEarned = Math.floor(rates.gold * hours * raidMult);
         player.coins      = Math.floor((player.coins || 0) + goldEarned);
-        player.resources  = player.resources || { food: 0, wood: 0, stone: 0 };
+        player.resources  = player.resources || { wood: 0, stone: 0, food: 0 };
         const resEarned = {};
-        ['food', 'wood', 'stone'].forEach(r => {
+        // Canonical order — resEarned reaches the client as the raid_complete
+        // event's `resources`, so its key order is a display order.
+        ['wood', 'stone', 'food'].forEach(r => {
           // Floor the GAIN (not the sum) so the number reported to the player
           // is exactly the number that was added — stored resources are always
           // integers, so this is arithmetically identical to the old form.
@@ -752,7 +814,7 @@ export function catchUp(state, nowMs, engine = null) {
 
   // Seed / migrate the empire resource pool
   if (!player.resources) {
-    player.resources = { food: 0, wood: 0, stone: 0 };
+    player.resources = { wood: 0, stone: 0, food: 0 };
     changed = true;
   }
   if ('iron' in player.resources) {
@@ -799,7 +861,7 @@ export function catchUp(state, nowMs, engine = null) {
   // object to getRates.
   const researchFx  = eco ? eco.getResearchEffects(player.research) : {};
   const prodBonuses = {};
-  for (const r of ['food', 'wood', 'stone']) {
+  for (const r of ['wood', 'stone', 'food']) {
     prodBonuses[r + '_production'] = (raceBonuses[r + '_production'] || 0)
       + (researchFx[r + '_production'] || 0)
       + (blessingFx[r + '_production'] || 0);
@@ -823,36 +885,65 @@ export function catchUp(state, nowMs, engine = null) {
     const terrainKey  = (city.x != null && city.y != null) ? _getTerrain(city.x, city.y) : null;
     const terrainMods = engine?.TERRAIN_RESOURCE_MODS?.[terrainKey] || {};
 
-    // Extra stat effects: active (non-expired) event modifiers + terrain stat mods
-    const extraEffects = [
-      ...(city.activeModifiers || []).filter(m => !m.expiresAt || nowMs < m.expiresAt),
-      ...(engine?.TERRAIN_STAT_MODS?.[terrainKey] || []),
-    ];
+    // Extra stat effects: terrain stat mods. City events used to contribute
+    // `city.activeModifiers` here; that system was deleted 2026-08-04 and
+    // replaced by items (js/data/items.js), which act on production, not stats.
+    const extraEffects = [...(engine?.TERRAIN_STAT_MODS?.[terrainKey] || [])];
 
     const stats = eco.getStats(city.buildings || {}, city.population || 1000, extraEffects);
 
-    // Resource production (race + research + terrain) → empire-wide pool
-    const rates = eco.getRates(city.buildings || {}, prodBonuses, terrainMods);
+    // City items — the only PER-CITY production bonus, so it is summed HERE,
+    // inside the city loop, on top of the empire-wide prodBonuses built above.
+    //
+    // TIME-WEIGHTED over exactly the window being credited (see
+    // getCityItemEffects): production is applied as one lump at one rate, so an
+    // item that ran and expired inside a long offline gap has to be paid for the
+    // hours it was live. windowStart is derived from the CAPPED elapsedH rather
+    // than from lastUpdate, so the weights and the hours being paid always
+    // describe the same window even when MAX_ELAPSED_H bites.
+    const windowStart = nowMs - elapsedH * 3_600_000;
+    const itemFx      = eco.getCityItemEffects ? eco.getCityItemEffects(city, nowMs, windowStart) : {};
+    const cityBonuses = { ...prodBonuses };
+    for (const r of ['wood', 'stone', 'food']) {
+      const fx = itemFx[r + '_production'];
+      if (fx) cityBonuses[r + '_production'] = (cityBonuses[r + '_production'] || 0) + fx;
+    }
+
+    // Resource production (race + research + blessing + items + terrain) → empire-wide pool
+    const rates = eco.getRates(city.buildings || {}, cityBonuses, terrainMods);
     for (const [res, perHour] of Object.entries(rates)) {
       if (perHour > 0) player.resources[res] = (player.resources[res] || 0) + perHour * elapsedH;
     }
 
     // Gold income (accumulated, applied to player after all cities)
-    totalGoldEarned += eco.getGoldRate(city.buildings || {}, city.population, stats.happiness) * elapsedH;
+    // Corruption skims the take since 2026-08-03 — see getGoldRate.
+    totalGoldEarned += eco.getGoldRate(city.buildings || {}, city.population, stats.happiness, stats.corruption) * elapsedH;
 
-    // Population growth. God of Fertility blessing boosts positive growth
-    // only — a blessing must never deepen a decline.
-    let popRate = eco.getPopGrowthRate(stats, rates.food);
+    // Population growth. The famine term reads the EMPIRE larder, not just this
+    // city's farms — the pool above is shared, so a farmless city is fed by its
+    // neighbours (see isCityFed). Read after production is banked, so a city
+    // that feeds itself is always counted as fed.
+    //
+    // God of Fertility blessing boosts positive growth only — a blessing must
+    // never deepen a decline.
+    let popRate = eco.getPopGrowthRate(stats, rates.food, player.resources.food);
     if (popRate > 0 && blessingFx.pop_growth_bonus) {
       popRate = Math.round(popRate * (1 + blessingFx.pop_growth_bonus));
     }
-    if (popRate !== 0) {
-      city.population = Math.max(1, Math.round((city.population || 1000) + popRate * elapsedH));
-    }
-    eco.degradeExcessBuildings(city);
+    city.population = Math.max(1, Math.round((city.population || 1000) + popRate * elapsedH));
+    // City tier is a RATCHET (2026-08-03): record the high-water mark, which is
+    // what slots and tier are derived from. Replaces degradeExcessBuildings,
+    // which destroyed buildings at random whenever a shrinking city fell a
+    // tier — see the note on cityPeakPopulation in economy-core.js.
+    if (eco.updatePeakPopulation) eco.updatePeakPopulation(city);
 
     // freePopulation: +5/day ≈ 0.2083/h, cap 20
     city.freePopulation = Math.min(20, (city.freePopulation ?? 3) + (5 / 24) * elapsedH);
+
+    // Lapsed items are dropped only NOW — after the window they were live for
+    // has been paid. The weighting above is what makes that safe; pruning
+    // earlier would delete the entry before its hours were credited.
+    if (eco.pruneExpiredItems) eco.pruneExpiredItems(city, nowMs);
 
     city.lastResourceUpdate   = nowMs;
     city.lastPopulationUpdate = nowMs;

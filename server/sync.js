@@ -122,6 +122,12 @@ export async function syncPlayerState(req, res) {
           // than a camp for the player to attack later.
           ambush:   pending.ambush  || null,
           recruits: pending.recruits || null,
+          // When the expedition FINISHED (catch-up.js stamps it off the queue
+          // item's finishAt), not when this sync ran. The client files the log
+          // entry, the Activity row and the battle report under it. Null on
+          // results stashed by a pre-2026-08-03 server, where the client's
+          // "now" fallback is all there ever was.
+          at:       pending.at ?? null,
         });
       }
       lord.pendingDiscoveries = [];

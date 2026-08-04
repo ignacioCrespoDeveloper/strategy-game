@@ -842,7 +842,11 @@ const MapView = (() => {
     const toTerrain   = WorldService.getTerrain(tx, ty);
     const dist        = Math.max(1, Math.max(Math.abs(tx - lord.x), Math.abs(ty - lord.y)));
     const speed       = LordService.getEffectiveStats(lord).speed;
-    const secs        = EconomyCore.getTravelTime(dist, speed);
+    // Cartography's travel_speed (2026-08-03) — without it this preview quotes
+    // the un-researched march and the server then queues a shorter one.
+    const secs        = EconomyCore.getTravelTime(dist, speed, {
+      researchEffects: EconomyCore.getResearchEffects(PlayerService.getById(lord.playerId)?.research),
+    });
 
     return `
       <div class="mip-section">
@@ -872,6 +876,10 @@ const MapView = (() => {
         <div class="mip-stat-row">
           <span class="mip-label">Time</span>
           <span class="mip-value mip-value--gold">${gi('stopwatch')} ${TimeService.formatDuration(secs)}</span>
+        </div>
+        <div class="mip-stat-row">
+          <span class="mip-label">Arrives</span>
+          <span class="mip-value mip-value--gold">${gi('hourglass')} ${TimeService.endsAtClock(secs)}</span>
         </div>
         ${(() => {
           // March food cost — mirrors the server's EconomyCore.getMarchFoodCost
@@ -953,12 +961,16 @@ const MapView = (() => {
       if (_player && !isBandit) {
         const freshPlayer  = PlayerService.getById(_player.id);
         const playerCities = CityService.getPlayerCities(_player.id);
-        const MAX_CITIES   = 5;
+        // Was a hardcoded `const MAX_CITIES = 5` — a THIRD copy of a constant
+        // the server had at 7, so this button vanished two cities early and
+        // told the player nothing. Now the one shared formula, which reads the
+        // Frontier Charters research (2026-08-03).
+        const citySlots = CityService.getCitySlots(_player.id);
         const cost      = CityService.getFoundCost(playerCities.length);
         const coins     = freshPlayer?.coins ?? 0;
         const canAfford = cost === 0 || coins >= cost;
         // Hidden entirely when unaffordable — no disabled teaser.
-        if (playerCities.length < MAX_CITIES && canAfford) {
+        if (playerCities.length < citySlots && canAfford) {
           const costLabel = cost === 0 ? 'Free' : `${gi('two-coins')} ${cost.toLocaleString()}`;
           foundBtnHtml = `
             <button class="btn-primary mip-found-city-btn"
@@ -983,18 +995,19 @@ const MapView = (() => {
       const _level     = CityStatsService.getCityLevel(rawCity);
       const _tierImg   = _CITY_TIER_IMGS[Math.min(_level, _CITY_TIER_IMGS.length - 1)];
       const _stats     = CityStatsService.getStats(rawCity);
-      const _status    = CityStatsService.getCityStatus(_stats);
       const _slots     = CityStatsService.getSlotInfo(rawCity);
       const _goldRate  = ProductionService.getGoldRate(rawCity);
       const _rates     = ProductionService.getRates(rawCity);
-      const _growth    = CityStatsService.getPopulationGrowthRate(rawCity, _stats, _rates);
+      // getGrowthReport, not getCityStatus — this panel used to label a starving
+      // city "Stable" with no hint that it was shrinking (see city-stats.js).
+      const _report    = CityStatsService.getGrowthReport(rawCity, _stats, _rates);
+      const _growth    = _report.growth;
       const _buildItem = rawCity.constructionQueue.length > 0 ? rawCity.constructionQueue[0] : null;
       const _buildDef  = _buildItem ? BUILDING_DEFS[_buildItem.buildingId] : null;
       const _buildPct  = _buildItem ? Math.floor(ConstructionService.progress(rawCity) * 100) : 0;
       const _buildSecs = _buildItem ? ConstructionService.timeRemaining(rawCity) : 0;
-      const _growSym   = _growth > 0 ? '▲' : _growth < 0 ? '▼' : '─';
-      const _growCls   = _growth > 0 ? 'ov-cc-grow--up' : _growth < 0 ? 'ov-cc-grow--down' : 'ov-cc-grow--stable';
-      const _growLbl   = _growth !== 0 ? ` ${_growth > 0 ? '+' : ''}${_growth}/hr` : '';
+      const _growCls   = _growth > 0 ? 'ov-cc-grow--up' : 'ov-cc-grow--down';
+      const _growLbl   = ` ${_growth > 0 ? '+' : ''}${_growth}/hr`;
       citySection = `
         <div class="mip-divider"></div>
         <div class="mip-section">
@@ -1010,14 +1023,14 @@ const MapView = (() => {
             </div>
             <div class="ov-cc-name-row">
               <span class="ov-cc-name">${rawCity.name}</span>
-              <span class="cvl-status-badge cvl-${_status.id}">${_status.label}</span>
+              <span class="cvl-status-badge cvl-${_report.badgeId}" title="${_report.title}">${_report.badgeLabel}</span>
             </div>
             <div class="ov-cc-coords">(${rawCity.x}, ${rawCity.y})</div>
             <div class="ov-cc-divider"></div>
             <div class="ov-cc-stats">
               <div class="ov-cc-stat">
                 <span class="ov-cc-stat-label">Population</span>
-                <span class="ov-cc-stat-value">${Math.floor(rawCity.population).toLocaleString()} <span class="ov-cc-grow ${_growCls}">${_growSym}${_growLbl}</span></span>
+                <span class="ov-cc-stat-value">${Math.floor(rawCity.population).toLocaleString()} <span class="ov-cc-grow ${_growCls}" title="${_report.title}">${_report.sign}${_growLbl}</span></span>
               </div>
               <div class="ov-cc-stat">
                 <span class="ov-cc-stat-label">Tier</span>

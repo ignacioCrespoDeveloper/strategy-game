@@ -82,9 +82,18 @@ pass/fail/skip summary, then **deletes every account, its game data, and its
 map tiles again** — nothing is left behind in the Supabase project. It reads
 `server/.env` for credentials, same file the dev server itself uses.
 
-A full run takes **~3 minutes** — two of the scenarios wait out a real
+A full run takes **~11 minutes** — two of the scenarios wait out a real
 travel timer on purpose (see "What's real vs. instant-finished" below)
 rather than only exercising the credits-based shortcuts.
+
+⚠ **That runtime is tied to `travelTime` in `js/data/tuning.js`.** It was
+~3 minutes until that dial went 1.0 → 5.0 on 2026-08-03: Test 1 waits out a
+2-tile march (40s → 200s) and Test 2 a 4-tile attack march (60s → 400s), both
+in real wall-clock time. The suite is not hung, it is marching. If the dial
+moves again, expect this number to move with it — and if it ever needs to come
+down without touching the dial, shorten the *distances* in those two tests
+rather than swapping them onto `instant-action`, which skips the very code
+path they exist to cover.
 
 ## What's covered
 
@@ -110,13 +119,15 @@ rather than only exercising the credits-based shortcuts.
   triggering an arrival-check fight. This is a real, working design rule
   (`combat-resolver.js`), not a bug — the script hit it twice while being
   written, which is exactly the kind of thing worth writing down here.
-- **`/api/lord/instant-action` (the credits-based instant-finish) skips
-  `catchUp`'s `pendingArrivalCheck`/`pendingDiscoveries` set-up for plain
-  moves.** It's the right tool for *repositioning* a lord fast (used
-  throughout for setup), but the wrong tool whenever the move itself needs
-  to trigger something on arrival (raid interception). Test 8 works around
-  this with a distance-0 move, which resolves for free on the very next
-  `catchUp` call while still going through the real code path.
+- **`/api/lord/instant-action` used to skip `catchUp` for plain moves** —
+  it dequeued by hand and set `lord.x`/`lord.y` itself, so
+  `pendingArrivalCheck` was never set and paying credits to finish a march
+  was a way to arrive without ever being intercepted by a raider. **Fixed
+  2026-08-03:** the move branch backdates `finishAt` and runs `catchUp`, the
+  same shape the `search_area` and `scout` branches already used. Test 8
+  still uses a distance-0 move rather than the instant-finish, which
+  resolves for free on the very next `catchUp` call while going through the
+  ordinary code path — keep it that way, it exercises the real thing.
 - **The background dispatcher (5s `setInterval` in `server/index.js`) can
   race an explicit `/api/sync` call.** Test 2 originally asserted on
   `/api/sync`'s `events` array, which came back empty on one run because the
@@ -152,8 +163,9 @@ Run this after touching `unit-unlock.js`, `UNIT_ROSTER`, or
 
 ### Baseline
 
-**32 passed, 0 failed, 2 skipped** (2026-07-29). The 2 skips are Test 4's
-RNG-dependent ransom/release (see below).
+**38 passed, 0 failed, 2 skipped** (2026-08-03, unchanged across the Tanda 1
+and Tanda 2 work). The 2 skips are Test 4's RNG-dependent ransom/release
+(see below).
 
 Tests 2 and 3 are **mildly flaky** and can fail on an unlucky run — Test 2's
 `pendingPvpAttack cleared` depends on the fight resolving inside the wait

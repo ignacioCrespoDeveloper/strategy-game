@@ -82,6 +82,15 @@ var MoraleService = (() => {
       sum + (u.traits.includes('coward') ? u.startCount : 0), 0);
     const steadfastShare = totalModels > 0 ? steadfast / totalModels : 0;
     const cowardShare    = totalModels > 0 ? coward / totalModels : 0;
+    // Coward stays at 0.20. Raising it back to the pre-2026-07-29 0.30 was
+    // TRIED on 2026-08-03 as compensation for the per-model armour fix (cheap
+    // chaff hits harder now, and orc/swarm had climbed past its ceiling). It
+    // made things worse, not better: orc/swarm barely moved (76.8% → 76.0%)
+    // while orc START fell out of its band entirely (39.0% → 37.2%) and
+    // orc/blocks sank to 20.7%. The orc problem after the armour fix is a
+    // SPREAD problem inside one race — swarm too strong, blocks too weak — and
+    // a side-wide morale tax hits both ends at once, so it cannot fix it.
+    // See ROADMAP.md, Tanda 3.
     const lossPenalty    = Math.min(24, (lossFraction || 0) * 100) * (1 - 0.3 * steadfastShare + 0.2 * cowardShare);
     side.morale -= lossPenalty;
 

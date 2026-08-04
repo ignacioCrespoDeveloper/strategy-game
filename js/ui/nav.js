@@ -66,6 +66,7 @@ const Nav = (() => {
       { page: 'home',             icon: gi('house'), label: 'Home' },
       { page: 'map',              icon: gi('treasure-map'),  label: 'World Map' },
       { page: 'activity',         icon: gi('scroll-quill'), label: 'Activity', badge: unseenCount, notif: hasNotif },
+      { page: 'merchant',         icon: gi('shop'), label: 'Merchant' },
       { page: 'research',         icon: gi('open-book'), label: 'Research' },
       { page: 'tech-tree',        icon: gi('book-pile'), label: 'Tech Tree' },
       { page: 'battle-simulator', icon: gi('crossed-swords'),  label: 'Battle Sim' },
@@ -127,6 +128,12 @@ const Nav = (() => {
       const player = PlayerService.getSession();
       const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
       App.navigate('activity', { player, lord });
+    });
+
+    document.querySelector('[data-nav-page="merchant"]')?.addEventListener('click', () => {
+      const player = PlayerService.getSession();
+      const lord   = player?.lordId ? LordService.getById(player.lordId) : null;
+      App.navigate('merchant', { player, lord });
     });
 
     document.querySelector('[data-nav-page="research"]')?.addEventListener('click', () => {

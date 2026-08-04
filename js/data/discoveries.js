@@ -9,7 +9,10 @@
 //    name             → display name
 //    description      → flavour text shown in popup
 //    icon             → emoji
-//    category         → 'nothing' | 'resource' | 'combat' | 'event' | 'trade' | 'quest' | 'legendary'
+//    category         → 'nothing' | 'resource' | 'combat' | 'item' | 'trade' | 'quest' | 'legendary'
+//                       'item' finds pay a CITY ITEM (js/data/items.js) instead
+//                       of coin or resources — it was called 'event' until
+//                       2026-08-04, when city events were deleted.
 //    baseWeight       → probability weight before terrain modifiers
 //    baseDuration     → seconds the discovery remains active (0 = not stored)
 //    terrainMultipliers → { terrainId: multiplier }
@@ -19,6 +22,33 @@
 //
 //  Extend this file to add new discoveries.
 //  Do NOT add game logic here.
+//
+//  ── THE RESOURCE MIX (rebalanced 2026-08-03) ────────────────────────
+//  Two separate things decide what an expedition pays, and they are tuned
+//  in two different files. Keep them straight before touching either:
+//
+//    HOW OFTEN each resource turns up  → baseWeight, HERE.
+//    HOW MUCH each resource pays       → DiscoveryRoll.RES_RATIO (3:2:1).
+//
+//  The baseWeights below are set so that within EVERY tier, wood / stone /
+//  food come up about equally often once terrain frequency is averaged over
+//  the map (forest 20%, plains 30%, mountain 30%, marsh 10%, desert 10% —
+//  see WorldService.getTerrain). Terrain still decides which of them you
+//  find HERE; the catalog no longer puts a thumb on the scale on top of it.
+//  The 3:2:1 building-demand ratio is expressed purely as yield in
+//  discovery-roll.js, OGame-style, so it stays legible and tunable in one
+//  place instead of being smeared across a dozen weights.
+//
+//  A def's map-averaged weight is baseWeight × Σ(terrainFreq × multiplier).
+//  If you add or retune a resource def, re-run the parity check in
+//  scripts/test-economy.js rather than eyeballing baseWeight — a def's
+//  terrain spread moves its real weight by up to 40%.
+//
+//  WHAT THIS FIXED: tier 1 used to contain two stone finds, two food finds
+//  and NO wood find at all. Since the Common ER band draws from tier 1 and
+//  nothing else (tierOdds {1: 1.00}), wood was mathematically unobtainable
+//  for every low-rating expedition in the game — measured at 0.00% across
+//  all five terrains. Food, meanwhile, was the single commonest find.
 // =============================================
 
 var DISCOVERY_DEFS = {
@@ -48,7 +78,7 @@ var DISCOVERY_DEFS = {
     description: 'A surface ore vein laced through workable stone, easy to chip away and carry back to the city.',
     icon:        gi('ore'),
     category:    'resource',
-    baseWeight:  18,
+    baseWeight:  13,
     baseDuration: 1 * 24 * 3600,
     terrainMultipliers: {
       mountain: 2.0, desert: 0.8, plains: 0.5, forest: 0.3, marsh: 0.1,
@@ -63,7 +93,7 @@ var DISCOVERY_DEFS = {
     description: 'A rocky outcrop with loose, workable stone — easy pickings for a labour party.',
     icon:        gi('moai'),
     category:    'resource',
-    baseWeight:  18,
+    baseWeight:  13,
     baseDuration: 2 * 24 * 3600,
     terrainMultipliers: {
       mountain: 3.0, desert: 1.0, plains: 0.3, forest: 0.2, marsh: 0.1,
@@ -78,7 +108,7 @@ var DISCOVERY_DEFS = {
     description: 'Abandoned farmland, still rich with soil. A quick harvest would fill many baskets.',
     icon:        gi('wheat'),
     category:    'resource',
-    baseWeight:  20,
+    baseWeight:  13,
     baseDuration: 1 * 24 * 3600,
     terrainMultipliers: {
       plains: 4.0, forest: 0.5, marsh: 0.5, mountain: 0.1, desert: 0.0,
@@ -93,10 +123,48 @@ var DISCOVERY_DEFS = {
     description: 'A ford where fish congregate and fresh water flows freely. Good for a quick supply run.',
     icon:        gi('fishing-pole'),
     category:    'resource',
-    baseWeight:  16,
+    baseWeight:  10,
     baseDuration: 2 * 24 * 3600,
     terrainMultipliers: {
       marsh: 3.0, plains: 2.0, forest: 2.0, mountain: 0.5, desert: 0.0,
+    },
+  },
+
+  // The two tier-1 wood finds. They exist because tier 1 previously had none
+  // at all, which made wood unobtainable for any Common-band expedition (see
+  // the file header). Deliberately a PAIR, mirroring the two stone finds and
+  // the two food finds, so wood gets the same breadth of terrain coverage
+  // rather than one narrow forest-only entry that a mountain lord never sees.
+  fallen_timber: {
+    id:          'fallen_timber',
+    name:        'Fallen Timber',
+    tier:        1,
+    intelType:   'resources',
+    description: 'A stand of trees flattened by winter storms, already seasoned and waiting for anyone who brings a cart.',
+    icon:        gi('holy-oak'),
+    category:    'resource',
+    baseWeight:  12,
+    baseDuration: 1 * 24 * 3600,
+    terrainMultipliers: {
+      forest: 3.0, marsh: 1.5, plains: 1.0, mountain: 0.4, desert: 0.0,
+    },
+  },
+
+  charcoal_stack: {
+    id:          'charcoal_stack',
+    name:        'Charcoal Burner\'s Stack',
+    tier:        1,
+    intelType:   'resources',
+    description: 'Cordwood stacked head-high and abandoned mid-burn. The burner is long gone; the wood is not.',
+    icon:        gi('wooden-crate'),
+    category:    'resource',
+    baseWeight:  11,
+    baseDuration: 1 * 24 * 3600,
+    // The broader of the two: a charcoal burner works wherever there is
+    // anything to burn, so this is the entry that keeps wood on the board on
+    // mountain and desert tiles where fallen_timber is all but vetoed.
+    terrainMultipliers: {
+      forest: 2.5, plains: 1.5, marsh: 1.0, mountain: 0.8, desert: 0.2,
     },
   },
 
@@ -125,7 +193,7 @@ var DISCOVERY_DEFS = {
     description: 'A stack of felled logs left by loggers who never returned. Quality wood, ready for the taking.',
     icon:        gi('wood-pile'),
     category:    'resource',
-    baseWeight:  15,
+    baseWeight:  18,
     baseDuration: 3 * 24 * 3600,
     terrainMultipliers: {
       forest: 3.0, marsh: 1.5, plains: 0.8, mountain: 0.2, desert: 0.0,
@@ -140,7 +208,7 @@ var DISCOVERY_DEFS = {
     description: 'An old mine shaft sealed by a cave-in. Its galleries still run rich with cut stone and ore.',
     icon:        gi('war-pick'),
     category:    'resource',
-    baseWeight:  10,
+    baseWeight:  6,
     baseDuration: 7 * 24 * 3600,
     terrainMultipliers: {
       mountain: 3.0, desert: 1.2, plains: 0.4, forest: 0.3, marsh: 0.1,
@@ -155,7 +223,7 @@ var DISCOVERY_DEFS = {
     description: 'A rich vein of quality building stone breaks the surface here, ready to be quarried.',
     icon:        gi('stone-block'),
     category:    'resource',
-    baseWeight:  12,
+    baseWeight:  9,
     baseDuration: 5 * 24 * 3600,
     terrainMultipliers: {
       mountain: 3.0, desert: 1.0, plains: 0.3, forest: 0.2, marsh: 0.1,
@@ -170,7 +238,7 @@ var DISCOVERY_DEFS = {
     description: 'Rich hunting grounds. Your hunters could fill the city larders from this land.',
     icon:        gi('deer'),
     category:    'resource',
-    baseWeight:  12,
+    baseWeight:  16,
     baseDuration: 4 * 24 * 3600,
     terrainMultipliers: {
       forest: 3.0, plains: 1.5, marsh: 0.8, mountain: 0.3, desert: 0.0,
@@ -202,7 +270,12 @@ var DISCOVERY_DEFS = {
     description: 'A grove of primordial trees, untouched for centuries. Their timber alone could supply a city for months.',
     icon:        gi('pine-tree'),
     category:    'resource',
-    baseWeight:  4,
+    // Higher than its tier-3 neighbours look like they warrant: this def is
+    // vetoed hardest by terrain (0.2 plains / 0.1 mountain / 0.0 desert — 70%
+    // of the map), so a weight equal to theirs measures out at 23% of tier-3
+    // finds instead of a third. The number that matters is the measured share,
+    // not the printed weight.
+    baseWeight:  7,
     baseDuration: 10 * 24 * 3600,
     terrainMultipliers: {
       forest: 5.0, marsh: 1.5, plains: 0.2, mountain: 0.1, desert: 0.0,
@@ -217,7 +290,7 @@ var DISCOVERY_DEFS = {
     description: 'A massive natural stone deposit, rich enough to raise a dozen fortresses. The rock practically falls from the walls.',
     icon:        gi('gears'),
     category:    'resource',
-    baseWeight:  3,
+    baseWeight:  2,
     baseDuration: 14 * 24 * 3600,
     terrainMultipliers: {
       mountain: 4.0, desert: 0.8, plains: 0.2, forest: 0.1, marsh: 0.0,
@@ -247,7 +320,10 @@ var DISCOVERY_DEFS = {
     description: 'An exceptional stretch of wilderness teeming with prey. Your hunters could feed an entire army from this land.',
     icon:        gi('bison'),
     category:    'resource',
-    baseWeight:  4,
+    // The mirror of ancient_forest above: the LEAST terrain-vetoed tier-3 def
+    // (forest 4.0 AND plains 2.5, the two commonest non-mountain terrains), so
+    // it needs the lowest weight of the three to land on an equal share.
+    baseWeight:  3,
     baseDuration: 7 * 24 * 3600,
     terrainMultipliers: {
       forest: 4.0, plains: 2.5, marsh: 1.0, mountain: 0.3, desert: 0.0,
@@ -411,7 +487,29 @@ var DISCOVERY_DEFS = {
     },
   },
 
-  // ── Event ─────────────────────────────────────────────────────
+  // ── Item ──────────────────────────────────────────────────────
+  //
+  // Every def here pays a CITY ITEM of its own tier and nothing else (see
+  // DiscoveryRoll.rollRewards). There is one at EACH tier on purpose: item
+  // finds are ER-gated like all tiered loot, so without a tier-1 def a
+  // starting player — whose force only ever rolls tier 1 — could never find an
+  // item at all, and without a tier-3 def the endgame could only ever find the
+  // small ones. The ladder has to span the same range the item catalog does.
+
+  wandering_drover: {
+    id:          'wandering_drover',
+    name:        'Wandering Drover',
+    intelType:   'ruins',
+    description: 'A drover working a herd south ahead of the season, with more cattle than pasture and a price he will not repeat.',
+    icon:        gi('bison'),
+    category:    'item',
+    tier:        1,
+    baseWeight:  8,
+    baseDuration: 6 * 3600,
+    terrainMultipliers: {
+      plains: 2.2, forest: 1.0, marsh: 0.5, mountain: 0.4, desert: 0.3,
+    },
+  },
 
   ancient_ruins: {
     id:          'ancient_ruins',
@@ -419,7 +517,7 @@ var DISCOVERY_DEFS = {
     intelType:   'ruins',
     description: 'Crumbling stone walls hint at a civilization long forgotten. Scholars would pay dearly for access.',
     icon:        gi('capitol'),
-    category:    'event',
+    category:    'item',
     tier:        2,
     baseWeight:  8,
     baseDuration: 14 * 24 * 3600,
@@ -434,7 +532,7 @@ var DISCOVERY_DEFS = {
     intelType:   'ruins',
     description: 'A crumbling fortress ruin, long since stripped of defenders. Treasures may still lie within its vaults.',
     icon:        gi('damaged-house'),
-    category:    'event',
+    category:    'item',
     tier:        2,
     baseWeight:  8,
     baseDuration: 14 * 24 * 3600,
@@ -449,12 +547,27 @@ var DISCOVERY_DEFS = {
     intelType:   'ruins',
     description: 'A travelling scholar bearing ancient knowledge. Time spent with them grants rare insight.',
     icon:        gi('open-book'),
-    category:    'event',
+    category:    'item',
     tier:        2,
     baseWeight:  8,
     baseDuration: 6 * 3600,
     terrainMultipliers: {
       plains: 2.0, forest: 1.8, marsh: 0.6, mountain: 0.5, desert: 0.4,
+    },
+  },
+
+  forgotten_estate: {
+    id:          'forgotten_estate',
+    name:        'Forgotten Estate',
+    intelType:   'ruins',
+    description: 'A manor house standing empty behind its own walls — herds still grazing, quarry rights still sealed, ledgers still open on the desk. Nobody has come for any of it in years.',
+    icon:        gi('castle'),
+    category:    'item',
+    tier:        3,
+    baseWeight:  4,
+    baseDuration: 14 * 24 * 3600,
+    terrainMultipliers: {
+      plains: 1.6, forest: 1.2, mountain: 0.8, desert: 0.5, marsh: 0.4,
     },
   },
 

@@ -44,7 +44,7 @@
 </head>
 <body>
   <h1>🧭 Hexfront — Expedition Guide</h1>
-  <p class="sub">Every number read live from the engine. Regenerate with <code>node scripts/generate-quest-guide.js</code>. Generated 29/07/2026, 18:17:56.</p>
+  <p class="sub">Every number read live from the engine. Regenerate with <code>node scripts/generate-quest-guide.js</code>. Generated 04/08/2026, 13:37:13.</p>
   <p class="nav"><a href="army-guide.html">⚔ Army Matchups</a><a href="raid-guide.html">🏴 Raiding Guide</a></p>
 
   <p class="note"><b>Expeditions pull in two directions at once.</b> <b>Expedition Rating</b> is a floor pushing your army bigger — it gates <em>both</em> the quality of what you find and which recruits you attract, and scouts count double toward it. <b>Footprint</b> is a ceiling pushing back — past 600 PWR you get ambushed more, come back empty more, and the quiet finds stay hidden. Past 800 PWR an ambush fields <em>more</em> power than you brought. And a recruit that won't fit under your army cap is lost outright, not queued.</p>
@@ -54,7 +54,7 @@
     ER        = Σ unitPWR × (scout ? 2 : 1)<br>
     loudness  = clamp((armyPWR − 600) / 400, 0, 1)<br>
     ambush    = 0.90 below 800 PWR, rising to 1.30 at 1100 PWR<br>
-    army cap  = 200 + 80 × lordLevel &nbsp;(max 1100 with the Commanding talent)
+    army cap  = 200 + 80 × min(lordLevel, 10) &nbsp;(1100 with the Strategist talent)
   </div>
 
   <h2>Glossary</h2>
@@ -64,7 +64,7 @@
     <tbody>
       <tr><td class="rowhead">ER</td><td><b>Expedition Rating</b> — <code>Σ unitPWR × (scout ? 2 : 1)</code>. Scout-trait units count double. One rating, two jobs: it decides which <b>recruit tier</b> can turn up <em>and</em> how rich the <b>ground you are shown</b> is (see Find quality below). It is why a small scout party outperforms a big line army at finding things.</td></tr>
       <tr><td class="rowhead">Find tier</td><td>Every discovery carries a loot tier 1–3, which decides its payout band. <b>ER decides which tiers you are offered at all</b> — the roll draws the tier from your band first, then picks a find of that tier that suits the terrain. A Common-rated force is offered tier 1 only; Legendary is offered tier 3 on 25% of its finds.</td></tr>
-      <tr><td class="rowhead">PWR</td><td>A unit's combat power (<code>EconomyCore.getUnitPower</code>). Your army's total PWR is capped at <code>200 + 80 × lordLevel</code>.</td></tr>
+      <tr><td class="rowhead">PWR</td><td>A unit's combat power (<code>EconomyCore.getUnitPower</code>). Your army's total PWR is capped at <code>200 + 80 × min(lordLevel, 10)</code> — the cap stops growing at level 10, so levels 11–20 make the <em>lord</em> stronger, never the army bigger.</td></tr>
       <tr><td class="rowhead">Headroom</td><td>Cap − army PWR. Free capacity to <em>receive</em> a recruit. A recruit that doesn't fit is <b>lost outright</b>, not queued.</td></tr>
       <tr><td class="rowhead">Loudness</td><td>How conspicuous the army is: 0 below 600 PWR, rising to 1.0 at 1000. Higher means more ambushes, more empty expeditions, and smaller find rewards.</td></tr>
       <tr><td class="rowhead">Footprint</td><td>The umbrella name for the loudness penalties — the ceiling that stops "bring everything" from winning.</td></tr>
@@ -98,7 +98,7 @@
     <td class="cell num headroom">183</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">4× Longbeards <span class="dim">— no scout available yet</span><div class="dim">900 gold</div></td>
+    <td class="roster">4× Longbeards <span class="dim">— no scout available yet</span><div class="dim">3080 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Dark Elves</td>
@@ -108,7 +108,7 @@
     <td class="cell num headroom">175</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">3× Dark Riders <span class="scout-tag">scout</span> + 1× Darkshards<div class="dim">1275 gold</div></td>
+    <td class="roster">3× Dark Riders <span class="scout-tag">scout</span> + 1× Darkshards<div class="dim">4375 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">High Elves</td>
@@ -118,7 +118,7 @@
     <td class="cell num headroom">168</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">3× Silver Helms <span class="scout-tag">scout</span> + 1× Lothern Sea Guard<div class="dim">1320 gold</div></td>
+    <td class="roster">3× Silver Helms <span class="scout-tag">scout</span> + 1× Lothern Sea Guard<div class="dim">4545 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Human</td>
@@ -128,7 +128,7 @@
     <td class="cell num headroom">134</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">3× Empire Knights <span class="scout-tag">scout</span> + 2× Swordsmen<div class="dim">1415 gold</div></td>
+    <td class="roster">3× Empire Knights <span class="scout-tag">scout</span> + 2× Swordsmen<div class="dim">4845 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Orc</td>
@@ -138,7 +138,7 @@
     <td class="cell num headroom">167</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">5× Goblin Wolf Riders <span class="scout-tag">scout</span> + 1× Boar Boyz<div class="dim">1430 gold</div></td>
+    <td class="roster">5× Goblin Wolf Riders <span class="scout-tag">scout</span> + 1× Boar Boyz<div class="dim">4910 gold</div></td>
   </tr></tbody>
   </table>
   </div>
@@ -159,12 +159,12 @@
   <tr>
     <td class="rowhead">Dwarf</td>
     <td class="cell t-legendary">Legendary</td>
-    <td class="cell num">912</td>
-    <td class="cell num">509 <span class="dim">/ 680</span></td>
-    <td class="cell num headroom">171</td>
+    <td class="cell num">907</td>
+    <td class="cell num">504 <span class="dim">/ 680</span></td>
+    <td class="cell num headroom">176</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">6× Gyrocopter <span class="scout-tag">scout</span> + 1× Organ Gun<div class="dim">2870 gold</div></td>
+    <td class="roster">6× Gyrocopter <span class="scout-tag">scout</span> + 1× Hammerers<div class="dim">9075 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Dark Elves</td>
@@ -174,7 +174,7 @@
     <td class="cell num headroom">183</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">6× Shades <span class="scout-tag">scout</span> + 1× Cold One Knights<div class="dim">1890 gold</div></td>
+    <td class="roster">6× Shades <span class="scout-tag">scout</span> + 1× Cold One Knights<div class="dim">6510 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">High Elves</td>
@@ -184,7 +184,7 @@
     <td class="cell num headroom">379</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">3× Silver Helms <span class="scout-tag">scout</span> + 1× White Lions<div class="dim">1575 gold</div></td>
+    <td class="roster">3× Silver Helms <span class="scout-tag">scout</span> + 1× White Lions<div class="dim">5415 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Human</td>
@@ -194,7 +194,7 @@
     <td class="cell num headroom">207</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">6× Outriders <span class="scout-tag">scout</span> + 1× Great Cannon<div class="dim">1995 gold</div></td>
+    <td class="roster">6× Outriders <span class="scout-tag">scout</span> + 1× Great Cannon<div class="dim">6820 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Orc</td>
@@ -204,7 +204,7 @@
     <td class="cell num headroom">242</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">9× Goblin Wolf Riders <span class="scout-tag">scout</span> + 1× Boar Boyz<div class="dim">2290 gold</div></td>
+    <td class="roster">9× Goblin Wolf Riders <span class="scout-tag">scout</span> + 1× Boar Boyz<div class="dim">7870 gold</div></td>
   </tr></tbody>
   </table>
   </div>
@@ -230,7 +230,7 @@
     <td class="cell num headroom">487</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">6× Gyrocopter <span class="scout-tag">scout</span> + 1× Irondrakes<div class="dim">2710 gold</div></td>
+    <td class="roster">6× Gyrocopter <span class="scout-tag">scout</span> + 1× Irondrakes<div class="dim">9245 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Dark Elves</td>
@@ -240,7 +240,7 @@
     <td class="cell num headroom">463</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">4× Shades <span class="scout-tag">scout</span> + 1× Black Dragon<div class="dim">3745 gold</div></td>
+    <td class="roster">4× Shades <span class="scout-tag">scout</span> + 1× Black Dragon<div class="dim">12.855 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">High Elves</td>
@@ -250,7 +250,7 @@
     <td class="cell num headroom">468</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">5× Silver Helms <span class="scout-tag">scout</span> + 1× Sun Dragon<div class="dim">3095 gold</div></td>
+    <td class="roster">5× Silver Helms <span class="scout-tag">scout</span> + 1× Sun Dragon<div class="dim">10.650 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Human</td>
@@ -260,7 +260,7 @@
     <td class="cell num headroom">480</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">6× Outriders <span class="scout-tag">scout</span> + 1× Steam Tank<div class="dim">2330 gold</div></td>
+    <td class="roster">6× Outriders <span class="scout-tag">scout</span> + 1× Steam Tank<div class="dim">7965 gold</div></td>
   </tr>
   <tr>
     <td class="rowhead">Orc</td>
@@ -270,7 +270,7 @@
     <td class="cell num headroom">505</td>
     <td class="cell num ">0.00</td>
     <td class="cell num ">90%</td>
-    <td class="roster">8× Goblin Wolf Riders <span class="scout-tag">scout</span> + 1× Arachnarok Spider<div class="dim">3460 gold</div></td>
+    <td class="roster">8× Goblin Wolf Riders <span class="scout-tag">scout</span> + 1× Arachnarok Spider<div class="dim">11.880 gold</div></td>
   </tr></tbody>
   </table>
   </div>
@@ -339,25 +339,25 @@
     <td class="cell t-legendary">Legendary</td>
     <td class="cell num">800</td>
     <td class="cell num">168</td>
-    <td class="roster">Ogre Warrior <span class="dim">(112 PWR · 785g)</span>, Ironguts <span class="dim">(140 PWR · 980g)</span>, Ogre Champion <span class="dim">(162 PWR · 1135g)</span>, Young Dragon <span class="dim">(167 PWR · 1170g)</span></td>
+    <td class="roster">Ogre Warrior <span class="dim">(112 PWR · 2690g)</span>, Ironguts <span class="dim">(140 PWR · 3355g)</span>, Ogre Champion <span class="dim">(162 PWR · 3890g)</span>, Young Dragon <span class="dim">(167 PWR · 4010g)</span></td>
   </tr>
   <tr>
     <td class="cell t-rare">Rare</td>
     <td class="cell num">450</td>
     <td class="cell num">101</td>
-    <td class="roster">Dragon Guard <span class="dim">(96 PWR · 505g)</span>, Forest Troll <span class="dim">(92 PWR · 640g)</span>, Ogre Bulls <span class="dim">(101 PWR · 705g)</span></td>
+    <td class="roster">Dragon Guard <span class="dim">(96 PWR · 1735g)</span>, Forest Troll <span class="dim">(92 PWR · 2195g)</span>, Ogre Bulls <span class="dim">(101 PWR · 2420g)</span></td>
   </tr>
   <tr>
     <td class="cell t-uncommon">Uncommon</td>
     <td class="cell num">200</td>
     <td class="cell num">53</td>
-    <td class="roster">Goblin Archers <span class="dim">(23 PWR · 80g)</span>, Wolf Riders <span class="dim">(38 PWR · 200g)</span>, Mercenary Spearmen <span class="dim">(44 PWR · 155g)</span>, Crossbowmen <span class="dim">(52 PWR · 185g)</span>, Mercenary Crossbows <span class="dim">(52 PWR · 185g)</span></td>
+    <td class="roster">Goblin Archers <span class="dim">(23 PWR · 270g)</span>, Wolf Riders <span class="dim">(38 PWR · 690g)</span>, Mercenary Spearmen <span class="dim">(44 PWR · 530g)</span>, Crossbowmen <span class="dim">(52 PWR · 630g)</span>, Mercenary Crossbows <span class="dim">(52 PWR · 630g)</span></td>
   </tr>
   <tr>
     <td class="cell t-common">Common</td>
     <td class="cell num">0</td>
     <td class="cell num">39</td>
-    <td class="roster">Goblin Rabble <span class="dim">(20 PWR · 70g)</span>, Goblin Spearmen <span class="dim">(27 PWR · 95g)</span>, Bandits <span class="dim">(33 PWR · 170g)</span>, Bandit Archers <span class="dim">(39 PWR · 200g)</span></td>
+    <td class="roster">Goblin Rabble <span class="dim">(20 PWR · 240g)</span>, Goblin Spearmen <span class="dim">(27 PWR · 325g)</span>, Bandits <span class="dim">(33 PWR · 585g)</span>, Bandit Archers <span class="dim">(39 PWR · 695g)</span></td>
   </tr></tbody>
   </table>
   </div>
@@ -413,26 +413,27 @@
   <h2>What each find tier pays <span class="stage-meta">before level, length, depletion and footprint scaling</span></h2>
   <div class="tablewrap">
   <table>
-    <thead><tr><th>Find tier</th><th>Gold</th><th>Each resource</th></tr></thead>
+    <thead><tr><th>Find tier</th><th>Gold</th><th>Wood</th><th>Stone</th><th>Food</th></tr></thead>
     <tbody>
   <tr>
     <td class="rowhead">Tier 1</td>
     <td class="cell num">200–500</td>
-    <td class="cell num">800–5000</td>
+    <td class="cell num">1200–7500</td><td class="cell num">800–5000</td><td class="cell num">400–2500</td>
   </tr>
   <tr>
     <td class="rowhead">Tier 2</td>
     <td class="cell num">500–1400</td>
-    <td class="cell num">5000–25000</td>
+    <td class="cell num">7500–37500</td><td class="cell num">5000–25000</td><td class="cell num">2500–12500</td>
   </tr>
   <tr>
     <td class="rowhead">Tier 3</td>
     <td class="cell num">1400–3600</td>
-    <td class="cell num">25000–50000</td>
+    <td class="cell num">37500–75000</td><td class="cell num">25000–50000</td><td class="cell num">12500–25000</td>
   </tr></tbody>
   </table>
   </div>
-  <p class="note">Lord level adds +12% per level above 1, and expedition length multiplies on top (×1.8 on Long). A level-10 lord on a Long expedition therefore multiplies these by ~3.7×.</p>
+  <p class="note"><b>Why the three resources differ (wood ×1.50 · stone ×1.00 · food ×0.50).</b> Wood, stone and food are equally likely to turn <em>up</em> — terrain decides which one, not the catalog — but they do not pay the same, because the city does not need them equally. Every resource building, house and wall is bought with wood and stone; food appears in barely a handful of costs and is the one resource a city already out-produces. So expedition loot follows the building ratio, 3&nbsp;:&nbsp;2&nbsp;:&nbsp;1, the same way an OGame expedition hands back far more metal than deuterium. The multipliers average to exactly 1.0, so this changes <em>which</em> resource an expedition is worth, never <em>how much</em>.</p>
+  <p class="note">Lord level adds +12% per level above 1 <b>up to level 10</b>, where it stops — levels 11–20 raise your lord's own stats and grant talents, not loot. Expedition length multiplies on top (×1.8 on Long), so a level-10-or-higher lord on a Long expedition multiplies these by ~3.7×.</p>
 
   <h2>Expedition length — your bet</h2>
   <div class="tablewrap">
@@ -556,48 +557,39 @@
     <thead><tr><th>Unit</th><th>Race</th><th>PWR</th><th>ER</th><th>Gold</th><th>Gold per ER</th><th>Unlocked by</th></tr></thead>
     <tbody>
   <tr>
-    <td class="rowhead">Shades</td>
-    <td class="cell">Dark Elves</td>
-    <td class="cell num">68</td>
-    <td class="cell num">136</td>
-    <td class="cell num">235</td>
-    <td class="cell num gpe">1.74</td>
-    <td class="cell early-no">Archery Range L4</td>
-  </tr>
-  <tr>
     <td class="rowhead">Outriders</td>
     <td class="cell">Human</td>
     <td class="cell num">63</td>
     <td class="cell num">126</td>
-    <td class="cell num">220</td>
-    <td class="cell num gpe">1.75</td>
+    <td class="cell num">750</td>
+    <td class="cell num gpe">5.98</td>
     <td class="cell early-no">Gunpowder Workshop L4</td>
+  </tr>
+  <tr>
+    <td class="rowhead">Shades</td>
+    <td class="cell">Dark Elves</td>
+    <td class="cell num">68</td>
+    <td class="cell num">136</td>
+    <td class="cell num">810</td>
+    <td class="cell num gpe">5.99</td>
+    <td class="cell early-no">Archery Range L4</td>
   </tr>
   <tr>
     <td class="rowhead">Goblin Wolf Riders</td>
     <td class="cell">Orc</td>
     <td class="cell num">41</td>
     <td class="cell num">82</td>
-    <td class="cell num">215</td>
-    <td class="cell num gpe">2.61</td>
+    <td class="cell num">740</td>
+    <td class="cell num gpe">8.98</td>
     <td class="cell early-yes">Stables L1</td>
-  </tr>
-  <tr>
-    <td class="rowhead">Silver Helms</td>
-    <td class="cell">High Elves</td>
-    <td class="cell num">71</td>
-    <td class="cell num">142</td>
-    <td class="cell num">370</td>
-    <td class="cell num gpe">2.62</td>
-    <td class="cell early-yes">Stables L2</td>
   </tr>
   <tr>
     <td class="rowhead">Empire Knights</td>
     <td class="cell">Human</td>
     <td class="cell num">66</td>
     <td class="cell num">132</td>
-    <td class="cell num">345</td>
-    <td class="cell num gpe">2.62</td>
+    <td class="cell num">1185</td>
+    <td class="cell num gpe">8.99</td>
     <td class="cell early-yes">Stables L2</td>
   </tr>
   <tr>
@@ -605,8 +597,8 @@
     <td class="cell">Dark Elves</td>
     <td class="cell num">67</td>
     <td class="cell num">134</td>
-    <td class="cell num">350</td>
-    <td class="cell num gpe">2.62</td>
+    <td class="cell num">1200</td>
+    <td class="cell num gpe">9.00</td>
     <td class="cell early-yes">Stables L2</td>
   </tr>
   <tr>
@@ -614,9 +606,18 @@
     <td class="cell">Dwarf</td>
     <td class="cell num">67</td>
     <td class="cell num">134</td>
-    <td class="cell num">355</td>
-    <td class="cell num gpe">2.64</td>
+    <td class="cell num">1210</td>
+    <td class="cell num gpe">9.00</td>
     <td class="cell early-no">Engineering Workshop L6</td>
+  </tr>
+  <tr>
+    <td class="rowhead">Silver Helms</td>
+    <td class="cell">High Elves</td>
+    <td class="cell num">71</td>
+    <td class="cell num">142</td>
+    <td class="cell num">1275</td>
+    <td class="cell num gpe">9.01</td>
+    <td class="cell early-yes">Stables L2</td>
   </tr></tbody>
   </table>
   </div>

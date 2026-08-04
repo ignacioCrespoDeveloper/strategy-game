@@ -7,6 +7,14 @@
 //  All rate/cap math lives in js/domain/market-core.js (shared with the
 //  client) — this handler only authorises, applies and persists.
 //
+//  The buying half lives in actions/market-buy.js — one file per endpoint,
+//  same as the rest of server/actions.
+//
+//  NO BUILDING GATES THIS (2026-08-04). The Merchant used to require a
+//  Marketplace and size its daily cap off that building's highest level across
+//  the player's cities; it is now a global empire counter, so this handler
+//  never looks at `cities` at all. See market-core.js.
+//
 //  The daily volume ledger lives ON THE PLAYER as `player.marketLedger`
 //  ({ date, gold }), deliberately NOT in a separate storage key the way
 //  lord-action.js keeps 'search_fatigue'. That key exists because tile
@@ -14,18 +22,14 @@
 //  fields the UI must read to show remaining volume, and the player object is
 //  already synced. Keeping it here means no extra plumbing and no way for the
 //  client's display to disagree with the server's cap.
+//
+//  ⚠ The cap is currently OFF (MARKET_DAILY_GOLD_CAP = null). The ledger is
+//  still written on every sale so re-enabling it cannot hand anyone a fresh
+//  allowance they had already spent.
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
 import { MarketCore } from '../engine-loader.js';
-
-// Marketplace level is taken as the HIGHEST across the player's cities, the
-// same rule the Temple uses for blessings and the Library for research.
-function _maxMarketplaceLevel(cities, playerId) {
-  return Object.values(cities)
-    .filter(c => c?.playerId === playerId)
-    .reduce((max, c) => Math.max(max, c.buildings?.marketplace || 0), 0);
-}
 
 export async function handleMarketSell(req, res) {
   const { resource, amount } = req.body || {};
@@ -45,21 +49,20 @@ export async function handleMarketSell(req, res) {
   if (!ctx) return;
   const { admin, playerId, rawPlayers, player, lords, cities, armies } = ctx;
 
-  const mkLevel = _maxMarketplaceLevel(cities, playerId);
-  const ledger  = player.marketLedger || null;
-  const now     = Date.now();
+  const ledger = player.marketLedger || null;
+  const now    = Date.now();
 
   // Never sell more than the player actually holds. Clamping instead of
   // erroring keeps a "sell all" button honest when production ticked between
   // the client's render and this request.
-  player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
+  player.resources = player.resources || { wood: 0, stone: 0, food: 0 };
   const held  = Math.floor(player.resources[resource] || 0);
   const asked = Math.min(want, held);
   if (asked <= 0) {
     return res.status(400).json({ ok: false, error: `You have no ${resource} to sell.` });
   }
 
-  const quote = MarketCore.marketQuote(resource, asked, mkLevel, ledger, now);
+  const quote = MarketCore.marketSellQuote(resource, asked, ledger, now);
   if (!quote.ok) return res.status(400).json({ ok: false, error: quote.error });
 
   // Apply: take exactly quote.spend, credit quote.gold.
@@ -77,8 +80,8 @@ export async function handleMarketSell(req, res) {
       spent:     quote.spend,
       gold:      quote.gold,
       capped:    quote.capped,
-      remaining: MarketCore.marketRemainingToday(mkLevel, player.marketLedger, now),
-      dailyCap:  MarketCore.marketDailyCap(mkLevel),
+      remaining: MarketCore.marketRemainingToday(player.marketLedger, now),
+      dailyCap:  MarketCore.marketDailyCap(),
     },
   });
 }

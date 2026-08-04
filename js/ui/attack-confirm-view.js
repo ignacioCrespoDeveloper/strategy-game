@@ -74,9 +74,9 @@ const AttackConfirmView = (() => {
     const plunder = city?.plunder;
     const lootHtml = plunder ? [
       plunder.gold  > 0 ? `<div class="mip-enemy-unit-chip">${gi('two-coins')} ${plunder.gold.toLocaleString()}</div>` : '',
-      plunder.food  > 0 ? `<div class="mip-enemy-unit-chip">${gi('wheat')} ${plunder.food.toLocaleString()}</div>` : '',
       plunder.wood  > 0 ? `<div class="mip-enemy-unit-chip">${gi('wood-pile')} ${plunder.wood.toLocaleString()}</div>` : '',
       plunder.stone > 0 ? `<div class="mip-enemy-unit-chip">${gi('war-pick')} ${plunder.stone.toLocaleString()}</div>` : '',
+      plunder.food  > 0 ? `<div class="mip-enemy-unit-chip">${gi('wheat')} ${plunder.food.toLocaleString()}</div>` : '',
     ].filter(Boolean).join('') : '';
 
     return `
@@ -138,15 +138,27 @@ const AttackConfirmView = (() => {
 
   // ── Lord selector section ─────────────────────────────────────
 
+  // Cartography sells `travel_speed` (2026-08-03), so every ETA on this screen
+  // has to read the player's research or it under-promises by the same margin
+  // the missing ATTACK_MIN_SECS floor used to over-promise. Read fresh rather
+  // than off `_player`: research can complete while this screen is open.
+  function _marchFx() {
+    return EconomyCore.getResearchEffects(PlayerService.getById(_player?.id)?.research);
+  }
+
   function _lordOptionHtml(lord) {
     const speed = LordService.getEffectiveStats(lord).speed;
     const fromX = lord.x ?? _targetX;
     const fromY = lord.y ?? _targetY;
     const dist  = Math.max(Math.abs(_targetX - fromX), Math.abs(_targetY - fromY));
-    const secs  = EconomyCore.getTravelTime(dist, speed);
+    // minSecs matches the server's attack floor (server/actions/lord-action.js
+    // passes it for intent === 'attack', to guarantee the defender a warning
+    // window). Omitting it here made this dropdown promise a 10s strike on an
+    // adjacent tile that the server then queued as 60s.
+    const secs  = EconomyCore.getTravelTime(dist, speed, { minSecs: EconomyCore.ATTACK_MIN_SECS, researchEffects: _marchFx() });
     const eta   = secs > 0 ? TimeService.formatDuration(secs) : 'Immediate';
     const race  = RACES[lord.race] || {};
-    return `<option value="${lord.id}">${lord.name} · ${eta}</option>`;
+    return `<option value="${lord.id}">${lord.name} · ${eta} · lands ${TimeService.endsAtClock(secs)}</option>`;
   }
 
   // ── Attacker info card ─────────────────────────────────────────
@@ -162,7 +174,7 @@ const AttackConfirmView = (() => {
     const fromX  = lord.x ?? _targetX;
     const fromY  = lord.y ?? _targetY;
     const dist   = Math.max(Math.abs(_targetX - fromX), Math.abs(_targetY - fromY));
-    const secs   = EconomyCore.getTravelTime(dist, stats.speed);
+    const secs   = EconomyCore.getTravelTime(dist, stats.speed, { minSecs: EconomyCore.ATTACK_MIN_SECS, researchEffects: _marchFx() });
     const eta    = secs > 0 ? TimeService.formatDuration(secs) : 'Immediate';
     const terrain = WorldService.getTerrain(_targetX, _targetY);
 
@@ -181,7 +193,7 @@ const AttackConfirmView = (() => {
           <div class="ac-route-mid">
             <div class="ac-route-line-dot"></div>
             <div class="ac-route-dash-line"></div>
-            <div class="ac-route-time">${gi('stopwatch')} ${eta}</div>
+            <div class="ac-route-time">${gi('stopwatch')} ${eta}<span class="ac-route-clock">strikes ${TimeService.endsAtClock(secs)}</span></div>
             <div class="ac-route-dash-line"></div>
             <div class="ac-route-line-dot ac-route-line-dot--red"></div>
           </div>

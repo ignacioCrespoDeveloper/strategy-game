@@ -25,11 +25,46 @@
 
 import {
   BUILDING_DEFS, UNIT_DEFS, UNIT_ROSTER, RACES, EconomyCore,
-  MOUNT_POOL, BLESSING_DEFS, blessingCost, LORD_MAX_LEVEL, DiscoveryRoll,
+  // LORD_POWER_LEVEL_CAP, not LORD_MAX_LEVEL: this is an INCOME model and every
+  // income line (raid rate, expedition loot scalar, army PWR cap) freezes at
+  // level 10. Levels 11–20 buy stats and talents, which this model does not
+  // price — running the sim to 20 would print bigger level numbers against
+  // identical gold and read as a bug.
+  MOUNT_POOL, BLESSING_DEFS, blessingCost, LORD_POWER_LEVEL_CAP,
+  lordArmyPowerCapBase, DiscoveryRoll,
   MarketCore, RESEARCH_DEFS, TUNING, tune,
 } from '../server/engine-loader.js';
-import { MAX_LORDS, lordRecruitCost } from '../server/actions/lord-create.js';
-import { MAX_CITIES, cityFoundCost } from '../server/actions/city-found.js';
+import { lordRecruitCost } from '../server/actions/lord-create.js';
+import { cityFoundCost }   from '../server/actions/city-found.js';
+
+// The server's MAX_LORDS / MAX_CITIES constants are GONE (2026-08-03) — both
+// caps are bought from the Library now (Codes of Command / Frontier Charters)
+// and are UNCAPPED, so there is no longer a number to import. This model needs
+// a finite target to price a "finished" account against, so it states one:
+// 7 of each, the value the constants held, which keeps every demand row below
+// comparable to previous runs of this script.
+//
+// These are MODELLING ASSUMPTIONS, not game rules. The research needed to
+// reach them is priced separately in RESEARCH_TARGETS below — before this,
+// expansion cost only gold, so leaving that out would understate demand.
+const MAX_LORDS  = 7;
+const MAX_CITIES = 7;
+
+// What the modelled account researches to reach those two targets:
+//   7 cities  = 1 + ceil(L/2) → Frontier Charters 12
+//   7 lords   = 1 + L         → Codes of Command 6
+const RESEARCH_TARGETS = { frontier_charters: 12, codes_of_command: 6 };
+
+// Cumulative resource cost of researching a book from 0 to `level`.
+function cumulativeResearchCost(bookId, level) {
+  const def = RESEARCH_DEFS[bookId];
+  if (!def) return 0;
+  let total = 0;
+  for (let l = 1; l <= level; l++) {
+    total += Object.values(def.cost(l)).reduce((s, v) => s + v, 0);
+  }
+  return total;
+}
 
 // ── CLI ────────────────────────────────────────────────────────
 const argv    = process.argv.slice(2);
@@ -49,6 +84,37 @@ const DAYS    = (() => {
 // when only 30 days are printed. Reporting horizon and simulation horizon are
 // deliberately different numbers.
 const SIM_DAYS = Math.max(DAYS, 120);
+
+// --dial key=value (repeatable) — run the model with a dial set to something
+// other than what js/data/tuning.js ships, WITHOUT editing that file.
+//
+//   node scripts/economy-projection.js --dial travelTime=5
+//   node scripts/economy-projection.js --dial travelTime=5 --dial questGold=0.8
+//
+// Rule 7 of ECONOMY-REBALANCE-PLAN.md says a dial change is verified by running
+// this script. That was a lie of omission: you had to EDIT the shipped file to
+// find out, which means the answer to "what would x5 travel time do" could only
+// be had by first half-committing to it. Mutating TUNING here is safe because
+// `tune()` reads the live object on every call and this process is throwaway.
+//
+// Every override is echoed in the DIALS section below, so a projection run with
+// an override can never be mistaken for the shipped curve.
+const DIAL_OVERRIDES = {};
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] !== '--dial') continue;
+  const [key, raw] = String(argv[i + 1] || '').split('=');
+  const value      = Number(raw);
+  if (!key || !isFinite(value) || value < 0) {
+    console.error(`--dial expects key=number, got "${argv[i + 1]}"`);
+    process.exit(2);
+  }
+  if (!(key in (TUNING || {}))) {
+    console.error(`--dial: unknown dial "${key}". Known: ${Object.keys(TUNING || {}).join(', ')}`);
+    process.exit(2);
+  }
+  DIAL_OVERRIDES[key] = value;
+  TUNING[key] = value;
+}
 
 const fmt  = n => Math.round(n).toLocaleString('en-US');
 const fmtK = n => Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M'
@@ -115,6 +181,10 @@ const BEHAVIOUR_DAILY = {
   // Population a city settles at per city-tier step, used for gold income and
   // for the slot cap. Rough but only gold depends on it, and gold from cities
   // is a small channel next to raiding.
+  // The 3,500/day here predates the 2026-08-03 status-ladder retune and now
+  // agrees with it — it lands between Growing (3,000) and Prosperous (4,000).
+  // Before that retune the engine was paying 14,376/day and this model was
+  // the thing telling the truth.
   popByDay: day => Math.min(100000, 1000 + day * 3500),
 
   // How full a lord's army actually is, as a fraction of the PWR cap, and how
@@ -194,18 +264,28 @@ function expeditionExpected(lordLevel, erTierId) {
   // ever changes, change it here too. Missing this made the projection blind to
   // the two biggest dials in the game, which is the worst possible time to be
   // blind: right when someone is tuning.
+  //
+  // DiscoveryRoll.RES_RATIO (the 3:2:1 wood/stone/food yield split) is the one
+  // multiplier in rollRewards that is deliberately NOT mirrored here, and it is
+  // not an oversight. This projection models resource income as a single lumped
+  // number — it never asks which resource — and RES_RATIO's multipliers average
+  // to exactly 1.0 across the three, with the catalog weighted so each turns up
+  // about equally often (see js/data/discoveries.js). So the lump is unchanged
+  // by it. Applying it here anyway would be double-counting. If this file ever
+  // starts breaking resources out per type, that stops being true: multiply
+  // each type's line by DiscoveryRoll.resYieldMult(type) at that point.
   return {
     resources: resMid  * scalar * BEHAVIOUR.findResourceShare * tune('questResources'),
     gold:      goldMid * scalar * BEHAVIOUR.findGoldShare     * tune('questGold'),
   };
 }
 
-// ER band a lord's army reaches. Army PWR is capped at 200 + level×80, and the
-// player fills that cap gradually (see armyFillByDay) with growing scout
-// weighting (scouts count x2 for ER — the documented composition lever, see
-// discovery-roll.js RECRUIT_TIERS).
+// ER band a lord's army reaches. Army PWR is capped at 200 + level×80 (level
+// frozen at 10), and the player fills that cap gradually (see armyFillByDay)
+// with growing scout weighting (scouts count x2 for ER — the documented
+// composition lever, see discovery-roll.js RECRUIT_TIERS).
 function erTierFor(lordLevel, day) {
-  const cap = 200 + lordLevel * 80;
+  const cap = lordArmyPowerCapBase(lordLevel);
   const er  = cap * BEHAVIOUR.armyFillByDay(day) * BEHAVIOUR.scoutErByDay(day);
   return { tierId: DiscoveryRoll.erTierFor(er).id, er };
 }
@@ -213,14 +293,14 @@ function erTierFor(lordLevel, day) {
 // City production per hour, from the real building curves.
 function cityProduction(buildings, population) {
   const bonuses = {};
-  for (const r of ['food', 'wood', 'stone']) {
+  for (const r of ['wood', 'stone', 'food']) {
     bonuses[r + '_production'] = RACE.bonuses[r + '_production'] || 0;
   }
   const rates = EconomyCore.getRates(buildings, bonuses, null);
   const stats = EconomyCore.getStats(buildings, population, []);
   return {
     resources: rates.food + rates.wood + rates.stone,
-    gold:      EconomyCore.getGoldRate(buildings, population, stats.happiness),
+    gold:      EconomyCore.getGoldRate(buildings, population, stats.happiness, stats.corruption),
   };
 }
 
@@ -255,7 +335,7 @@ function cumulativeBuildingCost(id, toLevel) {
 // getUnitGoldCost. Uses the median human roster line so the number reflects
 // what a player actually buys rather than a best case.
 function armyCostAtCap(lordLevel) {
-  const cap   = 200 + lordLevel * 80;
+  const cap   = lordArmyPowerCapBase(lordLevel);
   const roster = UNIT_ROSTER.human || {};
   const ids   = new Set();
   for (const lvlMap of Object.values(roster)) {
@@ -283,7 +363,19 @@ const MOUNT_ONE_PER_TIER = (() => {
   return [...byTier.values()];
 })();
 
-const APEX_ALL = ['dragon_lair', 'fortress', 'eagle_tower', 'monster_pit', 'slayer_lodge',
+// `fortress` LEFT THIS LIST on 2026-08-03 (Nacho's call). Its base was cut ÷10
+// that day precisely so city defence would have a middle rung instead of
+// "Guard Post or nothing" — at 320,000 it now sits an order of magnitude below
+// the Imperial Palace (4.8M) and the Dragon Lair (6M), so counting it as apex
+// made this milestone measure the cheapest thing in the list and report the
+// tier as reachable a week early. It is a mid-tier defence building now, and
+// the milestone measures the buildings that are still apex.
+//
+// It is deliberately NOT moved into the CORE basket either: that basket assumes
+// L8 in all seven cities, which for a ×1.6 curve off 320k is ~22M per city.
+// Fortress depth is a defence CHOICE, not core progression — the Guard Post is
+// what represents city defence in CORE, and it is already in CIVIC_IDS.
+const APEX_ALL = ['dragon_lair', 'eagle_tower', 'monster_pit', 'slayer_lodge',
                   'imperial_palace', 'sacred_grove', 'grand_forge', 'great_war_camp',
                   'slave_market', 'blood_citadel'];
 
@@ -318,7 +410,7 @@ function computeDemand() {
   for (let n = 1; n < MAX_CITIES; n++) coreGold += cityFoundCost(n);
   // Expansion alone, before any army — the first milestone in the budget table.
   const expansionGold = coreGold;
-  const armyOne  = armyCostAtCap(LORD_MAX_LEVEL);
+  const armyOne  = armyCostAtCap(LORD_POWER_LEVEL_CAP);
   // Armies are re-bought after losses — the only naturally recurring gold sink.
   const ARMY_REBUYS = 3;
   coreGold += armyOne * MAX_LORDS * ARMY_REBUYS;
@@ -329,6 +421,14 @@ function computeDemand() {
   }
   coreRes += cumulativeBuildingCost('town_hall', 10) * MAX_CITIES;
   for (const id of CIVIC_IDS) coreRes += cumulativeBuildingCost(id, 8) * MAX_CITIES;
+
+  // The research that BUYS those 7 cities and 7 lords (2026-08-03). Empire-wide
+  // and paid once, not per city — but it is now a hard prerequisite for the
+  // MAX_CITIES multiplier above, so leaving it out would price an empire the
+  // modelled account is not yet allowed to found.
+  const expansionRes = Object.entries(RESEARCH_TARGETS)
+    .reduce((s, [id, lvl]) => s + cumulativeResearchCost(id, lvl), 0);
+  coreRes += expansionRes;
 
   // ENDGAME — deliberately beyond the 3-week window.
   // Two mount figures: what a player REALISTICALLY buys (top mounts on their
@@ -343,9 +443,18 @@ function computeDemand() {
     apexRes   += cumulativeBuildingCost(id, 3);
     apexL1Res += cumulativeBuildingCost(id, 1);
   }
+  // Every book is maxLevel: Infinity, so this row is a SAMPLE, and the sample
+  // depth has to follow the curve or it stops meaning anything. A flat-10 depth
+  // was fine while every book was on ×1.35; the OGame-priced books added
+  // 2026-08-03 are on ×1.75/×2, where level 10 costs 500–1,000× level 1 and
+  // nobody will ever buy it. Sampling those at 5 keeps the row reading as
+  // "what a committed player actually researches" rather than as one absurd
+  // Cartography number swamping the other five books.
   let tomeRes = 0;
   for (const [id, def] of Object.entries(RESEARCH_DEFS)) {
-    const cap = Number.isFinite(def.maxLevel) ? def.maxLevel : 10; // uncapped tomes: sample 10 levels
+    const factor = (def.cost(2).stone || def.cost(2).food || def.cost(2).wood || 0)
+                 / (def.cost(1).stone || def.cost(1).food || def.cost(1).wood || 1);
+    const cap = Number.isFinite(def.maxLevel) ? def.maxLevel : (factor >= 1.6 ? 5 : 10);
     for (let l = 1; l <= cap; l++) {
       const c = def.cost(l);
       tomeRes += (c.food || 0) + (c.wood || 0) + (c.stone || 0);
@@ -376,15 +485,22 @@ function simulate(days) {
   const ms = { expansion: null, firstMount: null, mountLadder: null, apexL1: null, apexL3: null,
                mount1: null, mount2: null };
 
-  // PER-CITY building state. Cities are founded EMPTY (town_hall 1, as seeded
-  // by city-found.js) and must develop from scratch, so founding one does not
+  // PER-CITY building state. Cities are founded nearly empty (town_hall 1 and
+  // NOTHING else, as seeded by city-found.js — the free Farm was removed
+  // 2026-08-04) and must develop from scratch, so founding one does not
   // instantly multiply production — an earlier version shared a single loadout
-  // across all cities and handed city 2 a fully-built economy on day 1.
-  const cityBuildings = [{ town_hall: 1, lumber_mill: 0, stone_quarry: 0, farm: 0, aqueduct: 0, marketplace: 0 }];
+  // across all cities and handed city 2 a fully-built economy on day 1. Keep
+  // this literal in step with city-found.js.
+  const foundingLoadout = () =>
+    ({ town_hall: 1, lumber_mill: 0, stone_quarry: 0, farm: 0, aqueduct: 0, marketplace: 0 });
+
+  const cityBuildings = [foundingLoadout()];
 
   for (let day = 1; day <= days; day++) {
-    // Lord level tracks time played, capped by the real LORD_MAX_LEVEL.
-    const lordLevel = Math.max(1, Math.min(LORD_MAX_LEVEL, Math.floor(day / 2) + 1));
+    // Lord level tracks time played, capped at the level where income stops
+    // growing (see the import note — LORD_MAX_LEVEL is 20, but 11–20 pay only
+    // in stats and talents, neither of which this model prices).
+    const lordLevel = Math.max(1, Math.min(LORD_POWER_LEVEL_CAP, Math.floor(day / 2) + 1));
     const pop       = BEHAVIOUR.popByDay(day);
 
     // ── Income ────────────────────────────────────────────────
@@ -430,7 +546,7 @@ function simulate(days) {
     while (cities < MAX_CITIES && (cumGold - goldSpent) >= cityFoundCost(cities)) {
       goldSpent += cityFoundCost(cities);
       cities++;
-      cityBuildings.push({ town_hall: 1, lumber_mill: 0, stone_quarry: 0, farm: 0, aqueduct: 0, marketplace: 0 });
+      cityBuildings.push(foundingLoadout());
     }
 
     // 2. BUILD from resource surplus, cheapest-first along BUILD_ORDER —
@@ -528,9 +644,16 @@ if (_changed.length === 0) {
 } else {
   for (const k of _dialKeys) {
     const v = _dials[k];
-    console.log(`  ${k.padEnd(20)} x${String(v).padEnd(6)}${v !== 1 ? '  <-- CHANGED' : ''}`);
+    const tag = k in DIAL_OVERRIDES ? '  <-- --dial OVERRIDE (not shipped)'
+              : v !== 1             ? '  <-- CHANGED'
+              : '';
+    console.log(`  ${k.padEnd(20)} x${String(v).padEnd(6)}${tag}`);
   }
   console.log('  NOTE: verdicts below reflect these dials, not the shipped defaults.');
+}
+if (Object.keys(DIAL_OVERRIDES).length > 0) {
+  console.log(`  ** SIMULATION ONLY — ${Object.entries(DIAL_OVERRIDES).map(([k, v]) => `${k}=${v}`).join(', ')} came from --dial.`);
+  console.log('     js/data/tuning.js was NOT modified. Nothing below is the shipped curve.');
 }
 
 // ── Income anchors (the thing the first audit pass got wrong) ──
@@ -595,7 +718,7 @@ console.log(`  CORE gold      ${fmt(demand.coreGold).padStart(12)}   (lords + ci
 console.log(`  CORE resources ${fmt(demand.coreRes).padStart(12)}   (producers L15, town hall L10, civic/military L8, x${MAX_CITIES} cities)`);
 console.log(`  ENDGAME mounts ${fmt(demand.mountGold).padStart(12)}   (one per tier on 3 main lords; all ${MAX_LORDS} = ${fmt(demand.mountGoldAll)})`);
 console.log(`  ENDGAME apex   ${fmt(demand.apexRes).padStart(12)}   (to Lv3, ${RACE.id}-reachable only: ${APEX_IDS.join(', ')})`);
-console.log(`  ENDGAME tomes  ${fmt(demand.tomeRes).padStart(12)}   (all Library books to cap; uncapped sampled at L10)`);
+console.log(`  ENDGAME tomes  ${fmt(demand.tomeRes).padStart(12)}   (all Library books; sampled at L10, or L5 for the OGame ×1.75/×2 curves)`);
 
 // ── Milestones ────────────────────────────────────────────────
 // THE budget table from ECONOMY-REBALANCE-PLAN.md Part 2. Every price in the
@@ -641,10 +764,12 @@ console.log('   so they ignore blessing spend and read slightly optimistic.)');
 console.log('\n-- PAYBACK ' + '-'.repeat(53));
 const end   = allRows[allRows.length - 1];
 const endMix = end.mix;
-// Resources are valued at the merchant's own exchange rate so one-off gold
-// prices can be compared against resource yields. It is a VALUATION, not a
-// claim you could actually sell that volume — the merchant is daily-capped.
-const RES_PER_GOLD = (MarketCore.MARKET_RATES.wood + MarketCore.MARKET_RATES.stone + MarketCore.MARKET_RATES.food) / 3;
+// Resources are valued at the merchant's SELL rate (what you get for handing
+// them over), so one-off gold prices can be compared against resource yields.
+// The buy rate is deliberately not averaged in: this is asking "what is this
+// pile worth", which is the selling question.
+const _sellRates   = MarketCore.MARKET_SELL_RATES;
+const RES_PER_GOLD = (_sellRates.wood + _sellRates.stone + _sellRates.food) / 3;
 const goldEq = (g, r) => g + r / RES_PER_GOLD;
 let paybackFails = 0;
 
@@ -671,7 +796,11 @@ for (const [id, def] of Object.entries(BLESSING_DEFS)) {
   if (e.resource_yield_bonus) gainR += (endMix.raidRes + endMix.expRes) * e.resource_yield_bonus;
   if (e.pop_growth_bonus) {
     // Population is a permanent STOCK, so one day of uptime adds gold/day forever.
-    const extraPop = end.cities * 599 * e.pop_growth_bonus * 24;
+    // Read the healthy-city baseline straight off the status ladder instead of
+    // hardcoding it — this used to be a literal 599 and silently went stale the
+    // moment the tiers were retuned (2026-08-03).
+    const baseRate = EconomyCore.STATUS_POP_RATE.growing;
+    const extraPop = end.cities * baseRate * e.pop_growth_bonus * 24;
     gainG += extraPop * 0.004 * tune('populationGold') * 24;
   }
   if (e.recruit_speed)     tempo.push(`recruit ${Math.round(e.recruit_speed * 100)}%`);
@@ -687,7 +816,7 @@ for (const [id, def] of Object.entries(BLESSING_DEFS)) {
     tag = 'TRADE';
     // The actionable number for a conversion: what you pay per 1,000 of what you
     // gain. Compare against the merchant, which runs the trade the other way at
-    // ~50 gold per 1,000 resources (MARKET_RATES ~20:1).
+    // ~50 gold per 1,000 resources (MARKET_SELL_RATES ~20:1).
     if (netR > 0 && netG < 0) note = `  (${fmt(-netG / netR * 1000)} gold per 1,000 res — merchant does the reverse at ~${fmt(1000 / RES_PER_GOLD)})`;
   }
   console.log(`    ${id.padEnd(20)} net ${fmtK(netG).padStart(7)}g ${fmtK(netR).padStart(9)}res  ${tag}`
@@ -704,13 +833,13 @@ function expIncomeAt(lordLevel, day, erMult, speed) {
   const searchSecs = DiscoveryRoll.lengthOf(BEHAVIOUR.expeditionLength).secs;
   const hopSecs    = EconomyCore.getTravelTime(1, speed) / BEHAVIOUR.searchesPerTile;
   const perLord    = Math.floor(BEHAVIOUR.activeHoursPerDay * 3600 / (searchSecs + hopSecs));
-  const er         = (200 + lordLevel * 80) * BEHAVIOUR.armyFillByDay(day) * BEHAVIOUR.scoutErByDay(day) * (erMult || 1);
+  const er         = lordArmyPowerCapBase(lordLevel) * BEHAVIOUR.armyFillByDay(day) * BEHAVIOUR.scoutErByDay(day) * (erMult || 1);
   const each       = expeditionExpected(lordLevel, DiscoveryRoll.erTierFor(er).id);
   return { gold: each.gold * perLord, res: each.resources * perLord };
 }
 console.log('\n  MOUNTS (one lord at L10, day ' + end.day + ')');
-const baseExp  = expIncomeAt(LORD_MAX_LEVEL, end.day, 1, BEHAVIOUR.lordSpeed);
-const baseEr   = (200 + LORD_MAX_LEVEL * 80) * BEHAVIOUR.armyFillByDay(end.day) * BEHAVIOUR.scoutErByDay(end.day);
+const baseExp  = expIncomeAt(LORD_POWER_LEVEL_CAP, end.day, 1, BEHAVIOUR.lordSpeed);
+const baseEr   = lordArmyPowerCapBase(LORD_POWER_LEVEL_CAP) * BEHAVIOUR.armyFillByDay(end.day) * BEHAVIOUR.scoutErByDay(end.day);
 // Keys that can move income at all. A mount carrying none of them is a pure
 // stat purchase and its "NEVER" is a statement about the CATALOG, not a bug —
 // so those are summarised in one line instead of 15 identical rows.
@@ -726,14 +855,14 @@ for (const m of MOUNTS) {
   const e = m.effects || {};
   if (!INCOME_KEYS.some(k => e[k])) { statMounts++; statCost += m.cost; continue; }
 
-  const exp = expIncomeAt(LORD_MAX_LEVEL, end.day, e.expeditionRatingMult || 1,
+  const exp = expIncomeAt(LORD_POWER_LEVEL_CAP, end.day, e.expeditionRatingMult || 1,
                           BEHAVIOUR.lordSpeed + (e.speed || 0));
   let dG = exp.gold - baseExp.gold, dR = exp.res - baseExp.res;
   // quest_bonus is a straight % on the expedition payout — the scout slot's
   // real product, and the reason it no longer depends on crossing an ER band.
   if (e.quest_bonus) { dG += exp.gold * e.quest_bonus; dR += exp.res * e.quest_bonus; }
   if (e.raid_bonus) {
-    const raid = EconomyCore.getRaidHourlyRewards(LORD_MAX_LEVEL);
+    const raid = EconomyCore.getRaidHourlyRewards(LORD_POWER_LEVEL_CAP);
     dG += raid.gold * BEHAVIOUR.raidHoursPerDay * e.raid_bonus;
     dR += (raid.food + raid.wood + raid.stone) * BEHAVIOUR.raidHoursPerDay * e.raid_bonus;
   }
@@ -772,24 +901,68 @@ for (const id of ['lumber_mill', 'stone_quarry', 'farm']) {
 // -- Research: Rule 4 — an exponential cost curve needs a benefit on a GROWING
 // base. A bounded benefit (march food is capped per tile on a fixed-size map)
 // can never be priced correctly, at any number.
+//
+// `march_food_cost` FLIPPED false → true on 2026-08-03. It was classified as
+// bounded because march food was capped at 500/tile, which is reached at ten
+// models — so past a small army the saving stopped growing and no price could
+// be right. That cap was REMOVED in the same session (see getMarchFoodCost):
+// the bill is now 50 + 45 per model with no ceiling, so a percentage of it
+// rides the army as it grows. The rule did not change; the base did.
+// COUNT vs PERCENT (2026-08-03). Three books now grant whole UNITS — a city, a
+// lord, a rung of scout intel — not percentages, and pricing them "per 1% of
+// effect" is meaningless. It is also arithmetically unsafe: the city ladder
+// grants a slot every OTHER level, so the marginal percentage is 0 half the
+// time and the first run of this table printed "frontier_charters L10
+// InfinityM". Count books are priced per unit instead.
+const COUNT_KEYS = { city_slots: 'city', lord_slots: 'lord', espionage_power: 'rung' };
+
+// Keys whose benefit rides a base that GROWS with the empire, and are therefore
+// legitimate on an exponential cost curve.
+//   city_slots / lord_slots — the benefit IS a new income source. Nothing rides
+//     a faster-growing base than "you now have another city".
 const GROWING_BASE = { construction_speed: true, recruit_speed: true,
                        food_production: true, wood_production: true, stone_production: true,
-                       gold_income_bonus: true, march_food_cost: false };
-console.log('\n  RESEARCH (resources per 1% of effect — flat = healthy, exploding = wrong shape)');
+                       gold_income_bonus: true, march_food_cost: true,
+                       city_slots: true, lord_slots: true };
+
+// UTILITY keys ride no income base and are not meant to — they buy information
+// or tempo, exactly like the TEMPO blessings above. Not a payback failure; the
+// rule simply does not apply. Counted separately so the distinction stays
+// visible rather than being laundered into GROWING_BASE.
+const UTILITY_KEYS = { espionage_power: true };
+
+console.log('\n  RESEARCH (cost per marginal unit of effect — flat = healthy, exploding = wrong shape)');
 for (const [id, def] of Object.entries(RESEARCH_DEFS)) {
-  const key = Object.keys(def.bonuses(1))[0];
-  const grows = GROWING_BASE[key];
+  const keys = Object.keys(def.bonuses(1));
+  // A book passes if ANY of its keys rides a growing base. Cartography emits
+  // travel_speed AND march_food_cost; the speed half is bounded by the 20x10
+  // map, the food half is not (march food scales with army size without limit
+  // since the 500/tile cap was removed), and the second is enough to justify
+  // the curve. Reading only keys[0] — as this did until 2026-08-03 — would have
+  // condemned the book on whichever key happened to be declared first.
+  const grows   = keys.some(k => GROWING_BASE[k]);
+  const utility = !grows && keys.every(k => UTILITY_KEYS[k]);
+  // Price against the key the book is actually SOLD on: the growing one if it
+  // has one, else the first.
+  const key     = keys.find(k => GROWING_BASE[k]) || keys[0];
+  const unit    = COUNT_KEYS[key];
   const out = [];
   for (const l of [1, 5, 10]) {
     const c    = def.cost(l);
     const cost = (c.food || 0) + (c.wood || 0) + (c.stone || 0);
-    const cur  = Math.abs(Object.values(def.bonuses(l))[0]);
-    const prev = l > 1 ? Math.abs(Object.values(def.bonuses(l - 1))[0]) : 0;
-    const marginal = (cur - prev) * 100;
-    out.push(`L${String(l).padStart(2)} ${fmtK(cost / marginal).padStart(6)}`);
+    const cur  = Math.abs(def.bonuses(l)[key] || 0);
+    const prev = l > 1 ? Math.abs(def.bonuses(l - 1)[key] || 0) : 0;
+    // Percent keys are quoted per 1%; count keys per whole unit. A level that
+    // grants nothing on its own (the charter ladder's even levels) prints "—"
+    // rather than dividing by zero.
+    const marginal = unit ? (cur - prev) : (cur - prev) * 100;
+    out.push(`L${String(l).padStart(2)} ${(marginal > 0 ? fmtK(cost / marginal) : '—').padStart(6)}`);
   }
-  if (!grows) paybackFails++;
-  console.log(`    ${id.padEnd(20)} ${out.join('  ')}   base ${grows ? 'GROWS  ok' : 'BOUNDED — unfixable on an exponential curve'}`);
+  const verdict = grows   ? 'GROWS  ok'
+                : utility ? 'UTILITY — buys information, not yield (by design)'
+                :           'BOUNDED — unfixable on an exponential curve';
+  if (!grows && !utility) paybackFails++;
+  console.log(`    ${id.padEnd(20)} ${out.join('  ')}${unit ? ` per ${unit}` : ''}   base ${verdict}`);
 }
 
 console.log(`\n  ${paybackFails} payback failure(s).`

@@ -120,10 +120,11 @@ async function createTestAccount(label, race, classId, lordName) {
   acct.cityId = cityRes.city.id;
   acct.x = x; acct.y = y;
 
-  // Marching costs food (distance × (2500 + 500·models)) — the starter kit
-  // only covers a couple of lone-lord moves. Top the test accounts up so
-  // the scenarios exercise MOVEMENT mechanics, not food scarcity (which the
-  // economy suite covers via EconomyCore.getMarchFoodCost directly).
+  // Marching costs food (distance × (50 + 45·models), uncapped since
+  // 2026-08-03) — the starter kit only covers a couple of lone-lord moves.
+  // Top the test accounts up so the scenarios exercise MOVEMENT mechanics,
+  // not food scarcity (which the economy suite covers via
+  // EconomyCore.getMarchFoodCost directly).
   const playersBlob = await readStorage(acct.userId, 'players');
   if (playersBlob?.[acct.userId]) {
     playersBlob[acct.userId].resources = { ...(playersBlob[acct.userId].resources || {}), food: 1_000_000 };

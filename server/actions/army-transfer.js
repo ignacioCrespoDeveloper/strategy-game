@@ -17,7 +17,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { UNIT_DEFS, TALENT_POOL, EconomyCore, getLordMountEffects } from '../engine-loader.js';
+import { UNIT_DEFS, EconomyCore, getLordMountEffects, lordTalentEffects, lordArmyPowerCapBase } from '../engine-loader.js';
 import { applyExchange } from '../army-transfer-core.js';
 import { lordBusyReason } from '../lord-busy.js';
 
@@ -27,9 +27,9 @@ import { lordBusyReason } from '../lord-busy.js';
 // but not be handed the same troops by another lord, so an army built legally
 // could not be split and reassembled.
 function _armyPowerCap(lord) {
-  const talent = TALENT_POOL?.[lord.talentId]?.effects?.armyPowerCapBonus || 0;
+  const talent = lordTalentEffects(lord).armyPowerCapBonus || 0;
   const mount  = getLordMountEffects(lord).armyPowerCapBonus || 0;
-  return 200 + (lord.level || 1) * 80 + talent + mount;
+  return lordArmyPowerCapBase(lord.level) + talent + mount;
 }
 
 // The down / mid-action / restricting-stance checks that used to live here as

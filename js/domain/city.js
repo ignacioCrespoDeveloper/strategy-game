@@ -32,10 +32,19 @@ const CityService = (() => {
     return 'c_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
   }
 
-  // ⚠ MIRROR of server/actions/city-found.js (MAX_CITIES, cityFoundCost).
-  // The server is authoritative; this copy exists only so the client can
-  // preview cost and disable the button. Change both together.
-  const MAX_CITIES  = 7;
+  // ⚠ MIRROR of server/actions/city-found.js (cityFoundCost). The server is
+  // authoritative; this copy exists only so the client can preview cost and
+  // disable the button. Change both together.
+  //
+  // The flat MAX_CITIES = 7 that used to sit here is GONE (2026-08-03) — the
+  // cap is bought from the Library now and lives in ONE place,
+  // EconomyCore.getCitySlots, which both sides call. It is not mirrored here
+  // because a mirror is exactly how map-view.js ended up enforcing 5 while the
+  // server enforced 7.
+  function getCitySlots(playerId) {
+    const player = PlayerService.getById(playerId);
+    return EconomyCore.getCitySlots(EconomyCore.getResearchEffects(player?.research));
+  }
 
   // Cost to found city N (1-indexed). First city is always free.
   // 2nd: 8k, 3rd: 16k, 4th: 32k, 5th: 64k, 6th: 128k, 7th: 256k (×2 each time).
@@ -52,7 +61,10 @@ const CityService = (() => {
     if (n.length > 30) return { ok: false, error: 'City name cannot exceed 30 characters.' };
 
     const existing = getPlayerCities(playerId);
-    if (existing.length >= MAX_CITIES) return { ok: false, error: `Maximum of ${MAX_CITIES} cities reached.` };
+    const slots    = getCitySlots(playerId);
+    if (existing.length >= slots) {
+      return { ok: false, error: `You may hold ${slots} ${slots === 1 ? 'city' : 'cities'}. Research Frontier Charters in the Library to claim another.` };
+    }
 
     if (!WorldService.isInBounds(x, y))  return { ok: false, error: 'Tile is out of bounds.' };
     if (WorldService.isOccupied(x, y))   return { ok: false, error: 'This tile is already occupied.' };
@@ -75,12 +87,16 @@ const CityService = (() => {
       y,
       population:           1000,
       freePopulation:       3,
+      // Town Hall only — see the long note in server/actions/city-found.js,
+      // which is the authoritative founding path; this pair must agree.
       buildings:            { town_hall: 1 },
       lastResourceUpdate:   now,
       lastPopulationUpdate: now,
       constructionQueue:    [],
-      activeModifiers:      [],
-      eventCooldowns:       {},
+      // Applied city items: [{ itemId, startedAt, expiresAt }] — js/data/items.js.
+      // Replaced activeModifiers + eventCooldowns, which belonged to the city
+      // event system deleted 2026-08-04.
+      activeItems:          [],
       landmark:             null,
     };
 
@@ -130,5 +146,5 @@ const CityService = (() => {
     return roster;
   }
 
-  return { found, getFoundCost, getById, getAll, getPlayerCities, save, getGarrison };
+  return { found, getFoundCost, getCitySlots, getById, getAll, getPlayerCities, save, getGarrison };
 })();

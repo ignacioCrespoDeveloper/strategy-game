@@ -16,8 +16,18 @@ const App = (() => {
   // navigation closes that off for all three screens at once.
   let _currentStop = null;
 
+  // The build this browser is actually running, stamped into the page by
+  // server/asset-version.js. Logged on boot because "which build is that
+  // client on" was unanswerable during the mount-price report — a screenshot
+  // of a stale price looks identical to a real pricing bug. Reads 'dev' when
+  // index.html was opened off disk rather than served.
+  function _buildId() {
+    return document.querySelector('meta[name="hexfront-build"]')?.content || 'unknown';
+  }
+
   // ── Boot ──────────────────────────────────────────────────────
   async function init() {
+    console.info(`Hexfront build ${_buildId()}`);
     _registerEvents();
 
     // Supabase automatically restores the session from its own localStorage keys.
@@ -119,6 +129,9 @@ const App = (() => {
   const _SYNC_ON_ENTER = new Set([
     'map', 'city', 'lord-screen', 'overview', 'activity',
     'tech-tree', 'attack-confirm', 'action-confirm', 'rankings', 'clan', 'research',
+    // The Merchant prices every trade off live balances, so entering it with a
+    // stale gold/resource figure would show quotes the server then refuses.
+    'merchant',
   ]);
 
   async function _goto(screen, data) {
@@ -185,6 +198,11 @@ const App = (() => {
         HUD.show(data.player, data.lord);
         Nav.show(data.player, data.lord, 'tech-tree');
         TechTreeScreen.render(root, data);
+        break;
+      case 'merchant':
+        HUD.show(data.player, data.lord);
+        Nav.show(data.player, data.lord, 'merchant');
+        MerchantScreen.render(root, data);
         break;
       case 'research':
         HUD.show(data.player, data.lord);

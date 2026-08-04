@@ -12,7 +12,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { LORD_CLASSES, STANCE_DEFS, getLordMountEffects, TALENT_POOL, EconomyCore, DiscoveryRoll } from '../engine-loader.js';
+import { LORD_CLASSES, STANCE_DEFS, getLordMountEffects, lordTalentEffects, EconomyCore, DiscoveryRoll } from '../engine-loader.js';
 
 // Base scout duration before the speed multiplier — mirrors move's own
 // distance*20*(5/speed) curve so speed behaves consistently everywhere.
@@ -99,16 +99,19 @@ export async function handleLordAction(req, res) {
     const fromX    = lord.x ?? destX;
     const fromY    = lord.y ?? destY;
     const distance = Math.max(Math.abs(destX - fromX), Math.abs(destY - fromY));
-    const minSecs  = intent === 'attack' ? 60 : 0;
-    const secs     = EconomyCore.getTravelTime(distance, speed, { minSecs });
+    const minSecs  = intent === 'attack' ? EconomyCore.ATTACK_MIN_SECS : 0;
+    // ONE effects object for both halves of the march — Cartography now sells
+    // speed AND the food discount, so reading it twice would be the start of
+    // the two drifting apart.
+    const marchFx  = EconomyCore.getResearchEffects(player.research);
+    const secs     = EconomyCore.getTravelTime(distance, speed, { minSecs, researchEffects: marchFx });
 
     // March food cost (the OGame deuterium role): crossing tiles burns food,
     // paid up front at enqueue — same-tile actions stay free. No refund on
     // cancel/defeat, same as construction costs. Cartography research discounts.
-    const foodCost = EconomyCore.getMarchFoodCost(
-      distance, armies[lordId]?.units, EconomyCore.getResearchEffects(player.research));
+    const foodCost = EconomyCore.getMarchFoodCost(distance, armies[lordId]?.units, marchFx);
     if (foodCost > 0) {
-      player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
+      player.resources = player.resources || { wood: 0, stone: 0, food: 0 };
       const have = Math.floor(player.resources.food || 0);
       if (have < foodCost) {
         return res.status(400).json({ ok: false, error: `Not enough food to march: need ${foodCost} 🌾, have ${have}. Feed your army or shorten the march.` });
@@ -144,7 +147,7 @@ export async function handleLordAction(req, res) {
     // then got the full duration from the server.
     const cls        = LORD_CLASSES[lord.classId];
     const clsMult    = cls?.passive?.effects?.searchDurationMult;
-    const talentMult = lord.talentId ? TALENT_POOL?.[lord.talentId]?.effects?.searchDurationMult : undefined;
+    const talentMult = lordTalentEffects(lord).searchDurationMult;
     const mult = (clsMult != null && talentMult != null)
       ? Math.min(clsMult, talentMult)
       : (clsMult ?? talentMult ?? 1);

@@ -5,6 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Hexfront — Age of Lords</title>
 
+  <!-- Build id. Rewritten at serve time by server/asset-version.js, which also
+       appends ?v=<build> to every local src/href below — do not add version
+       query strings by hand. Reads "dev" only when this file is opened
+       directly off disk instead of through the game server. -->
+  <meta name="hexfront-build" content="dev" />
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap" rel="stylesheet">
@@ -14,6 +20,11 @@
 
   <!-- Persistent top bar (hidden until login) -->
   <div id="hud-bar" class="hidden"></div>
+
+  <!-- Global incoming-attack strip, filled by hud.js on every screen. Sits
+       just under the HUD bar and overlays the page rather than reflowing it,
+       so #screen-root's top offset stays a constant 52px. -->
+  <div id="hud-threat-bar" class="hidden"></div>
 
   <!-- Left sidebar navigation (hidden until login) -->
   <div id="nav-sidebar" class="hidden"></div>
@@ -56,6 +67,8 @@
   <script src="js/data/buildings.js"></script>
   <script src="js/data/research.js"></script>
   <script src="js/data/blessings.js"></script>
+  <!-- items.js before economy-core.js and discovery-roll.js — both read it -->
+  <script src="js/data/items.js"></script>
   <script src="js/data/discoveries.js"></script>
   <script src="js/data/lord-classes.js"></script>
   <script src="js/data/honor-tiers.js"></script>
@@ -76,7 +89,9 @@
   <script src="js/domain/market-core.js"></script>
   <script src="js/domain/city.js"></script>
   <script src="js/domain/city-stats.js"></script>
-  <script src="js/domain/events.js"></script>
+  <!-- js/domain/events.js (city events) was deleted 2026-08-04 — replaced by
+       city items, js/data/items.js. Not to be confused with js/core/events.js,
+       the pub/sub bus loaded above, which is very much alive. -->
   <script src="js/domain/building-unlock.js"></script>
   <script src="js/domain/unit-unlock.js"></script>
   <script src="js/domain/construction.js"></script>
@@ -111,6 +126,7 @@
   <script src="js/ui/attack-confirm-view.js"></script>
   <script src="js/ui/action-confirm-view.js"></script>
   <script src="js/ui/activity-screen.js"></script>
+  <script src="js/ui/merchant-screen.js"></script>
   <script src="js/ui/research-screen.js"></script>
   <script src="js/ui/tech-tree-screen.js"></script>
   <script src="js/ui/nav.js"></script>

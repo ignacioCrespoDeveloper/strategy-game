@@ -77,7 +77,7 @@ const ActivityService = (() => {
   //                   separate intel store, so the entry itself is the intel.
   //                   Re-scout to refresh it; dismiss it and it's gone.
   // dedupeKey makes a double-ingest harmless in both cases.
-  const _RES_ICON = { gold: 'two-coins', food: 'wheat', wood: 'wood-pile', stone: 'war-pick' };
+  const _RES_ICON = { gold: 'two-coins', wood: 'wood-pile', stone: 'war-pick', food: 'wheat' };
 
   // ── Scout report ──────────────────────────────────────────────
   //
@@ -111,7 +111,7 @@ const ActivityService = (() => {
         const gold  = evt.goldEarned || 0;
         const res   = evt.resources  || {};
         const parts = [`+${gold}${gi(_RES_ICON.gold)}`];
-        ['food', 'wood', 'stone'].forEach(r => {
+        ['wood', 'stone', 'food'].forEach(r => {
           if (res[r] > 0) parts.push(`+${res[r]}${gi(_RES_ICON[r])}`);
         });
         const dur = evt.durationSecs
@@ -125,6 +125,11 @@ const ActivityService = (() => {
           lordId:    evt.lordId   || null,
           lordName:  evt.lordName || '',
           dedupeKey: evt.id || `raid_${evt.lordId}_${evt.at || ''}`,
+          // The raid's own finish time (catch-up.js stamps it off
+          // stance.finishAt), not this sync's. log() spreads the entry over its
+          // `at: now` default, so passing it here is what files a raid that
+          // paid out overnight under the hour it actually ended.
+          ...(evt.at ? { at: evt.at } : {}),
         });
         count++;
       } else if (evt.type === 'scout_result') {
@@ -143,6 +148,11 @@ const ActivityService = (() => {
           lordId:      evt.lordId   || null,
           lordName:    evt.lordName || '',
           dedupeKey:   evt.id || `scout_${evt.lordId}_${evt.at || ''}`,
+          // When the scout reported in, not when we collected it — same reason
+          // as the raid branch above. latestScoutReport() surfaces this as the
+          // intel's age on the attack-confirm screen, so a stale report must
+          // not be able to read as fresh.
+          ...(evt.at ? { at: evt.at } : {}),
         });
         count++;
       }

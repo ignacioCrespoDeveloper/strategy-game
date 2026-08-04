@@ -18,16 +18,21 @@ var TERRAIN_RESOURCE_MODS = {
   forest:   { wood:  1.25 },
   plains:   { food:  1.25 },
   mountain: { stone: 1.30 },
-  marsh:    { food:  0.95, wood: 0.95, stone: 0.95 },
-  desert:   { food:  0.70, wood: 0.75 },
+  marsh:    { wood: 0.95, stone: 0.95, food: 0.95 },
+  desert:   { wood: 0.75, food:  0.70 },
 };
 
 // Flat city-stat bonuses/penalties per terrain.
 // { stat: string, value: number } — same shape as building effects.
+// Marsh lost its +15 security and mountain its +10 when the security stat was
+// deleted (2026-08-04). Mountain therefore has NO stat mod at all now, and
+// marsh is a straight hygiene penalty — accepted deliberately: security bought
+// nothing, so the "compensation" it paid was never real. Both tiles still
+// differ through TERRAIN_RESOURCE_MODS above and the battle mods in
+// battle-defs.js. This is the place to put a live bonus if either needs one.
 var TERRAIN_STAT_MODS = {
-  marsh:    [{ stat: 'hygiene',  value: -15 }, { stat: 'security', value: 15 }],
-  mountain: [{ stat: 'security', value: 10  }],
-  desert:   [{ stat: 'happiness', value: -5 }],
+  marsh:    [{ stat: 'hygiene',   value: -15 }],
+  desert:   [{ stat: 'happiness', value:  -5 }],
 };
 
 const WorldService = (() => {

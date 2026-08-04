@@ -105,6 +105,14 @@ const LordScreen = (() => {
     if (!_lord.classId)             { _lord.classId      = 'warrior';              changed = true; }
     if (_lord.talentPoints == null) { _lord.talentPoints = 0;                      changed = true; }
     if (_lord.talentId     === undefined) { _lord.talentId = null;                 changed = true; }
+    // Multi-talent migration (2026-08-03). Seed the array from the old scalar
+    // so a returning lord's single pick shows up in slot 1 rather than reading
+    // as unspent. getLordTalentIds does the same thing at read time, so this is
+    // only about persisting the shape — never about deciding what is held.
+    if (!Array.isArray(_lord.talentIds)) {
+      _lord.talentIds = _lord.talentId ? [_lord.talentId] : [];
+      changed = true;
+    }
     if (_lord.mountId      === undefined) { _lord.mountId  = null;                 changed = true; }
     if (_lord.currentHp    == null) { _lord.currentHp    = LordService.getEffectiveStats(_lord).health; changed = true; }
     if (_lord.hpRegenAt    == null) { _lord.hpRegenAt    = TimeService.now();      changed = true; }
@@ -120,6 +128,15 @@ const LordScreen = (() => {
 
     if (changed) LordService.save(_lord);
   }
+
+  // ── Talent slots ──────────────────────────────────────────────
+  // One slot every 5 levels (TALENT_LEVELS = 5/10/15/20). These read through
+  // the lord-classes.js helpers rather than counting _lord.talentIds directly,
+  // so the tab badge and the tab body can never disagree with the server gate
+  // in server/actions/lord-talents.js — including the case where a lord holds
+  // a RETIRED talent id and gets that slot handed back.
+  function _heldTalents()     { return getLordTalentIds(_lord); }
+  function _openTalentSlots() { return Math.max(0, lordTalentSlots(_lord.level) - _heldTalents().length); }
 
   // ── Shell ─────────────────────────────────────────────────────
 
@@ -145,7 +162,7 @@ const LordScreen = (() => {
               <button class="ls-tab ${_activeTab === 'overview'  ? 'ls-tab--active' : ''}" data-tab="overview">${gi('position-marker')} Overview</button>
               <button class="ls-tab ${_activeTab === 'army'      ? 'ls-tab--active' : ''}" data-tab="army">${gi('crossed-swords')} Army</button>
               <button class="ls-tab ${_activeTab === 'discovery' ? 'ls-tab--active' : ''}" data-tab="discovery" id="ls-tab-discovery">${gi('magnifying-glass')} Quests${(() => { const n = DiscoveryService.getUnseenCount(_player.id, _lord.id); return n > 0 ? `<span class="ls-tab-badge">${n}</span>` : ''; })()}</button>
-              <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < 5 ? 'data-base-title="Unlocks at level 5"' : ''}>${gi('magic-swirl')} Talents${(_lord.level || 1) >= 5 && !_lord.talentId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
+              <button class="ls-tab ${_activeTab === 'talents'   ? 'ls-tab--active' : ''}" data-tab="talents" ${(_lord.level || 1) < TALENT_LEVELS[0] ? `data-base-title="Unlocks at level ${TALENT_LEVELS[0]}"` : ''}>${gi('magic-swirl')} Talents${_openTalentSlots() > 0 ? `<span class="ls-tab-badge ls-tab-badge--gold">${_openTalentSlots()}</span>` : ''}</button>
               <button class="ls-tab ${_activeTab === 'mount'     ? 'ls-tab--active' : ''}" data-tab="mount" ${(_lord.level || 1) < MOUNT_MIN_LEVEL ? `data-base-title="Unlocks at level ${MOUNT_MIN_LEVEL}"` : ''}>${gi('horse-head')} Mount${(_lord.level || 1) >= MOUNT_MIN_LEVEL && !_lord.mountId ? '<span class="ls-tab-badge ls-tab-badge--gold">!</span>' : ''}</button>
               <button class="ls-tab ${_activeTab === 'battles'   ? 'ls-tab--active' : ''}" data-tab="battles">${gi('plain-dagger')} Battles${(() => { const n = BattleHistoryService.getForLord(_lord.id).length; return n > 0 ? `<span class="ls-tab-badge ls-tab-badge--neutral">${n}</span>` : ''; })()}</button>
             </nav>
@@ -274,20 +291,31 @@ const LordScreen = (() => {
       `;
     }).join('');
 
-    // Chosen talent (replaces passive trait display)
-    const chosenTalent = (typeof TALENT_POOL !== 'undefined' && _lord.talentId)
-      ? TALENT_POOL[_lord.talentId]
-      : null;
-    const passiveHtml = chosenTalent ? `
+    // Chosen talents (replaces passive trait display). Up to four since
+    // 2026-08-03 — one card each, in pick order.
+    const heldTalents = _heldTalents().map(id => TALENT_POOL[id]).filter(Boolean);
+    const openSlots   = _openTalentSlots();
+    const passiveHtml = (heldTalents.length || openSlots) ? `
       <div class="cvl-divider"></div>
       <div class="lsh-section">
-        <div class="lsh-section-title">Talent</div>
-        <div class="lsh-passive-card">
-          <div class="lsh-passive-icon">${chosenTalent.icon}</div>
-          <div class="lsh-passive-body">
-            <div class="lsh-passive-name">${chosenTalent.name}</div>
-          </div>
+        <div class="lsh-section-title">
+          Talents
+          <span class="lsh-pts-badge">${heldTalents.length}/${MAX_TALENTS}</span>
         </div>
+        ${heldTalents.map(t => `
+          <div class="lsh-passive-card">
+            <div class="lsh-passive-icon" style="color:${t.color}">${t.icon}</div>
+            <div class="lsh-passive-body">
+              <div class="lsh-passive-name">${t.name}</div>
+            </div>
+          </div>`).join('')}
+        ${openSlots > 0 ? `
+          <div class="lsh-passive-card lsh-passive-card--empty">
+            <div class="lsh-passive-icon">${gi('padlock')}</div>
+            <div class="lsh-passive-body">
+              <div class="lsh-passive-name">${openSlots} talent${openSlots !== 1 ? 's' : ''} to choose</div>
+            </div>
+          </div>` : ''}
       </div>
     ` : '';
 
@@ -417,7 +445,7 @@ const LordScreen = (() => {
           // as literal SVG markup). The full itemised entry, with the lord it
           // belongs to, lands in the Activity feed on the next sync.
           const res      = result.resources || {};
-          const resToast = ['food', 'wood', 'stone'].filter(k => res[k] > 0).map(k => `+${res[k]} ${k}`).join(', ');
+          const resToast = ['wood', 'stone', 'food'].filter(k => res[k] > 0).map(k => `+${res[k]} ${k}`).join(', ');
           _toast(`Raid complete: +${result.goldEarned || 0} gold${resToast ? `, ${resToast}` : ''}`);
           _lord   = LordService.getById(_lord.id);
           // The payout lands on the player, not the lord — without this the
@@ -771,6 +799,23 @@ const LordScreen = (() => {
     const totalPower   = _armyPower(_lord.id);
     const maxPower     = LordService.getArmyPowerCap(_lord);
     const overPower    = totalPower > maxPower;
+
+    // Expedition Rating — the quest-side twin of PWR, shown right beside it.
+    // It is deliberately NOT derivable from the PWR next to it: scouts count
+    // double (SCOUT_ER_MULT), so the same 400 PWR reads Common as line troops
+    // and Rare as scouts. Without this pair on screen together the whole
+    // scouts-vs-mass decision is invisible until the confirm screen.
+    //
+    // Same call the expedition confirm screen makes, mount multiplier
+    // included — the server applies it when the expedition resolves
+    // (catch-up.js), so omitting it here would understate the band and make
+    // the two screens disagree.
+    const er           = Math.round(DiscoveryRoll.expeditionRating(army.units, UNIT_DEFS, LordService.getMountExpeditionErMult(_lord)));
+    const erTier       = DiscoveryRoll.erTierFor(er);
+    const erNext       = [...DiscoveryRoll.RECRUIT_TIERS].reverse().find(t => t.er > er);
+    // The band name lives ONLY here now — the chip shows the number and says
+    // the rest in colour — so the tooltip has to lead with it.
+    const erTitle      = `Expedition Rating — ${erTier.label} band. Decides the quality of what this lord finds on expeditions and who joins it. Scouts count double.${erNext ? ` ${erNext.er} ER for ${erNext.label}.` : ''}`;
     const armyHtml    = army.units.length === 0
       ? `<p class="lov-pos-none">No troops mustered — recruit from the Army tab.</p>`
       : `${_regenNoteHtml(army)}<div class="la-unit-cards">${_armyCardsHtml(army, { removable: false, regen: _isGarrisonRegen() })}</div>`;
@@ -790,7 +835,10 @@ const LordScreen = (() => {
         <div class="lov-section">
           <div class="lov-section-row">
             <div class="lov-section-title">Army</div>
-            <span class="lov-army-power${overPower ? ' lov-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">${gi('crossed-swords')} ${totalPower} / ${maxPower} PWR</span>
+            <div class="lov-army-stats">
+              <span class="lov-army-er lov-army-er--${erTier.id}" title="${erTitle}">${er} ER</span>
+              <span class="lov-army-power${overPower ? ' lov-army-power--over' : ''}" title="Army Power — the capacity that gates recruiting">${gi('crossed-swords')} ${totalPower} / ${maxPower} PWR</span>
+            </div>
           </div>
           ${armyHtml}
         </div>
@@ -1443,7 +1491,7 @@ const LordScreen = (() => {
           : a.won
             ? 'The attackers were beaten off and stripped of what they carried.'
             : 'Your column was driven off and left the field.';
-        const spoils = (entry.rewards || []).filter(r => _RES_ICONS[r.type] && r.amount > 0);
+        const spoils = (entry.rewards || []).filter(_isSpoil);
         bodyHtml = `
           <div class="qd-banner ${cls}">
             <span class="qd-banner-icon">${a.won ? gi('crossed-swords') : gi('skull-crossed-bones')}</span>
@@ -1529,7 +1577,7 @@ const LordScreen = (() => {
           <div class="qd-hint">${gi('position-marker')} Sighted at (${entry.tileX}, ${entry.tileY}) before camps were retired — nothing to attack.</div>`;
       } else if (!isNothing && entry.rewards && entry.rewards.length > 0) {
         const rows = entry.rewards
-          .filter(r => _RES_ICONS[r.type] && r.amount > 0)
+          .filter(_isSpoil)
           .map(_spoilChip)
           .join('');
         if (rows) {
@@ -1544,7 +1592,7 @@ const LordScreen = (() => {
         // card used to render the banner ALONE, so the most frequent outcome
         // in the game looked like it paid nothing whatsoever.
         const nothingRows = (entry.rewards || [])
-          .filter(r => _RES_ICONS[r.type] && r.amount > 0)
+          .filter(_isSpoil)
           .map(_spoilChip)
           .join('');
         bodyHtml = `
@@ -1603,11 +1651,34 @@ const LordScreen = (() => {
       </div>`;
   }
 
+  // Canonical order (gold → wood → stone → food), same as the HUD. Spoil chips
+  // render one reward at a time off the roll's own list, so this map only has to
+  // agree in key order for the next reader's sake.
   const _RES_ICONS = { gold: gi('two-coins'), wood: gi('wood-pile'), stone: gi('war-pick'), food: gi('wheat'), xp: gi('round-star') };
+
+  // Is this reward worth a chip? Amount-bearing rewards need a real amount;
+  // an ITEM find carries no amount at all — the item IS the payout — so it has
+  // its own test. Every spoils list filters through here; a list that hand-rolls
+  // `_RES_ICONS[r.type] && r.amount > 0` silently swallows item finds, which is
+  // exactly how the biggest reward in an expedition would go unannounced.
+  function _isSpoil(r) {
+    if (!r) return false;
+    if (r.type === 'item') return typeof ITEM_DEFS !== 'undefined' && !!ITEM_DEFS[r.itemId];
+    return !!_RES_ICONS[r.type] && r.amount > 0;
+  }
 
   // One reward → one chip. Both spoils lists (quest finds and ambush pickings)
   // render through here so they can't drift apart again.
   function _spoilChip(r) {
+    if (r.type === 'item') {
+      const def = ITEM_DEFS[r.itemId];
+      return `
+        <div class="qd-spoil qd-spoil--item">
+          <span class="qd-spoil-icon">${def.icon}</span>
+          <span class="qd-spoil-name">${def.name}</span>
+          <span class="qd-spoil-value">${itemBonusLabel(def)}</span>
+        </div>`;
+    }
     return `
       <div class="qd-spoil">
         <span class="qd-spoil-icon">${_RES_ICONS[r.type]}</span>
@@ -1625,37 +1696,37 @@ const LordScreen = (() => {
 
   // ── Talents tab ───────────────────────────────────────────────
 
+  // FOUR SLOTS, one every 5 levels (2026-08-03). The tab shows what is already
+  // held, then — only if a slot is actually open — the grid of what is left to
+  // pick. Held talents are filtered OUT of the grid: the same talent twice is
+  // refused server-side, so offering it would be a button that can only fail.
   function _talentsTabHtml() {
-    const level        = _lord.level || 1;
-    const points       = _lord.talentPoints || 0;
-    const chosenId     = _lord.talentId;
-    const chosenTalent = chosenId ? TALENT_POOL[chosenId] : null;
-    const effective    = LordService.getEffectiveStats(_lord);
+    const level     = _lord.level || 1;
+    const held      = _heldTalents();
+    const heldDefs  = held.map(id => TALENT_POOL[id]).filter(Boolean);
+    const openSlots = _openTalentSlots();
+    const nextLevel = nextTalentLevel(level);
 
-    // Section 1 — Talent selection
-    let talentSectionHtml = '';
-    if (level < 5) {
-      talentSectionHtml = `
-        <div class="lt-locked-notice">
-          <div class="lt-locked-icon">${gi('padlock')}</div>
-          <div class="lt-locked-text">Talent selection unlocks at <strong>level 5</strong>.</div>
-          <div class="lt-locked-hint">Level up your lord to choose a permanent talent.</div>
-        </div>`;
-    } else if (chosenTalent) {
-      talentSectionHtml = `
-        <div class="lt-chosen-card" style="border-color:${chosenTalent.color}30">
-          <div class="lt-chosen-icon" style="color:${chosenTalent.color}">${chosenTalent.icon}</div>
-          <div class="lt-chosen-body">
-            <div class="lt-chosen-name" style="color:${chosenTalent.color}">${chosenTalent.name}</div>
-            <div class="lt-chosen-category">${chosenTalent.category === 'combat' ? gi('crossed-swords') + ' Combat' : gi('treasure-map') + ' Strategic'}</div>
-            <div class="lt-chosen-desc">${chosenTalent.description}</div>
-          </div>
-          <div class="lt-chosen-badge">Permanent</div>
-        </div>`;
-    } else {
-      // Group by category
-      const combatTalents    = Object.values(TALENT_POOL).filter(t => t.category === 'combat');
-      const strategicTalents = Object.values(TALENT_POOL).filter(t => t.category === 'strategic');
+    const chosenCard = t => `
+      <div class="lt-chosen-card" style="border-color:${t.color}30">
+        <div class="lt-chosen-icon" style="color:${t.color}">${t.icon}</div>
+        <div class="lt-chosen-body">
+          <div class="lt-chosen-name" style="color:${t.color}">${t.name}</div>
+          <div class="lt-chosen-category">${t.category === 'combat' ? gi('crossed-swords') + ' Combat' : gi('treasure-map') + ' Strategic'}</div>
+          <div class="lt-chosen-desc">${t.description}</div>
+        </div>
+        <div class="lt-chosen-badge">Permanent</div>
+      </div>`;
+
+    const chosenHtml = heldDefs.map(chosenCard).join('');
+
+    // What comes next: the open grid, the level that opens the next slot, or
+    // nothing left to say once all four are spent.
+    let pickerHtml = '';
+    if (openSlots > 0) {
+      const available        = Object.values(TALENT_POOL).filter(t => !held.includes(t.id));
+      const combatTalents    = available.filter(t => t.category === 'combat');
+      const strategicTalents = available.filter(t => t.category === 'strategic');
 
       const renderCards = (talents) => talents.map(t => `
         <div class="lt-talent-card" style="border-color:${t.color}40">
@@ -1668,18 +1739,43 @@ const LordScreen = (() => {
           <button class="lt-choose-btn" data-talent-id="${t.id}" style="border-color:${t.color};color:${t.color}">Choose</button>
         </div>`).join('');
 
-      talentSectionHtml = `
-        <div class="lt-group-label">${gi('crossed-swords')} Combat Talents</div>
-        <div class="lt-talent-grid">${renderCards(combatTalents)}</div>
-        <div class="lt-group-label">${gi('treasure-map')} Strategic Talents</div>
-        <div class="lt-talent-grid">${renderCards(strategicTalents)}</div>`;
+      pickerHtml = `
+        <div class="lt-slot-notice">
+          ${openSlots} talent slot${openSlots !== 1 ? 's' : ''} open — your pick is <strong>permanent</strong>.
+        </div>
+        ${combatTalents.length ? `
+          <div class="lt-group-label">${gi('crossed-swords')} Combat Talents</div>
+          <div class="lt-talent-grid">${renderCards(combatTalents)}</div>` : ''}
+        ${strategicTalents.length ? `
+          <div class="lt-group-label">${gi('treasure-map')} Strategic Talents</div>
+          <div class="lt-talent-grid">${renderCards(strategicTalents)}</div>` : ''}`;
+    } else if (nextLevel) {
+      pickerHtml = `
+        <div class="lt-locked-notice">
+          <div class="lt-locked-icon">${gi('padlock')}</div>
+          <div class="lt-locked-text">Your next talent unlocks at <strong>level ${nextLevel}</strong>.</div>
+          <div class="lt-locked-hint">${heldDefs.length
+            ? `A lord chooses one talent at every fifth level — ${TALENT_LEVELS.join(', ')} — for ${MAX_TALENTS} in total.`
+            : 'Level up your lord to choose a permanent talent.'}</div>
+        </div>`;
+    } else {
+      pickerHtml = `
+        <div class="lt-locked-notice">
+          <div class="lt-locked-icon">${gi('laurel-crown')}</div>
+          <div class="lt-locked-text">All ${MAX_TALENTS} talents chosen.</div>
+          <div class="lt-locked-hint">This lord's build is complete — talents are permanent.</div>
+        </div>`;
     }
 
     return `
       <div class="lt-container">
         <div class="lt-section">
-          <div class="lt-section-title">${gi('magic-swirl')} Talent</div>
-          ${talentSectionHtml}
+          <div class="lt-section-title">
+            ${gi('magic-swirl')} Talents
+            <span class="lsh-pts-badge">${heldDefs.length}/${MAX_TALENTS}</span>
+          </div>
+          ${chosenHtml}
+          ${pickerHtml}
         </div>
       </div>`;
   }
@@ -2128,6 +2224,15 @@ const LordScreen = (() => {
     }
   }
 
+  // Every quest result carries the moment its expedition FINISHED — `pending.at`,
+  // stamped off the queue item's finishAt in server/tick/catch-up.js. Both log
+  // stores default to the wall clock, which is only correct when the result is
+  // fresh: the credit-finish path backdates finishAt, an idle tab can resolve
+  // minutes late, and a result recovered through sync can be days old. These
+  // two spreads carry the real time into each store's own field name.
+  const _logAt = p => (p?.at ? { loggedAt: p.at } : {});
+  const _actAt = p => (p?.at ? { at: p.at } : {});
+
   // Fighters offered to the lord. Already applied server-side; this reports it.
   // The over-cap case is the important one: recruits that don't fit are GONE,
   // so the message names the exact numbers rather than just saying "some were
@@ -2163,6 +2268,7 @@ const LordScreen = (() => {
                   tierLabel: r.tierLabel, armyPwr: r.armyPwr, cap: r.cap,
                   headroom: r.headroom, unitPwr: r.unitPwr },
       lordId: _lord.id, lordName: _lord.name,
+      ..._logAt(pending),
     });
 
     ActivityService.log(_player.id, {
@@ -2171,6 +2277,7 @@ const LordScreen = (() => {
       title:  r.joined > 0 ? `${what} joined your army` : `${what} refused to join`,
       detail,
       lordId: _lord.id, lordName: _lord.name,
+      ..._actAt(pending),
     });
 
     _toast(r.lost > 0 && r.joined === 0
@@ -2211,6 +2318,7 @@ const LordScreen = (() => {
       outcome: 'ambush',
       ambush: { won, lordFell, campName: campName || def.name },
       lordId: _lord.id, lordName: _lord.name,
+      ..._logAt(pending),
     });
 
     const lootStr = (rewards || []).filter(r => r.type !== 'xp')
@@ -2223,6 +2331,7 @@ const LordScreen = (() => {
             : won      ? (lootStr || 'No spoils')
             :            'Your army was driven off',
       lordId: _lord.id, lordName: _lord.name,
+      ..._actAt(pending),
     });
 
     _toast(lordFell ? 'Ambushed — your lord has fallen. See Battles tab.'
@@ -2270,12 +2379,14 @@ const LordScreen = (() => {
         tileX: record?.tileX ?? _lord.x, tileY: record?.tileY ?? _lord.y,
         terrain: terrainId, rewards: rewards || [], narrative, storyTitle,
         lordId: _lord.id, lordName: _lord.name,
+        ..._logAt(pending),
       });
       ActivityService.log(_player.id, {
         type: 'discovery', icon: def.icon || gi('fog'),
         title: `${reportName} — nothing found`,
         detail: xp > 0 ? `+${xp} XP for the expedition` : null,
         lordId: _lord.id, lordName: _lord.name,
+        ..._actAt(pending),
       });
       _toast(storyTitle
         ? `${storyTitle} — see Quests tab`
@@ -2295,13 +2406,22 @@ const LordScreen = (() => {
       definitionId: defId, tileX: record.tileX, tileY: record.tileY,
       terrain: record.terrain, rewards, narrative, storyTitle,
       lordId: _lord.id, lordName: _lord.name,
+      ..._logAt(pending),
     });
-    const rewardStr = rewards.filter(r => r.type !== 'xp').map(r => `+${r.amount} ${r.type}`).join(', ');
+    // An item find has no `amount` — printing one gives "+undefined item" in the
+    // activity feed, so items name themselves instead.
+    const rewardStr = rewards
+      .filter(r => r.type !== 'xp')
+      .map(r => r.type === 'item'
+        ? (ITEM_DEFS[r.itemId]?.name || 'Item')
+        : `+${r.amount} ${r.type}`)
+      .join(', ');
     ActivityService.log(_player.id, {
       type: 'discovery', icon: def.icon || gi('magnifying-glass'),
       title: `${reportName} claimed`,
       detail: rewardStr || `+${rewards.find(r => r.type === 'xp')?.amount || 0}${gi('round-star')}`,
       lordId: _lord.id, lordName: _lord.name,
+      ..._actAt(pending),
     });
     _toast(`${reportName} — see Quests tab`);
   }

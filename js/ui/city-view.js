@@ -24,11 +24,20 @@ const CityView = (() => {
     food:  { icon: gi('wheat'), name: 'Food'  },
   };
 
+  // The Merchant briefly lived here as a 5th tab (2026-08-04) and moved out the
+  // same day to the global nav — js/ui/merchant-screen.js. It trades the
+  // empire-wide resource pool against the empire-wide gold pile, neither of
+  // which belongs to a city, so it does not belong in the city view.
+  // Items ARE a city tab, unlike the Merchant: an item is spent on ONE city and
+  // its bonus belongs to that city alone, so "which city am I looking at" is
+  // the whole decision. The backpack it spends from is empire-wide, which is
+  // why the tab shows the same stock from every city.
   const BLD_TABS = [
     { id: 'overview',       label: 'Overview',       icon: gi('histogram') },
     { id: 'resources',      label: 'Resources',      icon: gi('wheat') },
     { id: 'infrastructure', label: 'Infrastructure', icon: gi('capitol') },
     { id: 'military',       label: 'Military',       icon: gi('crossed-swords')  },
+    { id: 'items',          label: 'Items',          icon: gi('wooden-crate') },
   ];
 
   // One tab per building group (the single-tab experiment was reverted).
@@ -59,10 +68,8 @@ const CityView = (() => {
       ServerActions.syncNow();
     }
 
-    const eventMessages = EventService.tick(_city);
-    if (eventMessages.length > 0) {
-      _city = CityService.getById(_city.id);
-    }
+    // EventService.tick() ran here until 2026-08-04. City events were deleted
+    // with it — see js/data/items.js for what replaced them and why.
 
     _bldTab      = 'overview';
     _selectedBld = null;
@@ -71,8 +78,6 @@ const CityView = (() => {
     _renderContent();
     _bindShellEvents();
     _startCountdown();
-
-    eventMessages.forEach(msg => _toast(msg));
   }
 
   // ── Shell ─────────────────────────────────────────────────────
@@ -110,21 +115,18 @@ const CityView = (() => {
     const terrain = WorldService.getTerrain(_city.x, _city.y);
     const stats   = CityStatsService.getStats(_city);
     const rates   = ProductionService.getRates(_city);
-    const growth  = CityStatsService.getPopulationGrowthRate(_city, stats, rates);
-    const status  = CityStatsService.getCityStatus(stats, growth);
+    // One call owns the badge, the rate and the famine override — see
+    // CityStatsService.getGrowthReport. Population is never flat, so there is
+    // no third "stagnant" arrow to render.
+    const report  = CityStatsService.getGrowthReport(_city, stats, rates);
+    const growth  = report.growth;
 
-    const growthSign  = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
-    const growthClass = growth > 0 ? 'pop-growing' : growth < 0 ? 'pop-declining' : 'pop-stable';
+    const activeItems = _activeItems();
 
-    const now = TimeService.now();
-    const uniqueEvents = Object.values(
-      (_city.activeModifiers || [])
-        .filter(m => !m.expiresAt || now < m.expiresAt)
-        .reduce((acc, m) => { if (!acc[m.source]) acc[m.source] = m; return acc; }, {})
-    );
-
-    const mainStats  = ['happiness', 'corruption', 'hygiene', 'unemployment', 'religion', 'culture'];
-    const extraStats = ['stability', 'security'];
+    // Same two lists the status badge scores from — City Status feeds it,
+    // City Defenses is deliberately excluded.
+    const mainStats  = CityStatsService.STATUS_STATS;
+    const extraStats = CityStatsService.DEFENSE_STATS;
 
     const { level: cityLevel } = CityStatsService.getSlotInfo(_city);
     const tierImg = _cityTierImg(cityLevel);
@@ -133,7 +135,7 @@ const CityView = (() => {
       <div class="cvl-artwork">
         <img class="cvl-artwork-img" src="${tierImg}" alt="${_city.name}" />
         <div class="cvl-artwork-glow"></div>
-        <div class="cvl-artwork-status cvl-${status.id}">${status.label}</div>
+        <div class="cvl-artwork-status cvl-${report.badgeId}" title="${report.title}">${report.badgeLabel}</div>
       </div>
 
       <div class="cvl-city-header">
@@ -149,7 +151,11 @@ const CityView = (() => {
       <div class="cvl-pop-row">
         <span class="cvl-pop-label">${gi('three-friends')} Population</span>
         <span class="cvl-pop-value">${Math.floor(_city.population || 1000)}</span>
-        <span class="cvl-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</span>
+        <span class="cvl-pop-growth ${report.cssClass}" title="${report.title}">${report.sign}${Math.abs(growth)}/hr</span>
+      </div>
+      <div class="cvl-pop-statusfx">
+        <span class="cvl-pop-statusfx-src">${report.fed ? `${report.status.label} status` : 'Famine · no food'}</span>
+        <span class="cvl-pop-statusfx-val ${report.cssClass}">${report.perDayText}</span>
       </div>
 
       <div class="cvl-divider"></div>
@@ -164,20 +170,50 @@ const CityView = (() => {
         ${extraStats.map(key => _statRowHtml(key, stats[key])).join('')}
       </div>
 
-      ${uniqueEvents.length > 0 ? `
+      ${activeItems.length > 0 ? `
         <div class="cvl-divider"></div>
         <div class="cvl-events">
-          <div class="cvl-events-title">Active Effects</div>
-          ${uniqueEvents.map(m => `
+          <div class="cvl-events-title">Active Items</div>
+          ${activeItems.map(({ def, entry }) => `
             <div class="cvl-event-row">
-              <span class="cvl-event-name">${(m.source || '').replace('event:', '').replace(/_/g, ' ')}</span>
-              <span class="cvl-event-val ${m.value >= 0 ? 'text-success' : 'text-danger'}">${m.value >= 0 ? '+' : ''}${m.value} ${m.stat}</span>
+              <span class="cvl-event-name">${def.name}</span>
+              <span class="cvl-event-val text-success">${_itemBonusLabel(def)} · ${_fmtLeft(entry.expiresAt)}</span>
             </div>
           `).join('')}
         </div>
       ` : ''}
 
     `;
+  }
+
+  // ── City items (js/data/items.js) ─────────────────────────────
+  //
+  // Every item currently live on this city, newest expiry last, each paired
+  // with its definition. Expired entries are filtered here as well as on the
+  // server: catch-up only prunes them on its next tick, so between an expiry
+  // and the next sync the stored array still holds a dead one.
+  function _activeItems() {
+    const now = TimeService.now();
+    return (_city.activeItems || [])
+      .filter(e => e && ITEM_DEFS[e.itemId] && (!e.expiresAt || now < e.expiresAt))
+      .map(e => ({ entry: e, def: ITEM_DEFS[e.itemId] }))
+      .sort((a, b) => (a.entry.expiresAt || 0) - (b.entry.expiresAt || 0));
+  }
+
+  // "+20% food" / "+25% all resources" — itemBonusLabel lives in js/data/items.js
+  // so the quest log's spoil chips print the identical string.
+  const _itemBonusLabel = itemBonusLabel;
+
+  // Coarse "time left" for something measured in days, where formatDuration's
+  // "71h 59m 12s" is noise. Days+hours, then hours+minutes, then minutes.
+  function _fmtLeft(expiresAt) {
+    const secs = Math.max(0, TimeService.secondsUntil(expiresAt || 0));
+    const d    = Math.floor(secs / 86400);
+    const h    = Math.floor((secs % 86400) / 3600);
+    const m    = Math.floor((secs % 3600) / 60);
+    if (d > 0) return `${d}d ${h}h left`;
+    if (h > 0) return `${h}h ${m}m left`;
+    return `${m}m left`;
   }
 
   function _statRowHtml(key, val, trend) {
@@ -259,6 +295,10 @@ const CityView = (() => {
       return tabsHtml + _overviewTabHtml();
     }
 
+    if (_bldTab === 'items') {
+      return tabsHtml + _itemsTabHtml();
+    }
+
     const section    = BLD_SECTIONS[_bldTab];
     const buildings  = _sectionBuildings(section);
     const selDef     = _selectedBld ? BUILDING_DEFS[_selectedBld] : null;
@@ -275,28 +315,22 @@ const CityView = (() => {
   function _overviewTabHtml() {
     const stats    = CityStatsService.getStats(_city);
     const rates    = ProductionService.getRates(_city);
-    const growth   = CityStatsService.getPopulationGrowthRate(_city, stats, rates);
-    const status   = CityStatsService.getCityStatus(stats, growth);
+    const report   = CityStatsService.getGrowthReport(_city, stats, rates);
+    const growth   = report.growth;
     const { level, usedSlots, maxSlots } = CityStatsService.getSlotInfo(_city);
     const garrison = CityService.getGarrison(_city);
     const terrain  = WorldService.getTerrain(_city.x, _city.y);
     const race     = RACES[_lord?.race] || {};
-    const now      = TimeService.now();
 
-    const growthSign  = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
-    const growthClass = growth > 0 ? 'pop-growing' : growth < 0 ? 'pop-declining' : 'pop-stable';
-
-    const uniqueEvents = Object.values(
-      (_city.activeModifiers || [])
-        .filter(m => !m.expiresAt || now < m.expiresAt)
-        .reduce((acc, m) => { if (!acc[m.source]) acc[m.source] = m; return acc; }, {})
-    );
+    const activeItems = _activeItems();
 
     const slotPct   = maxSlots > 0 ? Math.min(100, Math.round((usedSlots / maxSlots) * 100)) : 0;
     const slotColor = slotPct > 90 ? '#f44336' : slotPct > 70 ? '#ff9800' : '#4caf50';
 
-    const mainStats  = ['happiness', 'corruption', 'hygiene', 'unemployment', 'religion', 'culture'];
-    const extraStats = ['stability', 'security'];
+    // Same two lists the status badge scores from — City Status feeds it,
+    // City Defenses is deliberately excluded.
+    const mainStats  = CityStatsService.STATUS_STATS;
+    const extraStats = CityStatsService.DEFENSE_STATS;
 
     const trends = CityStatsService.getStatTrends(_city, stats, growth);
 
@@ -307,17 +341,21 @@ const CityView = (() => {
     // Gold economy data
     const cityGoldRate   = ProductionService.getGoldRate(_city);
 
-    // Tier progress — T5 starts at 100k, peak goal is 150k
-    const TIER_THRESHOLDS = [0, 10000, 25000, 50000, 100000, 150000];
+    // Tier progress. Thresholds are READ OFF SLOT_TABLE, never hand-copied: the
+    // literal that used to sit here stopped at tier 5 while the engine still had
+    // a tier 6, the same drift building-unlock.js already fixed. Past the last
+    // tier the bar runs to a soft "peak" goal half again the top threshold
+    // (100k → 150k today), which is the only number the ladder does not supply.
+    const TIERS       = EconomyCore.SLOT_TABLE || [];
+    const topTier     = TIERS[TIERS.length - 1] || { level: 5, minPop: 100000 };
+    const peakPop     = Math.round(topTier.minPop * 1.5);
     const currentPop  = Math.floor(_city.population || 1000);
-    const isMaxTier   = level >= 5;
-    const tierStart   = TIER_THRESHOLDS[level - 1] || 0;
-    const tierEnd     = TIER_THRESHOLDS[level] || 150000;
-    const isPeakPop   = isMaxTier && currentPop >= 150000;
+    const isMaxTier   = level >= topTier.level;
+    const tierEnd     = isMaxTier
+      ? peakPop
+      : (TIERS.find(r => r.level === level + 1)?.minPop || peakPop);
+    const isPeakPop   = isMaxTier && currentPop >= peakPop;
     const popToNext   = isPeakPop ? 0 : Math.max(0, tierEnd - currentPop);
-    const tierPct     = isPeakPop ? 100 : Math.min(100, Math.round(
-      ((currentPop - tierStart) / (tierEnd - tierStart)) * 100
-    ));
 
     const _fmtEta = hours => {
       if (hours < 1)       return '< 1h';
@@ -330,13 +368,13 @@ const CityView = (() => {
       return remD > 0 ? `${weeks}w ${remD}d` : `${weeks}w`;
     };
 
+    // Population is never flat, so there is no "stagnant" case to word — a city
+    // is either climbing toward the next tier or losing ground.
     let tierEta = '';
     if (!isPeakPop) {
-      if (growth <= 0) {
-        tierEta = growth === 0 ? 'Population stagnant' : 'Population declining';
-      } else {
-        tierEta = '~' + _fmtEta(popToNext / growth);
-      }
+      tierEta = growth > 0
+        ? '~' + _fmtEta(popToNext / growth)
+        : (report.fed ? 'Population declining' : 'Starving — no food');
     }
 
     return `
@@ -353,14 +391,14 @@ const CityView = (() => {
             <div class="cvov-hero-name">${_city.name}</div>
             <div class="cvov-hero-meta">
               <span class="cvov-tier-badge">Tier ${level}</span>
-              <span class="cvl-status-badge cvl-${status.id}">${status.label}</span>
+              <span class="cvl-status-badge cvl-${report.badgeId}" title="${report.title}">${report.badgeLabel}</span>
             </div>
             <div class="cvov-hero-terrain">${terrain.icon} ${terrain.name} · ${race.icon || ''} ${race.name || '—'}</div>
           </div>
           <div class="cvov-hero-pop">
             <div class="cvov-hero-pop-val">${currentPop.toLocaleString()}</div>
             <div class="cvov-hero-pop-label">Population</div>
-            <div class="cvov-hero-pop-growth ${growthClass}">${growthSign}${Math.abs(growth)}/hr</div>
+            <div class="cvov-hero-pop-growth ${report.cssClass}" title="${report.title}">${report.sign}${Math.abs(growth)}/hr</div>
           </div>
           <div class="cvov-hero-gold">
             <div class="cvov-hero-gold-rate">+${cityGoldRate}${gi('two-coins')}/h</div>
@@ -376,11 +414,11 @@ const CityView = (() => {
         ` : `
         <div class="cvov-tier-prog">
           <div class="cvov-tp-row">
-            <span class="cvov-tp-tiers">${isMaxTier ? `Tier 5 → Peak` : `Tier ${level} → Tier ${level + 1}`}</span>
+            <span class="cvov-tp-tiers">${isMaxTier ? `Tier ${topTier.level} → Peak` : `Tier ${level} → Tier ${level + 1}`}</span>
             <span class="cvov-tp-count">${currentPop.toLocaleString()} / ${tierEnd.toLocaleString()}</span>
             <span class="cvov-tp-eta ${growth <= 0 ? 'cvov-tp-eta--warn' : ''}">${tierEta}</span>
           </div>
-          <div class="cvov-tp-need">${popToNext.toLocaleString()} more population needed to reach ${isMaxTier ? 'peak (150k)' : `Tier ${level + 1}`}</div>
+          <div class="cvov-tp-need">${popToNext.toLocaleString()} more population needed to reach ${isMaxTier ? `peak (${Math.round(peakPop / 1000)}k)` : `Tier ${level + 1}`}</div>
         </div>
         `}
 
@@ -469,18 +507,83 @@ const CityView = (() => {
         </div>
         ` : ''}
 
-        ${uniqueEvents.length > 0 ? `
+        ${activeItems.length > 0 ? `
         <div class="cvov-section">
-          <div class="cvov-section-title">${gi('power-lightning')} Active Effects</div>
-          ${uniqueEvents.map(m => `
+          <div class="cvov-section-title">${gi('wooden-crate')} Active Items</div>
+          ${activeItems.map(({ def, entry }) => `
             <div class="cvl-event-row">
-              <span class="cvl-event-name">${(m.source || '').replace('event:', '').replace(/_/g, ' ')}</span>
-              <span class="cvl-event-val ${m.value >= 0 ? 'text-success' : 'text-danger'}">${m.value >= 0 ? '+' : ''}${m.value} ${m.stat}</span>
+              <span class="cvl-event-name">${def.name}</span>
+              <span class="cvl-event-val text-success">${_itemBonusLabel(def)} · ${_fmtLeft(entry.expiresAt)}</span>
             </div>
           `).join('')}
         </div>
         ` : ''}
 
+      </div>
+    `;
+  }
+
+  // ── Items tab ─────────────────────────────────────────────────
+  //
+  // Two lists, and the split is the point: what is WORKING here (this city's
+  // own, with time left) above what is IN STOCK (the empire-wide backpack, the
+  // same stock every city sees). Applying is one click and costs nothing but
+  // the item — there is no slot limit and nothing to configure, so a confirm
+  // step would only be in the way.
+  function _itemsTabHtml() {
+    const active = _activeItems();
+    const held   = Object.entries(_player?.items || {})
+      .filter(([id, n]) => ITEM_DEFS[id] && n > 0)
+      .map(([id, n]) => ({ def: ITEM_DEFS[id], count: n }))
+      .sort((a, b) => (a.def.tier - b.def.tier) || a.def.name.localeCompare(b.def.name));
+
+    // The combined production bonus this city is getting right now — the one
+    // number that answers "is stacking these actually doing anything".
+    const fx      = EconomyCore.getCityItemEffects(_city, TimeService.now());
+    const totals  = Object.entries(fx)
+      .filter(([, v]) => v > 0)
+      .map(([k, v]) => `+${Math.round(v * 100)}% ${k.replace('_production', '')}`)
+      .join(' · ');
+
+    const activeHtml = active.length > 0
+      ? active.map(({ def, entry }) => `
+          <div class="cvit-active-row">
+            <span class="cvit-icon">${def.icon}</span>
+            <div class="cvit-body">
+              <div class="cvit-name">${def.name}</div>
+              <div class="cvit-effect">${_itemBonusLabel(def)}</div>
+            </div>
+            <span class="cvit-timer">${_fmtLeft(entry.expiresAt)}</span>
+          </div>`).join('')
+      : `<div class="cvit-empty">No items are working in ${_city.name} right now.</div>`;
+
+    const heldHtml = held.length > 0
+      ? held.map(({ def, count }) => `
+          <div class="cvit-card cvit-card--t${def.tier}">
+            <div class="cvit-card-head">
+              <span class="cvit-icon">${def.icon}</span>
+              <span class="cvit-name">${def.name}</span>
+              <span class="cvit-count">×${count}</span>
+            </div>
+            <div class="cvit-card-summary">${def.summary}</div>
+            <div class="cvit-card-desc">${def.description}</div>
+            <button class="bld2-btn bld2-btn--ready cvit-apply" data-item="${def.id}">Use in ${_city.name}</button>
+          </div>`).join('')
+      : `<div class="cvit-empty">Your storehouse is empty. Items are brought back by expeditions — send a lord to search the world map.</div>`;
+
+    return `
+      <div class="cvit-wrap">
+        <div class="cvov-section">
+          <div class="cvov-section-title">${gi('hourglass')} Working in this city</div>
+          ${totals ? `<div class="cvit-totals">${totals} while they last</div>` : ''}
+          ${activeHtml}
+        </div>
+
+        <div class="cvov-section">
+          <div class="cvov-section-title">${gi('wooden-crate')} Storehouse</div>
+          <div class="cvit-hint">Items are held by your empire, not by a city — spend them wherever they earn the most. There is no limit on how many one city can run at once.</div>
+          <div class="cvit-grid">${heldHtml}</div>
+        </div>
       </div>
     `;
   }
@@ -654,6 +757,21 @@ const CityView = (() => {
               </div>
             ` : ''}
 
+            ${def.id === 'marketplace' ? (() => {
+              // The Marketplace's whole economic effect, spelled out. It used to
+              // be the door to the Merchant as well; since that moved to its own
+              // tab (2026-08-04) this bonus is all the building does, so leaving
+              // it implicit would make the Marketplace read as doing nothing.
+              // Percentage comes from EconomyCore, never a literal here.
+              const pct = n => Math.round(EconomyCore.MARKETPLACE_GOLD_PCT * 100 * n);
+              return `
+                <div class="bld2-prod-row">
+                  ${s.currentLvl > 0 ? `<span class="bld2-prod-cur">${gi('two-coins')} +${pct(s.currentLvl)}% gold from this city's taxes</span>` : ''}
+                  ${s.currentLvl > 0 && !s.atMax ? `<span class="bld2-prod-sep">→</span>` : ''}
+                  ${!s.atMax ? `<span class="bld2-prod-next">Lv ${s.targetLvl}: +${pct(s.targetLvl)}%</span>` : ''}
+                </div>`;
+            })() : ''}
+
             ${def.buildTimeDivisor ? `
               <div class="bld2-prod-row">
                 ${s.currentLvl > 0 ? `<span class="bld2-prod-cur">${gi('claw-hammer')} City builds ${def.buildTimeDivisor(s.currentLvl).toLocaleString()}× faster</span>` : ''}
@@ -712,66 +830,8 @@ const CityView = (() => {
         ${def.id === 'library' && s.currentLvl > 0 ? `
           <div class="rs-hint">${gi('open-book')} Books are researched in the <b>Research</b> tab — higher Library levels unlock more of them.</div>
         ` : ''}
-        ${def.id === 'marketplace' ? _merchantHtml() : ''}
       </div>
     `;
-  }
-
-  // ── The Merchant (Marketplace panel) ──────────────────────────
-  // Sells resources from the empire-wide pool for gold. All rate/cap maths
-  // comes from MarketCore, shared with server/actions/market-sell.js — this
-  // only renders the quotes it returns.
-  //
-  // Two buttons per resource rather than a free-text amount: the whole view
-  // re-renders after every action, which would wipe an input mid-typing, and
-  // the daily cap means "sell max" is the natural move anyway. "Sell half"
-  // exists so dumping a stockpile you still need to build with isn't a footgun.
-  function _merchantHtml() {
-    const mkLevel = CityService.getPlayerCities(_player.id)
-      .reduce((max, c) => Math.max(max, c.buildings?.marketplace || 0), 0);
-
-    if (mkLevel < MarketCore.MARKET_MIN_MARKETPLACE) {
-      return `<div class="rs-hint">${gi('two-coins')} Build the Marketplace to open trade — the merchant buys surplus resources for gold.</div>`;
-    }
-
-    const ledger    = _player?.marketLedger || null;
-    const cap       = MarketCore.marketDailyCap(mkLevel);
-    const remaining = MarketCore.marketRemainingToday(mkLevel, ledger, TimeService.now());
-    const pool      = _player?.resources || {};
-
-    const rows = MarketCore.MARKET_RESOURCES.map(res => {
-      const held = Math.floor(pool[res] || 0);
-      const rate = MarketCore.MARKET_RATES[res];
-      const half = MarketCore.marketQuote(res, Math.floor(held / 2), mkLevel, ledger, TimeService.now());
-      const full = MarketCore.marketQuote(res, held, mkLevel, ledger, TimeService.now());
-
-      const btn = (q, label, amount) => q.ok && q.gold > 0
-        ? `<button class="mk-sell-btn" data-sell-res="${res}" data-sell-amount="${amount}">${label} → ${gi('two-coins')}${q.gold.toLocaleString()}</button>`
-        : `<button class="mk-sell-btn" disabled>${label}</button>`;
-
-      return `
-        <div class="mk-row">
-          <span class="mk-row-res">${RES[res].icon} ${RES[res].name}</span>
-          <span class="mk-row-held">${held.toLocaleString()} held</span>
-          <span class="mk-row-rate">${rate} : 1</span>
-          <span class="mk-row-actions">
-            ${btn(half, 'Sell ½', Math.floor(held / 2))}
-            ${btn(full, 'Sell max', held)}
-          </span>
-        </div>`;
-    }).join('');
-
-    return `
-      <div class="mk-panel">
-        <div class="bld3-detail-req-title">${gi('two-coins')} The Merchant — sell surplus for gold</div>
-        <div class="mk-cap">
-          Today: <b>${remaining.toLocaleString()}</b> of ${cap.toLocaleString()} gold remaining
-          <span class="mk-cap-hint">(${MarketCore.MARKET_GOLD_PER_MK_LEVEL.toLocaleString()} gold/day per Marketplace level — resets daily)</span>
-        </div>
-        ${rows}
-        <div class="mk-note">The merchant pays well below what your own cities are worth. This is a way to
-        turn a surplus you cannot spend into gold, not a way to earn it.</div>
-      </div>`;
   }
 
   // ── Queue banner ──────────────────────────────────────────────
@@ -796,7 +856,7 @@ const CityView = (() => {
         <div class="cv-queue-item">
           <span class="cv-queue-item-pos">#${i + 2}</span>
           <span class="cv-queue-item-name">${qDef?.name || q.buildingId} → Lv ${q.targetLevel}</span>
-          <span class="cv-queue-item-eta">${TimeService.formatDuration(etaSecs)}</span>
+          <span class="cv-queue-item-eta">${TimeService.formatDuration(etaSecs)}<span class="cv-queue-clock">${TimeService.formatClock(q.finishAt)}</span></span>
           <button class="x-cancel-btn" data-cancel-build="${i + 1}" title="Cancel &amp; refund resources">✕</button>
         </div>`;
     }).join('');
@@ -807,6 +867,10 @@ const CityView = (() => {
         <span class="cv-queue-label">${def?.name || item.buildingId} → Level ${item.targetLevel}</span>
         <div class="cv-queue-bar"><div class="cv-queue-fill" id="cv-q-fill" style="transform:scaleX(${pct / 100})"></div></div>
         <span class="cv-queue-timer" id="cv-q-timer">${TimeService.formatDuration(secs)}</span>
+        <!-- Static: the ticker only rewrites #cv-q-timer, and finishAt never
+             moves. A Town Hall level can run for days, which is exactly when a
+             countdown alone stops being usable. -->
+        <span class="cv-queue-clock">${TimeService.formatClock(item.finishAt)}</span>
         <button class="cv-boost-btn ${canBoost ? '' : 'cv-boost-btn--cant'}" id="cv-boost-btn" ${canBoost ? '' : 'disabled'}>
           ${gi('power-lightning')} ${boostCost}${gi('cut-diamond')}
         </button>
@@ -819,16 +883,24 @@ const CityView = (() => {
 
   // ── Helpers ───────────────────────────────────────────────────
 
+  // Walks EconomyCore.RESOURCE_KEYS, NEVER Object.entries(bundle). A cost is a
+  // plain literal, so entry order is declaration order — and the Town Hall
+  // declared food first, which is why it alone printed "food · wood · stone".
+  function _orderedRes(bundle) {
+    const b = bundle || {};
+    return EconomyCore.RESOURCE_KEYS
+      .filter(k => (b[k] || 0) > 0)
+      .map(k => [k, b[k]]);
+  }
+
   function _prodLine(prod) {
-    return Object.entries(prod)
-      .filter(([, v]) => v > 0)
+    return _orderedRes(prod)
       .map(([res, v]) => `${RES[res]?.icon || res} +${v}/h`)
       .join(' ');
   }
 
   function _costHtml(cost) {
-    return Object.entries(cost)
-      .filter(([, v]) => v > 0)
+    return _orderedRes(cost)
       .map(([res, v]) => {
         const has = Math.floor((_player?.resources || {})[res] || 0) >= v;
         return `<span class="${has ? 'bld2-res' : 'bld2-res bld2-res--short'}">${RES[res]?.icon || res} ${v.toLocaleString()}</span>`;
@@ -888,6 +960,25 @@ const CityView = (() => {
       });
     });
 
+    // Items tab → spend one item on this city
+    document.querySelectorAll('.cvit-apply[data-item]').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        const itemId = btn.dataset.item;
+        const result = await ServerActions.applyItem(_city.id, itemId);
+        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
+        _city   = CityService.getById(_city.id);
+        _player = PlayerService.getById(_player.id);
+        const lp = document.getElementById('cv-left');
+        if (lp) lp.innerHTML = _leftPanelHtml();
+        _renderContent();
+        _toast(`${ITEM_DEFS[itemId]?.name || 'Item'} is now working in ${_city.name}.`);
+        // Production rates changed — the HUD prints them.
+        EventBus.emit('resources:changed');
+        HUD.refresh();
+      });
+    });
+
     // Detail panel close
     document.getElementById('bld3-close')?.addEventListener('click', () => {
       _selectedBld = null;
@@ -904,27 +995,6 @@ const CityView = (() => {
         _player = PlayerService.getById(_player.id);
         _renderContent();
         _startCountdown();
-        EventBus.emit('resources:changed');
-        HUD.refresh();
-      });
-    });
-
-    // Merchant sell buttons. The server clamps to the player's real holdings
-    // and to the remaining daily volume, so we report what it ACTUALLY sold
-    // (result.sale) rather than what we asked for.
-    document.querySelectorAll('.mk-sell-btn[data-sell-res]:not([disabled])').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const res    = btn.dataset.sellRes;
-        const amount = parseInt(btn.dataset.sellAmount || '0', 10);
-        btn.disabled = true;
-        const result = await ServerActions.marketSell(res, amount);
-        if (!result.ok) { btn.disabled = false; _toast(result.error || 'Server error'); return; }
-        _player = PlayerService.getById(_player.id);
-        _renderContent();
-        const s = result.sale || {};
-        _toast(s.capped
-          ? `Sold ${(s.spent || 0).toLocaleString()} ${res} for ${(s.gold || 0).toLocaleString()} gold — daily limit reached.`
-          : `Sold ${(s.spent || 0).toLocaleString()} ${res} for ${(s.gold || 0).toLocaleString()} gold.`);
         EventBus.emit('resources:changed');
         HUD.refresh();
       });

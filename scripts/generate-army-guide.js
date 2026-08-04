@@ -143,7 +143,8 @@ const html = `<!doctype html>
   <p class="legend">Green — the row race wins the matchup · Red — it loses it · Faded — mirror.</p>
   ${stageBlocks}
 
-  <h2>Top 5 army compositions <span class="stage-meta">endgame</span></h2>
+  <h2>Best of the four archetypes <span class="stage-meta">endgame</span></h2>
+  <p class="note"><b>These are not optimal armies, and the table is not a search.</b> The simulation builds exactly one army per race per archetype from four fixed heuristics (cheapest-first, highest-PWR-first, combined-arms, deep regiments) and ranks the twenty results. Each heuristic fills its army by walking its preference list and adding <em>one</em> of each unit that fits, then looping — so it produces one of every cavalry type rather than three of the best one, and it never evaluates putting the whole budget into a single unit. Read these as "the best of what four reasonable recipes produce", not "the strongest armies in the game".</p>
   <div class="tablewrap">
   <table>
     <thead><tr><th>#</th><th>Army</th><th>Cost</th><th>PWR</th><th>Win rate</th><th>Composition</th></tr></thead>

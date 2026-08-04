@@ -45,11 +45,18 @@ const LordService = (() => {
 
   // ── Stats & class helpers ─────────────────────────────────────
 
-  // Returns the effects object for the lord's chosen talent, or {} if none.
+  // Returns the MERGED effects of every talent the lord holds (up to four
+  // since 2026-08-03), or {} if none. The merge rules — and the read-time
+  // migration off the old single `talentId` — live in lord-classes.js so the
+  // client and the four server paths share one definition.
   function getTalentEffects(lord) {
-    return (typeof TALENT_POOL !== 'undefined' && lord.talentId)
-      ? (TALENT_POOL[lord.talentId]?.effects || {})
-      : {};
+    return (typeof lordTalentEffects !== 'undefined') ? lordTalentEffects(lord) : {};
+  }
+
+  // The talent ids this lord holds, in pick order. UI-facing; the effects go
+  // through getTalentEffects above.
+  function getTalentIds(lord) {
+    return (typeof getLordTalentIds !== 'undefined') ? getLordTalentIds(lord) : [];
   }
 
   // Returns the effects for the lord's equipped mount, or {} if none.
@@ -113,10 +120,17 @@ const LordService = (() => {
 
   // ── CRUD ─────────────────────────────────────────────────────
 
-  // ⚠ MIRROR of server/actions/lord-create.js (MAX_LORDS, lordRecruitCost).
-  // The server is authoritative; this copy exists only so the client can
-  // preview cost and disable the button. Change both together.
-  const MAX_LORDS = 7;
+  // ⚠ MIRROR of server/actions/lord-create.js (lordRecruitCost). The server is
+  // authoritative; this copy exists only so the client can preview cost and
+  // disable the button. Change both together.
+  //
+  // The flat MAX_LORDS = 7 that used to sit here is GONE (2026-08-03) — the
+  // cap is bought from the Library (Codes of Command) and lives in ONE place,
+  // EconomyCore.getLordSlots, which both sides call.
+  function getLordSlots(playerId) {
+    const player = PlayerService.getById(playerId);
+    return EconomyCore.getLordSlots(EconomyCore.getResearchEffects(player?.research));
+  }
 
   // First lord is free; subsequent lords cost 10k, 20k, 40k, 80k, 160k, 320k.
   function getRecruitCost(existingLordCount) {
@@ -129,8 +143,8 @@ const LordService = (() => {
   // was the only consumer of commandCapacityBonus, so the `commander` talent
   // that granted that key was retired the same day rather than left in the
   // pool as an unundoable dead pick (see the TALENT_POOL header note).
-  // Army size is bounded solely by the PWR cap (200 + level×80 + talent
-  // bonus) in server/actions/recruit.js.
+  // Army size is bounded solely by the PWR cap (lordArmyPowerCapBase + talent
+  // + mount bonus) in server/actions/recruit.js.
 
   function create(playerId, name, raceId, classId) {
     const n = (name || '').trim();
@@ -144,7 +158,10 @@ const LordService = (() => {
 
     const lords = _getAll();
     const playerLords = Object.values(lords).filter(l => l.playerId === playerId);
-    if (playerLords.length >= MAX_LORDS) return { ok: false, error: `Maximum of ${MAX_LORDS} lords reached.` };
+    const slots = getLordSlots(playerId);
+    if (playerLords.length >= slots) {
+      return { ok: false, error: `You may command ${slots} ${slots === 1 ? 'lord' : 'lords'}. Research Codes of Command in the Library to raise another.` };
+    }
 
     const taken = Object.values(lords).some(l => l.name.toLowerCase() === n.toLowerCase());
     if (taken) return { ok: false, error: 'A lord with that name already exists.' };
@@ -162,6 +179,10 @@ const LordService = (() => {
       xp:             0,
       xpToNext:       150,
       talentPoints:   0,
+      // talentIds is the array the server writes; talentId is the pre-2026-08-03
+      // single pick, mirrored to talentIds[0] so nothing that still reads the
+      // scalar (a tab left open across the deploy) reads garbage.
+      talentIds:      [],
       talentId:       null,
       mountId:        null,
       actionQueue:    [],
@@ -219,9 +240,12 @@ const LordService = (() => {
     const fromX    = lord.x ?? destX;
     const fromY    = lord.y ?? destY;
     const distance = Math.max(Math.abs(destX - fromX), Math.abs(destY - fromY));
-    // Attack moves always take at least 5 minutes (300s) — gives the defender a warning window
-    // and ensures the attacker sees the travel countdown on the homepage.
-    const minSecs  = opts?.intent === 'attack' ? 60 : 0;
+    // Attack moves have a floor so the defender always gets a warning window
+    // and the attacker always sees a travel countdown on the homepage. The
+    // number lives with getTravelTime (the comment here used to say 5 minutes
+    // while the code said 60 seconds); server/actions/lord-action.js reads the
+    // same constant.
+    const minSecs  = opts?.intent === 'attack' ? EconomyCore.ATTACK_MIN_SECS : 0;
     const secs     = EconomyCore.getTravelTime(distance, speed, { minSecs });
 
     const now  = TimeService.now();
@@ -437,24 +461,28 @@ const LordService = (() => {
     return Object.values(_getAll());
   }
 
-  // CP cap by lord level: Lv1=280, +80 per level.
+  // CP cap by lord level: Lv1=280, +80 per level, FROZEN AT LEVEL 10 (=1000).
+  // The base comes from lordArmyPowerCapBase so the freeze is defined once —
+  // see the LORD_POWER_LEVEL_CAP block in js/data/lord-classes.js for why
+  // levels 11–20 buy stats and talents but no army.
   // Talent and mount bonuses STACK — they are separate purchases on separate
-  // axes (a permanent talent pick vs. a re-buyable 1.5M apex mount), so a
-  // level-10 commanding lord on an apex mount caps at 1000 + 100 + 200 = 1300.
-  // Mirrored in server/actions/recruit.js and server/tick/catch-up.js; all
-  // three must agree or the client will offer recruits the server refuses.
+  // axes (a permanent talent pick vs. a re-buyable apex mount), so a
+  // strategist lord on an apex mount caps at 1000 + 100 + 200 = 1300.
+  // Mirrored in server/actions/recruit.js, server/actions/army-transfer.js and
+  // server/tick/catch-up.js; all four must agree or the client will offer
+  // recruits the server refuses.
   function getArmyPowerCap(lord) {
-    return 200 + (lord.level || 1) * 80
+    return lordArmyPowerCapBase(lord.level)
       + (getTalentEffects(lord).armyPowerCapBonus || 0)
       + (getMountEffects(lord).armyPowerCapBonus  || 0);
   }
 
   return {
     create, getById, getByPlayer, getAll, save, setPosition,
-    getRecruitCost,
+    getRecruitCost, getLordSlots,
     enqueueAction, enqueueMoveAction, tickActions, checkLevelUp, tickHp,
     actionTimeRemaining, actionProgress,
-    getEffectiveStats, getActionDuration, getTalentEffects, getMountEffects,
+    getEffectiveStats, getActionDuration, getTalentEffects, getTalentIds, getMountEffects,
     getMountExpeditionErMult,
     getStance, isStanced, enterStance, exitStance, tickStance,
     getArmyPowerCap,

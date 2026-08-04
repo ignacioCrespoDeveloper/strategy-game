@@ -2095,6 +2095,16 @@ body.nav-open #screen-root {
   transition: transform 1s linear;
 }
 .cv-queue-timer { font-size: 0.78rem; color: var(--text-secondary); white-space: nowrap; }
+
+/* Wall-clock completion time next to a build countdown. One step quieter than
+   the countdown it annotates, in both the banner and the queued rows. */
+.cv-queue-clock {
+  font-size: 0.66rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  margin-left: 0.35rem;
+}
 .cv-queue-upcoming {
   margin-top: 0.5rem;
   padding-top: 0.4rem;
@@ -2373,6 +2383,48 @@ body.nav-open #screen-root {
 
 #hud-bar.hidden {
   display: none !important;
+}
+
+/* ── Global incoming-attack strip ────────────────────────────
+   Rendered by hud.js on every authenticated screen (the scan used to run only
+   while Overview was mounted). Overlays the top of the page instead of pushing
+   it down, so body.hud-active #screen-root can keep its fixed 52px offset.
+   Clicking anywhere on it goes to Overview, which carries the full detail. */
+#hud-threat-bar {
+  position: fixed;
+  top: 52px;
+  left: 0;
+  right: 0;
+  z-index: 99;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.28rem 1rem;
+  cursor: pointer;
+  font-size: 0.74rem;
+  color: #ffd9d9;
+  background: linear-gradient(180deg, rgba(120, 12, 12, 0.97), rgba(80, 8, 8, 0.97));
+  border-bottom: 1px solid var(--danger-alert, #8c0a0a);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  animation: hud-threat-pulse 2.2s ease-in-out infinite;
+}
+
+#hud-threat-bar.hidden {
+  display: none !important;
+}
+
+.hud-threat-icon  { display: inline-flex; flex-shrink: 0; }
+.hud-threat-text  { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.hud-threat-eta   { font-weight: 700; color: #ffb0b0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hud-threat-clock { color: #e0b070; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+@keyframes hud-threat-pulse {
+  0%, 100% { box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45); }
+  50%      { box-shadow: 0 2px 18px rgba(200, 30, 30, 0.55); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #hud-threat-bar { animation: none; }
 }
 
 /* Resources â€” left */
@@ -4294,16 +4346,41 @@ body.nav-open #screen-root {
   margin-bottom: 0.6rem;
 }
 .lov-section-row .lov-section-title { margin-bottom: 0; }
-.lov-army-power {
+/* The Army header's two readouts — ER (what this army can find) and PWR
+   (what it can field). One rule for both: they are peer stats about the same
+   army, so they carry identical weight rather than one reading as a footnote
+   to the other. Colour is what separates them, and on ER it also carries the
+   band. */
+.lov-army-power,
+.lov-army-er {
   font-size: 1.15rem;
   font-weight: 700;
   font-family: var(--font-display);
-  color: #c8b840;
   letter-spacing: 0.04em;
   white-space: nowrap;
-  text-shadow: 0 0 10px rgba(200,184,64,0.35);
 }
+.lov-army-power { color: #c8b840; text-shadow: 0 0 10px rgba(200,184,64,0.35); }
 .lov-army-power--over { color: #e05050; text-shadow: 0 0 10px rgba(220,80,80,0.4); }
+
+/* ER band colour — bronze → blue → violet, the same progression the
+   unit-tier medallions use. With the icon and the band name both gone this
+   is the ONLY band signal on screen, so the steps are kept far apart in hue:
+   Common is a dead warm grey (it is the no-scouts baseline and should look
+   like nothing), and nothing in the ladder reuses the PWR gold beside it.
+   The band name still reads in full in the tooltip. */
+.lov-army-er            { color: #9a9484; text-shadow: 0 0 10px rgba(154,148,132,0.28); }
+.lov-army-er--uncommon  { color: #c8933a; text-shadow: 0 0 10px rgba(200,147,58,0.38); }
+.lov-army-er--rare      { color: #a6cdf0; text-shadow: 0 0 10px rgba(95,146,196,0.45); }
+.lov-army-er--legendary { color: #eec6ff; text-shadow: 0 0 10px rgba(221,127,255,0.45); }
+
+/* ER + PWR pair, right-aligned as one group. */
+.lov-army-stats {
+  display: flex;
+  align-items: baseline;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 
 /* Army tab power chip — combat-strength score, informational only (not a
    recruit limit — that's the small .la-army-cp-inline readout above) */
@@ -5317,9 +5394,10 @@ body.nav-open #screen-root {
 .ov-cc-stat-value { color: var(--text-primary); font-weight: 600; display: flex; align-items: center; gap: 0.3rem; }
 
 .ov-cc-grow        { font-size: 0.7rem; font-weight: 700; }
+/* Two states only — a city's population always moves, so there is no neutral
+   growth colour (see EconomyCore.getPopGrowthRate). */
 .ov-cc-grow--up    { color: #5cdd5c; }
 .ov-cc-grow--down  { color: #e05050; }
-.ov-cc-grow--stable{ color: var(--text-muted); }
 .ov-cc-gold-rate { color: #f0c040; font-weight: 700; }
 
 .ov-cc-construction {
@@ -6068,6 +6146,10 @@ body.nav-open #screen-root {
 .cvl-unrest     { color: #e09030; border-color: #a05010; background: rgba(150,70,10,0.15); }
 .cvl-rioting    { color: #e05030; border-color: #a02010; background: rgba(150,30,10,0.15); }
 .cvl-critical   { color: #e02020; border-color: #900000; background: rgba(120,0,0,0.2); }
+/* Famine is not a tier of the civic ladder — it OVERRIDES the badge whenever a
+   city has no food, so it must not reuse a tier's colour. Violet reads as
+   "different kind of problem" against the green→red ladder. */
+.cvl-famine     { color: #d070e0; border-color: #7a2090; background: rgba(110,20,130,0.18); }
 
 /* =============================================
    CITY LEFT PANEL â€” redesigned header & stats
@@ -6128,9 +6210,29 @@ body.nav-open #screen-root {
   font-weight: 600;
   white-space: nowrap;
 }
+/* Two states only — see .ov-cc-grow--up above. */
 .pop-growing  { color: #5cc85c; }
 .pop-declining { color: #e05030; }
-.pop-stable   { color: var(--text-muted); }
+
+/* City-status → population-growth modifier, shown under the pop row so the
+   badge reads as a mechanic instead of decoration. Hidden at ×1.00. */
+.cvl-pop-statusfx {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.9rem 0.4rem;
+  gap: 0.5rem;
+  font-size: 0.66rem;
+}
+.cvl-pop-statusfx-src {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.cvl-pop-statusfx-val {
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 /* City panel stats section header (padded, for use directly in panel root) */
 .cvl-stats2-header {
@@ -8208,7 +8310,7 @@ body.nav-open #screen-root {
   font-weight: 600;
 }
 
-/* Passive trait card */
+/* Passive trait card — one per held talent since 2026-08-03, so they stack */
 .lsh-passive-card {
   display: flex;
   gap: 0.65rem;
@@ -8218,6 +8320,18 @@ body.nav-open #screen-root {
   border-radius: var(--radius-md);
   padding: 0.65rem 0.75rem;
 }
+
+.lsh-passive-card + .lsh-passive-card { margin-top: 0.4rem; }
+
+/* The "N talents to choose" placeholder that follows the held ones. Dashed and
+   muted so an unspent slot reads as an invitation, not as a held talent. */
+.lsh-passive-card--empty {
+  margin-top: 0.4rem;
+  background: transparent;
+  border-style: dashed;
+  opacity: 0.75;
+}
+.lsh-passive-card--empty .lsh-passive-name { color: var(--text-muted, #888); }
 
 .lsh-passive-icon { font-size: 1.3rem; line-height: 1; flex-shrink: 0; padding-top: 2px; }
 
@@ -8988,6 +9102,17 @@ body.nav-open #screen-root {
   padding: 0 0.3rem;
 }
 
+/* Wall-clock arrival under the travel countdown. Deliberately quieter than the
+   duration above it: the countdown is the decision, the clock time is the
+   planning detail. */
+.ac-route-clock {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: #8a8a8a;
+  letter-spacing: 0.04em;
+}
+
 .ac-instant-note {
   font-size: 0.75rem;
   color: #5db85d;
@@ -9408,6 +9533,20 @@ body.nav-open #screen-root {
 .lt-locked-icon   { font-size: 2rem; opacity: 0.5; }
 .lt-locked-text   { font-size: 0.9rem; }
 .lt-locked-hint   { font-size: 0.78rem; opacity: 0.7; }
+
+/* "N talent slots open" banner above the picker grid (multi-talent, 2026-08-03).
+   Sits between the already-chosen cards and the grid, so the reason the grid is
+   on screen at all is stated rather than implied. */
+.lt-slot-notice {
+  margin: 12px 0 2px;
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  color: var(--text-gold);
+  background: rgba(200, 147, 58, 0.09);
+  border: 1px solid rgba(200, 147, 58, 0.28);
+  border-radius: 8px;
+}
+.lt-slot-notice strong { color: var(--text-gold); }
 
 /* Talent cards grid */
 .lt-group-label {
@@ -9859,6 +9998,17 @@ body.nav-open #screen-root {
   white-space: nowrap;
 }
 
+/* Wall-clock finish time beside the countdown. Dimmer and tabular so a column
+   of marching lords reads as a schedule rather than as competing numbers. */
+.ov-mv-clock {
+  font-size: 0.62rem;
+  color: #6d6d6d;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  min-width: 3.2em;
+  text-align: right;
+}
+
 .ov-mv-row--attack {
   background: rgba(140, 10, 10, 0.18);
   border-left: 2px solid var(--danger-alert);
@@ -9906,6 +10056,14 @@ body.nav-open #screen-root {
 .ov-iab-countdown {
   font-weight: 700;
   color: #e07070;
+}
+
+/* The hour the attack lands. "Arrives in 12m" tells you to act now; "at 18:42"
+   is what you need to plan a defence around, so both are shown. */
+.ov-iab-clock {
+  font-weight: 700;
+  color: #e0b070;
+  font-variant-numeric: tabular-nums;
 }
 
 
@@ -11942,99 +12100,220 @@ body.nav-open #screen-root {
 }
 .rs-hint b { color: var(--gold-light); }
 
-/* ── The Merchant (Marketplace detail panel, city-view) ───────── */
+/* ── The Merchant (global nav screen) ─────────────────────────────
+   Trades the empire pool both ways. Was a strip inside the Marketplace's
+   detail panel, then a city tab, and is now a full screen of its own
+   (js/ui/merchant-screen.js) — so it owns its layout rather than borrowing
+   .bld3-detail's frame. One card per tradable resource; each card holds a
+   sell half and a buy half, colour-coded so the two directions are never
+   confused at a glance. */
 
-.mk-panel {
-  border-top: 1px solid var(--border-base);
-  padding: 0.6rem 0.9rem 0.7rem;
+.mk-screen {
+  padding: 1rem 1.1rem 2rem;
+  max-width: 1100px;
+  margin: 0 auto;
 }
+.mk-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.25rem;
+}
+.mk-head-title {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gold-light);
+}
+.mk-head-purse {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.mk-head-purse b { color: var(--gold-light); }
+
 .mk-cap {
   font-size: 0.74rem;
   color: var(--text-muted);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.9rem;
 }
 .mk-cap b { color: var(--gold-light); }
 .mk-cap-hint {
-  display: block;
   font-size: 0.66rem;
   opacity: 0.75;
 }
-.mk-row {
+
+.mk-cards {
   display: grid;
-  grid-template-columns: minmax(96px, 1fr) auto auto minmax(180px, auto);
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.32rem 0;
-  border-bottom: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 0.9rem;
 }
-.mk-row:last-of-type { border-bottom: none; }
-.mk-row-res {
+.mk-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-accent);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.mk-card-head {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.78rem;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-base);
+}
+.mk-card-res {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.9rem;
   color: var(--text-primary);
 }
-.mk-row-held {
-  font-size: 0.72rem;
+.mk-card-held {
+  font-size: 0.74rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-.mk-row-rate {
-  font-size: 0.68rem;
+
+/* The two halves of a card. The left accent bar is the only thing telling a
+   hurried player which direction they are about to commit to — gold for
+   selling (you receive coin), green for buying (you receive goods). */
+.mk-side {
+  padding: 0.6rem 0.75rem 0.7rem;
+  border-left: 3px solid transparent;
+}
+.mk-side--sell { border-left-color: rgba(200, 147, 58, 0.65); }
+.mk-side--buy  {
+  border-left-color: rgba(96, 168, 96, 0.65);
+  border-top: 1px solid var(--border-base);
+}
+.mk-side-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.mk-side-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+.mk-side-rate {
+  font-size: 0.66rem;
   color: var(--text-muted);
-  letter-spacing: 0.04em;
   white-space: nowrap;
 }
-.mk-row-actions {
+
+.mk-side-input {
   display: flex;
+  align-items: stretch;
   gap: 0.3rem;
-  justify-content: flex-end;
-  flex-wrap: wrap;
 }
-.mk-sell-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.22rem;
-  padding: 0.24rem 0.5rem;
-  font-size: 0.7rem;
+.mk-amount {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.3rem 0.45rem;
   font-family: inherit;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border-base);
+  border-radius: 3px;
+}
+.mk-amount:focus {
+  outline: none;
+  border-color: rgba(200, 147, 58, 0.7);
+}
+/* Spinners steal width in a field that already has ½ / All chips next to it. */
+.mk-amount::-webkit-outer-spin-button,
+.mk-amount::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.mk-amount { -moz-appearance: textfield; appearance: textfield; }
+
+.mk-chip {
+  flex: 0 0 auto;
+  padding: 0.24rem 0.45rem;
+  font-family: inherit;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid var(--border-base);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.mk-chip:hover {
+  color: var(--gold-light);
+  border-color: rgba(200, 147, 58, 0.6);
+}
+
+.mk-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+  min-height: 1.5rem;
+  margin: 0.35rem 0 0.45rem;
+  font-size: 0.72rem;
+  color: var(--text-secondary, var(--text-muted));
+  font-variant-numeric: tabular-nums;
+}
+.mk-preview b { color: var(--gold-light); }
+.mk-preview-muted { opacity: 0.6; }
+
+.mk-trade-btn {
+  width: 100%;
+  padding: 0.36rem 0.5rem;
+  font-family: inherit;
+  font-size: 0.76rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.mk-trade-btn--sell {
   color: var(--gold-light);
   background: rgba(200, 147, 58, 0.12);
   border: 1px solid rgba(200, 147, 58, 0.4);
-  border-radius: 3px;
-  cursor: pointer;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-  transition: background 0.12s, border-color 0.12s;
 }
-.mk-sell-btn:hover:not([disabled]) {
+.mk-trade-btn--sell:hover:not([disabled]) {
   background: rgba(200, 147, 58, 0.22);
   border-color: rgba(200, 147, 58, 0.7);
 }
-.mk-sell-btn[disabled] {
+.mk-trade-btn--buy {
+  color: #8ed08e;
+  background: rgba(96, 168, 96, 0.12);
+  border: 1px solid rgba(96, 168, 96, 0.4);
+}
+.mk-trade-btn--buy:hover:not([disabled]) {
+  background: rgba(96, 168, 96, 0.22);
+  border-color: rgba(96, 168, 96, 0.7);
+}
+.mk-trade-btn[disabled] {
   opacity: 0.35;
   cursor: not-allowed;
   color: var(--text-muted);
   border-color: var(--border-base);
   background: transparent;
 }
+
 .mk-note {
-  margin-top: 0.5rem;
-  font-size: 0.66rem;
-  line-height: 1.4;
+  margin-top: 1rem;
+  font-size: 0.68rem;
+  line-height: 1.5;
   color: var(--text-muted);
   opacity: 0.85;
-}
-
-/* Narrow screens: stack the row so the buttons keep their full labels. */
-@media (max-width: 640px) {
-  .mk-row {
-    grid-template-columns: 1fr auto;
-    row-gap: 0.25rem;
-  }
-  .mk-row-rate { grid-column: 2; text-align: right; }
-  .mk-row-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
 
 /* Active-research countdown + instant-finish (Research screen detail) */
@@ -12302,4 +12581,147 @@ body.nav-open #screen-root {
     gap: 0.15rem;
   }
   .acc-row-value { text-align: left; }
+}
+
+
+/* =============================================
+   CITY ITEMS TAB — cvit-* system
+   Items are found by expeditions and spent on ONE city for a fixed number of
+   hours (js/data/items.js). Two lists: what is working here, and the empire's
+   storehouse. Tier tints the card border so the ladder is readable at a glance.
+   ============================================= */
+
+.cvit-wrap { padding-bottom: 2rem; }
+
+.cvit-totals {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-success);
+  margin-bottom: 0.6rem;
+}
+
+.cvit-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 0.8rem;
+}
+
+.cvit-empty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 0.5rem 0;
+}
+
+/* ── Working in this city ─────────────────────────────── */
+
+.cvit-active-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  margin-bottom: 0.4rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  border-left: 3px solid var(--text-success);
+  border-radius: 4px;
+}
+
+.cvit-icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  color: var(--text-gold);
+}
+.cvit-icon .gi { width: 100%; height: 100%; fill: currentColor; }
+
+.cvit-body { flex: 1; min-width: 0; line-height: 1.3; }
+
+.cvit-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.cvit-effect {
+  font-size: 0.72rem;
+  color: var(--text-success);
+}
+
+.cvit-timer {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Storehouse ───────────────────────────────────────── */
+
+.cvit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.7rem;
+}
+
+.cvit-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-muted);
+  border-top: 2px solid var(--border-base);
+  border-radius: 5px;
+}
+
+/* Tier tint — same ladder the item catalog uses (1 common → 3 rare). */
+.cvit-card--t1 { border-top-color: var(--border-base); }
+.cvit-card--t2 { border-top-color: #4a7ab8; }
+.cvit-card--t3 { border-top-color: var(--border-gold); }
+
+.cvit-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cvit-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-gold-light);
+  font-variant-numeric: tabular-nums;
+}
+
+.cvit-card-summary {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-success);
+}
+
+.cvit-card-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.45;
+  flex: 1;
+}
+
+/* The label carries the city name, which can be long — .bld2-btn is nowrap by
+   default and would push it out of the card. */
+.cvit-apply {
+  margin-top: 0.2rem;
+  white-space: normal;
+}
+
+/* An item spoil chip in the quest log gets more room than a "+240 wood" one:
+   it prints a name and an effect instead of a number and a unit. */
+.qd-spoil--item .qd-spoil-value {
+  font-size: 0.7rem;
+  color: var(--text-success);
+}
+
+@media (max-width: 640px) {
+  .cvit-grid { grid-template-columns: 1fr; }
 }

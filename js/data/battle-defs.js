@@ -28,7 +28,7 @@ var TERRAIN_BATTLE_MODS = {
 
 // ── Base loot by level — scaled by each camp's rewardMultiplier ──────
 //
-// resMin/resMax: a single random resource type (food/wood/stone) in
+// resMin/resMax: a single random resource type (wood/stone/food) in
 // this range is granted alongside gold on victory — camps are assumed to
 // hold plundered goods, same flavor as the coin_cache-style discoveries.
 

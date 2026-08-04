@@ -40,7 +40,7 @@ export async function handleCancelBuild(req, res) {
   const CANCEL_BUILD_REFUND = 0.75;
 
   const refund = def ? def.cost(item.targetLevel) : {};
-  player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
+  player.resources = player.resources || { wood: 0, stone: 0, food: 0 };
   for (const [rKey, amt] of Object.entries(refund)) {
     if (amt > 0) player.resources[rKey] = (player.resources[rKey] || 0) + Math.floor(amt * CANCEL_BUILD_REFUND);
   }

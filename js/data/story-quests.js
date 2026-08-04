@@ -11,7 +11,7 @@
 //    bandit  (15) — combat encounters. Shown for category:'combat'.
 //    lore    (45) — atmosphere only, no reward. Shown for category:'nothing'.
 //    reward  (75) — story + the normal reward already resolved server-side.
-//                   Shown for category:'resource'|'event'|'trade'.
+//                   Shown for category:'resource'|'item'|'trade'.
 //    jackpot (15) — rare, dramatic, big-reward finds.
 //                   Shown for category:'legendary'.
 //
@@ -195,13 +195,14 @@ var STORY_QUESTS = {
 };
 
 // Category → story tier mapping. Combat maps to bandit stories, nothing
-// maps to no-reward lore, resource/event/trade share the reward pool,
+// maps to no-reward lore, resource/item/trade share the reward pool,
 // legendary maps to the rare jackpot pool.
+// ('item' was 'event' until 2026-08-04 — see js/data/items.js.)
 var STORY_QUEST_TIER_BY_CATEGORY = {
   combat:    'bandit',
   nothing:   'lore',
   resource:  'reward',
-  event:     'reward',
+  item:      'reward',
   trade:     'reward',
   legendary: 'jackpot',
 };

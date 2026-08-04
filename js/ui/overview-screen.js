@@ -12,8 +12,7 @@ const OverviewScreen = (() => {
   let _lordsCollapsed  = false;
   let _selectedClass   = null;
   let _prisonList      = []; // lords the player currently holds captive — fetched async, see render()
-  let _incoming        = []; // enemy attack-marches heading at our tiles — fetched async + every 30s, see render()
-  let _incomingTimer   = null;
+  let _incoming        = []; // enemy attack-marches heading at our tiles — owned by HUD.js, mirrored here via 'threats:changed'
   let _densityInitialized = false; // one-time: default Cities/Lords collapsed for returning players so the dashboard opens on Movements, not everything at once
 
   // ── Entry point ───────────────────────────────────────────────
@@ -42,28 +41,17 @@ const OverviewScreen = (() => {
     });
 
     // Incoming attacks are DERIVED cross-player state (enemy attack-marches
-    // aimed at our tiles) — same async-patch pattern, refreshed every 30s
-    // while this screen is mounted. Deliberately never in the Activity tab.
-    _fetchIncoming();
-    if (_incomingTimer) clearInterval(_incomingTimer);
-    _incomingTimer = setInterval(_fetchIncoming, 30000);
+    // aimed at our tiles). The scan is OWNED BY HUD.js since 2026-08-03, so it
+    // keeps running on every other screen too — this screen used to hold the
+    // only poll in the game, which meant a defender anywhere else was never
+    // warned. Read the current list on mount, then follow it by event.
+    // Deliberately still never in the Activity tab.
+    _incoming = HUD.getThreats();
   }
 
   function stop() {
     _stopTicker();
     _unsubscribeAlerts();
-    if (_incomingTimer) { clearInterval(_incomingTimer); _incomingTimer = null; }
-  }
-
-  async function _fetchIncoming() {
-    try {
-      const result = await ServerActions.checkIncomingAttacks();
-      if (!result.ok) return;
-      const list    = result.incoming || [];
-      const changed = JSON.stringify(list) !== JSON.stringify(_incoming);
-      _incoming = list;
-      if (changed) _rerender();
-    } catch (_) { /* non-fatal — retried on the next interval */ }
   }
 
   // PvP/activity alerts are now polled globally by HUD.js (so they fire on
@@ -74,8 +62,20 @@ const OverviewScreen = (() => {
     _player = PlayerService.getById(_player.id);
     if (_root) { _root.innerHTML = _shell(); _bindEvents(); _startTicker(); }
   }
-  function _subscribeAlerts()   { EventBus.on('pvp:alert', _onPvpAlert); }
-  function _unsubscribeAlerts() { EventBus.off('pvp:alert', _onPvpAlert); }
+  // Same arrangement for the incoming-attack scan: HUD polls, this screen
+  // mirrors. The banner is the detailed half of HUD's one-line strip.
+  function _onThreatsChanged(payload) {
+    _incoming = payload?.incoming || [];
+    _rerender();
+  }
+  function _subscribeAlerts() {
+    EventBus.on('pvp:alert', _onPvpAlert);
+    EventBus.on('threats:changed', _onThreatsChanged);
+  }
+  function _unsubscribeAlerts() {
+    EventBus.off('pvp:alert', _onPvpAlert);
+    EventBus.off('threats:changed', _onThreatsChanged);
+  }
 
   // Show any offline-progression notifications queued by App.init's /api/sync call.
   function _flushSyncEvents() {
@@ -91,11 +91,19 @@ const OverviewScreen = (() => {
       recruitment_completed: e => `⚔️ ${e.cityName}: ${e.count}× ${e.unitId.replace(/_/g, ' ')} ready`,
       lord_recovered:        e => `❤️ ${e.lordName} has recovered`,
       blessing_lapsed:       e => `⛪ ${(typeof BLESSING_DEFS !== 'undefined' && BLESSING_DEFS[e.blessingId]?.name) || 'Your blessing'} has lapsed`,
-      lord_action_done:      e => e.destX != null ? `🗺️ ${e.lordName} arrived at (${e.destX}, ${e.destY})` : null,
+      // These two report things that happened WHILE YOU WERE AWAY, so the hour
+      // is part of the news — "arrived at (5, 3)" reads as just-now otherwise,
+      // which is the same lie the feed timestamps told until 2026-08-03. `at`
+      // is the action's own finishAt (server/tick/catch-up.js); absent on
+      // events from an older server, in which case the toast simply omits it.
+      lord_action_done:      e => e.destX != null
+        ? `🗺️ ${e.lordName} arrived at (${e.destX}, ${e.destY})${e.at ? ` · ${TimeService.formatClock(e.at)}` : ''}`
+        : null,
       raid_complete:         e => {
         const r     = e.resources || {};
-        const extra = ['food', 'wood', 'stone'].filter(k => r[k] > 0).map(k => `+${r[k]} ${k}`).join(', ');
-        return `🏴 ${e.lordName || 'Your lord'}'s raid ended: +${e.goldEarned || 0} gold${extra ? `, ${extra}` : ''}`;
+        const extra = ['wood', 'stone', 'food'].filter(k => r[k] > 0).map(k => `+${r[k]} ${k}`).join(', ');
+        const when  = e.at ? ` (${TimeService.formatClock(e.at)})` : '';
+        return `🏴 ${e.lordName || 'Your lord'}'s raid ended${when}: +${e.goldEarned || 0} gold${extra ? `, ${extra}` : ''}`;
       },
       pvp_resolved:          e => {
         const icon = e.report?.winner === 'attacker' ? '⚔️' : e.report?.winner === 'draw' ? '🤝' : '💀';
@@ -218,22 +226,17 @@ const OverviewScreen = (() => {
         }
       });
 
-      // Incoming-attack countdowns: patch in place; when one reaches zero
-      // the battle is resolving — drop it and re-scan (the result itself
-      // arrives via the HUD's pvp:alert poll).
+      // Incoming-attack countdowns: patch in place. Expiry is NOT handled here
+      // any more — HUD owns the list and drops landed marches on its own 1s
+      // tick, then emits 'threats:changed', which re-renders this screen. Two
+      // owners pruning the same array raced each other and could re-scan twice
+      // for one landing.
       if (_incoming.length > 0) {
-        const now2   = TimeService.now();
-        const before = _incoming.length;
-        _incoming = _incoming.filter(t => t.finishAt > now2);
-        if (_incoming.length !== before) {
-          needsRerender = true;
-          _fetchIncoming();
-        } else {
-          _incoming.forEach((t, i) => {
-            const el = document.getElementById(`ov-threat-eta-${i}`);
-            if (el) el.textContent = TimeService.formatDuration(Math.max(0, Math.ceil((t.finishAt - now2) / 1000)));
-          });
-        }
+        const now2 = TimeService.now();
+        _incoming.forEach((t, i) => {
+          const el = document.getElementById(`ov-threat-eta-${i}`);
+          if (el) el.textContent = TimeService.formatDuration(Math.max(0, Math.ceil((t.finishAt - now2) / 1000)));
+        });
       }
 
       if (needsRerender) {
@@ -259,7 +262,8 @@ const OverviewScreen = (() => {
           <div class="ov-iab-text">
             <div class="ov-iab-title">Incoming attack from ${t.attackerName} (Lv ${t.attackerLevel})!</div>
             <div class="ov-iab-detail">Target: ${t.targetType === 'city' ? gi('guarded-tower') : gi('person')} ${t.targetName} at (${t.tileX}, ${t.tileY}) · arrives in
-              <span class="ov-iab-countdown" id="ov-threat-eta-${i}">${TimeService.formatDuration(remaining)}</span></div>
+              <span class="ov-iab-countdown" id="ov-threat-eta-${i}">${TimeService.formatDuration(remaining)}</span>
+              · at <span class="ov-iab-clock">${TimeService.formatClock(t.finishAt)}</span></div>
           </div>
         </div>`;
     }).join('');
@@ -469,6 +473,11 @@ const OverviewScreen = (() => {
             <div class="ov-mv-bar-wrap">
               <div class="ov-mv-bar"><div class="ov-mv-fill${isAttacking ? ' ov-mv-fill--attack' : ''}${isRaidingRow ? ' ov-mv-fill--raiding' : ''}" id="ov-mv-fill-${lord.id}" style="transform:scaleX(${pct / 100})"></div></div>
               <span class="ov-mv-time" id="ov-mv-time-${lord.id}">${TimeService.formatDuration(secs)}</span>
+              <!-- The hour it lands. Rendered once and never touched by the
+                   ticker above (which only rewrites #ov-mv-time-*): finishAt
+                   does not move, so re-deriving it every second would be a
+                   second timer doing the same arithmetic. -->
+              <span class="ov-mv-clock">${TimeService.formatClock(qItem ? qItem.finishAt : stanceObj.finishAt)}</span>
             </div>` : ''}
         </div>`;
     }).join('');
@@ -497,7 +506,10 @@ const OverviewScreen = (() => {
   function _citiesSection() {
     const cities     = CityService.getPlayerCities(_player.id);
     const cards      = cities.length ? cities.map(_cityCard).join('') : '';
-    const atLimit    = cities.length >= 5;
+    // Same stale hardcoded 5 the lords section carried — see _lordsSection.
+    // Frontier Charters research is the cap now (2026-08-03).
+    const citySlots  = CityService.getCitySlots(_player.id);
+    const atLimit    = cities.length >= citySlots;
     const foundCost  = CityService.getFoundCost(cities.length);
     const coins      = PlayerService.getById(_player.id)?.coins || 0;
     const canAfford  = foundCost === 0 || coins >= foundCost;
@@ -509,8 +521,10 @@ const OverviewScreen = (() => {
         <div class="ov-section-row">
           <div class="ov-section-title">
             Cities
-            <span class="ov-limit-badge">${cities.length}/5</span>
-            ${!atLimit ? `<span class="ov-cost-hint">${costLabel} to found</span>` : ''}
+            <span class="ov-limit-badge">${cities.length}/${citySlots}</span>
+            ${!atLimit
+              ? `<span class="ov-cost-hint">${costLabel} to found</span>`
+              : `<span class="ov-cost-hint">${gi('book-pile')} Frontier Charters for another</span>`}
           </div>
           <button class="ov-section-toggle" id="ov-toggle-cities">${_citiesCollapsed ? '▼' : '▲'}</button>
         </div>
@@ -534,8 +548,10 @@ const OverviewScreen = (() => {
     const stats      = CityStatsService.getStats(city);
     const slotInfo   = CityStatsService.getSlotInfo(city);
     const prodRates  = ProductionService.getRates(city);
-    const growth     = CityStatsService.getPopulationGrowthRate(city, stats, prodRates);
-    const status     = CityStatsService.getCityStatus(stats, growth);
+    // getGrowthReport, not getCityStatus — this card used to label a starving
+    // city "Stable" with no hint that it was shrinking (see city-stats.js).
+    const report     = CityStatsService.getGrowthReport(city, stats, prodRates);
+    const growth     = report.growth;
     const buildItem  = city.constructionQueue.length > 0 ? city.constructionQueue[0] : null;
     const buildDef   = buildItem ? BUILDING_DEFS[buildItem.buildingId] : null;
     const buildPct   = buildItem ? Math.floor(ConstructionService.progress(city) * 100) : 0;
@@ -545,9 +561,8 @@ const OverviewScreen = (() => {
 
     const tierName = `Tier ${slotInfo.level}`;
 
-    const growthSymbol = growth > 0 ? '▲' : growth < 0 ? '▼' : '─';
-    const growthClass  = growth > 0 ? 'ov-cc-grow--up' : growth < 0 ? 'ov-cc-grow--down' : 'ov-cc-grow--stable';
-    const growthLabel  = growth !== 0 ? ` ${growth > 0 ? '+' : ''}${growth}/hr` : '';
+    const growthClass  = growth > 0 ? 'ov-cc-grow--up' : 'ov-cc-grow--down';
+    const growthLabel  = ` ${growth > 0 ? '+' : ''}${growth}/hr`;
 
     return `
       <div class="ov-city-card${_underThreat(city.x, city.y) ? ' ov-card--threat' : ''}" data-city-id="${city.id}">
@@ -562,7 +577,7 @@ const OverviewScreen = (() => {
           </div>
           <div class="ov-cc-name-row">
             <span class="ov-cc-name">${city.name}</span>
-            <span class="cvl-status-badge cvl-${status.id}">${status.label}</span>
+            <span class="cvl-status-badge cvl-${report.badgeId}" title="${report.title}">${report.badgeLabel}</span>
           </div>
           <div class="ov-cc-coords">(${city.x}, ${city.y})</div>
           <div class="ov-cc-divider"></div>
@@ -571,7 +586,7 @@ const OverviewScreen = (() => {
               <span class="ov-cc-stat-label">Population</span>
               <span class="ov-cc-stat-value">
                 ${Math.floor(city.population)}
-                <span class="ov-cc-grow ${growthClass}">${growthSymbol}${growthLabel}</span>
+                <span class="ov-cc-grow ${growthClass}" title="${report.title}">${report.sign}${growthLabel}</span>
               </span>
             </div>
             <div class="ov-cc-stat">
@@ -632,7 +647,11 @@ const OverviewScreen = (() => {
 
   function _lordsSection() {
     const lords       = LordService.getByPlayer(_player.id);
-    const atLimit     = lords.length >= 5;
+    // Was a hardcoded 5, in BOTH the gate and the badge, while the server
+    // allowed 7 — the badge read "5/5" on an account that could still recruit
+    // two more. The cap is Codes of Command research now (2026-08-03).
+    const lordSlots   = LordService.getLordSlots(_player.id);
+    const atLimit     = lords.length >= lordSlots;
     const recruitCost = LordService.getRecruitCost(lords.length);
     const coins       = PlayerService.getById(_player.id)?.coins || 0;
     const canAfford   = coins >= recruitCost;
@@ -644,8 +663,10 @@ const OverviewScreen = (() => {
         <div class="ov-section-row">
           <div class="ov-section-title">
             Lords
-            <span class="ov-limit-badge">${lords.length}/5</span>
-            ${!atLimit ? `<span class="ov-cost-hint">${costLabel} to recruit</span>` : ''}
+            <span class="ov-limit-badge">${lords.length}/${lordSlots}</span>
+            ${!atLimit
+              ? `<span class="ov-cost-hint">${costLabel} to recruit</span>`
+              : `<span class="ov-cost-hint">${gi('book-pile')} Codes of Command for another</span>`}
           </div>
           <button class="ov-section-toggle" id="ov-toggle-lords">${_lordsCollapsed ? '▼' : '▲'}</button>
         </div>

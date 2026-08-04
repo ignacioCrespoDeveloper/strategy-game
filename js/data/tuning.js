@@ -16,6 +16,7 @@
 //    questGold           Gold from questing      (expeditions + ambush loot)
 //    questResources      Resources from questing (expeditions + ambush loot)
 //    travelTime          Travel time             (>1 = SLOWER, <1 = faster)
+//    buildTime           Building construction   (>1 = SLOWER, <1 = faster)
 //
 //  ── HOW TO USE IT ────────────────────────────────────────────────
 //  Change one dial at a time, then run:
@@ -97,7 +98,37 @@ var TUNING = {
   //
   // Does NOT change march FOOD cost — that is per tile, not per second, so
   // slowing travel down does not quietly make marching more expensive.
-  travelTime: 1.0,
+  //
+  // 1.0 → 5.0 on 2026-08-03 (Nacho's call). At 1.0 the ENTIRE 20×10 world was
+  // 6m20s wide at base speed and 3m31s on an apex mount, so there was no
+  // strategic geography at all: every target was equally close and the 60s
+  // attack floor, not distance, decided how long a strike took. At 5.0 a march
+  // to a neighbour three tiles away takes 5 minutes — a real warning window —
+  // and crossing the map takes half an hour.
+  //
+  // VERIFIED FREE: `economy-projection.js --dial travelTime=8` produces income
+  // identical to 1.0 to the last digit, because travel only reaches the income
+  // model as a one-tile hop between expeditions (~17s against a 900s search).
+  // This is a FEEL and PvP-reachability dial, not an income one — which is why
+  // it could move this far without re-opening the pacing you approved.
+  travelTime: 5.0,
+
+  // Building construction. Applied in EconomyCore.getBuildTime — the ONE
+  // function the server's enqueue (server/actions/build.js) and every client
+  // display both call, so the queue and the tooltip can never disagree.
+  //
+  // 1.0 → 1/3 on 2026-08-04 (Nacho's call): everything is 3× FASTER to build.
+  //
+  // Stacks MULTIPLICATIVELY with the two construction speed-ups that already
+  // existed — the Town Hall's ÷(1+level) divisor and construction_speed % from
+  // race/Engineering Tomes — but is applied BEFORE the max(5, …) floor, so no
+  // build can be dialled below 5 seconds no matter how the three compound.
+  //
+  // NOT an income dial: build time gates how fast a player converts a
+  // stockpile into production, not how much they earn per hour. Costs are
+  // untouched, so the resource curve the economy projection models is the
+  // same — this only shortens the waiting.
+  buildTime: 1 / 3,
 };
 
 // Safe reader. Returns 1.0 for an unknown or non-numeric dial so a typo in

@@ -18,7 +18,7 @@
 
 const ProductionService = (() => {
 
-  // Resource rates (food/wood/stone) per hour for a city:
+  // Resource rates (wood/stone/food) per hour for a city:
   // building output × (race + Library research) bonuses × terrain multipliers.
   //
   // The race is derived HERE, from the player's main lord (player.lordId) —
@@ -35,11 +35,18 @@ const ProductionService = (() => {
     const research = EconomyCore.getResearchEffects(player?.research);
     // God of Nature blessing: % production, additive with race + research.
     const blessing = EconomyCore.getBlessingEffects(player?.activeBlessing, TimeService.now());
+    // City items (js/data/items.js): the only bonus in this sum that belongs to
+    // ONE city rather than the whole empire. Instantaneous form — this function
+    // answers "what is this city making right now", which is a display question.
+    // The authoritative accrual in server/tick/catch-up.js uses the TIME-WEIGHTED
+    // form instead; see EconomyCore.getCityItemEffects for why they differ.
+    const items    = EconomyCore.getCityItemEffects(city, TimeService.now());
     const bonuses  = {};
-    ['food', 'wood', 'stone'].forEach(r => {
+    EconomyCore.RESOURCE_KEYS.forEach(r => {
       bonuses[r + '_production'] = (race?.bonuses?.[r + '_production'] || 0)
         + (research[r + '_production'] || 0)
-        + (blessing[r + '_production'] || 0);
+        + (blessing[r + '_production'] || 0)
+        + (items[r + '_production'] || 0);
     });
     return EconomyCore.getRates(
       city.buildings,
@@ -52,7 +59,7 @@ const ProductionService = (() => {
   // scales it empire-wide (same multiplier the server applies in catch-up).
   function getGoldRate(city) {
     const stats  = CityStatsService.getStats(city);
-    const base   = EconomyCore.getGoldRate(city.buildings, city.population, stats.happiness);
+    const base   = EconomyCore.getGoldRate(city.buildings, city.population, stats.happiness, stats.corruption);
     const player = PlayerService.getById(city.playerId);
     const fx     = EconomyCore.getBlessingEffects(player?.activeBlessing, TimeService.now());
     return Math.floor(base * (1 + (fx.gold_income_bonus || 0)));
@@ -79,7 +86,7 @@ const ProductionService = (() => {
     const player   = PlayerService.getById(playerId);
 
     if (player) {
-      if (!player.resources) player.resources = { food: 0, wood: 0, stone: 0 };
+      if (!player.resources) player.resources = { wood: 0, stone: 0, food: 0 };
       delete player.resources.iron; // legacy resource, removed in the OGame overhaul
 
       // ── Resource production → empire pool ─────────────────────

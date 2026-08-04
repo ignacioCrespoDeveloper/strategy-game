@@ -55,7 +55,7 @@ export async function handleBlessingConsecrate(req, res) {
   }
 
   // The offering is charged per hour, so a longer rite costs proportionally
-  // more. blessingCost returns { gold, food, wood, stone }, never a bare number,
+  // more. blessingCost returns { gold, wood, stone, food }, never a bare number,
   // and WHICH of those are non-zero depends on the blessing: each is billed in
   // the currency it does not produce (BLESSING_COST_MIX). Passing blessingId is
   // mandatory in spirit — omitting it silently charges the dearest profile.
@@ -64,7 +64,7 @@ export async function handleBlessingConsecrate(req, res) {
 
   const short = [];
   if (have.gold < cost.gold) short.push(`${cost.gold.toLocaleString()} gold (have ${Math.floor(have.gold).toLocaleString()})`);
-  for (const r of ['food', 'wood', 'stone']) {
+  for (const r of ['wood', 'stone', 'food']) {
     if (Math.floor(have[r] || 0) < cost[r]) {
       short.push(`${cost[r].toLocaleString()} ${r} (have ${Math.floor(have[r] || 0).toLocaleString()})`);
     }
@@ -78,7 +78,7 @@ export async function handleBlessingConsecrate(req, res) {
 
   player.coins     = (player.coins || 0) - cost.gold;
   player.resources = player.resources || {};
-  for (const r of ['food', 'wood', 'stone']) {
+  for (const r of ['wood', 'stone', 'food']) {
     player.resources[r] = (player.resources[r] || 0) - cost[r];
   }
 

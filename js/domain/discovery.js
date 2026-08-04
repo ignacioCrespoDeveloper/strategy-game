@@ -132,11 +132,17 @@ const DiscoveryService = (() => {
   function _getLog()        { return StorageService.get(LOG_KEY) || {}; }
   function _saveLog(data)   { StorageService.set(LOG_KEY, data); }
 
+  // `entry.loggedAt` may be supplied by the caller when the result being
+  // logged did not happen just now — an expedition that resolved server-side
+  // while the browser was closed carries its own finish time (catch-up.js
+  // stamps it, sync.js forwards it as `at`). Defaulting to the clock is only
+  // right for the live path; doing it unconditionally, as this did until
+  // 2026-08-03, is what made a three-day-old quest read "just now".
   function addLog(playerId, entry) {
     const all = _getLog();
     if (!all[playerId]) all[playerId] = [];
     const id  = 'log_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
-    all[playerId].unshift({ id, ...entry, loggedAt: TimeService.now() });
+    all[playerId].unshift({ id, ...entry, loggedAt: entry.loggedAt || TimeService.now() });
     if (all[playerId].length > 100) all[playerId] = all[playerId].slice(0, 100);
     _saveLog(all);
   }
@@ -208,13 +214,19 @@ const DiscoveryService = (() => {
         recruits: evt.recruits || undefined,
         lordId:   evt.lordId   || undefined,
         lordName: evt.lordName || undefined,
+        loggedAt: evt.at || undefined,
       });
 
       // Activity-tab entry — the only notification quests produce.
       const def       = DEFS[evt.defId] || null;
       const name      = def?.name || 'A discovery';
+      // Items carry no `amount` (the item IS the payout), so they name
+      // themselves — the same rule lord-screen.js's online path follows.
       const rewardStr = (evt.rewards || []).filter(r => r.type !== 'xp')
-        .map(r => `+${r.amount} ${r.type}`).join(', ');
+        .map(r => r.type === 'item'
+          ? (typeof ITEM_DEFS !== 'undefined' && ITEM_DEFS[r.itemId]?.name) || 'Item'
+          : `+${r.amount} ${r.type}`)
+        .join(', ');
       // XP is normally left out of the summary — it's the least interesting
       // line when there is loot to report. But an expedition that found
       // NOTHING still earns it, and suppressing it there left the entry with
@@ -244,6 +256,11 @@ const DiscoveryService = (() => {
           // it the entry can only fall back to matching on lordName.
           lordId:   evt.lordId   || null,
           lordName: evt.lordName || '',
+          // The expedition's own finish time. ActivityService.log spreads the
+          // entry over its `at: TimeService.now()` default, so supplying it
+          // here is what stops a batch of offline results from all filing
+          // under the same login minute.
+          ...(evt.at ? { at: evt.at } : {}),
         });
       }
       count++;

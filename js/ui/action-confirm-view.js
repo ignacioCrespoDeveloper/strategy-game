@@ -106,6 +106,15 @@ const ActionConfirmView = (() => {
       </div>`).join('')}</div>`;
   }
 
+  // The wall-clock time an order of `secs` finishes at. Every Duration row is
+  // paired with one of these: "how long" and "when" are different questions,
+  // and a player deciding whether to commit a lord for 30 minutes is really
+  // asking the second one. `verb` names what happens at that hour ("Returns",
+  // "Reports", "Ends") rather than repeating "Finishes" three times.
+  function _endsRow(secs, verb) {
+    return { label: `${gi('hourglass')} ${verb}`, value: TimeService.endsAtClock(secs) };
+  }
+
   // ── Quest ─────────────────────────────────────────────────────
   // The only action with a parameter to choose, so the length picker lives
   // here and every number below reacts to it.
@@ -166,6 +175,7 @@ const ActionConfirmView = (() => {
 
     const rows = [
       { label: `${gi('stopwatch')} Duration`,        value: TimeService.formatDuration(secs) },
+      _endsRow(secs, 'Returns'),
       { label: `${gi('two-coins')} Reward`,          value: `×${(L.reward * (1 - F.reward * loudness)).toFixed(2)}` },
       { label: `${gi('fog')} Chance of nothing`,     value: `${Math.round(odds.nothing * 100)}%`, warn: loudness > 0 || tier.nothing > 1 },
       { label: `${gi('hazard-sign')} Ambush risk`,   value: `×${(L.risk * (1 + F.combat * loudness)).toFixed(2)}`, warn: loudness > 0 },
@@ -250,6 +260,7 @@ const ActionConfirmView = (() => {
     const secs = LordService.getActionDuration(_lord, 'scout');
     const rows = [
       { label: `${gi('stopwatch')} Duration`, value: TimeService.formatDuration(secs) },
+      _endsRow(secs, 'Reports'),
       { label: `${gi('spy')} Gathers`,        value: 'Enemy city + lord intel on this tile' },
     ];
     return `
@@ -274,6 +285,7 @@ const ActionConfirmView = (() => {
 
     const rows = [
       { label: `${gi('stopwatch')} Duration`, value: TimeService.formatDuration(secs) },
+      _endsRow(secs, 'Ends'),
     ];
     if (rates) {
       rows.push({ label: `${gi('two-coins')} Expected gold`, value: `~${Math.floor(rates.gold * hours).toLocaleString()}` });

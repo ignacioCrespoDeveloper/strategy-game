@@ -122,10 +122,11 @@ var BattleEngine = (() => {
       })
       .filter(Boolean);
 
-    // Apply combat talent traits/bonuses to the lord's battle unit
+    // Apply combat talent traits/bonuses to the lord's battle unit — merged
+    // across every talent the lord holds (up to four since 2026-08-03).
     const talentEffects = (typeof LordService !== 'undefined')
       ? LordService.getTalentEffects(lord)
-      : ((typeof TALENT_POOL !== 'undefined' && lord.talentId) ? (TALENT_POOL[lord.talentId]?.effects || {}) : {});
+      : ((typeof lordTalentEffects !== 'undefined') ? lordTalentEffects(lord) : {});
 
     if (talentEffects.battleUnitAttackBonus)  lordUnit.attack  += talentEffects.battleUnitAttackBonus;
     if (talentEffects.battleUnitDefenseBonus) lordUnit.defense += talentEffects.battleUnitDefenseBonus;
@@ -198,16 +199,73 @@ var BattleEngine = (() => {
   // suspiciously low number reads as "that target is heavily armored" rather
   // than looking like a broken engine. Armor-piercing attackers bypass most
   // of that reduction, so they rarely (correctly) trigger this flag.
-  function _computeDamage(attacker, target, phase, terrainMods) {
-    let baseDmg   = attacker.attack * _stackDamageMult(attacker.count) * _rand(0.85, 1.15);
-    let reduction = target.defense * 0.4;
+  // How much of the target's defense stat is subtracted from an incoming swing.
+  // PER MODEL — see the note below.
+  // Swept against test-balance.js on 2026-08-03 after the per-model change.
+  // The old 0.4 was calibrated for PER-STACK subtraction, where a deep stack
+  // paid it once; per model it is punishing, and it lands hardest on cheap
+  // low-attack chaff whose whole swing is smaller than the reduction:
+  //
+  //   k     race bands out of 38-62%          worst archetype
+  //   0.40  orc start 11.6, dark elf 84.5     orc/blocks 20.3
+  //   0.30  orc start 21.2, dark elf 75.7     orc/blocks 23.4
+  //   0.25  orc start 29.8, dark elf 68.2     orc/blocks 23.5
+  //   0.20  ALL PASS (orc 39.0, dark elf 60.4) orc/swarm 76.8
+  //   0.15  ALL PASS (orc 50.9, dark elf 52.6) orc/swarm 81.4
+  //
+  // 0.20 is the value where every race band comes back inside its window with
+  // the least disturbance to the rest of the curve. Lower than that and cheap
+  // mass starts running away with it (orc/swarm climbing past its ceiling),
+  // which is the same swarm problem the `coward` morale tax exists to price.
+  const ARMOR_REDUCTION = 0.20;
+
+  function _computeDamage(attacker, target, phase, terrainMods, modelsOverride) {
+    // ARMOR IS SUBTRACTED PER MODEL, NOT PER STACK (fixed 2026-08-03).
+    //
+    // This used to read:
+    //     baseDmg   = attack × count × rand
+    //     reduction = defense × 0.4
+    //     finalDmg  = max(1, baseDmg − reduction)
+    //
+    // Damage scaled with the stack's model count but the armour subtraction did
+    // not, so a target's defense was amortised across however many models the
+    // attacker happened to have in one stack. Twenty models in ONE stack ate the
+    // reduction once; the same twenty models split across twenty stacks ate it
+    // twenty times, for the same PWR and the same units. Measured before the
+    // fix: one deep stack of 20 beat twenty stacks of 1 of the IDENTICAL unit
+    // 100% of the time. That is not a preference for concentration, it is an
+    // arithmetic error, and it silently defeated the whole point of the
+    // 2026-07-27 linear-damage pass — whose stated goal was that army SHAPE be
+    // cost-neutral so composition could be about roles and traits.
+    //
+    // Now each model's swing is reduced individually and the stack's output is
+    // the sum, which is what "twenty soldiers each hitting an armoured target"
+    // has always meant. Consequences that are intended, not side effects:
+    //   • armour is meaningfully stronger against many weak hits (a 3-attack
+    //     model can no longer meaningfully hurt a 20-defense target, and the
+    //     max(1, …) floor means it contributes 1 rather than nothing);
+    //   • total damage from deep stacks drops (~20% at median stats), so
+    //     battles run longer. The round cap and morale absorb this;
+    //   • armor_piercing gets MORE valuable, since the reduction it cuts is now
+    //     paid per model.
+    // `modelsOverride` is how many of the stack's models are swinging in THIS
+    // attack. _executeAttack splits a stack into groups that each pick their
+    // own target (see MAX_ATTACK_GROUPS), so it passes the group's share here.
+    // Absent → the whole stack, which is what every other caller means.
+    const models  = _stackDamageMult(modelsOverride ?? attacker.count);
+    let perModel  = attacker.attack * _rand(0.85, 1.15);
+    let reduction = target.defense * ARMOR_REDUCTION;
 
     // armor_piercing nearly bypasses defense
     if (attacker.traits.includes('armor_piercing')) reduction *= 0.20;
 
-    const heavyArmor = reduction >= baseDmg * 0.55;
+    // Now a per-MODEL judgement, which is what the flag always meant to report:
+    // "this target's armour is eating most of each blow". Comparing against the
+    // whole stack's output made it fire less and less often the deeper the
+    // stack got, regardless of how armoured the target actually was.
+    const heavyArmor = reduction >= perModel * 0.55;
 
-    let finalDmg = Math.max(1, baseDmg - reduction);
+    let finalDmg = Math.max(1, perModel - reduction) * models;
 
     // charge phase: flat multiplier then terrain. ×1.4 since 2026-07-27 —
     // the old ×2.0 was tuned when stack damage was dampened (count^0.8);
@@ -299,7 +357,18 @@ var BattleEngine = (() => {
     // fire_attack: mark target as burning (suppresses regen next end-of-round)
     if (attacker.traits.includes('fire_attack')) target._burning = true;
 
-    return { damage: Math.max(1, Math.ceil(finalDmg)), heavyArmor };
+    // ROUND, don't CEIL (2026-08-03). Rounding happens once per ATTACK, and a
+    // side made of many shallow stacks makes many more attacks than one deep
+    // stack of the same models — so `ceil` handed it a free +0.5 damage per
+    // stack per phase. Measured on identical synthetic units: ten 1-model
+    // stacks threw 4.9% more damage per fight than one 10-model stack purely
+    // from this rounding, before any tactical difference.
+    //
+    // `round` is unbiased in expectation (the fractional part is ~uniform
+    // thanks to the ×0.85–1.15 roll), so damage no longer depends on how the
+    // same models happen to be grouped. The max(1, …) floor stays: an attack
+    // that connects always does something.
+    return { damage: Math.max(1, Math.round(finalDmg)), heavyArmor };
   }
 
   // Applies damage to a unit stack with model-death overflow.
@@ -408,53 +477,186 @@ var BattleEngine = (() => {
   // actorSide: 'attacker' | 'defender' — which side `attacker` belongs to.
   // Returns { modelsKilled, chargeHit }.
   //
-  // SPILLOVER (2026-07-27): if the attack wipes its target stack, the
-  // leftover damage carries into the next target, and so on. Without this,
-  // one huge attack into a 1-model stack killed exactly one model and the
-  // rest evaporated — armies of many tiny stacks soaked overkill for free,
-  // and "hire exactly one of everything" beat every concentrated build by
-  // 40+ points in the balance suite. Target-specific bonuses (anti_large,
-  // bloodlust, fragile) are baked into the original damage roll and spill
-  // as-is — the sword doesn't get lighter mid-swing; per-target rerolls
-  // aren't worth the complexity.
-  function _executeAttack(attacker, enemySide, phase, terrainMods, round, events, actorSide) {
-    const target = TargetingService.select(attacker, enemySide, round);
-    if (!target) return { modelsKilled: 0, chargeHit: false };
+  // A STACK SPLITS INTO GROUPS, AND EACH GROUP PICKS ITS OWN TARGET
+  // (2026-08-03). This is the fix for the last and largest shape defect.
+  //
+  // WHAT WAS WRONG. `_executeAttack` runs once per stack per phase and made ONE
+  // TargetingService.select call. So the number of independent TACTICAL
+  // DECISIONS an army got scaled with its number of STACKS, not its number of
+  // models. Eleven stacks made eleven target picks; five stacks made five, at
+  // identical total damage — measured on the two dark elf armies: 603 vs 613
+  // damage thrown, 12.7 vs 6.3 attacks per round.
+  //
+  // That compounds. More picks finish off more enemy STACKS per round, and
+  // killing a stack removes a whole attacker rather than a model — while the
+  // side with few stacks loses a bigger share of its own output with each one.
+  // Across the twenty tournament armies, all built to the same PWR cap, the
+  // number of unit types correlated 0.694 with win rate. Nothing else came
+  // close: total HP 0.373, model count 0.132, total attack 0.041, army PWR
+  // −0.038. It was never about what you brought, only about how many piles you
+  // split it into — and PWR charges nothing for being a separate pile.
+  //
+  // THE FIX. The stack is divided into up to MAX_ATTACK_GROUPS groups; each
+  // group selects its own target and swings with its own share of the models.
+  // Total damage is unchanged (the shares sum to the stack), so this moves
+  // decisions, not power. Groups are also bounded by the number of living
+  // enemy stacks — picking a sixth target when the enemy has three is wasted
+  // work — and by the model count, so a lone monster still gets exactly one.
+  //
+  // The cap exists for the battle REPORT, which is persisted to Supabase: a
+  // 40-model regiment writing 40 events per phase per round would balloon it.
+  // Six captures nearly all of the effect (armies rarely field more than six
+  // stacks a side) at a bounded cost.
+  //
+  // SPILLOVER (2026-07-27): if a group wipes its target stack, the leftover
+  // carries into the next target, and so on. Contact carry is lossless and
+  // bounded by the group's own bodies; ranged stays ×0.3 over a single hop,
+  // which is what stopped massed artillery cleaving three stacks a round from
+  // behind a wall (the 80%+ "castle" builds). Target-specific bonuses
+  // (anti_large, bloodlust, fragile) are baked into the group's damage roll and
+  // spill as-is — the sword doesn't get lighter mid-swing.
+  const MAX_ATTACK_GROUPS = 6;
 
-    const { damage, heavyArmor } = _computeDamage(attacker, target, phase, terrainMods);
+  // Overkill carry. CONTACT is lossless and bounded by the group's own bodies:
+  // a stack absorbs damage losslessly (the cascade in _applyDamage), so it
+  // should deal it that way too, and "as many enemies as you have bodies" is
+  // the bound that keeps full carry from becoming the old cliff where one
+  // 1-model monster cleaved eight stacks. RANGED stays lossy and single-hop —
+  // see the note above _executeAttack.
+  const CONTACT_FRICTION = 1.0;
+  const RANGED_FRICTION  = 0.3;
+
+  function _executeAttack(attacker, enemySide, phase, terrainMods, round, events, actorSide, engagedModels) {
+    const liveEnemyStacks = enemySide.units.filter(_alive).length;
+    if (liveEnemyStacks === 0) return { modelsKilled: 0, chargeHit: false };
+
+    // How many of this stack's models actually reach the enemy this phase.
+    // Defaults to all of them; the frontage budget (see _runAttacks) passes a
+    // smaller number when the line is already full.
+    const engaged = Math.max(0, Math.min(attacker.count, engagedModels ?? attacker.count));
+    if (engaged === 0) return { modelsKilled: 0, chargeHit: false };
+
+    const groups = Math.max(1, Math.min(engaged, liveEnemyStacks, MAX_ATTACK_GROUPS));
     const trait  = _activeTrait(attacker, phase);
-    const result = _applyDamage(target, damage, round, phase, attacker, trait, events, actorSide, heavyArmor);
 
-    let modelsKilled = result.modelsKilled;
-    // Overkill spills into the next target. CONTACT phases (melee, charge)
-    // carry HALF the leftover force per hop, up to 8 hops — a sword keeps
-    // swinging, a monster keeps trampling, but the swing loses momentum.
-    // At full carry, one monster attack chain-deleted 2-3 single-model
-    // stacks per round and one-of-each armies melted.
-    // RANGED spills too since 2026-07-29, but weakly: ×0.3 and ONE hop —
-    // a volley that flattens its target still lands some stray shots on
-    // the unit behind it. Zero ranged spill made 1-model stacks free
-    // ablative armor against shooting (the "singles as armor" meta);
-    // unrestricted spill is the other cliff — massed artillery cleaved
-    // three stacks a round from behind a wall (the 80%+ "castle" builds).
-    const friction = (phase === 'melee' || phase === 'charge') ? 0.5 : phase === 'ranged' ? 0.3 : 0;
-    const maxHops  = phase === 'ranged' ? 1 : 8;
-    let spill = Math.floor((result.overkill || 0) * friction);
-    for (let hops = 0; spill > 0 && hops < maxHops; hops++) {
-      const next = TargetingService.select(attacker, enemySide, round);
-      if (!next) break;
-      const spillResult = _applyDamage(next, spill, round, phase, attacker, trait, events, actorSide, heavyArmor);
-      modelsKilled += spillResult.modelsKilled;
-      spill         = Math.floor((spillResult.overkill || 0) * friction);
+    let modelsKilled = 0;
+    let chargeHit    = false;
+
+    for (let g = 0; g < groups; g++) {
+      // Even split; the remainder goes to the first groups so the shares
+      // always sum back to attacker.count and no damage is created or lost.
+      const share = Math.floor(engaged / groups) + (g < engaged % groups ? 1 : 0);
+      if (share <= 0) continue;
+
+      const target = TargetingService.select(attacker, enemySide, round);
+      if (!target) break;
+
+      const { damage, heavyArmor } = _computeDamage(attacker, target, phase, terrainMods, share);
+      const result = _applyDamage(target, damage, round, phase, attacker, trait, events, actorSide, heavyArmor);
+      modelsKilled += result.modelsKilled;
+      if (phase === 'charge' && !result.dodged && attacker.traits.includes('charge')) chargeHit = true;
+
+      const friction = (phase === 'melee' || phase === 'charge') ? CONTACT_FRICTION
+                     : phase === 'ranged' ? RANGED_FRICTION
+                     : 0;
+      const maxHops  = phase === 'ranged' ? 1 : share;
+      let spill = Math.floor((result.overkill || 0) * friction);
+      for (let hops = 0; spill > 0 && hops < maxHops; hops++) {
+        const next = TargetingService.select(attacker, enemySide, round);
+        if (!next) break;
+        const spillResult = _applyDamage(next, spill, round, phase, attacker, trait, events, actorSide, heavyArmor);
+        modelsKilled += spillResult.modelsKilled;
+        spill         = Math.floor((spillResult.overkill || 0) * friction);
+      }
     }
 
-    const chargeHit = phase === 'charge' && !result.dodged && attacker.traits.includes('charge');
     return { modelsKilled, chargeHit };
   }
 
   // Sort a unit list by speed descending (fast units act first within phase).
   function _bySpeed(units) {
     return [...units].sort((a, b) => b.speed - a.speed);
+  }
+
+  // ── Frontage ──────────────────────────────────────────────────
+  //
+  // A battle line is only so wide. FRONTAGE is the number of MODELS a side can
+  // bring into contact in one phase; anything beyond it is standing behind the
+  // fighting, not in it. Set to 0 to disable the cap entirely.
+  //
+  // WHY MODELS AND NOT STACKS. The whole shape problem this engine has been
+  // fighting is that packaging changed outcomes: eleven stacks of one model got
+  // eleven independent attacks while five stacks of two got five, at identical
+  // damage. A budget counted in MODELS is neutral by construction — both of
+  // those armies put the same number of bodies into the line, whatever boxes
+  // they arrived in — where a budget counted in stacks would just re-create the
+  // same bias pointing the other way.
+  //
+  // It also gives the game a real strategic rule it did not have: past the
+  // frontage, extra bodies stop adding damage, so a wide cheap horde converts
+  // into reserves rather than output and army building becomes about quality
+  // per model instead of quantity.
+  //
+  // Order of engagement is speed-sorted, the same order units already strike
+  // in, so the quickest into contact are the ones that fight.
+  //
+  // ── SWEPT 2026-08-03, SHIPPED OFF, PENDING A DESIGN CALL ──
+  //
+  // The proposal: cap troops per round so that fielding many unit types becomes
+  // counterproductive. It works — and the tighter it is, the more completely it
+  // works — but it is a rebalance, not a patch. Measured against the whole
+  // balance suite, `types-corr` being how strongly the number of unit types
+  // predicts winning (0 = packaging no longer matters at all):
+  //
+  //   width   shape neutrality   types-corr    suite failures
+  //   ──────────────────────────────────────────────────────────
+  //   off      25.0-27.6%        0.462-0.486    0   (5-run noise band)
+  //    12         26.4%             0.470       0
+  //    10         27.5%             0.448       0
+  //     8         35.1%             0.457       2
+  //     6         34.6%             0.331       7
+  //     4         26.6%            -0.008      14
+  //
+  // At width 4 the variety advantage is DEAD — composition stops caring how
+  // many piles you split into, which is exactly the goal. The cost is that the
+  // race bands, tuned for an uncapped line, come apart: fourteen checks fail
+  // and dark_elf/balanced tops the table at 81.7%. Width 8 buys a real shape
+  // improvement for two failures without moving the correlation at all.
+  //
+  // So the open question is not whether the mechanic works, but whether a full
+  // race retune is worth buying with it. Left at 0 — the verified-green state —
+  // until that call is made. The _runAttacks refactor it required stays either
+  // way: it replaced six near-identical copies of the phase loop with one.
+  const FRONTAGE = 0;
+
+  // Runs one phase for one side, respecting the frontage budget.
+  // Returns { modelsKilled, chargeHit }.
+  function _runAttacks(units, enemySide, phase, terrainMods, round, events, actorSide) {
+    let budget       = FRONTAGE > 0 ? FRONTAGE : Infinity;
+    let modelsKilled = 0;
+    let chargeHit    = false;
+
+    for (const unit of units) {
+      if (budget <= 0) break;
+      if (!_sideAlive(enemySide)) break;
+
+      const engaged = Math.min(unit.count, budget);
+      budget -= engaged;
+
+      const r = _executeAttack(unit, enemySide, phase, terrainMods, round, events, actorSide, engaged);
+      modelsKilled += r.modelsKilled;
+      if (r.chargeHit) chargeHit = true;
+
+      // double_strike: 30% chance to attack a second time in melee. The second
+      // swing is the same models going again, so it does NOT spend more of the
+      // frontage — the unit is already in the line.
+      if (phase === 'melee' && unit.traits.includes('double_strike')
+          && Math.random() < 0.30 && _sideAlive(enemySide)) {
+        const r2 = _executeAttack(unit, enemySide, phase, terrainMods, round, events, actorSide, engaged);
+        modelsKilled += r2.modelsKilled;
+      }
+    }
+    return { modelsKilled, chargeHit };
   }
 
   // Pyroblast: round 1 only — a lord with the pyroblast trait fires a splash
@@ -535,16 +737,8 @@ var BattleEngine = (() => {
         atkLosses += _applyPyroblast(ctx.defender.units, ctx.attacker, 'defender', 'attacker', round, events);
       }
 
-      for (const unit of atkRanged) {
-        if (!_sideAlive(ctx.defender)) break;
-        const r = _executeAttack(unit, ctx.defender, 'ranged', terrainMods, round, events, 'attacker');
-        defLosses += r.modelsKilled;
-      }
-      for (const unit of defRanged) {
-        if (!_sideAlive(ctx.attacker)) break;
-        const r = _executeAttack(unit, ctx.attacker, 'ranged', terrainMods, round, events, 'defender');
-        atkLosses += r.modelsKilled;
-      }
+      defLosses += _runAttacks(atkRanged, ctx.defender, 'ranged', terrainMods, round, events, 'attacker').modelsKilled;
+      atkLosses += _runAttacks(defRanged, ctx.attacker, 'ranged', terrainMods, round, events, 'defender').modelsKilled;
 
       if (!_sideAlive(ctx.defender)) { winner = 'attacker'; reason = 'eliminated'; break; }
       if (!_sideAlive(ctx.attacker)) { winner = 'defender'; reason = 'eliminated'; break; }
@@ -554,18 +748,13 @@ var BattleEngine = (() => {
         const atkCharge = _bySpeed(ctx.attacker.units.filter(u => _alive(u) && u.traits.includes('charge') && u.role === 'cavalry'));
         const defCharge = _bySpeed(ctx.defender.units.filter(u => _alive(u) && u.traits.includes('charge') && u.role === 'cavalry'));
 
-        for (const unit of atkCharge) {
-          if (!_sideAlive(ctx.defender)) break;
-          const r = _executeAttack(unit, ctx.defender, 'charge', terrainMods, round, events, 'attacker');
-          defLosses += r.modelsKilled;
-          if (r.chargeHit) chargeHitDef = true;
-        }
-        for (const unit of defCharge) {
-          if (!_sideAlive(ctx.attacker)) break;
-          const r = _executeAttack(unit, ctx.attacker, 'charge', terrainMods, round, events, 'defender');
-          atkLosses += r.modelsKilled;
-          if (r.chargeHit) chargeHitAtk = true;
-        }
+        const atkChargeRes = _runAttacks(atkCharge, ctx.defender, 'charge', terrainMods, round, events, 'attacker');
+        defLosses += atkChargeRes.modelsKilled;
+        if (atkChargeRes.chargeHit) chargeHitDef = true;
+
+        const defChargeRes = _runAttacks(defCharge, ctx.attacker, 'charge', terrainMods, round, events, 'defender');
+        atkLosses += defChargeRes.modelsKilled;
+        if (defChargeRes.chargeHit) chargeHitAtk = true;
 
         if (!_sideAlive(ctx.defender)) { winner = 'attacker'; reason = 'eliminated'; break; }
         if (!_sideAlive(ctx.attacker)) { winner = 'defender'; reason = 'eliminated'; break; }
@@ -577,25 +766,8 @@ var BattleEngine = (() => {
       const atkMelee = _bySpeed(ctx.attacker.units.filter(u => _alive(u) && !u.traits.includes('ranged')));
       const defMelee = _bySpeed(ctx.defender.units.filter(u => _alive(u) && !u.traits.includes('ranged')));
 
-      for (const unit of atkMelee) {
-        if (!_sideAlive(ctx.defender)) break;
-        const r = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events, 'attacker');
-        defLosses += r.modelsKilled;
-        // double_strike: 30% chance to attack a second time in melee
-        if (unit.traits.includes('double_strike') && Math.random() < 0.30 && _sideAlive(ctx.defender)) {
-          const r2 = _executeAttack(unit, ctx.defender, 'melee', terrainMods, round, events, 'attacker');
-          defLosses += r2.modelsKilled;
-        }
-      }
-      for (const unit of defMelee) {
-        if (!_sideAlive(ctx.attacker)) break;
-        const r = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events, 'defender');
-        atkLosses += r.modelsKilled;
-        if (unit.traits.includes('double_strike') && Math.random() < 0.30 && _sideAlive(ctx.attacker)) {
-          const r2 = _executeAttack(unit, ctx.attacker, 'melee', terrainMods, round, events, 'defender');
-          atkLosses += r2.modelsKilled;
-        }
-      }
+      defLosses += _runAttacks(atkMelee, ctx.defender, 'melee', terrainMods, round, events, 'attacker').modelsKilled;
+      atkLosses += _runAttacks(defMelee, ctx.attacker, 'melee', terrainMods, round, events, 'defender').modelsKilled;
 
       if (!_sideAlive(ctx.defender)) { winner = 'attacker'; reason = 'eliminated'; break; }
       if (!_sideAlive(ctx.attacker)) { winner = 'defender'; reason = 'eliminated'; break; }
@@ -670,7 +842,33 @@ var BattleEngine = (() => {
     };
   }
 
-  const _LOOT_RES_TYPES = ['food', 'wood', 'stone'];
+  // Camp loot pays ONE random resource, and which one follows the same
+  // 3 : 2 : 1 wood/stone/food ratio the expedition find table uses — see
+  // DiscoveryRoll.RES_RATIO, which is loaded before this file in both the
+  // browser (index.html) and server/engine-loader.js. Ambush spoils ARE
+  // expedition income, so an even three-way split here would have quietly
+  // dragged the game's overall resource mix back toward flat on the ~13% of
+  // expeditions that end in a fight.
+  //
+  // Weighted by TYPE rather than by amount, unlike rollRewards: the loot band
+  // (CAMP_LEVEL_LOOT resMin/resMax) is the same whichever resource is drawn,
+  // so the two formulations are equivalent and this way needs no second
+  // multiplier to keep in sync. The literal is a fallback for the standalone
+  // battle simulator, which loads the engine without the quest data.
+  const _LOOT_RES_RATIO = { wood: 3, stone: 2, food: 1 };
+
+  function _pickLootRes() {
+    const ratio = (typeof DiscoveryRoll !== 'undefined' && DiscoveryRoll.RES_RATIO) || _LOOT_RES_RATIO;
+    const types = Object.keys(ratio);
+    let total = 0;
+    types.forEach(t => total += ratio[t]);
+    let rand = Math.random() * total;
+    for (const t of types) {
+      rand -= ratio[t];
+      if (rand <= 0) return t;
+    }
+    return types[types.length - 1];
+  }
 
   function _buildReport(ctx, winner, reason, rounds, events) {
     // ctx.encounter is absent when called from the battle simulator (no PvE encounter)
@@ -685,7 +883,7 @@ var BattleEngine = (() => {
         lootGold = Math.floor((enc.loot?.goldMin ?? 0) + Math.random() * ((enc.loot?.goldMax ?? 0) - (enc.loot?.goldMin ?? 0)));
         if (enc.loot?.resMax > 0) {
           const amount = Math.floor((enc.loot.resMin ?? 0) + Math.random() * (enc.loot.resMax - (enc.loot.resMin ?? 0)));
-          if (amount > 0) lootResource = { [_LOOT_RES_TYPES[Math.floor(Math.random() * _LOOT_RES_TYPES.length)]]: amount };
+          if (amount > 0) lootResource = { [_pickLootRes()]: amount };
         }
         xpEarned = enc.xpReward?.win ?? 0;
       } else {

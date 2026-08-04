@@ -9,9 +9,11 @@
 //    isLandmark    → true for unique per-city landmark buildings
 //    requires      → { buildingId: minLevel }  (hard prereqs, also checked by ConstructionService)
 //    unlockRequires→ [{ type, ...args }]  (additional unlock conditions, checked by BuildingUnlockService)
-//    cost(level)   → { food, wood, stone }
+//    cost(level)   → { wood, stone, food } — ALWAYS in that key order, which is
+//                    EconomyCore.RESOURCE_KEYS. Cost panels render the literal's
+//                    own key order, so a food-first def prints food first.
 //    buildTime(level) → seconds
-//    production(level)→ { food, wood, stone } per hour (final rate =
+//    production(level)→ { wood, stone, food } per hour, same order rule (final rate =
 //                    production × race bonus × terrain multiplier)
 //    effects(level)→ [{ stat, value }] cumulative city-stat modifiers at level N.
 //                    Resource buildings all drain hygiene; the Aqueduct is
@@ -73,11 +75,16 @@ var BUILDING_DEFS = {
     description: 'Extracts stone from nearby rock formations. Essential for upgrading city infrastructure.',
     maxLevel:    Infinity,
     requires:    { town_hall: 1 },
+    // FACTOR 1.6 → 1.5 (2026-08-03, ECONOMY-REBALANCE-PLAN Phase 3b). The mill
+    // and the farm both compound at 1.5; the quarry alone was at 1.6, so its
+    // payback diverged from the other two forever rather than by a fixed
+    // margin — measured at L20 it took 118 days to repay against the mill's
+    // 24. A scarcity ordering is a design choice; a different exponent is not.
     cost:        level => ({
-      wood:  _scale(48, 1.6, level),
-      stone: _scale(24, 1.6, level),
+      wood:  _scale(48, 1.5, level),
+      stone: _scale(24, 1.5, level),
     }),
-    buildTime:   level => _ogTime(48, 24, 1.6, level),
+    buildTime:   level => _ogTime(48, 24, 1.5, level),
     production:  level => ({ stone: _og(20, level) }),
     effects:     level => [
       { stat: 'unemployment', value: -4 * level },
@@ -95,11 +102,19 @@ var BUILDING_DEFS = {
     description: 'Produces food to sustain your population and army. Food security is the foundation of a prosperous city.',
     maxLevel:    Infinity,
     requires:    { town_hall: 1 },
+    // COST BASE 300 → 60 (2026-08-03, ECONOMY-REBALANCE-PLAN Phase 3b).
+    // The farm charged 4× the Lumber Mill's base (300 vs 75) for a third of
+    // its output (10 vs 30) — 12× worse per unit produced before any curve
+    // applied, which made it a dead building past about L8 and left food the
+    // resource you simply stopped producing. Rebased to 60 (45 wood + 15
+    // stone), giving a cost:production ratio of 6.0 against the mill's 2.5 and
+    // the quarry's 3.5: food stays the dearest of the three, which matches its
+    // demand, but by 2.4× rather than 12×.
     cost:        level => ({
-      wood:  _scale(225, 1.5, level),
-      stone: _scale(75,  1.5, level),
+      wood:  _scale(45, 1.5, level),
+      stone: _scale(15, 1.5, level),
     }),
-    buildTime:   level => _ogTime(225, 75, 1.5, level),
+    buildTime:   level => _ogTime(45, 15, 1.5, level),
     production:  level => ({ food: _og(10, level) }),
     effects:     level => [
       { stat: 'happiness',    value:  4 * level },
@@ -145,14 +160,16 @@ var BUILDING_DEFS = {
     // at Lv10 — hence a curve change rather than a big base change.
     //   Lv1 4,400 · Lv2 7,480 · Lv5 36,749 · Lv10 521,797 (cum ~1.26M)
     // ⚠ OPENING CHECK: cities are seeded at town_hall 1, so the first cost a
-    // player meets is Lv1→2 = F3,400/W2,295/S1,785, which must stay inside the
-    // F5,000/W5,000/S4,000 starter kit. A fresh Farm makes 11 food/hour, so
-    // raising the base further would stall a new account. Re-verify after any
-    // change here or to the starter kit in server/actions/city-found.js.
+    // player meets is Lv1→2 = W2,295/S1,785/F3,400, which must stay inside the
+    // W5,000/S4,000/F5,000 starter kit. The seeded Farm 1 makes 11 food/hour
+    // from minute one (it is part of the founding loadout since 2026-08-03), so
+    // that is the only inflow backing a raise here. Re-verify after any change
+    // here or to the starter kit / founding loadout in
+    // server/actions/city-found.js.
     cost:        level => ({
-      food:  _scale(2000, 1.7, level),
       wood:  _scale(1350, 1.7, level),
       stone: _scale(1050, 1.7, level),
+      food:  _scale(2000, 1.7, level),
     }),
     buildTime:   level => _scale(120, 1.6, level),
     production:  () => ({}),
@@ -264,7 +281,10 @@ var BUILDING_DEFS = {
     icon:        gi('shop'),
     image:       'assets/buildings/marketplace.png',
     category:    'infrastructure',
-    description: 'Enables trade between cities and boosts overall prosperity. Corruption follows commerce.',
+    // Does NOT open the Merchant — that is its own tab and needs no building
+    // (2026-08-04). The Marketplace's job is the tax bonus in
+    // EconomyCore.getGoldRate, so the description must not promise trading.
+    description: 'Stalls, scales and coin-changers crowd the square. Every level swells the taxes this city collects — and the corruption that follows commerce.',
     maxLevel:    Infinity,
     requires:    { town_hall: 3 },
     cost:        level => ({
@@ -282,6 +302,36 @@ var BUILDING_DEFS = {
   },
 
   // ── MILITARY ─────────────────────────────────────────────────────
+  //
+  //  THE VETERANCY THREE — Barracks / Archery Range / Stables.
+  //
+  //  These are not ordinary buildings: EconomyCore.getVeterancyPct gives every
+  //  unit +2% attack and +2% defense per level of its TRAINING building, SUMMED
+  //  ACROSS EVERY CITY the player holds and applied retroactively. They are
+  //  already documented there as "the OGame Weapons/Armour techs", and that is
+  //  exactly what they are — an uncapped empire-wide percentage on combat power.
+  //
+  //  Until 2026-08-03 they were priced like ordinary buildings (~800–960 base
+  //  on ×1.5), which is the one curve an unbounded percentage must never have:
+  //  seven cities at Barracks 10 bought +140% attack for ~460k resources. They
+  //  now carry OGame's OWN research prices for those techs, verbatim, on
+  //  OGame's ×2 factor (metal→wood, crystal→stone, deuterium→food):
+  //
+  //    Barracks      = Weapons Technology     800 M / 200 C        ×2
+  //    Archery Range = Armour Technology    1,000 M                ×2
+  //    Stables       = Shielding Technology   200 M / 600 C / 100 D ×2
+  //
+  //  The per-building assignment is by resource SHAPE, not by flavour — the
+  //  three OGame techs happen to give three distinct profiles (mixed, pure
+  //  metal, stone-with-a-food-tail), and spreading them across the three
+  //  buildings stops a military push from draining one stockpile. Barracks
+  //  takes the mixed one because it is the prerequisite for the other two and
+  //  levels deepest (unit gates run to Lv12 in js/data/units.js).
+  //
+  //  Cheaper than before at Lv1 (1,000 vs 1,720 for the Barracks), then far
+  //  dearer: Lv10 goes 66k → 512k, Lv12 goes 148k → 2.05M. That is the point.
+  //  BUILD TIME is deliberately left on its old ×1.5 curve — the ask was about
+  //  price, and time is already divided by the Town Hall. Cost is the limiter.
 
   barracks: {
     id:          'barracks',
@@ -292,9 +342,10 @@ var BUILDING_DEFS = {
     description: 'Trains soldiers to defend and expand your realm. Military culture reduces civil harmony.',
     maxLevel:    Infinity,
     requires:    { town_hall: 3 },
+    // OGame Weapons Technology: 800 metal / 200 crystal, ×2.
     cost:        level => ({
-      wood:  _scale(960, 1.5, level),
-      stone: _scale(760, 1.5, level),
+      wood:  _scale(800, 2, level),
+      stone: _scale(200, 2, level),
     }),
     buildTime:   level => _scale(180, 1.5, level),
     production:  () => ({}),
@@ -302,7 +353,6 @@ var BUILDING_DEFS = {
       { stat: 'unemployment', value: -6 * level },
       { stat: 'happiness',    value: -3 * level },
       { stat: 'religion',     value: -2 * level },
-      { stat: 'security',     value:  5 * level },
     ],
   },
 
@@ -315,14 +365,14 @@ var BUILDING_DEFS = {
     description: 'Trains ranged units. Provides a steady stream of disciplined skirmishers and crossbow warriors.',
     maxLevel:    Infinity,
     requires:    { barracks: 3 },
+    // OGame Armour Technology: 1,000 metal, ×2. The single-resource column is
+    // the original's, and it reads right for a range: timber butts and galleries.
     cost:        level => ({
-      wood:  _scale(720, 1.5, level),
-      stone: _scale(520, 1.5, level),
+      wood:  _scale(1000, 2, level),
     }),
     buildTime:   level => _scale(150, 1.5, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',     value:  3 * level },
       { stat: 'unemployment', value: -4 * level },
     ],
   },
@@ -337,14 +387,17 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:       { barracks: 5 },
     unlockRequires: [{ type: 'city_tier', minTier: 2 }],
+    // OGame Shielding Technology: 200 metal / 600 crystal / 100 deuterium, ×2.
+    // The food column is the deuterium one and lands well here — stone stalls
+    // and standing fodder are what a cavalry stable actually costs.
     cost:        level => ({
-      wood:  _scale(960, 1.5, level),
-      stone: _scale(640, 1.5, level),
+      wood:  _scale(200, 2, level),
+      stone: _scale(600, 2, level),
+      food:  _scale(100, 2, level),
     }),
     buildTime:   level => _scale(180, 1.5, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',     value:  4 * level },
       { stat: 'unemployment', value: -3 * level },
     ],
   },
@@ -365,7 +418,6 @@ var BUILDING_DEFS = {
     buildTime:   level => _scale(90, 1.5, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',     value:  4 * level },
       { stat: 'unemployment', value: -3 * level },
     ],
     garrisonRoster: level => {
@@ -388,18 +440,23 @@ var BUILDING_DEFS = {
     icon:        gi('guarded-tower'),
     image:       'assets/buildings/fortress.png',
     category:    'military',
-    description: 'A hardened stone fortress garrisoned by professional soldiers. Provides elite Garrison Soldiers and dramatically boosts city security.',
+    description: 'A hardened stone fortress garrisoned by professional soldiers. Provides elite Garrison Soldiers and dramatically boosts city stability.',
     maxLevel:    Infinity,
     requires:       { guard_post: 3, barracks: 2 },
     unlockRequires: [{ type: 'city_tier', minTier: 3 }],
+    // BASE ÷10 (2026-08-03, ECONOMY-REBALANCE-PLAN Phase 4). L1 cost 3,200,000
+    // resources behind prerequisites (Guard Post 3 + Barracks 2) that cost
+    // ~8,900 combined — a 360× jump across one gate. The practical effect was
+    // that city defence had no middle: either the Guard Post, cheap and
+    // scaling, or nothing. At 320,000 the ×1.6 curve still carries it to a
+    // real endgame cost while giving the tier an actual entry price.
     cost:        level => ({
-      wood:  _scale(1200000, 1.6, level),
-      stone: _scale(2000000, 1.6, level),
+      wood:  _scale(120000, 1.6, level),
+      stone: _scale(200000, 1.6, level),
     }),
     buildTime:   level => _scale(600, 1.7, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',  value:  8 * level },
       { stat: 'stability', value:  4 * level },
       { stat: 'happiness', value: -2 * level },
     ],
@@ -429,7 +486,6 @@ var BUILDING_DEFS = {
     buildTime:   level => _scale(360, 1.6, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',    value:  5 * level },
       { stat: 'stability',   value:  3 * level },
       { stat: 'happiness',   value: -2 * level },
     ],
@@ -452,7 +508,6 @@ var BUILDING_DEFS = {
     buildTime:   level => _scale(600, 1.6, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',  value:  8 * level },
       { stat: 'happiness', value: -5 * level },
     ],
   },
@@ -474,7 +529,6 @@ var BUILDING_DEFS = {
     buildTime:   level => _scale(180, 1.5, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',  value:  3 * level },
       { stat: 'culture',   value:  2 * level },
       { stat: 'happiness', value: -1 * level },
     ],
@@ -497,7 +551,6 @@ var BUILDING_DEFS = {
     buildTime:   level => _scale(200, 1.5, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',  value:  4 * level },
       { stat: 'culture',   value:  3 * level },
       { stat: 'stability', value:  2 * level },
     ],
@@ -520,7 +573,6 @@ var BUILDING_DEFS = {
     buildTime:   level => _scale(600, 1.7, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',  value:  8 * level },
       { stat: 'culture',   value:  4 * level },
     ],
   },
@@ -535,14 +587,18 @@ var BUILDING_DEFS = {
     maxLevel:    Infinity,
     requires:    { barracks: 12 },
     unlockRequires: [{ type: 'race', ids: ['dark_elf', 'high_elf'] }, { type: 'city_tier', minTier: 5 }],
+    // FACTOR 2.0 → 1.7 (2026-08-03, ECONOMY-REBALANCE-PLAN Phase 4). At ×2.0
+    // the practical ceiling was L2–L3 forever: L10 cost 6.14 BILLION resources
+    // — 14.6 years of endgame income — and a single level took 1,024 hours to
+    // build, so `maxLevel: Infinity` was a fiction. ×1.7 matches the other
+    // landmarks and leaves a tail a player can actually climb.
     cost:        level => ({
-      wood:  _scale(2400000, 2, level),
-      stone: _scale(3600000, 2, level),
+      wood:  _scale(2400000, 1.7, level),
+      stone: _scale(3600000, 1.7, level),
     }),
-    buildTime:   level => _scale(7200, 2.0, level),
+    buildTime:   level => _scale(7200, 1.7, level),
     production:  () => ({}),
     effects:     level => [
-      { stat: 'security',  value:  15 * level },
       { stat: 'happiness', value:  -8 * level },
     ],
   },
@@ -660,7 +716,6 @@ var BUILDING_DEFS = {
     production:  level => ({ food: 60 * level }),
     effects:     level => [
       { stat: 'unemployment', value: -15 * level },
-      { stat: 'security',     value:  10 * level },
       { stat: 'stability',    value:   5 * level },
       { stat: 'happiness',    value:  -3 * level },
     ],
@@ -686,7 +741,7 @@ var BUILDING_DEFS = {
       stone: _scale(980000, 1.7, level),
     }),
     buildTime:   level => _scale(4200, 1.7, level),
-    production:  level => ({ food: 30 * level, wood: 30 * level }),
+    production:  level => ({ wood: 30 * level, food: 30 * level }),
     effects:     level => [
       { stat: 'unemployment', value: -12 * level },
       { stat: 'corruption',   value:   8 * level },
@@ -717,7 +772,6 @@ var BUILDING_DEFS = {
     production:  () => ({}),
     effects:     level => [
       { stat: 'stability',  value:  12 * level },
-      { stat: 'security',   value:   8 * level },
       { stat: 'religion',   value:  -8 * level },
       { stat: 'happiness',  value:  -5 * level },
       { stat: 'corruption', value:  -4 * level },

@@ -49,7 +49,7 @@ export async function handleResearchStart(req, res) {
   const targetLevel = currentLevel + 1;
 
   const cost = def.cost(targetLevel);
-  player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
+  player.resources = player.resources || { wood: 0, stone: 0, food: 0 };
   for (const [rKey, amt] of Object.entries(cost)) {
     if (amt > 0 && Math.floor(player.resources[rKey] || 0) < amt) {
       return res.status(400).json({ ok: false, error: `Not enough ${rKey} (need ${amt}, have ${Math.floor(player.resources[rKey] || 0)})` });

@@ -128,7 +128,12 @@ var DiscoveryRoll = (() => {
   // Which categories carry a loot tier and are therefore reshaped by ER.
   // combat/recruits/nothing/intelligence are excluded: they have their own
   // multipliers (risk, footprint) and no tier to weight by.
-  const TIERED_CATEGORIES = new Set(['resource', 'event', 'trade', 'legendary']);
+  //
+  // 'item' was called 'event' until 2026-08-04, when city events were deleted
+  // and those finds started paying an ITEM instead of coin. The category is
+  // tiered like any other loot, which is what makes items follow the ER ladder:
+  // a Common force is only ever shown tier-1 item finds.
+  const TIERED_CATEGORIES = new Set(['resource', 'item', 'trade', 'legendary']);
   // Same fallback rollRewards uses, so weighting and payout never disagree.
   const tierOf = def => def?.tier || 2;
 
@@ -214,6 +219,8 @@ var DiscoveryRoll = (() => {
     cliff_face:       { stone: 1, xp: 15 },
     fertile_fields:   { food: 1,  xp: 15 },
     river_crossing:   { food: 1,  xp: 15 },
+    fallen_timber:    { wood: 1,  xp: 15 },
+    charcoal_stack:   { wood: 1,  xp: 15 },
     coin_cache:       { gold: 1,  xp: 15 },
     // Tier 2
     timber_cache:     { wood: 1,  xp: 30 },
@@ -227,15 +234,20 @@ var DiscoveryRoll = (() => {
     marble_quarry:    { stone: 1, xp: 80  },
     bountiful_hunt:   { food: 1,  xp: 60  },
     buried_vault:     { gold: 1,  xp: 100 },
-    // Event / trade / legendary
-    // ancient_ruins and wandering_sage used to pay XP and NOTHING ELSE, which
-    // made the two most common event finds feel like a wasted expedition —
-    // ancient_ruins is the single highest-weight event def and its own
-    // description promises "Scholars would pay dearly for access". Both now
-    // pay coin, as they always read like they should.
-    ancient_ruins:       { gold: 1,  xp: 80  },
-    abandoned_keep:      { gold: 1,  xp: 50  },
-    wandering_sage:      { gold: 1,  xp: 100 },
+    // Item / trade / legendary
+    //
+    // The five item defs carry XP AND NOTHING ELSE here — the payout is the
+    // item itself, handed out by the category branch in rollRewards, which
+    // returns before this table's resource/gold walk is ever reached. A `gold`
+    // key on one of these would therefore be dead data that reads like a
+    // promise, so there is none. (They did pay coin between 2026-07-29 and
+    // 2026-08-04, for the era when they were 'event' finds with no item to
+    // give; an item of the same tier is worth several times that coin.)
+    wandering_drover:    { xp: 20  },
+    ancient_ruins:       { xp: 80  },
+    abandoned_keep:      { xp: 50  },
+    wandering_sage:      { xp: 100 },
+    forgotten_estate:    { xp: 140 },
     merchant_caravan:    { gold: 1,  xp: 20  },
     traveling_merchant:  { gold: 1,  xp: 20  },
     ancient_relic:       { gold: 1,  xp: 160 },
@@ -295,7 +307,44 @@ var DiscoveryRoll = (() => {
     3: { res: [25000, 50000], gold: [1400, 3600] },
   };
 
+  // ⚠ DELIBERATELY NOT the canonical wood → stone → food display order, and it
+  // must stay that way. rollRewards() walks this array calling _randInt() per
+  // type, so the sequence IS the random sequence — reordering it silently
+  // changes every reward roll in the game. It is an RNG input, not a display
+  // list; the reward chips that render the result impose their own order.
   const RES_TYPES = ['gold', 'food', 'wood', 'stone'];
+
+  // ── The 3 : 2 : 1 resource ratio ──────────────────────────────
+  // OGame's expedition model, and the reason a Small find there can pay 40k
+  // metal but only 13k deuterium: the find TYPE is near-even, the AMOUNT is
+  // not. Rather than skew the catalog's weights (which would also make the
+  // rare resource rare to SEE, so players conclude it is unobtainable — the
+  // exact bug this replaced), each type keeps roughly equal odds of turning
+  // up and the payout carries the ratio.
+  //
+  // The numbers come from what the BUILDING catalog actually demands, which
+  // is overwhelmingly wood- and stone-priced: every resource building, house
+  // and wall is bought with wood + stone, and food appears in only a handful
+  // of costs. Food's real sink is population upkeep, not construction, and
+  // cities out-produce the other two on it (base L10 output is 1078 wood /
+  // 1318 stone / 1559 food per hour) — so a field expedition is the WRONG
+  // place to top food up, and the worst place to top wood up is nowhere.
+  //
+  // NOTE THE MEAN IS 1.0 BY CONSTRUCTION (3+2+1)/3 = 2, so dividing by 2
+  // gives ×1.5 / ×1.0 / ×0.5. That is deliberate: this pass re-DISTRIBUTES
+  // expedition income across the three resources without changing how much
+  // an expedition is worth in total. The economy pace was signed off at the
+  // current dials — if you ever want quests to pay more or less overall,
+  // move tune('questResources'), never these.
+  //
+  // Gold is absent on purpose. It answers to a bounded sink (units, capped
+  // by army PWR) and rides its own ladder — see TIER_RANGES.
+  const RES_RATIO     = { wood: 3, stone: 2, food: 1 };
+  const _RATIO_MEAN   = (RES_RATIO.wood + RES_RATIO.stone + RES_RATIO.food) / 3;
+  function resYieldMult(type) {
+    const r = RES_RATIO[type];
+    return r > 0 ? r / _RATIO_MEAN : 1;
+  }
 
   // Lord level adds +12% loot per level above 1.
   const LEVEL_SCALAR_PER_LEVEL = 0.12;
@@ -496,10 +545,13 @@ var DiscoveryRoll = (() => {
   // the casualties) roughly constant however big you get. Loot scales by the
   // same multiplier, so a bigger fight still pays more — it just costs blood
   // in proportion instead of being a walkover.
-  // THE REAL PWR RANGE: getArmyPowerCap is 200 + level×80, LORD_MAX_LEVEL is
-  // 10 → 1000, or 1100 with the `commanding` talent's +100. Nothing legal
-  // exists above that, so the whole curve is tuned across 0–1100 and anything
-  // beyond is unreachable rather than merely rare.
+  // THE REAL PWR RANGE: getArmyPowerCap is 200 + level×80 with the level term
+  // FROZEN AT 10 (LORD_POWER_LEVEL_CAP) → 1000, or 1100 with the `strategist`
+  // talent's +100. Raising LORD_MAX_LEVEL to 20 in 2026-08-03 deliberately did
+  // NOT move this: the cap freeze is what keeps the whole curve tuned across
+  // 0–1100, with anything beyond unreachable rather than merely rare.
+  // (An apex mount adds +200 on top of that; ambushRatioFor clamps, so those
+  // lords sit at the OVERMATCH_RATIO ceiling rather than off the end of it.)
   const AMBUSH_RATIO     = 0.9;  // baseline: defenders field ~90% of attacker PWR
   const AMBUSH_RATIO_VAR = 0.25; // ±25% so no two ambushes feel identical
   const AMBUSH_MAX_MULT  = 12;   // sanity clamp on roster inflation
@@ -564,11 +616,28 @@ var DiscoveryRoll = (() => {
   // multiplier, the tile's remaining richness, and how much the army's own
   // noise scared off. All default to neutral so older 2-arg calls are
   // unchanged.
+  // Which item an item-category find hands over: a flat pick among every item
+  // of that tier (js/data/items.js). Equal odds inside the tier is deliberate —
+  // the tier is where the difficulty gate lives (ER decides it), so a second
+  // lottery underneath it would only add noise to a decision the player already
+  // made. Reads ITEM_DEFS as a global with a guard, same as this file already
+  // does for `tune` and `EconomyCore`; engine-loader.js loads items.js first.
+  function rollItem(tier) {
+    if (typeof itemsOfTier !== 'function') return null;
+    const pool = itemsOfTier(tier);
+    if (!pool || pool.length === 0) return null;
+    return pool[Math.floor(Math.random() * pool.length)].id;
+  }
+
   function rollRewards(def, lordLevel, opts) {
     const rewards = [];
     if (!def || def.category === 'combat') return rewards;
 
-    const level     = Math.max(1, lordLevel || 1);
+    // lordPowerLevel(), not the raw level — the loot scalar freezes at level 10
+    // along with the PWR cap and the raid rate. At the raw level a level-20 lord
+    // would multiply every find by 3.28× instead of 2.08×, i.e. +58% on the
+    // single largest income line in the game. See js/data/lord-classes.js.
+    const level     = lordPowerLevel(lordLevel);
     const lengthMul = lengthOf(opts?.lengthId).reward;
     const depletion = (opts?.depletion == null) ? 1 : opts.depletion;
     // The quiet finds — a hidden cache, a wary trader — are exactly what a
@@ -579,6 +648,21 @@ var DiscoveryRoll = (() => {
     const tier      = def.tier || 2;
     const ranges = TIER_RANGES[tier] || TIER_RANGES[2];
     const base   = BASE_REWARDS[def.id];
+
+    // Item finds pay an ITEM and its XP — never coin, never resources. The
+    // item's own tier IS the find's tier, so the ER ladder that decides which
+    // tiers a force is shown also decides which items it can bring home.
+    //
+    // No scalar applies: an item is one fixed thing (js/data/items.js), so
+    // level, length, depletion and footprint move which item you get by moving
+    // the TIER of the find, not the size of the payout. Checked before the
+    // !base guard so a new item def is never silently reduced to 20 flat XP.
+    if (def.category === 'item') {
+      const itemId = rollItem(tier);
+      if (itemId) rewards.push({ type: 'item', itemId });
+      if (base && base.xp > 0) rewards.push({ type: 'xp', amount: Math.round(base.xp * lengthMul) });
+      return rewards;
+    }
 
     if (!base) {
       rewards.push({ type: 'xp', amount: 20 });
@@ -599,7 +683,12 @@ var DiscoveryRoll = (() => {
       const [min, max] = (t === 'gold')
         ? (def.id === 'lost_treasure' ? [800, 2000] : ranges.gold)
         : ranges.res;
-      const dial = (t === 'gold') ? questGold : questRes;
+      // resYieldMult is what carries the 3:2:1 wood/stone/food ratio — see
+      // RES_RATIO. It multiplies the SHARED tier band rather than each type
+      // getting its own band, so the tiers stay contiguous (a lucky tier-1
+      // wood roll still brushes tier 2's floor) and there is exactly one
+      // number to move if the ratio is ever retuned.
+      const dial = (t === 'gold') ? questGold : questRes * resYieldMult(t);
       rewards.push({ type: t, amount: Math.floor(_randInt(min, max) * scalar * dial) });
     });
     // XP tracks how long the lord was actually out there, but NOT tile
@@ -612,11 +701,11 @@ var DiscoveryRoll = (() => {
   }
 
   return {
-    rollDef, outcomeOdds, rollCampLevel, rollCampDetails, rollAmbushDetails, rollRewards,
+    rollDef, outcomeOdds, rollCampLevel, rollCampDetails, rollAmbushDetails, rollRewards, rollItem,
     lengthOf, depletionFor, loudnessOf, ambushRatioFor,
-    expeditionRating, recruitTierFor, erTierFor, rollRecruits,
+    expeditionRating, recruitTierFor, erTierFor, rollRecruits, resYieldMult,
     LENGTHS, DEFAULT_LENGTH, DEPLETION, RECRUIT_TIERS, SCOUT_ER_MULT,
     FOOTPRINT, QUIET_PWR, LOUD_PWR, OVERMATCH_PWR, OVERMATCH_MAX,
-    GOLD_DISC_IDS, BASE_REWARDS, TIER_RANGES, LEVEL_SCALAR_PER_LEVEL,
+    GOLD_DISC_IDS, BASE_REWARDS, TIER_RANGES, LEVEL_SCALAR_PER_LEVEL, RES_RATIO,
   };
 })();

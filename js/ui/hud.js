@@ -28,6 +28,7 @@ const HUD = (() => {
     const m = String(d.getUTCMinutes()).padStart(2, '0');
     const s = String(d.getUTCSeconds()).padStart(2, '0');
     el.textContent = `${h}:${m}:${s}`;
+    _tickThreatBar();
   }
 
   function show(player, lord) {
@@ -86,12 +87,18 @@ const HUD = (() => {
     _alertTimer = setInterval(() => {
       _alertTick++;
       _pollActivityFeed();
+      // Every other tick — 20s. Threats change on a march's timescale, not a
+      // battle's, and this shares the feed poll's timer instead of adding one.
+      if (_alertTick % 2 === 0) _pollThreats();
     }, 10000);
     _pollActivityFeed(); // don't wait a full 10s for the first check
+    _pollThreats();
   }
 
   function _stopAlertPolling() {
     if (_alertTimer) { clearInterval(_alertTimer); _alertTimer = null; }
+    _threats = [];
+    _renderThreatBar();
   }
 
   async function _pollActivityFeed() {
@@ -221,16 +228,16 @@ const HUD = (() => {
     // Empire-wide resource pool lives on player.resources
     const playerRes = player.resources || {};
     const totals = {
-      food:  Math.floor(playerRes.food  || 0),
       wood:  Math.floor(playerRes.wood  || 0),
       stone: Math.floor(playerRes.stone || 0),
+      food:  Math.floor(playerRes.food  || 0),
     };
 
     // Production rates: sum across all cities
-    const rates  = { food: 0, wood: 0, stone: 0 };
+    const rates  = { wood: 0, stone: 0, food: 0 };
     cities.forEach(city => {
       const cityRates = ProductionService.getRates(city);
-      ['food', 'wood', 'stone'].forEach(k => {
+      ['wood', 'stone', 'food'].forEach(k => {
         rates[k] += cityRates[k] || 0;
       });
     });
@@ -245,7 +252,7 @@ const HUD = (() => {
     document.getElementById('hud-r-coins-rate')?.classList.toggle('hud-res-rate--neg', goldNet < 0);
     document.getElementById('hud-r-coins-rate')?.classList.toggle('hud-res-rate--pos', goldNet > 0);
 
-    ['food', 'wood', 'stone'].forEach(k => {
+    ['wood', 'stone', 'food'].forEach(k => {
       _set(`hud-r-${k}`,       _fmt(totals[k]));
       _set(`hud-r-${k}-rate`,  _fmtRate(rates[k]));
       document.getElementById(`hud-r-${k}-rate`)?.classList.toggle('hud-res-rate--pos', rates[k] > 0);
@@ -330,7 +337,87 @@ const HUD = (() => {
     document.getElementById('hud-hamburger')?.addEventListener('click', () => {
       Nav.toggle(_player, _lord);
     });
+    // The strip is a link to the detail. Bound on the container (which
+    // persists) rather than its contents (which _renderThreatBar replaces), so
+    // this survives every re-render without re-binding.
+    document.getElementById('hud-threat-bar')?.addEventListener('click', () => {
+      if (!_player) return;
+      App.navigate('overview', { player: PlayerService.getById(_player.id), lord: _lord });
+    });
     EventBus.on('resources:changed', refresh);
+  }
+
+  // ── Incoming-attack scan — runs on EVERY screen ────────────────
+  //
+  // /api/attack/incoming derives enemy attack-marches aimed at our tiles from
+  // the attackers' own action queues, so a threat is visible from the moment
+  // the attack is LAUNCHED — the warning window the 60s attack floor exists to
+  // guarantee. That was already true; what was missing is that only
+  // overview-screen.js ever asked. A defender on the map, in a city or on a
+  // lord screen was told nothing until they happened to navigate home, which
+  // made a correctly-timed alert behave like a resolve-time one.
+  //
+  // Hosting the scan here puts it on every authenticated screen, exactly like
+  // the activity-feed poll above it, and it shares that poll's timer rather
+  // than adding a second one: every other 10s tick, i.e. every 20s.
+  let _threats = [];
+
+  function getThreats() { return _threats; }
+
+  async function _pollThreats() {
+    if (!_player) return;
+    try {
+      const result = await ServerActions.checkIncomingAttacks();
+      if (!result?.ok) return;
+      const list    = result.incoming || [];
+      const changed = JSON.stringify(list) !== JSON.stringify(_threats);
+      _threats = list;
+      _renderThreatBar();
+      // Overview renders the detailed version of this list and no longer polls
+      // for it itself — this is how it learns the list moved.
+      if (changed) EventBus.emit('threats:changed', { incoming: _threats });
+    } catch (_) {
+      // Non-fatal — the next tick retries.
+    }
+  }
+
+  // The global strip. Deliberately terse: it exists to get the player to look,
+  // and the Overview banner it links to carries the detail (attacker, target,
+  // army). Clicking anywhere on it goes there.
+  function _renderThreatBar() {
+    const bar = document.getElementById('hud-threat-bar');
+    if (!bar) return;
+    if (_threats.length === 0) {
+      bar.classList.add('hidden');
+      bar.innerHTML = '';
+      return;
+    }
+    const soonest = _threats[0]; // server sorts by finishAt
+    const more    = _threats.length > 1 ? ` · +${_threats.length - 1} more` : '';
+    bar.classList.remove('hidden');
+    bar.innerHTML = `
+      <span class="hud-threat-icon">${gi('crossed-swords')}</span>
+      <span class="hud-threat-text">Under attack — ${soonest.attackerName} → ${soonest.targetName} (${soonest.tileX}, ${soonest.tileY})${more}</span>
+      <span class="hud-threat-eta" id="hud-threat-eta">${TimeService.formatDuration(Math.max(0, Math.ceil((soonest.finishAt - TimeService.now()) / 1000)))}</span>
+      <span class="hud-threat-clock">at ${TimeService.formatClock(soonest.finishAt)}</span>`;
+  }
+
+  // Driven by the 1s clock timer rather than a timer of its own. Also drops
+  // threats that have landed: the scan only returns marches still in flight,
+  // so once finishAt passes there is nothing left to warn about and the strip
+  // must not sit at "0s" until the next 20s poll.
+  function _tickThreatBar() {
+    if (_threats.length === 0) return;
+    const now  = TimeService.now();
+    const live = _threats.filter(t => t.finishAt > now);
+    if (live.length !== _threats.length) {
+      _threats = live;
+      _renderThreatBar();
+      EventBus.emit('threats:changed', { incoming: _threats });
+      return;
+    }
+    const el = document.getElementById('hud-threat-eta');
+    if (el) el.textContent = TimeService.formatDuration(Math.max(0, Math.ceil((_threats[0].finishAt - now) / 1000)));
   }
 
   function _fmt(n) {
@@ -345,5 +432,5 @@ const HUD = (() => {
     return (r > 0 ? '+' : '') + _fmt(Math.abs(r)) + '/h';
   }
 
-  return { show, hide, refresh };
+  return { show, hide, refresh, getThreats };
 })();

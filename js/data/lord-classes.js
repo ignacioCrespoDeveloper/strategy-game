@@ -23,7 +23,45 @@ var LORD_BASE_STATS = {
 // _checkLevelUp, and server/tick/catch-up.js _checkLevelUp — that last one
 // keeps its own copy on purpose (it's a dependency-free module, same reason it
 // carries its own _xpToNextLevel).
-var LORD_MAX_LEVEL = 10;
+//
+// RAISED 10 → 20 on 2026-08-03 (Nacho). The cap moved; the POWER CURVE did not.
+var LORD_MAX_LEVEL = 20;
+
+// =============================================
+//  THE TWO HALVES OF THE LEVEL CURVE
+//
+//  Levels 1–10 are the POWER half. Three numbers grow with level and all
+//  three stop growing HERE:
+//    · army PWR cap        lordArmyPowerCapBase() below
+//    · raid rate/hour      EconomyCore.getRaidHourlyRewards
+//    · expedition loot     DiscoveryRoll.rollRewards' level scalar
+//
+//  Levels 11–20 are the MASTERY half. They pay in exactly two things — the
+//  lord's own stats (the automatic per-level gain plus one spendable point)
+//  and talent slots at 15 and 20. Nothing a lord PROJECTS into the world gets
+//  bigger past 10.
+//
+//  ⚠ ANY formula that reads a lord's level to size an effect ON THE WORLD must
+//  go through lordPowerLevel(), never lord.level. This is not a style rule: at
+//  the raw level, raising the cap alone would have taken raid income from 490
+//  to 940 gold/hour and expedition loot to +58%, roughly doubling an endgame
+//  economy that was signed off measured at level 10 (ECONOMY-AUDIT.md).
+//  Stats, XP, ransom, rankings and display all keep reading the REAL level.
+// =============================================
+var LORD_POWER_LEVEL_CAP = 10;
+
+function lordPowerLevel(level) {
+  return Math.min(Math.max(1, level || 1), LORD_POWER_LEVEL_CAP);
+}
+
+// Base army Combat Power cap for a lord of this level, before talent and mount
+// bonuses. THE one definition — js/domain/lord.js getArmyPowerCap,
+// server/actions/recruit.js, server/actions/army-transfer.js and
+// server/tick/catch-up.js all add their bonuses on top of this call rather than
+// re-typing `200 + level * 80`, which is how the four copies used to drift.
+function lordArmyPowerCapBase(level) {
+  return 200 + lordPowerLevel(level) * 80;
+}
 
 // How much one spent talent point moves a stat. Health lives on a ~100-based
 // scale while every other stat sits between 5 and 20, so a flat +1 to health
@@ -39,13 +77,21 @@ function lordStatGain(statKey, points) {
 // health raised 200 → 300 alongside LORD_STAT_POINT_GAIN: a level-10 lord who
 // banked every point into health now lands around 250, which would have sat
 // pegged at the end of the old bar with no visible progress for the last third.
+//
+// RESIZED AGAIN for LORD_MAX_LEVEL 20 (2026-08-03), same rule: size the bar to
+// what the cap can actually reach, or the whole mastery half of the curve is
+// invisible. A level-20 lord banking every point into one stat lands at
+//   health   100 + 19 auto + 19×15 = 404
+//   any stat   5 + 19×2 auto + 19 + 6 (apex mount) = 68
+// so 450/70. Early bars read lower than they used to; the number next to the
+// bar is the readout that matters, the bar is the sense of headroom.
 var LORD_STAT_MAX = {
-  health:     300,
-  attack:     20,
-  defense:    20,
-  leadership: 20,
-  magic:      20,
-  speed:      20,
+  health:     450,
+  attack:     70,
+  defense:    70,
+  leadership: 70,
+  magic:      70,
+  speed:      70,
 };
 
 // Icon, colour and label for each stat — consumed by all UI components.
@@ -179,16 +225,19 @@ function getRecruitableClasses() {
 }
 
 // =============================================
-//  TALENT_POOL — Cross-class talents unlocked at level 5.
+//  TALENT_POOL — Cross-class talents, one slot every 5 levels.
 //
-//  Lords choose exactly one talent, permanently.
-//  Combat talents add traits/stats to the lord's BattleUnit.
-//  Strategic talents apply passive effects via getTalentEffects().
+//  A lord picks a talent at levels 5, 10, 15 and 20 (TALENT_LEVELS), so a
+//  maxed lord carries FOUR, each one permanent. Combat talents add traits and
+//  stats to the lord's BattleUnit; strategic talents apply passive effects.
+//  Everything downstream reads the MERGED effects of all held talents through
+//  lordTalentEffects() — see mergeTalentEffects below for how they compose.
 //
 //  EVERY KEY BELOW HAS A LIVE CONSUMER, and the authoritative one is the
 //  SERVER path — the client copies exist only to preview the same number.
-//  A talent is chosen ONCE and PERMANENTLY, so a key with no consumer is not
-//  merely incomplete, it is a trap the player can never undo. Audited
+//  A talent is chosen PERMANENTLY out of a budget of four, so a key with no
+//  consumer is not merely incomplete, it is a trap the player can never undo
+//  and one of only four picks they will ever make. Audited
 //  2026-07-30, which retired two talents for exactly that reason:
 //    · commander (commandCapacityBonus) — described "+2 unit slots", a system
 //      retired when army size became PWR-bounded. Zero consumers, ever since
@@ -361,6 +410,102 @@ var TALENT_POOL = {
     },
   },
 };
+
+// =============================================
+//  TALENT SLOTS — one pick every 5 levels (2026-08-03, Nacho).
+//
+//  Four levels, four talents, and that is the whole budget: a level-20 lord
+//  holds four of the ten talents above and can never hold a fifth. The pool
+//  deliberately stays bigger than the budget so the picks remain a build.
+//
+//  STORAGE. `lord.talentIds` is the array and the only thing the server
+//  writes. `lord.talentId` (the pre-2026-08-03 single pick) is still read as
+//  the fallback and is still MIRRORED to talentIds[0] on write — that field is
+//  persisted on every lord row in Supabase, so migrating at read time costs
+//  nothing and there is no backfill window where the two disagree. Same
+//  approach as resolveMountId's race-split migration further down.
+// =============================================
+var TALENT_LEVELS = [5, 10, 15, 20];
+var MAX_TALENTS   = TALENT_LEVELS.length;
+
+// How many talent slots a lord of this level has unlocked (0–4).
+function lordTalentSlots(level) {
+  const lvl = Math.max(1, level || 1);
+  return TALENT_LEVELS.filter(l => lvl >= l).length;
+}
+
+// The level at which this lord's NEXT slot opens, or null once all four are
+// unlocked. Drives the "unlocks at level N" copy in the Talents tab.
+function nextTalentLevel(level) {
+  const lvl = Math.max(1, level || 1);
+  return TALENT_LEVELS.find(l => lvl < l) ?? null;
+}
+
+// The talents a lord actually holds. Prefer this over reading lord.talentIds
+// directly — it also does the three jobs that keep the read honest:
+//   · migrates a pre-2026-08-03 lord carrying only `talentId`
+//   · drops ids that are no longer in TALENT_POOL, so a lord holding a retired
+//     pick (commander/scholar, 2026-07-30) gets that slot back to spend rather
+//     than being stuck holding a talent with no effect (see lord-talents.js)
+//   · never returns more ids than the lord's level has slots for, so bad data
+//     can't hand out effects the level hasn't earned
+function getLordTalentIds(lord) {
+  if (!lord) return [];
+  const raw = Array.isArray(lord.talentIds)
+    ? lord.talentIds
+    : (lord.talentId ? [lord.talentId] : []);
+  const out = [];
+  for (const id of raw) {
+    if (typeof id !== 'string') continue;
+    if (!Object.prototype.hasOwnProperty.call(TALENT_POOL, id)) continue;
+    if (out.includes(id)) continue;
+    out.push(id);
+  }
+  return out.slice(0, lordTalentSlots(lord.level));
+}
+
+// Effect keys that COMPOSE MULTIPLICATIVELY because they are multipliers on a
+// duration — two 30% cuts are 0.7 × 0.7, not 0.4. Every other numeric key in
+// `effects` is a flat bonus and ADDS; battleUnitTraits is an array and unions.
+//
+// This list is the one thing that must be updated when a talent introduces a
+// new multiplier key. Getting it wrong is silent: a mult key falling through to
+// the additive branch turns "×0.75 quest duration" into "+0.75", i.e. a 75%
+// LONGER expedition rather than a 25% shorter one.
+var TALENT_MULT_KEYS = ['searchDurationMult', 'recruitTimeMult'];
+
+// Merge the effects of every held talent into one effects object with the same
+// SHAPE a single talent's `effects` had. That shape is the whole point: every
+// existing consumer (battle-engine, combat-resolver, recruit, catch-up,
+// lord-action) keeps reading `fx.armyPowerCapBonus`, `fx.battleUnitTraits` and
+// friends exactly as it did when a lord held one talent.
+function mergeTalentEffects(talentIds) {
+  const out = {};
+  for (const id of talentIds || []) {
+    const fx = TALENT_POOL[id]?.effects;
+    if (!fx) continue;
+    for (const key of Object.keys(fx)) {
+      const val = fx[key];
+      if (Array.isArray(val)) {
+        if (!out[key]) out[key] = [];
+        for (const v of val) if (!out[key].includes(v)) out[key].push(v);
+      } else if (TALENT_MULT_KEYS.includes(key)) {
+        out[key] = (out[key] == null ? 1 : out[key]) * val;
+      } else if (typeof val === 'number') {
+        out[key] = (out[key] || 0) + val;
+      } else {
+        out[key] = val;
+      }
+    }
+  }
+  return out;
+}
+
+// THE talent-effects entry point. Everything that used to read
+// `TALENT_POOL[lord.talentId].effects` calls this instead.
+function lordTalentEffects(lord) {
+  return mergeTalentEffects(getLordTalentIds(lord));
+}
 
 // =============================================
 //  MOUNT_POOL — A lord may equip exactly one mount at a time, freely
@@ -1050,8 +1195,16 @@ function getMountsForRace(raceId) {
 // Quadratic because a high-level lord is a far bigger investment than a linear
 // term admits (XP to L10 is ~4,950, plus talents, plus a mount), while a fresh
 // lord should stay trivially cheap to bail out:
-//   L1 700 · L3 3,900 · L5 10,300 · L8 25,900 · L10 40,300
-// At the endgame curve L10 is ~6 hours of gold income. The gold is a TRANSFER
+//   L1 700 · L3 3,900 · L5 10,300 · L8 25,900 · L10 40,300 · L20 160,300
+//
+// ⚠ THE L20 NUMBER IS A CONSEQUENCE, NOT A DECISION (2026-08-03). This reads
+// the REAL level, not lordPowerLevel(), because ransom prices the INVESTMENT in
+// a lord and a level-20 lord genuinely represents ~4× the XP and twice the
+// talents of a level-10 one. But quadratic across a doubled range lands at
+// ~1.3 days of endgame gold income to bail one lord out, where L10 was ~6
+// hours. If that reads as too punishing in play, the dial to turn is the 400
+// coefficient (or clamp the input to lordPowerLevel) — flagged for Nacho, not
+// changed unilaterally. The gold is a TRANSFER
 // to the captor (server/actions/lord-ransom.js), not a sink, so this doubles as
 // the payout that makes taking prisoners worth doing.
 function lordRansomCost(level) {

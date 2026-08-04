@@ -20,9 +20,9 @@ var RACES = {
     description: 'Adaptable and industrious. Humans thrive in all climates and excel at commerce and construction. No single specialty — but no weakness either.',
     bonusLabel:  '+5% all resource production · −10% construction time',
     bonuses: {
-      food_production:    0.05,
       wood_production:    0.05,
       stone_production:   0.05,
+      food_production:    0.05,
       construction_speed: -0.10,  // negative = faster
       population_growth:  0.00,
     },
@@ -39,9 +39,9 @@ var RACES = {
     description: 'Masters of stone. Dwarven engineers build twice as fast as any other race, and their quarries run deeper than the roots of mountains.',
     bonusLabel:  '+30% stone · −20% construction time',
     bonuses: {
-      food_production:    0.00,
       wood_production:    0.00,
       stone_production:   0.30,
+      food_production:    0.00,
       construction_speed: -0.20,
       population_growth:  0.00,
     },
@@ -58,9 +58,9 @@ var RACES = {
     description: 'Relentless and vast in number. Orcish clans multiply faster than any other race and feed their hordes through unmatched agricultural toil. Strength in numbers.',
     bonusLabel:  '+25% population growth · +20% food production',
     bonuses: {
-      food_production:    0.20,
       wood_production:    0.00,
       stone_production:   0.00,
+      food_production:    0.20,
       construction_speed: 0.00,
       population_growth:  0.25,
     },
@@ -81,11 +81,11 @@ var RACES = {
     // already getting. Now matches `bonuses` below exactly. NOTE: the 0.05
     // population_growth is deliberately still unlisted because nothing reads
     // that key yet; see ROADMAP.md "Dead race-bonus keys".
-    bonusLabel:  '+15% food · +10% wood · −10% construction time',
+    bonusLabel:  '+10% wood · +15% food · −10% construction time',
     bonuses: {
-      food_production:    0.15,
       wood_production:    0.10,
       stone_production:   0.00,
+      food_production:    0.15,
       construction_speed: -0.10,
       population_growth:  0.05,
     },
@@ -102,9 +102,9 @@ var RACES = {
     description: 'Exiled kin of the Elves, twisted by centuries in the deep. They bend shadow and dark wood to their will, fell entire forests for their cursed works, and breed faster than their surface cousins ever did.',
     bonusLabel:  '+30% wood · +15% population growth',
     bonuses: {
-      food_production:    0.00,
       wood_production:    0.30,
       stone_production:   0.00,
+      food_production:    0.00,
       construction_speed: 0.00,
       population_growth:  0.15,
     },

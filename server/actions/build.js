@@ -9,7 +9,7 @@
 // =============================================
 
 import { loadAndCatchUp, saveState } from '../action-base.js';
-import { BUILDING_DEFS, RACES, EconomyCore } from '../engine-loader.js';
+import { BUILDING_DEFS, RACES, EconomyCore, BuildingUnlockService } from '../engine-loader.js';
 
 export async function handleBuild(req, res) {
   const { cityId, buildingId } = req.body || {};
@@ -67,9 +67,28 @@ export async function handleBuild(req, res) {
     }
   }
 
+  // THE UNLOCK GATE (2026-08-03). Everything above is a hand-rolled check that
+  // happens to duplicate part of BuildingUnlockService; everything the service
+  // knows that ISN'T above was simply unenforced until now — building SLOTS,
+  // the `city_tier` gate and the `race` gate. A crafted POST could therefore
+  // raise a Dragon Lair as a dwarf, drop a tier-5 building into a tier-1 city,
+  // and build past maxSlots forever. Same class as the recruitment-gate
+  // exploit of 2026-07-29, and closed the same way: ONE gate, run by the
+  // client's build UI, the tech tree AND the server, so the client can never
+  // offer what the server would reject.
+  //
+  // The lord that owns the city determines the race gate. Cities carry no race
+  // of their own, and every UI caller passes the same lord — the player's, from
+  // player.lordId — so this reads the identical state the button did.
+  const raceLord = lords[player.lordId] || Object.values(lords).find(l => l.playerId === playerId) || null;
+  const gate = BuildingUnlockService.check(city, raceLord, def);
+  if (gate.locked) {
+    return res.status(400).json({ ok: false, error: gate.reasons[0] });
+  }
+
   const targetLevel = effectiveLevel + 1;
   const cost = def.cost(targetLevel);
-  player.resources = player.resources || { food: 0, wood: 0, stone: 0 };
+  player.resources = player.resources || { wood: 0, stone: 0, food: 0 };
   for (const [rKey, amt] of Object.entries(cost)) {
     if (amt > 0 && Math.floor(player.resources[rKey] || 0) < amt) {
       return res.status(400).json({ ok: false, error: `Not enough ${rKey} (need ${amt}, have ${Math.floor(player.resources[rKey] || 0)})` });

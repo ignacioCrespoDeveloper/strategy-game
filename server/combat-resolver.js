@@ -45,9 +45,10 @@ import {
   LORD_MAX_LEVEL,
   STANCE_DEFS,
   getLordMountEffects,
-  TALENT_POOL,
+  lordTalentEffects,
   EconomyCore,
   BATTLE_WIN_HEAL_PCT,
+  ENGINE,
 } from './engine-loader.js';
 
 // ── Supabase clients ──────────────────────────────────────────
@@ -200,13 +201,39 @@ const _MIN_XP            = 5;
 // _MIN_XP=5 / _MIN_VICTORY_GOLD=10 floor, which felt worthless).
 const _MIN_CITY_VICTORY_GOLD = 50;
 const _MIN_CITY_XP           = 30;
-const _RESOURCE_LOOT_PCT = 0.05;  // fraction of the city owner's resource pool looted
-// Two bounds on that percentage. Without them a sack moved 5% of the victim's
-// ENTIRE empire-wide pool, uncapped, with no repeat-attack limit — the largest
-// transfer in the game, and at endgame pool sizes a single hit could take a
-// full day of production. The cap scales with lootMult so the God of War
-// blessing keeps its value against rich targets.
-const _RESOURCE_LOOT_CAP = 100000;          // max per resource, per sack
+// Fraction of the city owner's resource pool looted.
+// 0.05 → 0.20 on 2026-08-03 (Nacho's call): sacking a city was the riskiest
+// thing a player could do and paid a twentieth of a stockpile for it. Note this
+// lands on top of the same day's projection fix — the 20% is now taken from what
+// the victim ACTUALLY holds, not from whatever their last login left in
+// Supabase — so the real change against live play is larger than 4×.
+const _RESOURCE_LOOT_PCT = 0.20;
+
+// THE PER-SACK CAP IS GONE (Nacho's call, 2026-08-03). It used to be 100,000
+// per resource, and it was quietly the most important number in this file.
+//
+// A flat cap turns a percentage into a ceiling, and a ceiling INVERTS the
+// incentive it was meant to control. Measured against the 20% rate, the
+// effective loss rate fell as the victim got richer: 20% at a 500k pool, 10% at
+// 1M, 5% at 2M, **2% at 5M**. Every resource stockpiled past half a million was
+// very nearly immune, so hoarding became the safest thing a player could do —
+// in a game whose whole economy is about spending and contesting resources.
+// It also made the richest targets, the ones most worth attacking, pay the
+// worst per unit of risk taken to reach them. And it made the headline number
+// a lie: "20%" was not 20% precisely where it mattered.
+//
+// THE REAL BOUND IS THE COOLDOWN BELOW, and it is a better one. It is keyed to
+// the VICTIM and set by any successful sack, so it is global rather than
+// per-attacker: whatever happens, a player can lose at most 20% per hour, and
+// each hit takes 20% of what is LEFT, not of the original. Stripping someone
+// bare needs ~24 successful attacks in a day, each one an army marching there
+// (5× longer since the travel-time change) and winning a real battle — and the
+// defender can answer all of it by playing: spending, defending, or having
+// allies.
+//
+// If a ceiling is ever wanted again, make it scale with the victim (e.g. "no
+// more than N hours of their own production") so it can never mint a zone of
+// immunity the way a flat number does.
 const _LOOT_COOLDOWN_MS  = 60 * 60 * 1000;  // per-victim plunder immunity (matches lord-defeat downtime)
 
 // Sum of unit "power" for a battle-army stack list — the same PWR score
@@ -335,12 +362,63 @@ function _awardXp(lord, xpEarned) {
   return { xpEarned, leveled };
 }
 
+// What a defender's resource pool WOULD hold right now, if they logged in.
+//
+// THE BUG THIS EXISTS FOR (reported from live play 2026-08-03, README #7).
+// A player's resources are only persisted when THEY act — their own sync, one
+// of their own actions, or the dispatcher draining one of their pending
+// events. `_resolveCore` loads every defender's `players` row raw from Supabase
+// and never runs catch-up on it, so an idle player's stored pool is frozen at
+// whatever it was the last time they played. Loot was 5% of that frozen number,
+// which meant **the plunder scaled with how recently the victim logged in, not
+// with what they owned** — the more abandoned a player, the poorer the prize.
+// At endgame rates a three-day-idle defender is sitting on ~3.9M of uncredited
+// production and the sack was taking 5% of a three-day-old figure.
+//
+// This runs the REAL catchUp on a throwaway copy and reads the resources out.
+// catchUp deep-copies its input (JSON round-trip) before touching anything, so
+// nothing here is mutated and no clock is advanced — which is deliberate, and
+// is what makes the rest of the fix safe:
+//
+//   • Advancing the defender's clocks would mean persisting their `cities`
+//     too, and this resolver does not write defender cities. Miss that and
+//     their next sync credits the same production a second time.
+//   • Running a real catch-up on them mid-battle would also complete their
+//     queues and could move a defending lord off the tile the fight is
+//     happening on.
+//
+// So the loot is SIZED against the projected pool and DEDUCTED from the stored
+// one. That can push a long-idle victim's stored resources negative, and that
+// is correct rather than a glitch: their own catch-up still credits the full
+// production from their untouched `lastResourceUpdate`, landing them at
+// exactly (true pool − loot). Nothing clamps resources at zero on the way, and
+// a negative balance only blocks spending until production catches up.
+//
+// Falls back to the stored pool if anything is missing — a defender we cannot
+// project for must still be lootable, just at the old (understated) rate.
+function _projectedResources(playerObj, lordsObj, citiesObj, armiesObj, nowMs) {
+  try {
+    const result = catchUp(
+      { player: playerObj, lords: lordsObj || {}, cities: citiesObj || {}, armies: armiesObj || {} },
+      nowMs,
+      ENGINE,
+    );
+    return result?.player?.resources || playerObj?.resources || {};
+  } catch (e) {
+    console.warn('[combat-resolver] resource projection failed, looting stored pool:', e.message);
+    return playerObj?.resources || {};
+  }
+}
+
 // Loots a slice of the defender's resource pool into the attacker's, in
 // place on both player records. Returns { [resType]: amountLooted }.
 // lootMult scales the plundered fraction — the God of War blessing feeds a
 // >1 multiplier here so a blessed sacking strips a bigger share of the pool.
-function _lootResources(defenderPlayer, attackerPlayer, lootMult = 1, nowMs = Date.now()) {
-  const loot   = _lootQuote(defenderPlayer, lootMult, nowMs);
+// `projectedRes`, when given, is what the defender's pool WOULD hold after
+// catch-up — see _projectedResources. The loot is sized against that; the
+// deduction still comes off the STORED pool, which is the whole trick (below).
+function _lootResources(defenderPlayer, attackerPlayer, lootMult = 1, nowMs = Date.now(), projectedRes = null) {
+  const loot   = _lootQuote(defenderPlayer, lootMult, nowMs, projectedRes);
   const defRes = defenderPlayer.resources || {};
   attackerPlayer.resources = attackerPlayer.resources || {};
   for (const [r, amount] of Object.entries(loot)) {
@@ -358,15 +436,18 @@ function _lootResources(defenderPlayer, attackerPlayer, lootMult = 1, nowMs = Da
 // cooldown applied, no mutation. Shared by the live payout above and by the
 // scout report, which used to hand-copy the percentage and so could promise
 // loot the real sack would not deliver.
-function _lootQuote(defenderPlayer, lootMult = 1, nowMs = Date.now()) {
+function _lootQuote(defenderPlayer, lootMult = 1, nowMs = Date.now(), projectedRes = null) {
   const quote = {};
   const last  = defenderPlayer?.lastPlunderedAt || 0;
   if (nowMs - last < _LOOT_COOLDOWN_MS) return quote; // freshly plundered — immune
-  const defRes = defenderPlayer?.resources || {};
+  const defRes = projectedRes || defenderPlayer?.resources || {};
   const pct    = _RESOURCE_LOOT_PCT * lootMult;
-  const cap    = Math.floor(_RESOURCE_LOOT_CAP * lootMult);
-  ['food', 'wood', 'stone'].forEach(r => {
-    const amount = Math.min(Math.floor((defRes[r] || 0) * pct), cap);
+  // Canonical order (wood → stone → food): the quote object's key order is what
+  // any generic renderer of `plunder` walks, so it decides display order too.
+  ['wood', 'stone', 'food'].forEach(r => {
+    // No ceiling — 20% is 20% however rich the victim is. See the note on
+    // _RESOURCE_LOOT_PCT for why the old flat cap was removed.
+    const amount = Math.floor((defRes[r] || 0) * pct);
     if (amount > 0) quote[r] = amount;
   });
   return quote;
@@ -426,11 +507,14 @@ function _unitRole(def) {
 // Build a lord unit for the battle context.
 // prefix: 'a' for attacker, 'd0'/'d1'/... for defenders.
 // sourceId is always lord.id (unique globally) — no prefix needed.
-// Applies the lord's chosen combat talent (attack/defense bonus + traits) —
-// mirrors js/domain/battle-engine.js buildContext()'s client-side PvE path,
-// which this previously lacked entirely, silently no-op'ing every combat
-// talent (blademaster, double_strike, pyroblast, iron_wall) in PvP.
-const _talentFx = lord => (lord?.talentId && TALENT_POOL[lord.talentId]?.effects) || {};
+// Applies the lord's combat talents (attack/defense bonus + traits) — mirrors
+// js/domain/battle-engine.js buildContext()'s client-side PvE path, which this
+// previously lacked entirely, silently no-op'ing every combat talent
+// (blademaster, double_strike, pyroblast, iron_wall) in PvP.
+//
+// MERGED across all four slots since 2026-08-03: a lord holding Blademaster
+// AND Iron Wall gets +4/+4 and both traits, not whichever one was picked first.
+const _talentFx = lord => lordTalentEffects(lord);
 
 function _makeLordUnit(lord, stats, prefix) {
   const traits = ['backline'];
@@ -686,33 +770,79 @@ function _applyLordHp(lordsObj, lordId, unitsSurviving, winner, side, capturerIn
 
 // ── Scout report ─────────────────────────────────────────────
 //
-//  Everything a scout learns about one tile, gathered in a single pass and
-//  returned whole. There is deliberately no tier/progression system and no
-//  client input: a scout either reaches the tile and sees it, or gets caught
-//  (resolveScout) and sees nothing. The report is a timestamped snapshot the
+//  Everything a scout learns about one tile, gathered in a single pass. There
+//  is no client input: a scout either reaches the tile and sees it, or gets
+//  caught (resolveScout) and sees nothing. The report is a timestamped snapshot
 //  server hands to the player's Activity feed — it is never stored as mutable
 //  client-side "known intel", so there is nothing for a browser to forge and
 //  nothing for the server to take on trust.
 //
-//  Shape:
-//    { city: null | { cityId, name, ownerId, ownerUsername, population,
+//  Shape (every field below `intel` may be null — see the ladder):
+//    { city: null | { cityId, name, ownerId, ownerUsername, population, intel,
 //                     garrison: [{unitId,count}], garrisonCount, garrisonPower,
-//                     plunder: { gold, food, wood, stone } },
+//                     plunder: { gold, wood, stone, food } },
 //      lords: [{ lordId, lordName, lordRace, lordLevel, lordClass, lordPortrait,
-//                playerId, playerUsername, units: [{unitId,count}], armyPower,
-//                stanceId, stanceName, lastActivity }] }
+//                playerId, playerUsername, intel, units: [{unitId,count}],
+//                armyCount, armyPower, stanceId, stanceName, lastActivity }] }
+
+// ── The espionage intel ladder ────────────────────────────────
+//
+//  OGame counter-espionage, ported 2026-08-03. What a scout brings home is a
+//  function of how far the SCOUT'S Spymaster's Ledger is ahead of the TARGET'S
+//  — not of the scout's level alone. Two players who never buy the book meet
+//  at diff 0 forever, so nobody starts behind; the book only pays against
+//  someone who read less than you did.
+//
+//    diff < 0  the target out-reads you: name, owner, population
+//    diff  0   + what taking it is worth (the plunder projection)
+//    diff  1   + how many bodies are behind the wall
+//    diff  2   + which bodies, and what they are worth in PWR
+//    diff ≥ 3  + every enemy lord's full army list
+//
+//  This is the ONE consumer of the `espionage_power` research key. Anything
+//  rendering a report must treat the gated fields as optional — the Activity
+//  screen prints a "your spies could not get closer" line for a missing rung
+//  rather than a zero, because a zero here reads as "undefended" and would get
+//  somebody killed.
+const SCOUT_INTEL_TIERS = {
+  PLUNDER:         0,
+  GARRISON_SIZE:   1,
+  GARRISON_DETAIL: 2,
+  ARMY_DETAIL:     3,
+};
+
+// A player's espionage level, floored at 0. Reads the same research pipe as
+// every other book; the key is a COUNT, not a percentage.
+function _espionageLevel(profile) {
+  const fx = EconomyCore.getResearchEffects(profile?.research);
+  return Math.max(0, Math.floor(fx.espionage_power || 0));
+}
+
 async function _gatherScoutReport(admin, callerId, x, y) {
-  const [cityHit, lordResult, armyResult, playerResult] = await Promise.all([
+  // `cities` is loaded for the plunder projection below: sizing the preview
+  // against a defender's STORED pool is the same understatement the live sack
+  // had (README #7), and a scout that promises less than the attack delivers is
+  // the same class of lie as one that promises more.
+  const [cityHit, lordResult, armyResult, playerResult, cityResult] = await Promise.all([
     _findCityAtTile(admin, x, y, callerId),
     admin.from('storage').select('player_id, value').eq('key', 'lords'),
     admin.from('storage').select('player_id, value').eq('key', 'armies'),
     admin.from('storage').select('player_id, value').eq('key', 'players'),
+    admin.from('storage').select('player_id, value').eq('key', 'cities'),
   ]);
 
   const armyByPlayer    = {};
   const profileByPlayer = {};
+  const lordsByPlayer   = {};
+  const citiesByPlayer  = {};
   (armyResult.data || []).forEach(r => { armyByPlayer[r.player_id]     = r.value || {}; });
   (playerResult.data || []).forEach(r => { profileByPlayer[r.player_id] = (r.value || {})[r.player_id] || {}; });
+  (lordResult.data  || []).forEach(r => { lordsByPlayer[r.player_id]   = r.value || {}; });
+  (cityResult.data  || []).forEach(r => { citiesByPlayer[r.player_id]  = r.value || {}; });
+
+  // The scout's own espionage level, read once — every diff on this tile is
+  // measured against it.
+  const myEspionage = _espionageLevel(profileByPlayer[callerId]);
 
   // ── Enemy city on this tile ────────────────────────────────
   let city = null;
@@ -722,6 +852,7 @@ async function _gatherScoutReport(admin, callerId, x, y) {
     const garrisonPower = _armyPower(garrison);
     const population    = Math.floor(cityHit.city.population || 0);
     const owner         = profileByPlayer[cityHit.playerId] || {};
+    const intel         = myEspionage - _espionageLevel(owner);
 
     // What taking this city would actually be worth. Calls the REAL payout
     // maths — _lootQuote for the resource cut, so the cap and the per-victim
@@ -731,24 +862,40 @@ async function _gatherScoutReport(admin, callerId, x, y) {
     // of the OWNER'S whole stockpile, not a per-city stash: the same figure
     // applies to any city they hold. A recently sacked owner reports 0 loot,
     // which is correct — that is what an attack right now would take.
-    const ownerLoot = _lootQuote(owner);
-    const plunder   = {
-      gold:  Math.max(_MIN_CITY_VICTORY_GOLD,
-                      Math.round(garrisonPower * _GOLD_PER_POWER) + Math.round(population * _CITY_GOLD_PCT)),
-      food:  ownerLoot.food  || 0,
-      wood:  ownerLoot.wood  || 0,
-      stone: ownerLoot.stone || 0,
-    };
+    // Projected, not stored — the same figure the live sack now uses.
+    // Skipped entirely below the PLUNDER rung: this is the most expensive
+    // computation in the report (a full catch-up projection of the owner's
+    // stockpile) and there is no point paying for a number we then discard.
+    let plunder = null;
+    if (intel >= SCOUT_INTEL_TIERS.PLUNDER) {
+      const ownerLoot = _lootQuote(owner, 1, Date.now(), _projectedResources(
+        owner,
+        lordsByPlayer[cityHit.playerId],
+        citiesByPlayer[cityHit.playerId],
+        armyByPlayer[cityHit.playerId],
+        Date.now(),
+      ));
+      plunder = {
+        gold:  Math.max(_MIN_CITY_VICTORY_GOLD,
+                        Math.round(garrisonPower * _GOLD_PER_POWER) + Math.round(population * _CITY_GOLD_PCT)),
+        food:  ownerLoot.food  || 0,
+        wood:  ownerLoot.wood  || 0,
+        stone: ownerLoot.stone || 0,
+      };
+    }
 
+    // null, never 0 or [] — see the ladder note above. A missing rung must be
+    // distinguishable from a genuinely empty garrison by the renderer.
     city = {
       cityId:        cityHit.city.id,
       name:          cityHit.city.name,
       ownerId:       cityHit.playerId,
       ownerUsername: owner.username || null,
       population,
-      garrison,
-      garrisonCount,
-      garrisonPower,
+      intel,
+      garrison:      intel >= SCOUT_INTEL_TIERS.GARRISON_DETAIL ? garrison      : null,
+      garrisonCount: intel >= SCOUT_INTEL_TIERS.GARRISON_SIZE   ? garrisonCount : null,
+      garrisonPower: intel >= SCOUT_INTEL_TIERS.GARRISON_DETAIL ? garrisonPower : null,
       plunder,
     };
   }
@@ -767,6 +914,11 @@ async function _gatherScoutReport(admin, callerId, x, y) {
       if (_armyTotal(armyUnits) <= 0) continue; // army-less lords don't exist for detection
 
       const stanceDef = STANCE_DEFS[lord.stance?.id || 'idle'];
+      // Same ladder, rung for rung, as the city block above: a head count buys
+      // the same tier as a garrison head count, composition the same tier as
+      // garrison composition. Identity and stance are NOT gated — a banner and
+      // a camp dug in for a raid are things a scout can see with their eyes.
+      const intel = myEspionage - _espionageLevel(profileByPlayer[row.player_id]);
       lords.push({
         lordId:         lord.id,
         lordName:       lord.name,
@@ -776,9 +928,10 @@ async function _gatherScoutReport(admin, callerId, x, y) {
         lordPortrait:   lord.portrait || null,
         playerId:       row.player_id,
         playerUsername: username,
-        units:          armyUnits.map(u => ({ unitId: u.unitId, count: u.count })),
-        armyCount:      _armyTotal(armyUnits),
-        armyPower:      _armyPower(armyUnits),
+        intel,
+        units:          intel >= SCOUT_INTEL_TIERS.ARMY_DETAIL     ? armyUnits.map(u => ({ unitId: u.unitId, count: u.count })) : null,
+        armyCount:      intel >= SCOUT_INTEL_TIERS.GARRISON_SIZE   ? _armyTotal(armyUnits) : null,
+        armyPower:      intel >= SCOUT_INTEL_TIERS.GARRISON_DETAIL ? _armyPower(armyUnits) : null,
         stanceId:       lord.stance?.id || 'idle',
         stanceName:     stanceDef?.name || null,
         lastActivity:   lord.actionQueue?.length > 0 ? lord.actionQueue[0].actionId : 'idle',
@@ -1205,7 +1358,17 @@ async function _resolveCore(admin, attackerPlayerId, attackerLordId, tileX, tile
       // gold. Date.now() lets getBlessingEffects ignore a lapsed blessing
       // even if catchUp hasn't cleared it yet on this path.
       const warBonus = EconomyCore.getBlessingEffects(atkP.activeBlessing, Date.now()).battle_loot_bonus || 0;
-      resourceLoot = _lootResources(cityOwnerPlayer, atkP, 1 + warBonus);
+      // Size the sack against what the victim ACTUALLY owns, not against the
+      // stale figure their last login happened to leave in Supabase — see
+      // _projectedResources.
+      const projected = _projectedResources(
+        cityOwnerPlayer,
+        defLordsByPlayer[cityHit.playerId],
+        defCitiesByPlayer[cityHit.playerId],
+        defArmiesByPlayer[cityHit.playerId],
+        Date.now(),
+      );
+      resourceLoot = _lootResources(cityOwnerPlayer, atkP, 1 + warBonus, Date.now(), projected);
       if (warBonus > 0) rewards.atkGold = Math.round(rewards.atkGold * (1 + warBonus));
     }
   }

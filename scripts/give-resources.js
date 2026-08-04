@@ -72,7 +72,7 @@ if (matches.length > 1) {
 }
 
 const target = matches[0];
-target.rec.resources = target.rec.resources || { food: 0, wood: 0, stone: 0 };
+target.rec.resources = target.rec.resources || { wood: 0, stone: 0, food: 0 };
 for (const res of ['wood', 'stone', 'food']) {
   target.rec.resources[res] = Math.floor((target.rec.resources[res] || 0) + amount);
 }
